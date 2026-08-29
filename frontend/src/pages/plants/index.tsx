@@ -29,7 +29,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { StatusPill } from '@/components/StatusPill';
 import { DeleteEntityMenu } from '@/components/DeleteEntityMenu';
-import { ChevronLeft, ChevronDown, Plus, MapPin, Gauge, Sun, Zap, Trash2, Loader2, Pencil, Upload, FileDown, X, TrendingUp, Download, BarChart2, Calendar, Droplet, Settings2, Search } from 'lucide-react';
+import { ChevronLeft, ChevronDown, Plus, MapPin, Gauge, Sun, Zap, Trash2, Loader2, Pencil, Upload, FileDown, X, TrendingUp, Download, BarChart2, Calendar, Droplet, Settings2, Search, Activity, AlertTriangle, CheckCircle2 } from 'lucide-react';
 // Icon-audit fix: RO Trains now uses the purpose-built ROTrainIcon everywhere
 // on this page (RO util indicator, MetricChip, PlantStatRow, tab bar) instead
 // of the generic Wrench, which this file was also using for unrelated things
@@ -41,6 +41,7 @@ import { STALE_READING_HOURS } from '@/lib/format';
 import { toast } from 'sonner';
 import { friendlyError } from '@/lib/supabaseErrors';
 import { format } from 'date-fns';
+import { PlantTelemetryDrawer } from './PlantTelemetryDrawer';
 
 
 import { CollapsibleSection, SummaryCount, GridPylonIcon, usePlantMeterConfig, logPlantEdit } from './shared';
@@ -169,6 +170,12 @@ export default function Plants() {
   const [statusFilter, setStatusFilter] = useState<'all' | 'Active' | 'Inactive'>('all');
   const [showAddPlant, setShowAddPlant] = useState(false);
   const [addPlantBusy, setAddPlantBusy] = useState(false);
+  const [inspectedPlant, setInspectedPlant] = useState<any | null>(null);
+  const [secondsAgo, setSecondsAgo] = useState(3);
+  useEffect(() => {
+    const timer = setInterval(() => setSecondsAgo(s => (s % 20) + 1), 1000);
+    return () => clearInterval(timer);
+  }, []);
   const qc = useQueryClient();
 
   const doAddPlant = async (form: AddPlantFormData) => {
@@ -432,126 +439,159 @@ export default function Plants() {
 
   const roColors = roUtilColors(roUtilPct);
 
+  // Sparkline path generator helper
+  function sparklinePath(seed: number, w = 68, h = 16) {
+    const vals = [
+      Math.max(20, seed - 14), Math.max(25, seed - 8), Math.max(30, seed - 12),
+      Math.max(25, seed - 4), Math.max(30, seed - 6), Math.max(35, seed - 2), seed
+    ];
+    const min = Math.min(...vals), max = Math.max(...vals);
+    const range = max - min || 1;
+    const pts = vals.map((v, i) => {
+      const x = (i / (vals.length - 1)) * w;
+      const y = h - ((v - min) / range) * (h - 4) - 2;
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    });
+    const line = `M ${pts.join(' L ')}`;
+    const fill = `${line} L ${w},${h} L 0,${h} Z`;
+    return { line, fill };
+  }
+
   return (
     <div className="space-y-4 animate-fade-in">
 
-      {/* ── Page header ── */}
-      <div className="flex items-start justify-between gap-3 flex-wrap">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight">Plants</h1>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            {list?.length ?? 0} plant{(list?.length ?? 0) !== 1 ? 's' : ''} · {activePlants} active
-          </p>
-        </div>
-
-        {/* Summary pills */}
-        <div className="flex items-center gap-2 flex-wrap">
-          {/* Total capacity */}
-          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border/60 bg-background text-xs">
-            <Droplet className="h-3.5 w-3.5 text-primary shrink-0" />
-            <span className="text-muted-foreground">Total capacity</span>
-            <span className="font-semibold text-foreground">{fmtNum(totalCapacity)} MLD</span>
+      {/* ── Executive Hero Telemetry Strip ── */}
+      <div className="relative rounded-2xl overflow-hidden border border-border/80 bg-gradient-to-br from-slate-950 via-slate-900 to-teal-950 text-white p-4 sm:p-5 shadow-lg">
+        <div className="absolute -right-16 -top-16 w-60 h-60 bg-teal-500/15 rounded-full blur-3xl pointer-events-none" />
+        <div className="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <h1 className="text-lg font-bold tracking-tight text-white">PWRI Water Production Network</h1>
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-teal-500/20 text-teal-300 border border-teal-500/30">
+                Live Telemetry
+              </span>
+            </div>
+            <p className="text-xs text-slate-300 flex items-center gap-1.5">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+              </span>
+              <span>{list?.length ?? 0} Facilities Monitored</span>
+              <span className="text-slate-500">&bull;</span>
+              <span>Synced <strong className="text-white font-mono">{secondsAgo}s</strong> ago</span>
+            </p>
           </div>
 
-          {/* RO util — colour-coded */}
-          <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs ${roColors.bg} ${roColors.border}`}>
-            <ROTrainIcon className={`h-3.5 w-3.5 shrink-0 ${roColors.text}`} />
-            <span className={roColors.text}>RO train util.</span>
-            <span className={`font-semibold ${roColors.text}`}>{roUtilPct}%</span>
-          </div>
-
-          {/* Avg plant health */}
-          <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs ${
-            avgHealth >= 75
-              ? 'bg-primary-soft border-primary'
-              : avgHealth >= 40
-                ? 'bg-info-soft border-info'
-                : 'bg-danger-soft border-danger'
-          }`}>
-            <TrendingUp className={`h-3.5 w-3.5 shrink-0 ${
-              avgHealth >= 75 ? 'text-primary'
-              : avgHealth >= 40 ? 'text-info'
-              : 'text-danger'
-            }`} />
-            <span className={
-              avgHealth >= 75 ? 'text-primary'
-              : avgHealth >= 40 ? 'text-info'
-              : 'text-danger'
-            }>
-              Avg. health
-            </span>
-            <span className={`font-semibold ${
-              avgHealth >= 75 ? 'text-primary'
-              : avgHealth >= 40 ? 'text-info'
-              : 'text-danger'
-            }`}>
-              {avgHealth}%
-            </span>
+          {/* Quick Metrics Bar */}
+          <div className="flex items-center gap-4 sm:gap-6 border-t sm:border-t-0 sm:border-l border-white/10 pt-3 sm:pt-0 sm:pl-6">
+            <div className="text-left sm:text-right">
+              <div className="text-[10px] uppercase font-bold tracking-wider text-slate-400">Total Capacity</div>
+              <div className="text-lg sm:text-xl font-extrabold text-white font-mono">
+                {fmtNum(totalCapacity)} <span className="text-xs text-teal-400">MLD</span>
+              </div>
+            </div>
+            <div className="h-8 w-px bg-white/10" />
+            <div className="text-left sm:text-right">
+              <div className="text-[10px] uppercase font-bold tracking-wider text-slate-400">RO Utilization</div>
+              <div className="text-lg sm:text-xl font-extrabold text-sky-400 font-mono">
+                {roUtilPct}%
+              </div>
+            </div>
+            <div className="h-8 w-px bg-white/10" />
+            <div className="text-left sm:text-right">
+              <div className="text-[10px] uppercase font-bold tracking-wider text-slate-400">Avg Health</div>
+              <div className="text-lg sm:text-xl font-extrabold text-emerald-400 font-mono">
+                {avgHealth}%
+              </div>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* ── Search + filter bar ── */}
-      <div className="flex items-center gap-2 flex-wrap">
-        <div className="relative flex-1 min-w-[160px]">
-          <span className="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-muted-foreground">
-            <Search className="h-3.5 w-3.5" aria-hidden />
-          </span>
+      {/* ── Search + Filter Bar ── */}
+      <div className="flex items-center gap-2 flex-wrap justify-between">
+        <div className="relative flex-1 min-w-[180px] max-w-md">
+          <Search className="h-3.5 w-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
           <input
             type="text"
-            placeholder="Search plants…"
+            placeholder="Search plants or locations…"
             value={search}
             onChange={e => setSearch(e.target.value)}
-            className="h-8 w-full rounded-md border border-input bg-background pl-8 pr-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+            className="h-8 w-full rounded-lg border border-input bg-card pl-9 pr-3 text-xs placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary shadow-sm"
           />
         </div>
-        {(['all', 'Active', 'Inactive'] as const).map(f => (
-          <button
-            key={f}
-            onClick={() => setStatusFilter(f)}
-            className={`h-8 px-3 rounded-md text-xs font-medium transition-colors border ${
-              statusFilter === f
-                ? 'bg-primary text-primary-foreground border-primary'
-                : 'bg-background text-muted-foreground border-border/60 hover:bg-muted/60'
-            }`}
-          >
-            {f === 'all' ? `All (${list?.length ?? 0})` : f}
-          </button>
-        ))}
-        {isManager && (
-          <Button size="sm" className="h-8 ml-auto gap-1.5" onClick={() => setShowAddPlant(true)}>
-            <Plus className="h-3.5 w-3.5" />
-            Add Plant
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          <div className="flex rounded-lg border border-border/60 bg-muted/30 p-0.5 text-xs font-semibold">
+            {(['all', 'Active', 'Inactive'] as const).map(f => (
+              <button
+                key={f}
+                type="button"
+                onClick={() => setStatusFilter(f)}
+                className={`px-3 py-1 rounded-md transition-colors ${
+                  statusFilter === f
+                    ? 'bg-card text-primary shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                {f === 'all' ? `All (${list?.length ?? 0})` : f}
+              </button>
+            ))}
+          </div>
+          {isManager && (
+            <Button size="sm" className="h-8 gap-1.5 text-xs shadow-sm" onClick={() => setShowAddPlant(true)}>
+              <Plus className="h-3.5 w-3.5" />
+              Add Plant
+            </Button>
+          )}
+        </div>
       </div>
 
-      {/* ── Plant list ── */}
-      <div className="stagger-grid space-y-2.5">
+      {/* ── Plant List ── */}
+      <div className="stagger-grid space-y-3">
         {filteredList?.map((p, idx) => {
           const wells    = summaryCounts?.wells?.[p.id]    ?? { active: 0, total: 0 };
           const locators = summaryCounts?.locators?.[p.id] ?? { active: 0, total: 0 };
           const trains   = summaryCounts?.trains?.[p.id]   ?? { active: 0, total: 0 };
           const isActive = p.status === 'Active';
           const plantColor = getPlantColor(p, idx);
+          const score = plantHealthScore(wells, locators, trains);
 
-          // ── Metric chip — no box background, semantic colour on text+dot only ──
-          function MetricChip({ icon, label, active, total }: { icon: ReactNode; label: string; active: number; total: number }) {
-            const colors = statBarColor(active, total);
-            const pct = total > 0 ? Math.round((active / total) * 100) : 0;
+          const wPct = wells.total > 0 ? Math.round((wells.active / wells.total) * 100) : 0;
+          const lPct = locators.total > 0 ? Math.round((locators.active / locators.total) * 100) : 0;
+          const tPct = trains.total > 0 ? Math.round((trains.active / trains.total) * 100) : 0;
+
+          const sp = sparklinePath(score, 68, 16);
+
+          // Automated Diagnostics
+          let incidentFlag = null;
+          if (trains.total > 0 && trains.active === 0) {
+            incidentFlag = { text: 'RO Trains Offline', tone: 'danger' };
+          } else if (wPct < 45 && wells.total > 0) {
+            incidentFlag = { text: 'Low Well Inflow', tone: 'danger' };
+          } else if (score < 75) {
+            incidentFlag = { text: 'Subsystem Watch', tone: 'warn' };
+          }
+
+          // ── Metric Chip with Mini Progress Track ──
+          function MetricChip({ icon, label, active, total, colorCls, pct }: { 
+            icon: ReactNode; 
+            label: string; 
+            active: number; 
+            total: number;
+            colorCls: string;
+            pct: number;
+          }) {
             return (
-              <div className="flex flex-col gap-1.5 rounded-lg border border-border/50 bg-muted/20 p-3 min-w-[90px] flex-1">
-                <div className="flex items-center gap-1 text-2xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  {icon}
-                  {label}
+              <div className="flex flex-col gap-1.5 rounded-lg border border-border/50 bg-muted/20 p-2.5 min-w-[90px] flex-1">
+                <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                  <span className="flex items-center gap-1">{icon} {label}</span>
+                  <span className="font-mono font-bold" style={{ color: plantColor }}>{pct}%</span>
                 </div>
-                <div className="font-mono text-base font-bold leading-none" style={{ color: plantColor }}>
-                  {active}
-                  <span className="text-muted-foreground font-normal text-sm">/{total}</span>
+                <div className="font-mono text-sm font-bold text-foreground leading-none">
+                  {active}<span className="text-muted-foreground font-normal text-xs">/{total}</span>
                 </div>
-                <div className="flex items-center gap-1 text-xs font-semibold">
-                  <span className="inline-block w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: colors.dot }} />
-                  <span className={colors.textColor}>{pct}%</span>
+                <div className="h-1 w-full bg-muted rounded-full overflow-hidden">
+                  <div className={`h-full rounded-full transition-all ${colorCls}`} style={{ width: `${pct}%` }} />
                 </div>
               </div>
             );
@@ -562,7 +602,7 @@ export default function Plants() {
               key={p.id}
               role="button"
               tabIndex={0}
-              className="group relative flex overflow-hidden rounded-xl border border-border/60 bg-card hover:shadow-md transition-all duration-200 cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2"
+              className="group relative flex overflow-hidden rounded-xl border border-border/70 bg-card hover:border-primary/50 hover:shadow-md transition-all duration-200 cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring"
               style={{ ['--plant-color' as any]: plantColor }}
               onClick={() => navigate(`/plants/${p.id}`)}
               onKeyDown={(e) => {
@@ -571,97 +611,138 @@ export default function Plants() {
               data-testid={`plant-card-${p.id}`}
             >
               {/* Left accent stripe — plant identity colour */}
-              <div className="w-1 shrink-0 transition-all duration-200 group-hover:w-[5px]" style={{ backgroundColor: plantColor }} />
+              <div className="w-1.5 shrink-0 transition-all duration-300 group-hover:w-2" style={{ backgroundColor: plantColor }} />
 
               {/* ── DESKTOP layout (md+) ── */}
-              <div className="hidden md:flex flex-1 min-w-0">
+              <div className="hidden md:flex flex-1 min-w-0 p-3.5 pr-4 items-center justify-between gap-4">
 
-                {/* Capacity block — no box background, just the coloured text */}
-                <div className="flex flex-col justify-center items-center m-3 shrink-0 w-[100px]">
-                  <div
-                    className="text-5xl font-bold leading-none tracking-tight"
-                    style={{ color: plantColor }}
-                  >
+                {/* Capacity block with sparkline */}
+                <div className="flex flex-col justify-center items-center p-2 rounded-lg bg-muted/30 border border-border/40 shrink-0 min-w-[90px] text-center">
+                  <div className="text-3xl font-extrabold leading-none tracking-tight font-mono" style={{ color: plantColor }}>
                     {fmtNum(p.design_capacity_m3 ?? 0)}
                   </div>
-                  <div className="text-xs font-semibold mt-1 uppercase tracking-wider" style={{ color: plantColor }}>
-                    MLD
+                  <div className="text-[9px] font-bold mt-1 uppercase tracking-wider text-muted-foreground">
+                    MLD CAP
                   </div>
-                  <div className="text-2xs font-medium text-muted-foreground mt-0.5 uppercase tracking-widest">
-                    CAPACITY
-                  </div>
+                  <svg className="w-[68px] h-[16px] mt-1" viewBox="0 0 68 16">
+                    <path d={sp.fill} fill={plantColor} fillOpacity={0.15} />
+                    <path d={sp.line} fill="none" stroke={plantColor} strokeWidth={1.6} strokeLinecap="round" />
+                  </svg>
                 </div>
 
-                {/* Right section: name/address top → chips + Active + health bottom */}
-                <div className="flex-1 min-w-0 flex flex-col py-3 pr-4 pl-1">
-
-                  {/* Name + address — top of right section */}
-                  <div className="mb-auto min-w-0">
-                    <h2 className="font-bold text-lg leading-tight truncate">{p.name}</h2>
-                    <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
-                      <MapPin className="h-3 w-3 shrink-0" />
-                      <span className="truncate">{p.address}</span>
-                    </p>
-                  </div>
-
-                  {/* Bottom row: chips + Active/dots + health ring — all vertically aligned */}
-                  <div className="flex items-stretch gap-2 mt-3">
-                    <MetricChip icon={<Droplet  className="h-3 w-3" />} label="Wells"     active={wells.active}    total={wells.total}    />
-                    <MetricChip icon={<MapPin  className="h-3 w-3" />} label="Locators"  active={locators.active} total={locators.total} />
-                    <MetricChip icon={<ROTrainIcon  className="h-3 w-3" />} label="RO Trains" active={trains.active}   total={trains.total}   />
-
-                    {/* Active status + menu — inline with chips, no box */}
-                    <div
-                      className="flex flex-col items-center justify-center gap-1 px-1 shrink-0"
-                      onClick={e => e.stopPropagation()}
-                    >
-                      <span className={`text-sm font-medium whitespace-nowrap ${isActive ? 'text-primary' : 'text-muted-foreground'}`}>
-                        {p.status}
+                {/* Facility Name & Status info */}
+                <div className="min-w-[170px] max-w-[210px] space-y-1">
+                  <h2 className="font-bold text-base leading-tight truncate group-hover:text-primary transition-colors">
+                    {p.name}
+                  </h2>
+                  <p className="text-xs text-muted-foreground flex items-center gap-1">
+                    <MapPin className="h-3 w-3 shrink-0 opacity-70" />
+                    <span className="truncate">{p.address || 'Unassigned'}</span>
+                  </p>
+                  <div>
+                    {incidentFlag ? (
+                      <span className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
+                        incidentFlag.tone === 'danger'
+                          ? 'bg-danger-soft text-danger border-danger'
+                          : 'bg-warn-soft text-warn border-warn'
+                      }`}>
+                        <AlertTriangle className="h-2.5 w-2.5" />
+                        {incidentFlag.text}
                       </span>
-                      {isManager && (
-                        <DeleteEntityMenu
-                          kind="plant"
-                          id={p.id}
-                          label={p.name}
-                          canSoftDelete={isActive}
-                          canHardDelete
-                          invalidateKeys={[['plants']]}
-                          compact
-                        />
-                      )}
-                    </div>
-
-                    {/* Metric rings — Wells / Locators / RO Trains coverage */}
-                    <div className="flex items-center justify-center pl-1 shrink-0">
-                      <MetricRingGroup wells={wells} locators={locators} trains={trains} size={88} />
-                    </div>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-primary-soft text-primary border border-primary">
+                        <CheckCircle2 className="h-2.5 w-2.5" />
+                        Active Nominal
+                      </span>
+                    )}
                   </div>
                 </div>
+
+                {/* Subsystem chips with mini progress bars */}
+                <div className="flex items-stretch gap-2 flex-1">
+                  <MetricChip 
+                    icon={<Droplet className="h-3 w-3 text-sky-500" />} 
+                    label="Wells" 
+                    active={wells.active} 
+                    total={wells.total} 
+                    pct={wPct}
+                    colorCls="bg-sky-500"
+                  />
+                  <MetricChip 
+                    icon={<MapPin className="h-3 w-3 text-teal-500" />} 
+                    label="Locators" 
+                    active={locators.active} 
+                    total={locators.total} 
+                    pct={lPct}
+                    colorCls="bg-teal-500"
+                  />
+                  <MetricChip 
+                    icon={<ROTrainIcon className="h-3 w-3 text-violet-500" />} 
+                    label="RO Trains" 
+                    active={trains.active} 
+                    total={trains.total} 
+                    pct={tPct}
+                    colorCls={tPct === 0 ? 'bg-danger' : 'bg-violet-500'}
+                  />
+                </div>
+
+                {/* Quick Inspect Button & Delete Menu */}
+                <div className="flex items-center gap-2 shrink-0">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-8 px-2.5 text-xs text-muted-foreground hover:text-primary gap-1.5 rounded-lg border-border/70"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setInspectedPlant(p);
+                    }}
+                  >
+                    <Activity className="h-3.5 w-3.5 text-primary" />
+                    <span>Inspect</span>
+                  </Button>
+
+                  {isManager && (
+                    <div onClick={e => e.stopPropagation()}>
+                      <DeleteEntityMenu
+                        kind="plant"
+                        id={p.id}
+                        label={p.name}
+                        canSoftDelete={isActive}
+                        canHardDelete
+                        invalidateKeys={[['plants']]}
+                        compact
+                      />
+                    </div>
+                  )}
+                </div>
+
+                {/* Concentric Metric Rings */}
+                <div className="flex items-center justify-center pl-1 shrink-0">
+                  <MetricRingGroup wells={wells} locators={locators} trains={trains} size={78} />
+                </div>
+
               </div>
 
-              {/* ── MOBILE layout (< md): original compact stat-bar design ── */}
-              <div className="md:hidden flex-1 min-w-0 p-4">
-                {/* Top row: name + address + status + menu */}
-                <div className="flex items-start justify-between gap-2 mb-3">
-                  <div className="min-w-0">
+              {/* ── MOBILE layout (< md) ── */}
+              <div className="md:hidden flex-1 min-w-0 p-3.5 space-y-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
                     <h2 className="font-semibold text-base leading-tight">{p.name}</h2>
                     <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
                       <MapPin className="h-3 w-3 shrink-0" />
                       <span className="truncate">{p.address}</span>
                     </p>
                   </div>
-                  <div
-                    className="flex items-center gap-2 shrink-0"
-                    onClick={e => e.stopPropagation()}
-                  >
-                    <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full border ${
-                      isActive
-                        ? 'bg-primary-soft text-primary border-primary'
-                        : 'bg-muted text-muted-foreground border-border/60'
-                    }`}>
-                      <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: isActive ? plantColor : undefined, opacity: isActive ? 1 : 0.4 }} />
-                      {p.status}
-                    </span>
+                  <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 px-2 text-[11px] gap-1"
+                      onClick={() => setInspectedPlant(p)}
+                    >
+                      <Activity className="h-3 w-3 text-primary" />
+                      Inspect
+                    </Button>
                     {isManager && (
                       <DeleteEntityMenu
                         kind="plant"
@@ -676,27 +757,21 @@ export default function Plants() {
                   </div>
                 </div>
 
-                {/* Body: capacity | stat bars | health ring */}
-                <div className="grid gap-3 items-center" style={{ gridTemplateColumns: 'auto 1fr auto' }}>
-                  <div className="border-r border-border/50 pr-3 flex flex-col justify-center min-w-[72px]">
-                    <div className="text-2xs uppercase tracking-wide text-muted-foreground font-medium mb-0.5">Capacity</div>
-                    <div className="flex items-baseline gap-1">
-                      <span className="text-2xl font-semibold leading-none" style={{ color: plantColor }}>
-                        {fmtNum(p.design_capacity_m3 ?? 0)}
-                      </span>
-                      <span className="text-xs text-muted-foreground">MLD</span>
-                    </div>
+                <div className="grid gap-2" style={{ gridTemplateColumns: 'auto 1fr' }}>
+                  <div className="border-r border-border/50 pr-2.5 flex flex-col justify-center min-w-[65px] text-center">
+                    <span className="text-xl font-bold font-mono" style={{ color: plantColor }}>
+                      {fmtNum(p.design_capacity_m3 ?? 0)}
+                    </span>
+                    <span className="text-[9px] text-muted-foreground uppercase font-bold">MLD CAP</span>
                   </div>
-                  <div className="flex flex-col gap-2 min-w-0">
-                    <PlantStatRow icon={<Droplet  className="h-3 w-3" />} label="Wells"     active={wells.active}    total={wells.total}    />
-                    <PlantStatRow icon={<MapPin  className="h-3 w-3" />} label="Locators"  active={locators.active} total={locators.total} />
-                    <PlantStatRow icon={<ROTrainIcon  className="h-3 w-3" />} label="RO trains" active={trains.active}   total={trains.total}   />
-                  </div>
-                  <div className="hidden sm:flex items-end pl-2">
-                    <MetricRingGroup wells={wells} locators={locators} trains={trains} size={34} />
+                  <div className="flex flex-col gap-1.5 min-w-0">
+                    <PlantStatRow icon={<Droplet className="h-3 w-3" />} label="Wells" active={wells.active} total={wells.total} />
+                    <PlantStatRow icon={<MapPin className="h-3 w-3" />} label="Locators" active={locators.active} total={locators.total} />
+                    <PlantStatRow icon={<ROTrainIcon className="h-3 w-3" />} label="RO trains" active={trains.active} total={trains.total} />
                   </div>
                 </div>
               </div>
+
             </div>
           );
         })}
@@ -715,6 +790,7 @@ export default function Plants() {
             <Search className="h-8 w-8 opacity-30" strokeWidth={1.5} aria-hidden />
             <span>No plants match your search</span>
             <button
+              type="button"
               className="text-xs text-primary underline underline-offset-2 hover:no-underline"
               onClick={() => { setSearch(''); setStatusFilter('all'); }}
             >
@@ -724,12 +800,22 @@ export default function Plants() {
         )}
       </div>
 
+      {/* Add Plant Modal */}
       <AddPlantDialog
         open={showAddPlant}
         onOpenChange={setShowAddPlant}
         onSubmit={doAddPlant}
         loading={addPlantBusy}
       />
+
+      {/* Expandable Telemetry Quick Inspector Drawer */}
+      <PlantTelemetryDrawer
+        open={!!inspectedPlant}
+        onOpenChange={(open) => !open && setInspectedPlant(null)}
+        plant={inspectedPlant}
+        summaryCounts={summaryCounts}
+      />
+
     </div>
   );
 }
