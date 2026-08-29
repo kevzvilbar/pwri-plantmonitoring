@@ -394,7 +394,13 @@ export function DataSummaryPopup({
   // Tab guard: if active tab becomes irrelevant, reset
   const activeTab: DSMTab = (!hasProdTab && tab === 'production') || (!hasConsTab && tab === 'consumption') ? 'overview' : tab;
 
-  // The shared "dates" for footer count — use per-tab.
+  // The shared "dates" for footer count & summary calculations — use per-tab.
+  // For rawwater overview: use prodDates so the footer count matches Per Well.
+  const tabDates = activeTab === 'consumption' ? consDates
+    : activeTab === 'production' ? prodDates
+    : metric === 'rawwater' ? prodDates
+    : overviewDates;
+
   // Aggregated Summary Statistics across the active date range
   const summaryStats = useMemo(() => {
     const totalProd = overviewChartRows.reduce((s, r) => s + (r.production ?? 0), 0);
