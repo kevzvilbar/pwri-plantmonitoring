@@ -283,7 +283,7 @@ export function GridMeterListRows({
   );
 }
 
-// ─── MeterNameListRows (full-width row editor matching image 2 design) ────────
+// ─── MeterNameListRows (structured table matching GridMeterListRows) ────────
 export function MeterNameListRows({
   count, names, accentColor, defaultPrefix, onSave, onRemoveLast,
 }: {
@@ -299,6 +299,8 @@ export function MeterNameListRows({
   const [confirmDeleteIdx, setConfirmDeleteIdx] = useState<number>(-1);
 
   const isYellow = accentColor === 'yellow';
+  const border = isYellow ? 'border-warn/60' : 'border-info/60';
+  const headerBg = isYellow ? 'bg-warn-soft/60' : 'bg-info-soft/60';
   const ring = isYellow ? 'focus:ring-warn' : 'focus:ring-info';
 
   const startEdit  = (i: number) => { setConfirmDeleteIdx(-1); setEditingIdx(i); setEditVal(names[i] ?? `${defaultPrefix} ${i + 1}`); };
@@ -316,51 +318,83 @@ export function MeterNameListRows({
   };
 
   return (
-    <div className="space-y-1.5">
+    <div className={`rounded-xl border ${border} overflow-hidden shadow-2xs`}>
+      {/* Table header */}
+      <div className={`grid grid-cols-[1fr_110px_auto] items-center ${headerBg} border-b ${border} px-3 py-2 gap-2`}>
+        <span className="text-2xs font-semibold text-muted-foreground uppercase tracking-wide">Meter Name</span>
+        <span className="text-2xs font-semibold text-muted-foreground uppercase tracking-wide text-center">
+          Source Type
+        </span>
+        <span className="w-10" />
+      </div>
+
+      {/* Rows */}
       {Array.from({ length: count }).map((_, i) => {
         const name = names[i] ?? `${defaultPrefix} ${i + 1}`;
 
-        if (editingIdx === i) return (
-          <div key={i} className="flex items-center gap-1.5 rounded-lg border border-input bg-background px-3 py-2 shadow-sm">
-            <input autoFocus value={editVal} onChange={e => setEditVal(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') commitEdit(); if (e.key === 'Escape') cancelEdit(); }}
-              className={`flex-1 text-sm bg-transparent focus:outline-none focus:ring-2 ${ring} rounded px-1`} />
-            <button onClick={commitEdit} className="inline-flex items-center justify-center h-6 w-6 rounded-full text-accent hover:bg-accent-soft transition-colors" aria-label="Save name">
-              <Check className="h-3.5 w-3.5" />
-            </button>
-            <button onClick={cancelEdit} className="inline-flex items-center justify-center h-6 w-6 rounded-full text-muted-foreground hover:bg-muted transition-colors" aria-label="Cancel">
-              <X className="h-3.5 w-3.5" />
-            </button>
+        if (confirmDeleteIdx === i) return (
+          <div key={i} className="grid grid-cols-[1fr_110px_auto] items-center gap-2 px-3 py-2.5 bg-destructive/5 border-b border-border/50 last:border-b-0">
+            <span className="text-xs text-destructive font-medium truncate col-span-2">Remove "{name}"?</span>
+            <div className="flex items-center gap-1 w-10 justify-end">
+              <button onClick={() => confirmDelete(i)} className="text-xs font-semibold text-destructive hover:underline">Yes</button>
+              <span className="text-muted-foreground/40">/</span>
+              <button onClick={() => setConfirmDeleteIdx(-1)} className="text-xs text-muted-foreground hover:underline">No</button>
+            </div>
           </div>
         );
 
-        if (confirmDeleteIdx === i) return (
-          <div key={i} className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2">
-            <span className="flex-1 text-sm text-destructive font-medium truncate">Remove "{name}"?</span>
-            <button onClick={() => confirmDelete(i)} className="text-xs font-semibold text-destructive hover:underline shrink-0">Yes</button>
-            <button onClick={() => setConfirmDeleteIdx(-1)} className="text-xs text-muted-foreground hover:underline shrink-0">No</button>
+        if (editingIdx === i) return (
+          <div key={i} className="grid grid-cols-[1fr_110px_auto] items-center gap-2 px-3 py-2 border-b border-border/50 last:border-b-0 bg-background">
+            <input autoFocus value={editVal} onChange={e => setEditVal(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') commitEdit(); if (e.key === 'Escape') cancelEdit(); }}
+              className={`text-sm bg-transparent border-b ${isYellow ? 'border-warn' : 'border-info'} focus:outline-none focus:ring-1 ${ring} rounded-t w-full px-1`} />
+            <div className="flex items-center justify-center">
+              <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-warn-soft text-warn border border-warn/40">
+                <Sun className="h-2.5 w-2.5" /> Solar Gen
+              </span>
+            </div>
+            <div className="flex items-center gap-1 w-10 justify-end">
+              <button onClick={commitEdit} className="inline-flex items-center justify-center h-6 w-6 rounded-full text-accent hover:bg-accent-soft transition-colors" aria-label="Save name">
+                <Check className="h-3.5 w-3.5" />
+              </button>
+              <button onClick={cancelEdit} className="inline-flex items-center justify-center h-6 w-6 rounded-full text-muted-foreground hover:bg-muted transition-colors" aria-label="Cancel">
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
           </div>
         );
 
         return (
-          <div key={i} className="group flex items-center gap-1 rounded-lg border border-transparent hover:border-input hover:bg-muted/30 px-3 py-2 text-sm transition-colors">
-            <span className="flex-1 truncate font-medium">{name}</span>
-            <button
-              onClick={() => startEdit(i)}
-              className="inline-flex items-center justify-center h-6 w-6 rounded-full text-muted-foreground hover:text-accent/90 hover:bg-accent-soft opacity-0 group-hover:opacity-100 focus:opacity-100 transition"
-              title={`Rename "${name}"`}
-              aria-label={`Rename "${name}"`}
-            >
-              <Pencil className="h-3.5 w-3.5" />
-            </button>
-            <button
-              onClick={() => askDelete(i)}
-              className="inline-flex items-center justify-center h-6 w-6 rounded-full text-muted-foreground hover:text-danger/90 hover:bg-danger-soft opacity-0 group-hover:opacity-100 focus:opacity-100 transition"
-              title={`Remove "${name}"`}
-              aria-label={`Remove "${name}"`}
-            >
-              <X className="h-3.5 w-3.5" />
-            </button>
+          <div key={i} className={`group grid grid-cols-[1fr_110px_auto] items-center gap-2 px-3 py-2 border-b border-border/50 last:border-b-0 bg-background hover:${headerBg}/40 transition-colors`}>
+            {/* Meter name */}
+            <span className="text-sm truncate font-medium text-foreground" title={name}>{name}</span>
+
+            {/* Type badge */}
+            <div className="flex items-center justify-center">
+              <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-warn-soft text-warn border border-warn/40">
+                <Sun className="h-2.5 w-2.5" /> Solar Gen
+              </span>
+            </div>
+
+            {/* Actions */}
+            <div className="flex items-center gap-0.5 w-10 justify-end">
+              <button
+                onClick={() => startEdit(i)}
+                className="inline-flex items-center justify-center h-6 w-6 rounded-full text-muted-foreground hover:text-accent hover:bg-accent-soft opacity-0 group-hover:opacity-100 focus:opacity-100 transition"
+                title={`Rename "${name}"`}
+                aria-label={`Rename "${name}"`}
+              >
+                <Pencil className="h-3.5 w-3.5" />
+              </button>
+              <button
+                onClick={() => askDelete(i)}
+                className="inline-flex items-center justify-center h-6 w-6 rounded-full text-muted-foreground hover:text-destructive hover:bg-destructive/15 opacity-0 group-hover:opacity-100 focus:opacity-100 transition"
+                title={`Remove "${name}"`}
+                aria-label={`Remove "${name}"`}
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
           </div>
         );
       })}
@@ -555,6 +589,20 @@ export function PowerConsumptionEnergyMix({
     ? +(((todayGrid - yesterday.grid) / yesterday.grid) * 100).toFixed(1)
     : null;
 
+  // ── Period summary aggregates across the active date range ───────────────
+  const rangeAggregates = useMemo(() => {
+    let solarSum = 0;
+    let gridSum = 0;
+    for (const r of rows) {
+      solarSum += r.solar;
+      gridSum += r.grid;
+    }
+    const totalKwh = +(solarSum + gridSum).toFixed(2);
+    const avgDaily = rows.length ? +(totalKwh / rows.length).toFixed(1) : 0;
+    const solarPct = totalKwh > 0 ? +((solarSum / totalKwh) * 100).toFixed(1) : 0;
+    return { solarSum: +solarSum.toFixed(2), gridSum: +gridSum.toFixed(2), totalKwh, avgDaily, solarPct };
+  }, [rows]);
+
   // ── CSV export ─────────────────────────────────────────────────────────────
   const exportCSV = () => {
     if (!rows.length) { toast.error('No data to export'); return; }
@@ -579,20 +627,22 @@ export function PowerConsumptionEnergyMix({
       <div className="flex items-start justify-between gap-2 flex-wrap">
         <div>
           <div className="flex items-center gap-2">
-            <TrendingUp className="h-4 w-4 text-primary" />
-            <span className="text-sm font-semibold">Power Consumption &amp; Energy Mix</span>
+            <div className="h-7 w-7 rounded-lg bg-primary-soft text-primary flex items-center justify-center shrink-0">
+              <TrendingUp className="h-4 w-4" />
+            </div>
+            <span className="text-sm font-bold text-foreground">Power Consumption &amp; Energy Mix</span>
           </div>
-          <p className="text-xs text-muted-foreground mt-0.5 pl-6">
+          <p className="text-xs text-muted-foreground mt-0.5 pl-9">
             {rangeLabel} · daily totals · Solar vs Grid (kWh)
           </p>
         </div>
-        <div className="flex items-center gap-1.5 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap">
           {/* Range pills */}
-          <div className="flex items-center gap-0.5 bg-muted rounded-md p-0.5">
+          <div className="flex items-center gap-0.5 bg-muted/80 p-0.5 rounded-lg border border-border/60">
             {(['30','90','180','all'] as const).map(r => (
               <button key={r} onClick={() => setRange(r)}
-                className={`px-2 py-0.5 rounded text-2xs font-medium transition-colors ${
-                  range === r ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
+                className={`px-2.5 py-1 rounded-md text-2xs font-bold transition-all ${
+                  range === r ? 'bg-card text-foreground shadow-2xs border border-border/80' : 'text-muted-foreground hover:text-foreground'
                 }`}>
                 {r === 'all' ? 'All' : `${r}d`}
               </button>
@@ -600,11 +650,11 @@ export function PowerConsumptionEnergyMix({
           </div>
           {/* Source pills — only shown when plant has both sources */}
           {hasSolar && hasGrid && (
-            <div className="flex items-center gap-0.5 bg-muted rounded-md p-0.5">
+            <div className="flex items-center gap-0.5 bg-muted/80 p-0.5 rounded-lg border border-border/60">
               {(['both','solar','grid'] as const).map(s => (
                 <button key={s} onClick={() => setSource(s)}
-                  className={`px-2 py-0.5 rounded text-2xs font-medium capitalize transition-colors ${
-                    source === s ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
+                  className={`px-2.5 py-1 rounded-md text-2xs font-bold capitalize transition-all ${
+                    source === s ? 'bg-primary text-primary-foreground shadow-2xs' : 'text-muted-foreground hover:text-foreground'
                   }`}>
                   {s === 'both' ? 'Both' : s.charAt(0).toUpperCase() + s.slice(1)}
                 </button>
@@ -612,136 +662,186 @@ export function PowerConsumptionEnergyMix({
             </div>
           )}
           {/* Export */}
-          <Button size="sm" variant="outline" className="h-7 px-2 text-xs gap-1" onClick={exportCSV}>
-            <Download className="h-3 w-3" /><span className="hidden sm:inline">Export</span>
+          <Button size="sm" variant="outline" className="h-8 px-2.5 text-xs gap-1.5 rounded-lg" onClick={exportCSV}>
+            <Download className="h-3.5 w-3.5" /><span className="hidden sm:inline">Export</span>
           </Button>
         </div>
       </div>
 
-      {/* ── Today stat cards ── */}
-      {today && (
-        <div className="grid grid-cols-3 gap-2">
-          {/* Today Solar */}
-          {hasSolar && (
-            <div className="rounded-lg border border-warn/70 bg-warn-soft/40 px-3 py-2.5">
-              <div className="flex items-center gap-1.5 mb-1">
-                <Sun className="h-3 w-3 text-warn" />
-                <span className="text-3xs font-semibold uppercase tracking-wide text-warn">Today Solar</span>
-              </div>
-              <div className="flex items-baseline gap-1">
-                <span className="text-lg font-semibold tabular-nums">{fmtNum(todaySolar)}</span>
-                <span className="text-2xs text-muted-foreground">kWh</span>
+      {/* ── KPI Strip ── */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
+        {/* Today Solar */}
+        {hasSolar && (
+          <div className="rounded-xl border border-warn/70 bg-warn-soft/50 p-3 shadow-2xs">
+            <div className="flex items-center justify-between gap-1 mb-1.5">
+              <div className="flex items-center gap-1.5">
+                <Sun className="h-3.5 w-3.5 text-warn" />
+                <span className="text-3xs font-bold uppercase tracking-wide text-warn">Today Solar</span>
               </div>
               {solarDelta !== null && (
-                <div className={`text-2xs mt-0.5 font-medium ${solarDelta >= 0 ? 'text-accent' : 'text-danger'}`}>
-                  {solarDelta >= 0 ? '↑' : '↓'} {Math.abs(solarDelta)}% vs yesterday
-                </div>
+                <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded-full ${solarDelta >= 0 ? 'bg-accent-soft text-accent' : 'bg-destructive/15 text-destructive'}`}>
+                  {solarDelta >= 0 ? '↑' : '↓'} {Math.abs(solarDelta)}%
+                </span>
               )}
-            </div>
-          )}
-          {/* Today Grid */}
-          {hasGrid && (
-            <div className="rounded-lg border border-info/70 bg-info-soft/40 px-3 py-2.5">
-              <div className="flex items-center gap-1.5 mb-1">
-                <GridPylonIcon className="h-3 w-3 text-info" />
-                <span className="text-3xs font-semibold uppercase tracking-wide text-info">Today Grid</span>
-              </div>
-              <div className="flex items-baseline gap-1">
-                <span className="text-lg font-semibold tabular-nums">{fmtNum(todayGrid)}</span>
-                <span className="text-2xs text-muted-foreground">kWh</span>
-              </div>
-              {gridDelta !== null && (
-                <div className={`text-2xs mt-0.5 font-medium ${gridDelta <= 0 ? 'text-accent' : 'text-danger'}`}>
-                  {gridDelta >= 0 ? '↑' : '↓'} {Math.abs(gridDelta)}% vs yesterday
-                </div>
-              )}
-            </div>
-          )}
-          {/* Today Total */}
-          <div className="rounded-lg border border-primary/70 bg-primary-soft/40 px-3 py-2.5">
-            <div className="flex items-center gap-1.5 mb-1">
-              <Zap className="h-3 w-3 text-primary" />
-              <span className="text-3xs font-semibold uppercase tracking-wide text-primary">Today Total</span>
             </div>
             <div className="flex items-baseline gap-1">
-              <span className="text-lg font-semibold tabular-nums">{fmtNum(todayTotal)}</span>
-              <span className="text-2xs text-muted-foreground">kWh</span>
+              <span className="text-xl font-bold font-numeral tabular-nums text-foreground">{fmtNum(todaySolar)}</span>
+              <span className="text-2xs text-muted-foreground font-semibold">kWh</span>
             </div>
-            {hasSolar && (
-              <div className="text-2xs mt-0.5 text-muted-foreground">
-                Solar: <span className="font-medium text-warn">{solarPct}%</span> of mix
+            <p className="text-[10px] text-muted-foreground mt-1">Solar PV Generation</p>
+          </div>
+        )}
+
+        {/* Today Grid */}
+        {hasGrid && (
+          <div className="rounded-xl border border-info/70 bg-info-soft/50 p-3 shadow-2xs">
+            <div className="flex items-center justify-between gap-1 mb-1.5">
+              <div className="flex items-center gap-1.5">
+                <GridPylonIcon className="h-3.5 w-3.5 text-info" />
+                <span className="text-3xs font-bold uppercase tracking-wide text-info">Today Grid</span>
               </div>
+              {gridDelta !== null && (
+                <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded-full ${gridDelta <= 0 ? 'bg-accent-soft text-accent' : 'bg-destructive/15 text-destructive'}`}>
+                  {gridDelta >= 0 ? '↑' : '↓'} {Math.abs(gridDelta)}%
+                </span>
+              )}
+            </div>
+            <div className="flex items-baseline gap-1">
+              <span className="text-xl font-bold font-numeral tabular-nums text-foreground">{fmtNum(todayGrid)}</span>
+              <span className="text-2xs text-muted-foreground font-semibold">kWh</span>
+            </div>
+            <p className="text-[10px] text-muted-foreground mt-1">Utility Grid Infeed</p>
+          </div>
+        )}
+
+        {/* Today Total */}
+        <div className="rounded-xl border border-primary/70 bg-primary-soft/50 p-3 shadow-2xs">
+          <div className="flex items-center justify-between gap-1 mb-1.5">
+            <div className="flex items-center gap-1.5">
+              <Zap className="h-3.5 w-3.5 text-primary" />
+              <span className="text-3xs font-bold uppercase tracking-wide text-primary">Today Total</span>
+            </div>
+            {hasSolar && todayTotal > 0 && (
+              <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-warn-soft text-warn border border-warn/40">
+                {solarPct}% Solar
+              </span>
             )}
           </div>
+          <div className="flex items-baseline gap-1">
+            <span className="text-xl font-bold font-numeral tabular-nums text-foreground">{fmtNum(todayTotal)}</span>
+            <span className="text-2xs text-muted-foreground font-semibold">kWh</span>
+          </div>
+          <p className="text-[10px] text-muted-foreground mt-1">Plant Daily Power</p>
         </div>
-      )}
+
+        {/* Period Aggregate */}
+        <div className="rounded-xl border border-border/80 bg-card p-3 shadow-2xs">
+          <div className="flex items-center justify-between gap-1 mb-1.5">
+            <div className="flex items-center gap-1.5">
+              <BarChart2 className="h-3.5 w-3.5 text-muted-foreground" />
+              <span className="text-3xs font-bold uppercase tracking-wide text-muted-foreground">Period Total</span>
+            </div>
+            <span className="text-[10px] text-muted-foreground font-mono">
+              {rangeLabel}
+            </span>
+          </div>
+          <div className="flex items-baseline gap-1">
+            <span className="text-xl font-bold font-numeral tabular-nums text-foreground">{fmtNum(rangeAggregates.totalKwh)}</span>
+            <span className="text-2xs text-muted-foreground font-semibold">kWh</span>
+          </div>
+          <p className="text-[10px] text-muted-foreground mt-1">
+            Avg <strong className="text-foreground">{fmtNum(rangeAggregates.avgDaily)}</strong> kWh/day · {rangeAggregates.solarPct}% solar
+          </p>
+        </div>
+      </div>
 
       {/* ── Chart ── */}
       {isLoading ? (
-        <div className="flex items-center justify-center h-48 gap-2 text-xs text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" /> Loading…
+        <div className="flex items-center justify-center h-60 gap-2 text-xs text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" /> Loading power telemetry…
         </div>
       ) : chartRows.length === 0 ? (
-        <div className="flex flex-col items-center justify-center h-48 gap-2 text-xs text-muted-foreground">
+        <div className="flex flex-col items-center justify-center h-60 gap-2 text-xs text-muted-foreground">
           <BarChart2 className="h-8 w-8 opacity-30" />
-          <p>No power readings in this period</p>
+          <p>No power readings recorded for this plant in the selected period.</p>
         </div>
       ) : (
-        <>
-          <div className="h-52 w-full">
+        <div className="space-y-2">
+          <div className="h-64 w-full">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart
                 data={chartRows}
-                margin={{ top: 4, right: 4, bottom: 20, left: 0 }}
-                barSize={Math.max(3, Math.min(14, 400 / chartRows.length))}
+                margin={{ top: 8, right: 8, bottom: 22, left: 4 }}
+                barSize={Math.max(4, Math.min(18, 520 / chartRows.length))}
               >
-                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" vertical={false} />
+                <defs>
+                  <linearGradient id="solarGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="hsl(48, 96%, 53%)" stopOpacity={0.95} />
+                    <stop offset="100%" stopColor="hsl(38, 92%, 48%)" stopOpacity={0.8} />
+                  </linearGradient>
+                  <linearGradient id="gridGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="hsl(213, 94%, 68%)" stopOpacity={0.95} />
+                    <stop offset="100%" stopColor="hsl(217, 91%, 55%)" stopOpacity={0.8} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" strokeOpacity={0.6} vertical={false} />
                 <XAxis
                   dataKey="date"
-                  tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }}
+                  tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
                   tickFormatter={(v: string) => v.slice(5)}
                   interval="preserveStartEnd"
-                  angle={-30}
+                  angle={-25}
                   textAnchor="end"
-                  height={36}
+                  height={38}
                 />
                 <YAxis
-                  tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }}
-                  width={42}
+                  tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
+                  width={46}
                   tickFormatter={(v: number) => v >= 1000 ? `${(v / 1000).toFixed(1)}k` : String(v)}
                 />
                 <Tooltip
-                  formatter={(v: any, name: string) => [`${fmtNum(v)} kWh`, name === 'solar' ? '☀ Solar' : '⚡ Grid']}
-                  labelFormatter={(label: string) => `Date: ${label}`}
-                  labelStyle={{ fontSize: 11 }}
-                  contentStyle={{ fontSize: 11, borderRadius: 8 }}
+                  formatter={(v: any, name: string) => [`${fmtNum(v)} kWh`, name === 'solar' ? '☀️ Solar' : '⚡ Grid']}
+                  labelFormatter={(label: string) => `Reading Date: ${label}`}
+                  labelStyle={{ fontSize: 12, fontWeight: 600 }}
+                  contentStyle={{
+                    fontSize: 12,
+                    borderRadius: 10,
+                    background: 'hsl(var(--card))',
+                    border: '1px solid hsl(var(--border))',
+                    boxShadow: 'var(--shadow-elev)',
+                  }}
                 />
                 {hasSolar && source !== 'grid' && (
-                  <Bar dataKey="solar" fill="hsl(48, 96%, 53%)" name="solar" radius={[0, 0, 0, 0]} stackId="a" />
+                  <Bar dataKey="solar" fill="url(#solarGradient)" name="solar" radius={[0, 0, 0, 0]} stackId="a" />
                 )}
                 {hasGrid && source !== 'solar' && (
-                  <Bar dataKey="grid" fill="hsl(213, 94%, 68%)" name="grid" radius={[2, 2, 0, 0]} stackId="a" />
+                  <Bar dataKey="grid" fill="url(#gridGradient)" name="grid" radius={[3, 3, 0, 0]} stackId="a" />
                 )}
               </BarChart>
             </ResponsiveContainer>
           </div>
 
-          {/* Legend */}
-          <div className="flex items-center gap-4 text-xs text-muted-foreground">
-            {hasSolar && source !== 'grid' && (
-              <div className="flex items-center gap-1.5">
-                <span className="inline-block h-2.5 w-2.5 rounded-sm bg-warn" />
-                Solar (kWh)
-              </div>
-            )}
-            {hasGrid && source !== 'solar' && (
-              <div className="flex items-center gap-1.5">
-                <span className="inline-block h-2.5 w-2.5 rounded-sm bg-info" />
-                Grid (kWh)
-              </div>
-            )}
+          {/* Legend Strip */}
+          <div className="flex items-center justify-between text-xs text-muted-foreground pt-1 border-t border-border/40">
+            <div className="flex items-center gap-4">
+              {hasSolar && source !== 'grid' && (
+                <div className="flex items-center gap-1.5">
+                  <span className="inline-block h-3 w-3 rounded-sm bg-warn shadow-xs" />
+                  <span className="font-medium text-foreground">Solar (kWh)</span>
+                </div>
+              )}
+              {hasGrid && source !== 'solar' && (
+                <div className="flex items-center gap-1.5">
+                  <span className="inline-block h-3 w-3 rounded-sm bg-info shadow-xs" />
+                  <span className="font-medium text-foreground">Grid (kWh)</span>
+                </div>
+              )}
+            </div>
+            <span className="text-3xs text-muted-foreground font-mono">
+              Total Energy {fmtNum(rangeAggregates.totalKwh)} kWh
+            </span>
           </div>
-        </>
+        </div>
       )}
     </div>
   );
@@ -1171,134 +1271,140 @@ export function PowerMetersCard({ plant }: { plant: any }) {
     <div className="space-y-3">
 
       {/* ── Meter Configuration ── */}
-      <Card className="p-5 space-y-5 rounded-2xl">
+      <Card className="p-5 space-y-4 rounded-2xl border border-border/80 shadow-2xs">
         {/* Header */}
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-2.5">
-            <div className="h-8 w-8 rounded-lg bg-primary-soft flex items-center justify-center shrink-0">
-              <Gauge className="h-4 w-4 text-primary" />
+            <div className="h-8 w-8 rounded-lg bg-primary-soft text-primary flex items-center justify-center shrink-0">
+              <Gauge className="h-4 w-4" />
             </div>
-            <h3 className="font-semibold text-sm">Power meter config</h3>
+            <div>
+              <h3 className="font-bold text-sm text-foreground">Power Meter Configuration</h3>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Configure meters per source. Names appear in <strong className="text-foreground">Operations → Power</strong>.
+              </p>
+            </div>
           </div>
-          <span className="inline-flex items-center gap-2 text-2xs font-semibold text-muted-foreground uppercase tracking-wide bg-muted/70 px-2.5 py-1 rounded-full border border-border/60 shrink-0">
+          <div className="flex items-center gap-1.5 shrink-0">
             {hasSolar && (
-              <span className="inline-flex items-center gap-1">
-                <span className="h-1.5 w-1.5 rounded-full bg-warn" /> Solar
+              <span className="inline-flex items-center gap-1 text-2xs font-bold px-2.5 py-1 rounded-full bg-warn-soft text-warn border border-warn/40">
+                <Sun className="h-3 w-3" /> Solar
               </span>
             )}
-            {hasSolar && hasGrid && <span className="text-muted-foreground/40">+</span>}
             {hasGrid && (
-              <span className="inline-flex items-center gap-1">
-                <span className="h-1.5 w-1.5 rounded-full bg-info" /> Grid
+              <span className="inline-flex items-center gap-1 text-2xs font-bold px-2.5 py-1 rounded-full bg-info-soft text-info border border-info/40">
+                <GridPylonIcon className="h-3 w-3" /> Grid
               </span>
             )}
-          </span>
+          </div>
         </div>
-
-        <p className="text-xs text-muted-foreground leading-relaxed">
-          Configure meters per source. Names appear in <strong className="text-foreground">Operations → Power</strong>. Energy sources are configured in <strong className="text-foreground">Plant Configuration</strong> above.
-        </p>
 
         {/* Meter panels — stacked on mobile, side-by-side on sm+ */}
         <div className={`grid gap-3 ${hasSolar ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1'}`}>
 
           {/* Solar meters panel */}
           {hasSolar && (
-            <div className="rounded-xl border border-warn/60 bg-warn-soft/40 p-3.5 space-y-3">
-              <div className="flex items-center justify-between gap-2 flex-wrap">
-                <div className="flex items-center gap-2">
-                  <div className="h-7 w-7 rounded-lg bg-warn-soft flex items-center justify-center shrink-0">
-                    <Sun className="h-3.5 w-3.5 text-warn" />
+            <div className="rounded-xl border border-warn/60 bg-warn-soft/30 p-3.5 space-y-3 flex flex-col justify-between">
+              <div className="space-y-3">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <div className="flex items-center gap-2">
+                    <div className="h-7 w-7 rounded-lg bg-warn-soft text-warn flex items-center justify-center shrink-0">
+                      <Sun className="h-4 w-4" />
+                    </div>
+                    <span className="text-sm font-bold text-foreground">Solar meters</span>
                   </div>
-                  <span className="text-sm font-semibold">Solar meters</span>
-                </div>
-                {/* Count stepper */}
-                <div className="flex items-center gap-1.5">
-                  <span className="text-2xs text-warn uppercase tracking-wide font-medium">Count</span>
-                  <div className="flex items-center gap-0.5 bg-background rounded-full border border-warn/70 p-0.5">
-                    <button
-                      onClick={() => canEdit && setSolarCount(c => Math.max(1, c - 1))}
-                      disabled={!canEdit || solarCount <= 1}
-                      className="h-6 w-6 rounded-full flex items-center justify-center hover:bg-warn-soft disabled:opacity-40 transition-colors"
-                      aria-label="Decrease solar meter count"
-                    ><Minus className="h-3 w-3" /></button>
-                    <span className="w-5 text-center text-sm font-mono font-semibold">{solarCount}</span>
-                    <button
-                      onClick={() => canEdit && setSolarCount(c => Math.min(20, c + 1))}
-                      disabled={!canEdit || solarCount >= 20}
-                      className="h-6 w-6 rounded-full flex items-center justify-center hover:bg-warn-soft disabled:opacity-40 transition-colors"
-                      aria-label="Increase solar meter count"
-                    ><Plus className="h-3 w-3" /></button>
+                  {/* Count stepper */}
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-3xs text-warn uppercase tracking-wider font-bold">Count</span>
+                    <div className="flex items-center gap-0.5 bg-background rounded-full border border-warn/70 p-0.5 shadow-2xs">
+                      <button
+                        onClick={() => canEdit && setSolarCount(c => Math.max(1, c - 1))}
+                        disabled={!canEdit || solarCount <= 1}
+                        className="h-6 w-6 rounded-full flex items-center justify-center hover:bg-warn-soft disabled:opacity-40 transition-colors"
+                        aria-label="Decrease solar meter count"
+                      ><Minus className="h-3 w-3" /></button>
+                      <span className="w-5 text-center text-xs font-mono font-bold">{solarCount}</span>
+                      <button
+                        onClick={() => canEdit && setSolarCount(c => Math.min(20, c + 1))}
+                        disabled={!canEdit || solarCount >= 20}
+                        className="h-6 w-6 rounded-full flex items-center justify-center hover:bg-warn-soft disabled:opacity-40 transition-colors"
+                        aria-label="Increase solar meter count"
+                      ><Plus className="h-3 w-3" /></button>
+                    </div>
                   </div>
                 </div>
+
+                {/* Meter name rows */}
+                {canEdit && (
+                  <div className="space-y-1">
+                    <p className="text-3xs text-muted-foreground font-bold uppercase tracking-wider">Meter Names</p>
+                    <MeterNameListRows count={solarCount} names={solarNames} accentColor="yellow" defaultPrefix="Solar Meter"
+                      onSave={names => { isDirty.current = true; setShowDirty(true); setSolarNames(names); }}
+                      onRemoveLast={() => setSolarCount(c => Math.max(1, c - 1))} />
+                  </div>
+                )}
               </div>
-              {/* Meter name rows */}
-              {canEdit && (
-                <div className="space-y-1">
-                  <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Meter names</p>
-                  <MeterNameListRows count={solarCount} names={solarNames} accentColor="yellow" defaultPrefix="Solar Meter"
-                    onSave={names => { isDirty.current = true; setShowDirty(true); setSolarNames(names); }}
-                    onRemoveLast={() => setSolarCount(c => Math.max(1, c - 1))} />
-                </div>
-              )}
             </div>
           )}
 
           {/* Grid meters panel */}
-          <div className="rounded-xl border border-info/60 bg-info-soft/40 p-3.5 space-y-3">
-            <div className="flex items-center justify-between gap-2 flex-wrap">
-              <div className="flex items-center gap-2">
-                <div className="h-7 w-7 rounded-lg bg-info-soft flex items-center justify-center shrink-0">
-                  <GridPylonIcon className="h-3.5 w-3.5 text-info" />
+          <div className="rounded-xl border border-info/60 bg-info-soft/30 p-3.5 space-y-3 flex flex-col justify-between">
+            <div className="space-y-3">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <div className="flex items-center gap-2">
+                  <div className="h-7 w-7 rounded-lg bg-info-soft text-info flex items-center justify-center shrink-0">
+                    <GridPylonIcon className="h-4 w-4" />
+                  </div>
+                  <span className="text-sm font-bold text-foreground">Grid meters</span>
                 </div>
-                <span className="text-sm font-semibold">Grid meters</span>
-              </div>
-              {/* Count stepper */}
-              <div className="flex items-center gap-1.5">
-                <span className="text-2xs text-info uppercase tracking-wide font-medium">Count</span>
-                <div className="flex items-center gap-0.5 bg-background rounded-full border border-info/70 p-0.5">
-                  <button
-                    onClick={() => canEdit && setGridCount(c => Math.max(1, c - 1))}
-                    disabled={!canEdit || gridCount <= 1}
-                    className="h-6 w-6 rounded-full flex items-center justify-center hover:bg-info-soft disabled:opacity-40 transition-colors"
-                    aria-label="Decrease grid meter count"
-                  ><Minus className="h-3 w-3" /></button>
-                  <span className="w-5 text-center text-sm font-mono font-semibold">{gridCount}</span>
-                  <button
-                    onClick={() => canEdit && setGridCount(c => Math.min(20, c + 1))}
-                    disabled={!canEdit || gridCount >= 20}
-                    className="h-6 w-6 rounded-full flex items-center justify-center hover:bg-info-soft disabled:opacity-40 transition-colors"
-                    aria-label="Increase grid meter count"
-                  ><Plus className="h-3 w-3" /></button>
+                {/* Count stepper */}
+                <div className="flex items-center gap-1.5">
+                  <span className="text-3xs text-info uppercase tracking-wider font-bold">Count</span>
+                  <div className="flex items-center gap-0.5 bg-background rounded-full border border-info/70 p-0.5 shadow-2xs">
+                    <button
+                      onClick={() => canEdit && setGridCount(c => Math.max(1, c - 1))}
+                      disabled={!canEdit || gridCount <= 1}
+                      className="h-6 w-6 rounded-full flex items-center justify-center hover:bg-info-soft disabled:opacity-40 transition-colors"
+                      aria-label="Decrease grid meter count"
+                    ><Minus className="h-3 w-3" /></button>
+                    <span className="w-5 text-center text-xs font-mono font-bold">{gridCount}</span>
+                    <button
+                      onClick={() => canEdit && setGridCount(c => Math.min(20, c + 1))}
+                      disabled={!canEdit || gridCount >= 20}
+                      className="h-6 w-6 rounded-full flex items-center justify-center hover:bg-info-soft disabled:opacity-40 transition-colors"
+                      aria-label="Increase grid meter count"
+                    ><Plus className="h-3 w-3" /></button>
+                  </div>
                 </div>
               </div>
-            </div>
-            {/* Meter name + multiplier rows */}
-            {canEdit && (
-              <div className="space-y-1">
-                <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Meter names &amp; multipliers</p>
-                <GridMeterListRows
-                  count={gridCount}
-                  names={gridNames}
-                  multipliers={gridMultipliers}
-                  onSaveNames={names => { isDirty.current = true; setShowDirty(true); setGridNames(names); }}
-                  onSaveMultiplier={(idx, val) => { isDirty.current = true; setShowDirty(true); setGridMultipliers(prev => { const next = [...prev]; next[idx] = val; return next; }); }}
-                  onRemoveLast={() => setGridCount(c => Math.max(1, c - 1))}
-                />
-              </div>
-            )}
 
-            {/* Change Meter — manager/admin only; separate from the name/count config */}
+              {/* Meter name + multiplier rows */}
+              {canEdit && (
+                <div className="space-y-1">
+                  <p className="text-3xs text-muted-foreground font-bold uppercase tracking-wider">Meter Names &amp; CT Multipliers</p>
+                  <GridMeterListRows
+                    count={gridCount}
+                    names={gridNames}
+                    multipliers={gridMultipliers}
+                    onSaveNames={names => { isDirty.current = true; setShowDirty(true); setGridNames(names); }}
+                    onSaveMultiplier={(idx, val) => { isDirty.current = true; setShowDirty(true); setGridMultipliers(prev => { const next = [...prev]; next[idx] = val; return next; }); }}
+                    onRemoveLast={() => setGridCount(c => Math.max(1, c - 1))}
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* Change Meter — manager/admin only */}
             {canEdit && (
-              <div className="pt-1 border-t border-info/60">
+              <div className="pt-2 border-t border-info/40">
                 <Button
                   size="sm"
                   variant="outline"
                   onClick={() => setChangeMeterOpen(true)}
-                  className="w-full gap-1.5 h-8 text-xs rounded-lg border-info/70 text-info hover:bg-info-soft hover:border-info/90"
+                  className="w-full gap-1.5 h-8 text-xs font-semibold rounded-lg border-info/70 text-info hover:bg-info-soft hover:border-info"
                 >
                   <ChangeMeterIcon className="h-3.5 w-3.5" />
-                  Change Meter
+                  <span>Change Meter / Update CT Ratio</span>
                 </Button>
               </div>
             )}
@@ -1306,20 +1412,33 @@ export function PowerMetersCard({ plant }: { plant: any }) {
         </div>
 
         {canEdit ? (
-          <div className="space-y-2">
-            {showDirty && !saving && (
-              <p className="flex items-center gap-1.5 text-xs font-medium text-warn">
-                <span className="h-1.5 w-1.5 rounded-full bg-warn" /> Unsaved changes
-              </p>
+          <div className="pt-2 border-t border-border/60">
+            {showDirty ? (
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-3 rounded-xl bg-warn-soft/60 border border-warn/60 animate-fade-in">
+                <div className="flex items-center gap-2 text-xs font-semibold text-warn">
+                  <span className="h-2 w-2 rounded-full bg-warn animate-ping" />
+                  <span>You have unsaved power meter configuration changes</span>
+                </div>
+                <Button
+                  onClick={saveConfig}
+                  disabled={saving}
+                  size="sm"
+                  className="w-full sm:w-auto px-5 h-9 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 text-xs font-bold shadow-sm"
+                >
+                  {saving ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <Check className="h-3.5 w-3.5 mr-1.5" />}
+                  Save power meter config
+                </Button>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between text-2xs text-muted-foreground px-1 py-0.5">
+                <span className="flex items-center gap-1.5 text-accent font-medium">
+                  <Check className="h-3.5 w-3.5" /> Power meter configuration is synced &amp; up to date
+                </span>
+                <span className="hidden sm:inline text-muted-foreground/60">
+                  {solarCount} solar · {gridCount} grid configured
+                </span>
+              </div>
             )}
-            <Button
-              onClick={saveConfig}
-              disabled={saving || !showDirty}
-              className="w-full h-10 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 disabled:bg-muted disabled:text-muted-foreground text-sm font-semibold"
-            >
-              {saving && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
-              Save power meter config
-            </Button>
           </div>
         ) : (
           <p className="text-xs text-muted-foreground text-center">Only managers and admins can edit meter configuration.</p>
