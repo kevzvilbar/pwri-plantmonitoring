@@ -259,36 +259,36 @@ export function DataCompletenessRadarCard({ plantIds }: Props) {
       </div>
 
       {isLoading ? (
-        <div className="space-y-3 py-4">
-          <Skeleton className="h-[270px] w-full rounded-xl" />
-          <div className="grid grid-cols-3 gap-2">
-            {[...Array(6)].map((_, i) => <Skeleton key={i} className="h-9 rounded-lg" />)}
+        <div className="space-y-2.5 py-2">
+          <Skeleton className="h-[190px] w-full rounded-xl" />
+          <div className="grid grid-cols-3 gap-1.5">
+            {[...Array(6)].map((_, i) => <Skeleton key={i} className="h-7 rounded-lg" />)}
           </div>
         </div>
       ) : !loaded.length || !radarData.length ? (
-        <div className="h-[270px] flex items-center justify-center text-xs text-muted-foreground">
+        <div className="h-[190px] flex items-center justify-center text-xs text-muted-foreground">
           No entity/logging data for this period.
         </div>
       ) : (
-        <div className="space-y-3">
-          {/* Prominent Large Radar chart */}
-          <div className="w-full h-[270px] sm:h-[285px]">
+        <div className="space-y-2">
+          {/* Compact Radar chart */}
+          <div className="w-full h-[185px] sm:h-[195px]">
             <ResponsiveContainer width="100%" height="100%">
-              <RadarChart data={radarData} outerRadius="82%" margin={{ top: 12, right: 28, bottom: 12, left: 28 }}>
-                <PolarGrid stroke="hsl(var(--border))" strokeOpacity={0.8} />
+              <RadarChart data={radarData} outerRadius="75%" margin={{ top: 6, right: 18, bottom: 6, left: 18 }}>
+                <PolarGrid stroke="hsl(var(--border))" strokeOpacity={0.7} />
                 <PolarAngleAxis
                   dataKey="axis"
                   tick={{
-                    fontSize: 11,
+                    fontSize: 10,
                     fontWeight: 600,
                     fill: 'hsl(var(--foreground))',
-                    fillOpacity: 0.9,
+                    fillOpacity: 0.85,
                   }}
                 />
                 <PolarRadiusAxis
                   angle={90}
                   domain={[0, 100]}
-                  tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }}
+                  tick={{ fontSize: 8, fill: 'hsl(var(--muted-foreground))' }}
                   tickCount={5}
                   axisLine={false}
                   tickFormatter={(v: number) => `${v}%`}
@@ -300,18 +300,18 @@ export function DataCompletenessRadarCard({ plantIds }: Props) {
                     dataKey={plant.id}
                     stroke={DRILL_COLORS[i % DRILL_COLORS.length]}
                     fill={DRILL_COLORS[i % DRILL_COLORS.length]}
-                    fillOpacity={loaded.length > 1 ? 0.18 : 0.28}
-                    strokeWidth={2}
+                    fillOpacity={loaded.length > 1 ? 0.16 : 0.24}
+                    strokeWidth={1.75}
                     dot={{
-                      r: 3.5,
+                      r: 3,
                       fill: DRILL_COLORS[i % DRILL_COLORS.length],
                       stroke: 'hsl(var(--card))',
                       strokeWidth: 1.5,
                     }}
                     activeDot={{
-                      r: 5.5,
+                      r: 4.5,
                       stroke: 'hsl(var(--card))',
-                      strokeWidth: 2,
+                      strokeWidth: 1.5,
                     }}
                     connectNulls
                   />
@@ -320,10 +320,10 @@ export function DataCompletenessRadarCard({ plantIds }: Props) {
                   contentStyle={{
                     background: 'hsl(var(--card))',
                     border: '1px solid hsl(var(--border))',
-                    borderRadius: 12,
-                    fontSize: 12,
+                    borderRadius: 10,
+                    fontSize: 11,
                     boxShadow: 'var(--shadow-elev)',
-                    padding: '8px 12px',
+                    padding: '6px 10px',
                   }}
                   formatter={(v: number, name: string) => [`${v == null ? '—' : `${v}%`}`, name]}
                 />
@@ -332,10 +332,10 @@ export function DataCompletenessRadarCard({ plantIds }: Props) {
           </div>
 
           {/* Per-axis breakdown bars */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-2.5 pt-2.5 border-t border-border/60">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-3.5 gap-y-1.5 pt-1.5 border-t border-border/50">
             {axisBreakdown.map((axis) => (
-              <div key={axis.id} className="space-y-1">
-                <div className="flex items-center justify-between text-xs">
+              <div key={axis.id} className="space-y-0.5">
+                <div className="flex items-center justify-between text-2xs">
                   <span className="text-muted-foreground font-medium">{axis.label}</span>
                   <span
                     className="tabular-nums font-bold font-numeral"
@@ -344,7 +344,7 @@ export function DataCompletenessRadarCard({ plantIds }: Props) {
                     {axis.avg == null ? '—' : `${axis.avg}%`}
                   </span>
                 </div>
-                <div className="h-1.5 bg-muted/80 rounded-full overflow-hidden">
+                <div className="h-1 bg-muted/80 rounded-full overflow-hidden">
                   <div
                     className={`h-full rounded-full transition-all duration-500 ${completenessBarColor(axis.avg)}`}
                     style={{ width: `${axis.avg ?? 0}%` }}
