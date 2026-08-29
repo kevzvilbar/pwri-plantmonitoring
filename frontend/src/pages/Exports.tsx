@@ -574,7 +574,7 @@ export default function Exports() {
           icon={CheckCircle2}
           label="Selected Export Package"
           value={selectedTableIds.size > 0 ? `${selectedTableIds.size} Selected` : 'Ready to Export'}
-          tone={selectedTableIds.size > 0 ? 'accent' : 'default'}
+          tone={selectedTableIds.size > 0 ? 'accent' : undefined}
         />
       </div>
 

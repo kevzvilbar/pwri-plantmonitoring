@@ -1071,13 +1071,13 @@ export default function SmartImportPanel() {
           icon={CheckCircle2}
           label="Parsed Records"
           value={parsedRows.length > 0 ? `${validCount} Valid / ${parsedRows.length} Total` : '0 Uploaded'}
-          tone={invalidCount > 0 ? 'warn' : 'default'}
+          tone={invalidCount > 0 ? 'warn' : undefined}
         />
         <StatCard
           icon={Activity}
           label="Import Pipeline Status"
           value={status === 'importing' ? 'Syncing...' : status === 'done' ? 'Sync Complete' : status === 'preview' ? 'Ready to Sync' : 'Awaiting CSV'}
-          tone={status === 'done' ? 'accent' : 'default'}
+          tone={status === 'done' ? 'accent' : undefined}
         />
       </div>
 
