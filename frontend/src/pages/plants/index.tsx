@@ -511,7 +511,7 @@ export default function Plants() {
             onClick={() => setStatusFilter(f)}
             className={`h-8 px-3 rounded-md text-xs font-medium transition-colors border ${
               statusFilter === f
-                ? 'bg-primary text-white border-primary'
+                ? 'bg-primary text-primary-foreground border-primary'
                 : 'bg-background text-muted-foreground border-border/60 hover:bg-muted/60'
             }`}
           >
@@ -1007,7 +1007,7 @@ function PlantDetail({ plantId }: { plantId: string }) {
             className={[
               'py-1.5 px-1 flex flex-col sm:flex-row items-center justify-center gap-1 text-xs font-medium rounded-md transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring min-w-0',
               tab === t.id
-                ? 'bg-primary text-white shadow-sm'
+                ? 'bg-primary text-primary-foreground shadow-sm'
                 : 'text-muted-foreground hover:text-foreground',
             ].join(' ')}
           >

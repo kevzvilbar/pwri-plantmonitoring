@@ -1056,7 +1056,7 @@ function BlendingRow({
 
       {/* Row 5: Save button — full-width on mobile */}
       <Button onClick={save} disabled={saving || !volumeChanged || anomalyRemarkRequired || (isBackdated && backdatedContextLoading)}
-        className={isMobile ? 'w-full h-11 text-sm bg-primary text-white hover:bg-primary/90 active:bg-primary shadow-sm' : 'h-9 px-4 text-xs w-full bg-primary text-white hover:bg-primary/90'}>
+        className={isMobile ? 'w-full h-11 text-sm bg-primary text-primary-foreground hover:bg-primary/90 active:bg-primary shadow-sm' : 'h-9 px-4 text-xs w-full bg-primary text-primary-foreground hover:bg-primary/90'}>
         {saving ? <Loader2 className={isMobile ? 'h-4 w-4 animate-spin' : 'h-3 w-3 animate-spin'} /> : (isBackdated && backdatedContextLoading) ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Save'}
       </Button>
 

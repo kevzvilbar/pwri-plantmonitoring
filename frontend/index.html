@@ -43,6 +43,35 @@
       })();
     </script>
 
+    <!--
+      DARK MODE: apply the persisted `dark` class before first paint.
+
+      The app itself only toggles `document.documentElement.classList` from
+      a useEffect in App.tsx (darkMode state, from useAppStore) — which runs
+      after React mounts and after the browser's first paint. Without this,
+      a returning user with dark mode on sees a flash of the light-mode
+      :root colors (from index.css) on every load/reload, then a jarring
+      snap to dark once React catches up. This mirrors the persisted state
+      synchronously, before any CSS is even applied, so the correct theme
+      is there for the very first frame. It only reads localStorage — it
+      never writes, so it can't drift from what useAppStore persists.
+    -->
+    <script>
+      (function () {
+        try {
+          var raw = localStorage.getItem('pwri-app-state');
+          if (!raw) return;
+          var parsed = JSON.parse(raw);
+          if (parsed && parsed.state && parsed.state.darkMode) {
+            document.documentElement.classList.add('dark');
+          }
+        } catch (e) {
+          // Corrupt/inaccessible storage (e.g. private browsing) — fall back
+          // to the default light theme; App.tsx's effect will still run.
+        }
+      })();
+    </script>
+
     <!-- Favicons -->
     <link rel="icon" type="image/png" sizes="any" href="%BASE_URL%favicon.png" />
     <link rel="icon" type="image/x-icon" href="%BASE_URL%favicon.ico" />

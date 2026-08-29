@@ -327,7 +327,7 @@ export function TrainOperatorLogModal({
               className={[
                 'h-6 px-2 rounded text-xs font-medium border transition-colors',
                 rangePreset === p
-                  ? 'bg-primary text-white border-primary'
+                  ? 'bg-primary text-primary-foreground border-primary'
                   : 'bg-background border-input text-muted-foreground hover:text-foreground',
               ].join(' ')}
             >{p}d</button>

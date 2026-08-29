@@ -66,7 +66,7 @@ export function TrendChartToolbar({
             className={[
               'px-2 text-2xs font-semibold transition-colors leading-none sm:h-5 sm:rounded-full',
               range === r
-                ? 'text-primary font-bold sm:bg-primary sm:text-white'
+                ? 'text-primary font-bold sm:bg-primary sm:text-primary-foreground'
                 : 'text-muted-foreground hover:text-foreground sm:bg-muted/70 sm:border sm:border-border',
             ].join(' ')}
           >{r}</button>
@@ -77,7 +77,7 @@ export function TrendChartToolbar({
           className={[
             'px-2 text-2xs font-semibold transition-colors leading-none sm:h-5 sm:rounded-full',
             range === 'CUSTOM'
-              ? 'text-primary font-bold sm:bg-primary sm:text-white'
+              ? 'text-primary font-bold sm:bg-primary sm:text-primary-foreground'
               : 'text-muted-foreground hover:text-foreground sm:bg-muted/70 sm:border sm:border-border',
           ].join(' ')}
         >Custom</button>

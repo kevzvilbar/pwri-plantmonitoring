@@ -256,7 +256,7 @@ export function ChemDosingForm() {
 
         {/* ── Right Sidebar — hidden on mobile ─────────────────────────── */}
         <div className="hidden md:block w-48 shrink-0">
-          <div className="rounded-xl bg-primary text-white p-3 space-y-3 sticky top-2">
+          <div className="rounded-xl bg-primary text-primary-foreground p-3 space-y-3 sticky top-2">
             <p className="text-xs font-bold uppercase tracking-wider text-primary-foreground">Dosing Summary</p>
             <div className="space-y-2.5"><DosingMobileSummary totalMassKg={totalMassKg} totalVolumeL={totalVolumeL} freePcs={freePcs} cost={cost} /></div>
             <div className="border-t border-primary-foreground/20 pt-2 space-y-2">
@@ -268,7 +268,7 @@ export function ChemDosingForm() {
       </div>
 
       {/* ── Mobile summary bar — visible only on mobile ───────────────── */}
-      <div className="md:hidden rounded-xl bg-primary text-white p-3 space-y-2.5">
+      <div className="md:hidden rounded-xl bg-primary text-primary-foreground p-3 space-y-2.5">
         <p className="text-xs font-bold uppercase tracking-wider text-primary-foreground">Dosing Summary <span className="text-primary-foreground/60 font-normal">(Live)</span></p>
         <div className="grid grid-cols-2 gap-x-4 gap-y-2">
           <DosingMobileSummary totalMassKg={totalMassKg} totalVolumeL={totalVolumeL} freePcs={freePcs} cost={cost} />

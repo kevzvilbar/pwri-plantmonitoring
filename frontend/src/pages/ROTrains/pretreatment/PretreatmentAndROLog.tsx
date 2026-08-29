@@ -1608,7 +1608,7 @@ export function PretreatmentAndROLog() {
                   <Button
                     type="button"
                     size="sm"
-                    className="w-full bg-primary hover:bg-primary/90 text-white gap-2"
+                    className="w-full bg-primary hover:bg-primary/90 text-primary-foreground gap-2"
                     onClick={() => {
                       // Guard: EVERY configured AFM/MMF unit must have its active field pair
                       // fully filled (both Pressure In & Out, or both Meter Start & End).
@@ -1696,7 +1696,7 @@ export function PretreatmentAndROLog() {
                           'px-3 py-1 transition-colors',
                           boosterConfig && 'cursor-not-allowed',
                           globalPsiMode
-                            ? 'bg-primary text-white'
+                            ? 'bg-primary text-primary-foreground'
                             : 'bg-background text-muted-foreground hover:bg-muted'
                         )}
                       >psi</button>
@@ -1709,7 +1709,7 @@ export function PretreatmentAndROLog() {
                           'px-3 py-1 transition-colors',
                           boosterConfig && 'cursor-not-allowed',
                           !globalPsiMode
-                            ? 'bg-primary text-white'
+                            ? 'bg-primary text-primary-foreground'
                             : 'bg-background text-muted-foreground hover:bg-muted'
                         )}
                       >Hz</button>
@@ -1813,7 +1813,7 @@ export function PretreatmentAndROLog() {
                   <Button
                     type="button"
                     size="sm"
-                    className="w-full bg-primary hover:bg-primary/90 text-white gap-2"
+                    className="w-full bg-primary hover:bg-primary/90 text-primary-foreground gap-2"
                     onClick={() => {
                       // Guard: EVERY Booster Pump + HPP field must be filled — HPP target,
                       // plus for each pump the active column (psi target OR Hz, whichever
@@ -1966,7 +1966,7 @@ export function PretreatmentAndROLog() {
               <Button
                 type="button"
                 size="sm"
-                className="w-full bg-primary hover:bg-primary/90 text-white gap-2"
+                className="w-full bg-primary hover:bg-primary/90 text-primary-foreground gap-2"
                 onClick={() => {
                   // Guard: EVERY configured housing must have BOTH Pressure In & Out filled.
                   const totalHousings = (train.num_cartridge_filters ?? 0) + (train.num_filter_housings ?? 0);

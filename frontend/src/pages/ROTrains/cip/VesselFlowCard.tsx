@@ -50,12 +50,12 @@ export function VesselFlowCard({ row, onChange }: { row: VesselFlowRow; onChange
         <div className="flex rounded-full border border-border overflow-hidden text-2xs font-semibold">
           <button type="button" onClick={() => onChange({ method: 'meter' })}
             className={cn('px-2.5 py-0.5 transition-colors',
-              row.method === 'meter' ? 'bg-primary text-white' : 'bg-background text-muted-foreground hover:bg-muted')}>
+              row.method === 'meter' ? 'bg-primary text-primary-foreground' : 'bg-background text-muted-foreground hover:bg-muted')}>
             📟 Meter
           </button>
           <button type="button" onClick={() => onChange({ method: 'manual' })}
             className={cn('px-2.5 py-0.5 transition-colors',
-              row.method === 'manual' ? 'bg-primary text-white' : 'bg-background text-muted-foreground hover:bg-muted')}>
+              row.method === 'manual' ? 'bg-primary text-primary-foreground' : 'bg-background text-muted-foreground hover:bg-muted')}>
             🪣 Bucket
           </button>
         </div>

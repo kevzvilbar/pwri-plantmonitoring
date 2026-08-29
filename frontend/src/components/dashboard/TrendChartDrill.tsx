@@ -49,7 +49,7 @@ export function GranularityControl({
   testIdPrefix?: string;
 }) {
   const OPTIONS: { key: Granularity; label: string; icon: React.ReactNode; activeClass: string }[] = [
-    { key: 'daily', label: 'Daily', icon: <BarChart2 className="h-3 w-3" />, activeClass: 'bg-primary text-white border-primary' },
+    { key: 'daily', label: 'Daily', icon: <BarChart2 className="h-3 w-3" />, activeClass: 'bg-primary text-primary-foreground border-primary' },
     { key: 'weekly', label: 'Weekly', icon: <Rows3 className="h-3 w-3" />, activeClass: 'bg-chart-2 text-white border-chart-2' },
     { key: 'monthly', label: 'Monthly', icon: <ChevronsUp className="h-3 w-3" />, activeClass: 'bg-kpi-ro text-white border-kpi-ro' },
   ];
@@ -103,7 +103,7 @@ export function StackToggle({
         title="Grouped bars — compare entities side by side"
         className={[
           'h-4 px-1.5 rounded text-2xs font-medium transition-colors flex items-center gap-0.5',
-          value === 'grouped' ? 'bg-primary text-white' : 'text-muted-foreground hover:text-foreground',
+          value === 'grouped' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground',
         ].join(' ')}
       >
         <Columns3 className="h-3 w-3" />
@@ -115,7 +115,7 @@ export function StackToggle({
         title="Stacked bars — see the combined total"
         className={[
           'h-4 px-1.5 rounded text-2xs font-medium transition-colors flex items-center gap-0.5',
-          value === 'stacked' ? 'bg-primary text-white' : 'text-muted-foreground hover:text-foreground',
+          value === 'stacked' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground',
         ].join(' ')}
       >
         <Rows3 className="h-3 w-3 rotate-90" />

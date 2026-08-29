@@ -41,16 +41,16 @@ export default function ROTrains() {
       <PageHeader title="RO Trains & Pre-Treatment" />
       <Tabs value={tab} onValueChange={handleTabChange}>
         <TabsList className="grid grid-cols-4 w-full">
-          <TabsTrigger value="overview" className="data-[state=active]:bg-accent data-[state=active]:text-white data-[state=active]:shadow-none text-xs sm:text-sm gap-1.5">
+          <TabsTrigger value="overview" className="data-[state=active]:bg-accent data-[state=active]:text-accent-foreground data-[state=active]:shadow-none text-xs sm:text-sm gap-1.5">
             <LayoutGrid className="hidden sm:inline-block h-3.5 w-3.5 shrink-0" aria-hidden />Overview
           </TabsTrigger>
-          <TabsTrigger value="pretreat-ro" className="data-[state=active]:bg-accent data-[state=active]:text-white data-[state=active]:shadow-none text-2xs sm:text-sm leading-tight gap-1.5">
+          <TabsTrigger value="pretreat-ro" className="data-[state=active]:bg-accent data-[state=active]:text-accent-foreground data-[state=active]:shadow-none text-2xs sm:text-sm leading-tight gap-1.5">
             <ROTrainIcon className="hidden sm:inline-block h-3.5 w-3.5 shrink-0" aria-hidden />Pre-Treatment & RO
           </TabsTrigger>
-          <TabsTrigger value="cip" className="data-[state=active]:bg-accent data-[state=active]:text-white data-[state=active]:shadow-none text-xs sm:text-sm gap-1.5">
+          <TabsTrigger value="cip" className="data-[state=active]:bg-accent data-[state=active]:text-accent-foreground data-[state=active]:shadow-none text-xs sm:text-sm gap-1.5">
             <Recycle className="hidden sm:inline-block h-3.5 w-3.5 shrink-0" aria-hidden />CIP
           </TabsTrigger>
-          <TabsTrigger value="chemical-dosing" className="data-[state=active]:bg-accent data-[state=active]:text-white data-[state=active]:shadow-none text-2xs sm:text-sm leading-tight gap-1.5">
+          <TabsTrigger value="chemical-dosing" className="data-[state=active]:bg-accent data-[state=active]:text-accent-foreground data-[state=active]:shadow-none text-2xs sm:text-sm leading-tight gap-1.5">
             <ChemicalsIcon className="hidden sm:inline-block h-3.5 w-3.5 shrink-0" aria-hidden />Chemical Dosing
           </TabsTrigger>
         </TabsList>

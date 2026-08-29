@@ -637,7 +637,7 @@ export function CIPLog() {
                   <Button variant="ghost"
                     onClick={() => { setEditId(null); setEditRow(null); setEditReason(''); setEditCustomReason(''); }}
                     disabled={saving}>Cancel</Button>
-                  <Button onClick={saveEdit} disabled={saving || !isReasonComplete(editReason, editCustomReason)} className="bg-primary text-white hover:bg-primary/90">
+                  <Button onClick={saveEdit} disabled={saving || !isReasonComplete(editReason, editCustomReason)} className="bg-primary text-primary-foreground hover:bg-primary/90">
                     {saving && <Loader2 className="h-3 w-3 mr-1.5 animate-spin" />}
                     Save Changes
                   </Button>
@@ -649,7 +649,7 @@ export function CIPLog() {
 
         {/* ── Sidebar: hidden on mobile (shown below instead), visible md+ ── */}
         <div className="hidden md:block w-48 shrink-0">
-          <div className="rounded-xl bg-primary text-white p-3 space-y-3 sticky top-2">
+          <div className="rounded-xl bg-primary text-primary-foreground p-3 space-y-3 sticky top-2">
             <div>
               <p className="text-xs font-bold uppercase tracking-wider text-primary-foreground">CIP Summary</p>
               <p className="text-3xs text-primary-foreground/60">(Live Calc)</p>
@@ -664,7 +664,7 @@ export function CIPLog() {
       </div>
 
       {/* ── Mobile summary bar (visible only on mobile) ─────────────────── */}
-      <div className="md:hidden rounded-xl bg-primary text-white p-3 space-y-2.5">
+      <div className="md:hidden rounded-xl bg-primary text-primary-foreground p-3 space-y-2.5">
         <p className="text-xs font-bold uppercase tracking-wider text-primary-foreground">CIP Summary <span className="text-primary-foreground/60 font-normal">(Live)</span></p>
         <div className="grid grid-cols-2 gap-x-4 gap-y-2">
           <CIPSummaryContent liveCost={liveCost} totalMassKg={totalMassKg} totalVolumeL={totalVolumeL} comparisonPct={comparisonPct} />

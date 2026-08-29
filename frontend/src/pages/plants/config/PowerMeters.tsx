@@ -592,7 +592,7 @@ export function PowerConsumptionEnergyMix({
             {(['30','90','180','all'] as const).map(r => (
               <button key={r} onClick={() => setRange(r)}
                 className={`px-2 py-0.5 rounded text-2xs font-medium transition-colors ${
-                  range === r ? 'bg-primary text-white' : 'text-muted-foreground hover:text-foreground'
+                  range === r ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
                 }`}>
                 {r === 'all' ? 'All' : `${r}d`}
               </button>
@@ -604,7 +604,7 @@ export function PowerConsumptionEnergyMix({
               {(['both','solar','grid'] as const).map(s => (
                 <button key={s} onClick={() => setSource(s)}
                   className={`px-2 py-0.5 rounded text-2xs font-medium capitalize transition-colors ${
-                    source === s ? 'bg-primary text-white' : 'text-muted-foreground hover:text-foreground'
+                    source === s ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
                   }`}>
                   {s === 'both' ? 'Both' : s.charAt(0).toUpperCase() + s.slice(1)}
                 </button>
@@ -1038,7 +1038,7 @@ export function PowerMeterChangeDialog({
           <Button
             onClick={submit}
             disabled={saving || !newMultValid || !form.changeDate || !form.oldFinalReading || !form.newInitialReading}
-            className="h-9 bg-primary text-white hover:bg-primary/90"
+            className="h-9 bg-primary text-primary-foreground hover:bg-primary/90"
           >
             {saving && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
             {readingId ? 'Log replacement' : 'Record meter change'}
@@ -1315,7 +1315,7 @@ export function PowerMetersCard({ plant }: { plant: any }) {
             <Button
               onClick={saveConfig}
               disabled={saving || !showDirty}
-              className="w-full h-10 rounded-xl bg-primary text-white hover:bg-primary/90 disabled:bg-muted disabled:text-muted-foreground text-sm font-semibold"
+              className="w-full h-10 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 disabled:bg-muted disabled:text-muted-foreground text-sm font-semibold"
             >
               {saving && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
               Save power meter config

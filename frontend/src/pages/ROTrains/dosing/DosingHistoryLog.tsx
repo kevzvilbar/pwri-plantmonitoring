@@ -378,7 +378,7 @@ export function DosingHistoryLog() {
                       <>
                         <Button
                           size="sm"
-                          className="h-6 px-2 text-2xs bg-primary text-white hover:bg-primary/90"
+                          className="h-6 px-2 text-2xs bg-primary text-primary-foreground hover:bg-primary/90"
                           onClick={saveEdit}
                           disabled={saving || !isReasonComplete(editReason, editCustomReason)}
                         >

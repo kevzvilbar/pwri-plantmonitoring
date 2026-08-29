@@ -103,7 +103,7 @@ export function BackwashModeCard({ plant }: { plant: any }) {
                 className={[
                   'flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-150',
                   active
-                    ? 'bg-primary text-white shadow-sm'
+                    ? 'bg-primary text-primary-foreground shadow-sm'
                     : 'text-muted-foreground hover:text-foreground',
                   !isManager ? 'cursor-default opacity-70' : 'cursor-pointer',
                 ].join(' ')}

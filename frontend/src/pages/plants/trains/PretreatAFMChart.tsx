@@ -117,7 +117,7 @@ export function PretreatAFMChart({
       {(['30', '90', '180', 'all'] as const).map(r => (
         <button key={r} onClick={() => setRange(r)}
           className={`px-2 py-0.5 rounded text-2xs font-medium transition-colors
-            ${range === r ? 'bg-primary text-white' : 'text-muted-foreground hover:text-foreground'}`}>
+            ${range === r ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}>
           {r === 'all' ? 'All' : `${r}d`}
         </button>
       ))}
@@ -137,7 +137,7 @@ export function PretreatAFMChart({
             {(['pressure', 'backwash'] as const).map(v => (
               <button key={v} onClick={() => setView(v)}
                 className={`px-2 py-0.5 rounded text-2xs font-medium capitalize transition-colors
-                  ${view === v ? 'bg-primary text-white' : 'text-muted-foreground hover:text-foreground'}`}>
+                  ${view === v ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}>
                 {v}
               </button>
             ))}

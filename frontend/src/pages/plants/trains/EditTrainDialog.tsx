@@ -313,12 +313,12 @@ export function EditTrainDialog({
                   <div className="flex rounded-full border border-border overflow-hidden text-2xs font-semibold">
                     <button type="button" onClick={() => setBoosterPsiMode(true)}
                       className={cn('px-2.5 py-0.5 transition-colors',
-                        boosterPsiMode ? 'bg-primary text-white' : 'bg-background text-muted-foreground hover:bg-muted')}>
+                        boosterPsiMode ? 'bg-primary text-primary-foreground' : 'bg-background text-muted-foreground hover:bg-muted')}>
                       psi
                     </button>
                     <button type="button" onClick={() => setBoosterPsiMode(false)}
                       className={cn('px-2.5 py-0.5 transition-colors',
-                        !boosterPsiMode ? 'bg-primary text-white' : 'bg-background text-muted-foreground hover:bg-muted')}>
+                        !boosterPsiMode ? 'bg-primary text-primary-foreground' : 'bg-background text-muted-foreground hover:bg-muted')}>
                       Hz
                     </button>
                   </div>

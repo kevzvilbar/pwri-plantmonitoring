@@ -295,7 +295,7 @@ export function BlendingVolumeCard({ plantIds }: Props) {
                 data-testid="blending-view-total"
                 className={[
                   'h-6 px-2 rounded text-2xs font-medium border transition-colors leading-none flex items-center gap-1',
-                  viewMode === 'total' ? 'bg-primary text-white border-primary' : 'bg-muted text-muted-foreground hover:text-foreground border-border',
+                  viewMode === 'total' ? 'bg-primary text-primary-foreground border-primary' : 'bg-muted text-muted-foreground hover:text-foreground border-border',
                 ].join(' ')}
               >
                 <BarChart2 className="h-3 w-3" />Total

@@ -850,7 +850,7 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                 onClick={() => { setDays(d as any); setEditRow(null); }}
                 className={[
                   'px-3 py-1 text-xs font-medium rounded-md transition-all',
-                  days === d ? 'bg-primary text-white shadow-sm' : 'text-muted-foreground hover:text-foreground',
+                  days === d ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
                 ].join(' ')}
               >
                 {label}
@@ -860,7 +860,7 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
               onClick={() => { setDays('custom'); setEditRow(null); }}
               className={[
                 'px-3 py-1 text-xs font-medium rounded-md transition-all',
-                days === 'custom' ? 'bg-primary text-white shadow-sm' : 'text-muted-foreground hover:text-foreground',
+                days === 'custom' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
               ].join(' ')}
             >
               Custom
@@ -884,7 +884,7 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                 onChange={e => setCustomTo(e.target.value)}
                 className="h-7 rounded-md border border-input bg-background px-2 text-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
               />
-              <Button size="sm" className="h-7 px-3 text-xs bg-primary text-white hover:bg-primary/90"
+              <Button size="sm" className="h-7 px-3 text-xs bg-primary text-primary-foreground hover:bg-primary/90"
                 onClick={() => { setAppliedFrom(customFrom); setAppliedTo(customTo); setEditRow(null); }}>
                 Apply
               </Button>
@@ -984,7 +984,7 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
             <div className="flex gap-2">
               <Button size="sm" onClick={saveEdit}
                 disabled={saving || (module === 'power' && meterFilter?.type === 'solar' ? !editRow.value2 : !editRow.value) || !isReasonComplete(editReason, editCustomReason)}
-                className="bg-primary text-white hover:bg-primary/90 h-7 text-xs px-3">
+                className="bg-primary text-primary-foreground hover:bg-primary/90 h-7 text-xs px-3">
                 {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Save changes'}
               </Button>
               <Button size="sm" variant="outline"

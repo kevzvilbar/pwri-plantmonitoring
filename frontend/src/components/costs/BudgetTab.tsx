@@ -157,7 +157,7 @@ export function BudgetTab() {
                         <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={cancelEdit} disabled={saving}>
                           <X className="h-3 w-3" /> Cancel
                         </Button>
-                        <Button size="sm" className="h-7 text-xs gap-1 bg-primary hover:bg-primary/90 text-white" onClick={() => save(r.month)} disabled={saving}>
+                        <Button size="sm" className="h-7 text-xs gap-1 bg-primary hover:bg-primary/90 text-primary-foreground" onClick={() => save(r.month)} disabled={saving}>
                           {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />} Save
                         </Button>
                       </div>
@@ -201,7 +201,7 @@ export function BudgetTab() {
               <div className="flex gap-1">
                 {(['total', 'power', 'chem'] as Metric[]).map((m) => (
                   <Button key={m} size="sm" variant="outline"
-                    className={`h-7 text-xs ${metric === m ? 'bg-primary hover:bg-primary/90 text-white border-primary' : ''}`}
+                    className={`h-7 text-xs ${metric === m ? 'bg-primary hover:bg-primary/90 text-primary-foreground border-primary' : ''}`}
                     onClick={() => setMetric(m)}>
                     {m === 'total' ? 'Total' : m === 'power' ? 'Power' : 'Chemicals'}
                   </Button>

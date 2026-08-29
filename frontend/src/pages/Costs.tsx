@@ -22,13 +22,13 @@ export default function Costs() {
       <PageHeader title="Costs" subtitle="Production cost, power bills & tariffs, chemical & filter prices" />
       <Tabs value={tab} onValueChange={(v) => setParams({ tab: v })}>
         <TabsList className={`grid ${canViewBudget ? 'grid-cols-6' : 'grid-cols-5'} w-full h-auto bg-muted rounded-xl p-1`}>
-          <TabsTrigger value="rollup" className="text-xs sm:text-sm py-2 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:shadow-sm">Rollup</TabsTrigger>
-          <TabsTrigger value="power" className="text-xs sm:text-sm py-2 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:shadow-sm">Power</TabsTrigger>
-          <TabsTrigger value="compare" className="text-xs sm:text-sm py-2 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:shadow-sm">Compare</TabsTrigger>
-          <TabsTrigger value="prices" className="text-xs sm:text-sm py-2 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:shadow-sm">Prices</TabsTrigger>
-          <TabsTrigger value="filters" className="text-xs sm:text-sm py-2 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:shadow-sm">Filters</TabsTrigger>
+          <TabsTrigger value="rollup" className="text-xs sm:text-sm py-2 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm">Rollup</TabsTrigger>
+          <TabsTrigger value="power" className="text-xs sm:text-sm py-2 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm">Power</TabsTrigger>
+          <TabsTrigger value="compare" className="text-xs sm:text-sm py-2 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm">Compare</TabsTrigger>
+          <TabsTrigger value="prices" className="text-xs sm:text-sm py-2 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm">Prices</TabsTrigger>
+          <TabsTrigger value="filters" className="text-xs sm:text-sm py-2 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm">Filters</TabsTrigger>
           {canViewBudget && (
-            <TabsTrigger value="budget" className="text-xs sm:text-sm py-2 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:shadow-sm">Budget</TabsTrigger>
+            <TabsTrigger value="budget" className="text-xs sm:text-sm py-2 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm">Budget</TabsTrigger>
           )}
         </TabsList>
         <TabsContent value="rollup" className="mt-3"><Rollup /></TabsContent>

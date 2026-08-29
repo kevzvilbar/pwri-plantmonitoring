@@ -357,7 +357,7 @@ export function OdometerRollerInput({
           <button
             type="button"
             onMouseDown={e => { e.preventDefault(); setKeyboardMode(false); }}
-            className="shrink-0 h-[48px] px-4 rounded-lg bg-highlight text-white text-sm font-semibold active:bg-highlight"
+            className="shrink-0 h-[48px] px-4 rounded-lg bg-highlight text-highlight-foreground text-sm font-semibold active:bg-highlight"
           >
             Done
           </button>

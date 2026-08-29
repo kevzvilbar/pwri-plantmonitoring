@@ -131,7 +131,7 @@ export function ImportReadingsDialog({
           <Button
             onClick={doImport}
             disabled={!canSubmit}
-            className="bg-primary text-white hover:bg-primary/90"
+            className="bg-primary text-primary-foreground hover:bg-primary/90"
           >
             {busy && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
             Import Rows{rows.length > 0 ? ` (${rows.length})` : ''}
@@ -176,7 +176,7 @@ export function ImportReadingsDialog({
               <Button
                 size="sm"
                 variant="outline"
-                className="gap-1.5 bg-primary text-white hover:bg-primary/90 border-primary"
+                className="gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90 border-primary"
                 onClick={() => fileRef.current?.click()}
               >
                 <Upload className="h-3.5 w-3.5" />
@@ -288,9 +288,9 @@ export function ImportReadingsDialog({
                 Overwrite it, or skip this row?
               </p>
               <div className="flex flex-wrap gap-2 pt-1">
-                <Button size="sm" className="bg-primary text-white hover:bg-primary/90 h-7 text-xs" onClick={() => handleDupDecision('overwrite')}>Overwrite</Button>
+                <Button size="sm" className="bg-primary text-primary-foreground hover:bg-primary/90 h-7 text-xs" onClick={() => handleDupDecision('overwrite')}>Overwrite</Button>
                 <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => handleDupDecision('skip')}>Skip</Button>
-                <Button size="sm" className="bg-primary text-white hover:bg-primary/90 h-7 text-xs" onClick={() => handleDupDecision('overwrite', true)} title="Overwrite this and all remaining duplicates">Overwrite All</Button>
+                <Button size="sm" className="bg-primary text-primary-foreground hover:bg-primary/90 h-7 text-xs" onClick={() => handleDupDecision('overwrite', true)} title="Overwrite this and all remaining duplicates">Overwrite All</Button>
                 <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => handleDupDecision('skip', true)} title="Skip this and all remaining duplicates">Skip All</Button>
               </div>
             </div>

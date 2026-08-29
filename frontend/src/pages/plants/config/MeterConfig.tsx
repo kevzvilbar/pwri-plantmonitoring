@@ -195,7 +195,7 @@ export function CIPChemicalsSection({
               type="button"
               onClick={addChemical}
               disabled={!newName.trim()}
-              className="h-8 px-3 rounded-md text-xs font-medium bg-primary text-white hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shrink-0"
+              className="h-8 px-3 rounded-md text-xs font-medium bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shrink-0"
             >
               + Add
             </button>
@@ -1062,7 +1062,7 @@ export function PlantMeterConfigCard({ plant }: { plant: any }) {
                     className={[
                       'px-3 py-1 text-xs font-medium rounded-md border transition-colors',
                       (cfg.locator_readings_per_day ?? 3) === preset
-                        ? 'bg-primary text-white border-primary'
+                        ? 'bg-primary text-primary-foreground border-primary'
                         : 'bg-transparent text-muted-foreground border-border hover:bg-muted dark:hover:bg-muted/50',
                       !canEdit ? 'opacity-50 cursor-default' : 'cursor-pointer',
                     ].join(' ')}
@@ -1309,7 +1309,7 @@ export function PlantMeterConfigCard({ plant }: { plant: any }) {
 
           {/* Save button */}
           {canEdit && (
-            <Button onClick={doSave} disabled={saving} className="w-full h-10 bg-primary text-white hover:bg-primary/90 text-sm" data-testid="save-meter-config-btn">
+            <Button onClick={doSave} disabled={saving} className="w-full h-10 bg-primary text-primary-foreground hover:bg-primary/90 text-sm" data-testid="save-meter-config-btn">
               {saving && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
               Save meter configuration
             </Button>
@@ -1405,7 +1405,7 @@ export function PlantComponentTypeCard({ plant, embedded = false }: { plant: any
                       data-testid={`media-type-${opt}`}
                       className={[
                         'flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-150',
-                        active ? 'bg-primary text-white shadow-sm' : 'text-muted-foreground hover:text-foreground',
+                        active ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
                         !isManager ? 'cursor-default opacity-70' : 'cursor-pointer',
                       ].join(' ')}
                     >
@@ -1449,7 +1449,7 @@ export function PlantComponentTypeCard({ plant, embedded = false }: { plant: any
                       data-testid={`filter-type-${opt.replace(' ', '-')}`}
                       className={[
                         'flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-150',
-                        active ? 'bg-primary text-white shadow-sm' : 'text-muted-foreground hover:text-foreground',
+                        active ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
                         !isManager ? 'cursor-default opacity-70' : 'cursor-pointer',
                       ].join(' ')}
                     >
@@ -1468,7 +1468,7 @@ export function PlantComponentTypeCard({ plant, embedded = false }: { plant: any
       {isManager && editing && (
         <div className="flex gap-1.5 justify-end pt-2.5">
           <Button size="sm" variant="ghost" onClick={cancel} disabled={saving} className="h-7 text-xs px-3">Cancel</Button>
-          <Button size="sm" onClick={save} disabled={saving} data-testid="save-component-types-btn" className="h-7 text-xs px-3 bg-primary text-white hover:bg-primary/90">
+          <Button size="sm" onClick={save} disabled={saving} data-testid="save-component-types-btn" className="h-7 text-xs px-3 bg-primary text-primary-foreground hover:bg-primary/90">
             {saving && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
             Save
           </Button>

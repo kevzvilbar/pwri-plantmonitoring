@@ -246,7 +246,7 @@ export function ImportROReadingsDialog({
             <div className="flex items-center gap-2">
               <Button
                 size="sm" variant="outline"
-                className="gap-1.5 bg-primary text-white hover:bg-primary/90 border-primary"
+                className="gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90 border-primary"
                 onClick={() => fileRef.current?.click()}
               >
                 <Upload className="h-3.5 w-3.5" /> Choose File
@@ -378,7 +378,7 @@ export function ImportROReadingsDialog({
             <Button
               onClick={doImport}
               disabled={!canSubmit}
-              className="bg-primary text-white hover:bg-primary/90"
+              className="bg-primary text-primary-foreground hover:bg-primary/90"
             >
               {busy && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
               Import Rows{rows.length > 0 ? ` (${rows.length})` : ''}

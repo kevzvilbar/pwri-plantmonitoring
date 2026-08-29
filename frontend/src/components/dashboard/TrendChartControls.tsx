@@ -58,7 +58,7 @@ export function TrendChartControls(props: Record<string, any>) {
                 <p className="text-2xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Breakdown</p>
                 <div className="flex flex-wrap gap-1">
                   <button onClick={() => { setViewBreakdown('total'); setSelectedLocatorIds(null); setShowLocatorFilter(false); }}
-                    className={['h-6 px-2 rounded text-2xs font-medium border transition-colors leading-none', viewBreakdown === 'total' ? 'bg-primary text-white border-primary' : 'bg-muted text-muted-foreground hover:text-foreground border-border'].join(' ')}>Total</button>
+                    className={['h-6 px-2 rounded text-2xs font-medium border transition-colors leading-none', viewBreakdown === 'total' ? 'bg-primary text-primary-foreground border-primary' : 'bg-muted text-muted-foreground hover:text-foreground border-border'].join(' ')}>Total</button>
                   <button onClick={() => { setViewBreakdown('by-locator'); setSelectedLocatorIds(null); }}
                     className={['h-6 px-2 rounded text-2xs font-medium border transition-colors leading-none', viewBreakdown === 'by-locator' ? 'bg-chart-2 text-white border-chart-2' : 'bg-muted text-muted-foreground hover:text-foreground border-border'].join(' ')}>By locator</button>
                   {metric === 'production' && (
@@ -91,7 +91,7 @@ export function TrendChartControls(props: Record<string, any>) {
                 <p className="text-2xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Breakdown</p>
                 <div className="flex flex-wrap gap-1">
                   <button onClick={() => { setRawwaterBreakdown('total'); setSelectedWellIds(null); }}
-                    className={['h-6 px-2 rounded text-2xs font-medium border', rawwaterBreakdown === 'total' ? 'bg-primary text-white border-primary' : 'bg-muted text-muted-foreground border-border'].join(' ')}>Total</button>
+                    className={['h-6 px-2 rounded text-2xs font-medium border', rawwaterBreakdown === 'total' ? 'bg-primary text-primary-foreground border-primary' : 'bg-muted text-muted-foreground border-border'].join(' ')}>Total</button>
                   <button onClick={() => setRawwaterBreakdown('by-well')}
                     className={['h-6 px-2 rounded text-2xs font-medium border', rawwaterBreakdown === 'by-well' ? 'bg-chart-2 text-white border-chart-2' : 'bg-muted text-muted-foreground border-border'].join(' ')}>By well</button>
                 </div>
@@ -128,7 +128,7 @@ export function TrendChartControls(props: Record<string, any>) {
                 <p className="text-2xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Breakdown</p>
                 <div className="flex flex-wrap gap-1">
                   <button onClick={() => { if (roDrillMode === 'by-train') { setRoDrillMode('default'); setShowTrainFilter(false); } }}
-                    className={['h-6 px-2 rounded text-2xs font-medium border', roDrillMode !== 'by-train' ? 'bg-primary text-white border-primary' : 'bg-muted text-muted-foreground border-border'].join(' ')}>Total</button>
+                    className={['h-6 px-2 rounded text-2xs font-medium border', roDrillMode !== 'by-train' ? 'bg-primary text-primary-foreground border-primary' : 'bg-muted text-muted-foreground border-border'].join(' ')}>Total</button>
                   <button onClick={() => setRoDrillMode(roDrillMode === 'by-train' ? 'default' : 'by-train')}
                     className={['h-6 px-2 rounded text-2xs font-medium border flex items-center gap-1', roDrillMode === 'by-train' ? 'bg-chart-2 text-white border-chart-2' : 'bg-muted text-muted-foreground border-border'].join(' ')}>
                     <ChevronsDown className="h-3 w-3" />By train
@@ -150,7 +150,7 @@ export function TrendChartControls(props: Record<string, any>) {
                   {(['daily','hourly','weekly','monthly'] as const).map((m) => (
                     <button key={m} onClick={() => { setPhDrillMode(m); setPhDayFocus(null); }}
                       disabled={m !== 'hourly' && !isGranularityUsable(m, rangeDays)}
-                      className={['h-6 px-2 rounded text-2xs font-medium border capitalize', phDrillMode === m ? 'bg-primary text-white border-primary' : (m !== 'hourly' && !isGranularityUsable(m, rangeDays)) ? 'opacity-40 cursor-not-allowed bg-muted text-muted-foreground border-border' : 'bg-muted text-muted-foreground border-border'].join(' ')}>{m}</button>
+                      className={['h-6 px-2 rounded text-2xs font-medium border capitalize', phDrillMode === m ? 'bg-primary text-primary-foreground border-primary' : (m !== 'hourly' && !isGranularityUsable(m, rangeDays)) ? 'opacity-40 cursor-not-allowed bg-muted text-muted-foreground border-border' : 'bg-muted text-muted-foreground border-border'].join(' ')}>{m}</button>
                   ))}
                 </div>
               </div>
@@ -197,7 +197,7 @@ export function TrendChartControls(props: Record<string, any>) {
                 <div className="flex flex-wrap gap-1 mb-2">
                   {(['both','solar','grid'] as const).map(s => (
                     <button key={s} onClick={() => setKwhSource(s)}
-                      className={['h-6 px-2 rounded text-2xs font-medium border capitalize', kwhSource === s ? 'bg-primary text-white border-primary' : 'bg-muted text-muted-foreground border-border'].join(' ')}>{s}</button>
+                      className={['h-6 px-2 rounded text-2xs font-medium border capitalize', kwhSource === s ? 'bg-primary text-primary-foreground border-primary' : 'bg-muted text-muted-foreground border-border'].join(' ')}>{s}</button>
                   ))}
                 </div>
                 <p className="text-2xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Bars</p>
@@ -238,7 +238,7 @@ export function TrendChartControls(props: Record<string, any>) {
                         className={[
                           'px-2 py-0.5 rounded text-2xs font-medium transition-colors',
                           kwhSource === s
-                            ? 'bg-primary text-white'
+                            ? 'bg-primary text-primary-foreground'
                             : 'text-muted-foreground hover:text-foreground',
                         ].join(' ')}>
                         {s === 'both' ? 'Both' : s === 'solar' ? '☀ Solar' : '⚡ Grid'}
@@ -338,7 +338,7 @@ export function TrendChartControls(props: Record<string, any>) {
               className={[
                 'h-5 px-1.5 rounded text-2xs font-medium transition-colors leading-none border',
                 rawwaterBreakdown === 'total'
-                  ? 'bg-primary text-white border-primary'
+                  ? 'bg-primary text-primary-foreground border-primary'
                   : 'bg-muted text-muted-foreground hover:text-foreground border-border',
               ].join(' ')}
             >Total</button>
@@ -385,7 +385,7 @@ export function TrendChartControls(props: Record<string, any>) {
               className={[
                 'h-5 px-1.5 rounded text-2xs font-medium transition-colors leading-none border',
                 viewBreakdown === 'total'
-                  ? 'bg-primary text-white border-primary'
+                  ? 'bg-primary text-primary-foreground border-primary'
                   : 'bg-muted text-muted-foreground hover:text-foreground border-border',
               ].join(' ')}
               title="Combined total"
@@ -490,7 +490,7 @@ export function TrendChartControls(props: Record<string, any>) {
               className={[
                 'h-5 px-1.5 rounded text-2xs font-medium transition-colors leading-none border',
                 roDrillMode !== 'by-train'
-                  ? 'bg-primary text-white border-primary'
+                  ? 'bg-primary text-primary-foreground border-primary'
                   : 'bg-muted text-muted-foreground hover:text-foreground border-border',
               ].join(' ')}
               title="Fleet average (all trains combined)"
@@ -553,7 +553,7 @@ export function TrendChartControls(props: Record<string, any>) {
               className={[
                 'h-5 px-1.5 rounded text-2xs font-medium transition-colors leading-none flex items-center gap-0.5 border',
                 phDrillMode === 'daily'
-                  ? 'bg-primary text-white border-primary'
+                  ? 'bg-primary text-primary-foreground border-primary'
                   : 'bg-muted text-muted-foreground hover:text-foreground border-border',
               ].join(' ')}
               title="Daily average health %"
@@ -620,7 +620,7 @@ export function TrendChartControls(props: Record<string, any>) {
                 className={[
                   'h-5 px-2 rounded text-2xs font-medium border transition-colors leading-none',
                   allTrainsSelected
-                    ? 'bg-primary text-white border-primary'
+                    ? 'bg-primary text-primary-foreground border-primary'
                     : 'bg-muted text-muted-foreground hover:text-foreground border-border',
                 ].join(' ')}
               >All</button>
@@ -713,7 +713,7 @@ export function TrendChartControls(props: Record<string, any>) {
                 className={[
                   'h-5 px-2 rounded text-2xs font-medium border transition-colors leading-none',
                   allSelected
-                    ? 'bg-primary text-white border-primary'
+                    ? 'bg-primary text-primary-foreground border-primary'
                     : 'bg-muted text-muted-foreground hover:text-foreground border-border',
                 ].join(' ')}
               >

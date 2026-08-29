@@ -1138,7 +1138,7 @@ function WellRow({
               </div>
               <Button
                 onClick={save} disabled={saving || !meterChanged || atLimit || anomalyRemarkRequired}
-                className="w-full h-10 text-sm bg-primary hover:bg-primary/90 active:bg-primary text-white shadow-sm"
+                className="w-full h-10 text-sm bg-primary hover:bg-primary/90 active:bg-primary text-primary-foreground shadow-sm"
                 title="Save water meter reading">
                 {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : editingId ? 'Update' : 'Save'}
               </Button>
@@ -1156,7 +1156,7 @@ function WellRow({
               <Button
                 onClick={save} disabled={saving || !meterChanged || atLimit || anomalyRemarkRequired}
                 size="sm"
-                className="h-7 px-2.5 shrink-0 bg-primary hover:bg-primary/90 active:bg-primary text-white text-xs shadow-sm"
+                className="h-7 px-2.5 shrink-0 bg-primary hover:bg-primary/90 active:bg-primary text-primary-foreground text-xs shadow-sm"
                 title="Save water meter reading">
                 {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : editingId ? 'Update' : 'Save'}
               </Button>

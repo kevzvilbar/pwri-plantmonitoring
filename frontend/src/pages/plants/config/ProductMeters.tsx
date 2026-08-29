@@ -1306,7 +1306,7 @@ function ProductMeterNameInlineBase({
           }}
           autoFocus
         />
-        <Button size="sm" className="h-7 px-2 text-xs bg-primary hover:bg-primary/90 text-white" onClick={saveName} disabled={busy}>
+        <Button size="sm" className="h-7 px-2 text-xs bg-primary hover:bg-primary/90 text-primary-foreground" onClick={saveName} disabled={busy}>
           {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Save'}
         </Button>
         <Button size="sm" variant="ghost" className="h-7 w-7 p-0 rounded-full" onClick={() => { setEditing(false); setNameInput(meter.name ?? ''); }}>

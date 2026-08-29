@@ -296,7 +296,7 @@ export function ChemicalPrices() {
             <Input type="date" value={v.effective_date} onChange={(e) => setV({ ...v, effective_date: e.target.value })} id="costs-effective-date"/>
           </div>
         </div>
-        <Button onClick={submit} className="w-full bg-primary hover:bg-primary/90 text-white" size="sm">Add price</Button>
+        <Button onClick={submit} className="w-full bg-primary hover:bg-primary/90 text-primary-foreground" size="sm">Add price</Button>
 
         {itemCategory === 'power' && v.plant_id && (
           <div className="pt-1 border-t">
@@ -381,7 +381,7 @@ export function ChemicalPrices() {
                   </Button>
                   <Button
                     size="sm"
-                    className="h-7 text-xs gap-1 bg-primary hover:bg-primary/90 text-white"
+                    className="h-7 text-xs gap-1 bg-primary hover:bg-primary/90 text-primary-foreground"
                     onClick={saveEdit}
                     disabled={saving}
                   >

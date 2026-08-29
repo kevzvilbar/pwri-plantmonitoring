@@ -134,7 +134,7 @@ export function Compare() {
               {rangeBtns.map(({ key, label }) => (
                 <button key={key} onClick={() => setViewMode(key)}
                   className={['h-6 px-2 rounded text-xs font-medium border transition-colors',
-                    viewMode === key ? 'bg-primary text-white border-primary' : 'bg-muted text-muted-foreground hover:text-foreground border-border',
+                    viewMode === key ? 'bg-primary text-primary-foreground border-primary' : 'bg-muted text-muted-foreground hover:text-foreground border-border',
                   ].join(' ')}>{label}</button>
               ))}
               {viewMode === 'custom' && (

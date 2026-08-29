@@ -231,7 +231,7 @@ export function BottomNav() {
             <>
               <span className={cn(
                 'flex items-center justify-center h-12 w-12 rounded-full shadow-elev border-2 border-card transition-all',
-                isActive ? 'bg-primary text-white' : 'bg-accent/90 text-accent-foreground',
+                isActive ? 'bg-primary text-primary-foreground' : 'bg-accent/90 text-accent-foreground',
               )}>
                 <LayoutDashboard className="h-5 w-5" />
               </span>

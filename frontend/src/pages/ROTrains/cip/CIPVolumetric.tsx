@@ -135,7 +135,7 @@ export function CIPVolumetric({ numVessels = 4 }: { numVessels?: number }) {
             className={cn(
               'text-xs px-3 py-1 rounded-full border font-medium transition-colors',
               activeTab === t.key
-                ? 'bg-accent text-white border-accent'
+                ? 'bg-accent text-accent-foreground border-accent'
                 : 'border-border bg-muted/40 text-muted-foreground hover:bg-muted'
             )}>
             {t.label}
@@ -160,7 +160,7 @@ export function CIPVolumetric({ numVessels = 4 }: { numVessels?: number }) {
             <Button
               size="sm"
               onClick={generateList}
-              className="h-7 px-3 text-xs bg-primary text-white hover:bg-primary/90"
+              className="h-7 px-3 text-xs bg-primary text-primary-foreground hover:bg-primary/90"
             >
               Generate List
             </Button>
@@ -179,12 +179,12 @@ export function CIPVolumetric({ numVessels = 4 }: { numVessels?: number }) {
             <div className="flex rounded-full border border-border overflow-hidden text-xs font-semibold">
               <button type="button" onClick={() => applyGlobalMethod('meter')}
                 className={cn('px-3 py-1 transition-colors',
-                  globalMethod === 'meter' ? 'bg-primary text-white' : 'bg-background text-muted-foreground hover:bg-muted')}>
+                  globalMethod === 'meter' ? 'bg-primary text-primary-foreground' : 'bg-background text-muted-foreground hover:bg-muted')}>
                 📟 Water Meter
               </button>
               <button type="button" onClick={() => applyGlobalMethod('manual')}
                 className={cn('px-3 py-1 transition-colors',
-                  globalMethod === 'manual' ? 'bg-primary text-white' : 'bg-background text-muted-foreground hover:bg-muted')}>
+                  globalMethod === 'manual' ? 'bg-primary text-primary-foreground' : 'bg-background text-muted-foreground hover:bg-muted')}>
                 🪣 Bucket Test
               </button>
             </div>
@@ -285,7 +285,7 @@ export function CIPVolumetric({ numVessels = 4 }: { numVessels?: number }) {
                         <button
                           type="button"
                           onClick={e => { e.stopPropagation(); saveVessel(row.id); }}
-                          className="h-6 px-2 rounded text-2xs font-semibold bg-primary text-white hover:bg-primary/90 transition-colors"
+                          className="h-6 px-2 rounded text-2xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
                           title="Save this vessel"
                         >
                           Save

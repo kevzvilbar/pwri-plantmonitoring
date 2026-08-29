@@ -805,7 +805,7 @@ export function TrainCsvImportDialog({ plantId, onClose,
             <p className="text-xs font-medium">Select CSV file</p>
             <div className="mt-1">
               <label className="inline-flex items-center gap-2 cursor-pointer group">
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-primary group-hover:bg-primary/90 text-white text-xs font-semibold px-4 py-1.5 transition-colors select-none">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-primary group-hover:bg-primary/90 text-primary-foreground text-xs font-semibold px-4 py-1.5 transition-colors select-none">
                   <Upload className="h-3.5 w-3.5" />
                   Choose File
                 </span>

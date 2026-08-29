@@ -544,13 +544,13 @@ export function WellsList({ plantId, highlightId }: { plantId: string; highlight
                   disabled={blendingPending}
                   className={`inline-flex items-center gap-1 h-6 px-2 rounded-full text-2xs font-medium border transition-colors ${
                     isBlending
-                      ? 'bg-primary border-primary text-white'
+                      ? 'bg-primary border-primary text-primary-foreground'
                       : 'bg-background border-border text-muted-foreground hover:bg-muted'
                   } ${blendingPending ? 'opacity-50 cursor-wait' : 'cursor-pointer'}`}
                   title={isBlending ? 'Blending on — click to clear' : 'Mark as blending well'}
                   data-testid={`well-blending-${w.id}`}
                 >
-                  {blendingPending ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : <span className={`h-1.5 w-1.5 rounded-full ${isBlending ? 'bg-white' : 'bg-muted-foreground'}`} />}
+                  {blendingPending ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : <span className={`h-1.5 w-1.5 rounded-full ${isBlending ? 'bg-primary-foreground' : 'bg-muted-foreground'}`} />}
                   Blending
                 </button>
                 {/* Power pill — 3 states: none / dedicated / shared.
@@ -565,7 +565,7 @@ export function WellsList({ plantId, highlightId }: { plantId: string; highlight
                         elMode === 'dedicated'
                           ? 'bg-warn border-warn text-white'
                           : elMode === 'shared'
-                          ? 'bg-primary border-primary text-white'
+                          ? 'bg-primary border-primary text-primary-foreground'
                           : 'bg-background border-border text-muted-foreground hover:bg-muted'
                       } ${powerBusy.has(w.id) ? 'opacity-50 cursor-wait' : 'cursor-pointer'}`}
                       title={

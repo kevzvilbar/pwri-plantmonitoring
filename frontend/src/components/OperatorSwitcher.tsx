@@ -223,7 +223,7 @@ export function OperatorSwitcher() {
                       onSelect={(e) => { e.preventDefault(); handleSelect(p); }}
                     >
                       <Avatar className="h-6 w-6 shrink-0">
-                        <AvatarFallback className={`text-3xs font-semibold ${isActive ? 'bg-accent text-white' : 'bg-muted text-muted-foreground'}`}>
+                        <AvatarFallback className={`text-3xs font-semibold ${isActive ? 'bg-accent text-accent-foreground' : 'bg-muted text-muted-foreground'}`}>
                           {initials(p)}
                         </AvatarFallback>
                       </Avatar>

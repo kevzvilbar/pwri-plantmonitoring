@@ -698,7 +698,7 @@ export function TrainLogModal({ trainId, trainLabel, plantId, onClose, initialTa
               {(['ro', 'pretreat'] as const).map(tab => (
                 <button key={tab} onClick={() => { setLogTab(tab); setPage(0); }}
                   className={cn('px-3 py-1 transition-colors',
-                    logTab === tab ? 'bg-primary text-white' : 'bg-background text-muted-foreground hover:bg-muted')}>
+                    logTab === tab ? 'bg-primary text-primary-foreground' : 'bg-background text-muted-foreground hover:bg-muted')}>
                   {tab === 'ro' ? 'RO' : 'Pre-Treatment'}
                 </button>
               ))}
@@ -706,7 +706,7 @@ export function TrainLogModal({ trainId, trainLabel, plantId, onClose, initialTa
             {(['7', '30', '90'] as const).map(p => (
               <button key={p} onClick={() => applyPreset(p)}
                 className={cn('h-6 px-2 rounded text-xs font-medium border transition-colors',
-                  rangePreset === p ? 'bg-primary text-white border-primary' : 'bg-background border-input text-muted-foreground hover:text-foreground')}>
+                  rangePreset === p ? 'bg-primary text-primary-foreground border-primary' : 'bg-background border-input text-muted-foreground hover:text-foreground')}>
                 {p}d
               </button>
             ))}

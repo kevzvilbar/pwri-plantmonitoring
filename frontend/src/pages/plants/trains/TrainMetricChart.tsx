@@ -113,7 +113,7 @@ export function TrainMetricChart({
           <div className="flex items-center gap-0.5 bg-muted rounded-md p-0.5">
             {(['30', '90', '180', 'all'] as const).map(r => (
               <button key={r} onClick={() => setRange(r)}
-                className={`px-2 py-0.5 rounded text-2xs font-medium transition-colors ${range === r ? 'bg-primary text-white' : 'text-muted-foreground hover:text-foreground'}`}>
+                className={`px-2 py-0.5 rounded text-2xs font-medium transition-colors ${range === r ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}>
                 {r === 'all' ? 'All' : `${r}d`}
               </button>
             ))}

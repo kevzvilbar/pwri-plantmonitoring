@@ -796,7 +796,7 @@ function ProductMeterRow({
           <div className="flex items-center gap-2">
             <Button
               onClick={save} disabled={saving || !reading || anomalyRemarkRequired}
-              className="flex-1 h-11 text-sm bg-primary hover:bg-primary/90 active:bg-primary text-white shadow-sm"
+              className="flex-1 h-11 text-sm bg-primary hover:bg-primary/90 active:bg-primary text-primary-foreground shadow-sm"
               data-testid={`product-meter-save-${meter.id}`}
             >
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Save'}
@@ -1199,12 +1199,12 @@ function ProductMeterHistoryDialog({ meter, plantId, onClose }: { meter: any; pl
             {WINDOWS.map(({ label, days: d }) => (
               <button key={label} onClick={() => { setDays(d as any); setEditRow(null); }}
                 className={['px-3 py-1 text-xs font-medium rounded-md transition-all',
-                  days === d ? 'bg-primary text-white shadow-sm' : 'text-muted-foreground hover:text-foreground',
+                  days === d ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
                 ].join(' ')}>{label}</button>
             ))}
             <button onClick={() => { setDays('custom'); setEditRow(null); }}
               className={['px-3 py-1 text-xs font-medium rounded-md transition-all',
-                days === 'custom' ? 'bg-primary text-white shadow-sm' : 'text-muted-foreground hover:text-foreground',
+                days === 'custom' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
               ].join(' ')}>Custom</button>
           </div>
           {days === 'custom' && (
@@ -1216,7 +1216,7 @@ function ProductMeterHistoryDialog({ meter, plantId, onClose }: { meter: any; pl
               <input type="date" value={customTo} min={customFrom} max={format(new Date(), 'yyyy-MM-dd')}
                 onChange={e => setCustomTo(e.target.value)}
                 className="h-7 rounded-md border border-input bg-background px-2 text-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring" />
-              <Button size="sm" className="h-7 px-3 text-xs bg-primary text-white hover:bg-primary/90"
+              <Button size="sm" className="h-7 px-3 text-xs bg-primary text-primary-foreground hover:bg-primary/90"
                 onClick={() => { setAppliedFrom(customFrom); setAppliedTo(customTo); setEditRow(null); }}>
                 Apply
               </Button>
@@ -1245,7 +1245,7 @@ function ProductMeterHistoryDialog({ meter, plantId, onClose }: { meter: any; pl
             />
             <div className="flex gap-2">
               <Button size="sm" onClick={saveEdit} disabled={saving || !editRow.value || !isReasonComplete(reason, customReason)}
-                className="bg-primary text-white hover:bg-primary/90 h-7 text-xs px-3">
+                className="bg-primary text-primary-foreground hover:bg-primary/90 h-7 text-xs px-3">
                 {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Save changes'}
               </Button>
               <Button size="sm" variant="outline"

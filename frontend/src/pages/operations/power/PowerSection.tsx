@@ -1159,7 +1159,7 @@ export function PowerForm() {
                           data-testid={`power-solar-input-${idx}`} id="powersection-classname-ml-auto-p-0-5-rounded-text-muted-fore"/>
                         <Button size="sm" disabled={isSavingThis || !solarMeterChanged}
                           onClick={() => submitMeter('solar', idx)}
-                          className="shrink-0 h-9 px-3 text-xs bg-primary text-white hover:bg-primary/90"
+                          className="shrink-0 h-9 px-3 text-xs bg-primary text-primary-foreground hover:bg-primary/90"
                           data-testid={`power-solar-save-${idx}`}>
                           {isSavingThis ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Save'}
                         </Button>
@@ -1281,7 +1281,7 @@ export function PowerForm() {
                           disabled={isSavingThis || !gridMeterChanged || configLoading}
                           title={configLoading ? 'Loading meter config — please wait' : undefined}
                           onClick={() => submitMeter('grid', idx)}
-                          className="shrink-0 h-9 px-3 text-xs bg-primary text-white hover:bg-primary/90"
+                          className="shrink-0 h-9 px-3 text-xs bg-primary text-primary-foreground hover:bg-primary/90"
                           data-testid={`power-grid-save-${idx}`}
                         >
                           {isSavingThis || configLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Save'}
@@ -1400,7 +1400,7 @@ export function PowerForm() {
                           disabled={isSavingThis || !gridMeterChanged || configLoading}
                           title={configLoading ? 'Loading meter config — please wait' : undefined}
                           onClick={() => submitMeter('grid', item.idx)}
-                          className="w-full h-11 text-sm bg-primary text-white hover:bg-primary/90 active:bg-primary shadow-sm"
+                          className="w-full h-11 text-sm bg-primary text-primary-foreground hover:bg-primary/90 active:bg-primary shadow-sm"
                           data-testid={`power-grid-save-${item.idx}`}
                         >
                           {isSavingThis || configLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : editingId && isFirst ? 'Update' : 'Save'}
@@ -1470,7 +1470,7 @@ export function PowerForm() {
                       <Button
                         disabled={isSavingThis || !solarMeterChanged}
                         onClick={() => submitMeter('solar', item.idx)}
-                        className="w-full h-11 text-sm bg-primary text-white hover:bg-primary/90 active:bg-primary shadow-sm"
+                        className="w-full h-11 text-sm bg-primary text-primary-foreground hover:bg-primary/90 active:bg-primary shadow-sm"
                         data-testid={`power-solar-save-${item.idx}`}
                       >
                         {isSavingThis ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Save'}
@@ -1578,7 +1578,7 @@ export function PowerForm() {
                         <Button
                           disabled={isSavingThis2 || !gridMeterChangedNS}
                           onClick={() => submitMeter('grid', idx)}
-                          className="w-full h-11 text-sm bg-primary text-white hover:bg-primary/90 active:bg-primary shadow-sm"
+                          className="w-full h-11 text-sm bg-primary text-primary-foreground hover:bg-primary/90 active:bg-primary shadow-sm"
                           data-testid={`power-grid-save-ns-${idx}`}
                         >
                           {isSavingThis2 ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Save'}
@@ -1596,7 +1596,7 @@ export function PowerForm() {
                             size="sm"
                             disabled={isSavingThis2 || !gridMeterChangedNS}
                             onClick={() => submitMeter('grid', idx)}
-                            className="shrink-0 h-9 px-3 text-xs bg-primary text-white hover:bg-primary/90"
+                            className="shrink-0 h-9 px-3 text-xs bg-primary text-primary-foreground hover:bg-primary/90"
                             data-testid={`power-grid-save-ns-${idx}`}
                           >
                             {isSavingThis2 ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Save'}
