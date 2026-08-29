@@ -48,7 +48,7 @@ interface Props {
 
 type RNode = HierarchyRectangularNode<CostSunburstNode> & { id: string };
 
-const SIZE = 220;
+const SIZE = 200;
 
 // Same accents as the Power Cost / Chemical Cost StatCards above this
 // chart (`text-chart-6` / `text-highlight` in Dashboard.tsx) — fixed by
@@ -80,20 +80,20 @@ function visibleSpan(d: RNode, focus: RNode) {
   return { x0, x1, y0: d.y0 - focus.depth, y1: d.y1 - focus.depth };
 }
 
+/** Color label for each category */
+function categorySwatchStyle(name: string): string {
+  if (name === 'Solar') return SOLAR_COLOR;
+  if (name === 'Grid' || name === 'Power') return POWER_COLOR;
+  if (name === 'Chemicals') return CHEM_COLOR;
+  return FILTER_COLOR;
+}
+
 export function CostSunburst({ plantIds }: Props) {
   const chartRange = useAppStore((s) => s.chartRange);
   const chartFrom = useAppStore((s) => s.chartFrom);
   const chartTo = useAppStore((s) => s.chartTo);
   const days = rangeKeyToDays(chartRange, chartFrom, chartTo);
 
-  // chartFrom/chartTo only reflect the real selection when chartRange is
-  // CUSTOM (rangeKeyToDays ignores them for the preset buttons) — but every
-  // range, preset or custom, should resolve to a real, concrete date span
-  // rather than a vague day-count, matching how Data Completeness Radar
-  // already labels itself ("Jul 24–Jul 26", not "last 2d"). For presets that
-  // means computing "today back N days" here instead of leaving it for the
-  // hook to silently re-derive the same thing internally with nothing to
-  // show for it in the UI.
   const isCustomRange = chartRange === 'CUSTOM';
   const resolvedTo = isCustomRange ? chartTo : format(new Date(), 'yyyy-MM-dd');
   const resolvedFrom = isCustomRange ? chartFrom : format(subDays(new Date(), days), 'yyyy-MM-dd');
@@ -101,9 +101,6 @@ export function CostSunburst({ plantIds }: Props) {
   const { data, isLoading } = useCostComposition(plantIds, days, resolvedFrom, resolvedTo);
   const [focusId, setFocusId] = useState('Cost');
 
-  // "last {days}d" was the tell that this was silently ignoring whatever was
-  // actually picked (it never changed no matter what range was selected).
-  // Every mode now shows the real dates it's actually querying instead.
   const rangeLabel = resolvedFrom === resolvedTo
     ? format(parseISO(resolvedFrom), 'MMM d')
     : `${format(parseISO(resolvedFrom), 'MMM d')}–${format(parseISO(resolvedTo), 'MMM d')}`;
@@ -126,9 +123,6 @@ export function CostSunburst({ plantIds }: Props) {
     return { nodes: all, byId: map, rootNode: laidOut };
   }, [data]);
 
-  // Ring thickness derived from the tree's actual depth, so the arcs
-  // always fill the full circle whether there's 1 ring (no per-chemical
-  // prices yet) or 2 (Power/Chemicals -> individual chemical).
   const ringCount = Math.max(1, (rootNode?.height ?? 1) + 1);
   const RING = SIZE / 2 / ringCount;
 
@@ -145,10 +139,6 @@ export function CostSunburst({ plantIds }: Props) {
   );
 
   const colorFor = (d: RNode): string => {
-    // Grid and Solar are Power's two ring-2 children now (not ring-1
-    // siblings) — check by name first so Solar keeps its own distinct color
-    // instead of inheriting Power's, the way an ordinary chemical/filter
-    // sub-slice inherits its category's color via the depth-1 walk-up below.
     if (d.data.name === 'Solar') return SOLAR_COLOR;
     if (d.data.name === 'Grid') return POWER_COLOR;
     let n: RNode = d;
@@ -157,6 +147,7 @@ export function CostSunburst({ plantIds }: Props) {
       : n.data.name === 'Chemicals' ? CHEM_COLOR
       : FILTER_COLOR;
   };
+
   const opacityFor = (d: RNode) => {
     const rel = d.depth - (focus?.depth ?? 0);
     if (rel !== 2) return 0.92;
@@ -168,10 +159,10 @@ export function CostSunburst({ plantIds }: Props) {
   if (isLoading) {
     return (
       <Card className="p-3">
-        <div className="flex flex-wrap items-center gap-1 mb-2">
+        <div className="flex flex-wrap items-center gap-1 mb-3">
           <span className="text-xs font-bold tracking-[-0.01em] text-foreground">Cost Composition</span>
         </div>
-        <Skeleton className="h-[220px] w-full" />
+        <Skeleton className="h-[220px] w-full rounded-lg" />
       </Card>
     );
   }
@@ -192,10 +183,12 @@ export function CostSunburst({ plantIds }: Props) {
   const focusChildren = ((focus?.children ?? []) as RNode[]);
   const focusTotal = focus?.value ?? 0;
   const isZoomed = !!focus && focus.id !== 'Cost';
+  const rootTotal = rootNode?.value ?? 0;
 
   return (
     <Card className="p-3">
-      <div className="flex flex-wrap items-center gap-1 mb-2">
+      {/* Header */}
+      <div className="flex flex-wrap items-center gap-1 mb-3">
         <span className="text-xs font-bold tracking-[-0.01em] text-foreground">Cost Composition</span>
         <button
           type="button"
@@ -206,73 +199,99 @@ export function CostSunburst({ plantIds }: Props) {
         </button>
       </div>
 
-      <div className="flex flex-col items-center gap-2">
-        <svg viewBox={`0 0 ${SIZE} ${SIZE}`} className="shrink-0" style={{ width: SIZE, height: SIZE }}>
-          <g transform={`translate(${SIZE / 2},${SIZE / 2})`}>
-            {(rootNode!.descendants() as RNode[]).filter((d) => d.depth > 0).map((d) => {
-              if (!focus) return null;
-              const span = visibleSpan(d, focus);
-              if (!span) return null;
-              const clickable = !!d.children?.length;
-              return (
-                <path
-                  key={d.id}
-                  d={arc(span) ?? undefined}
-                  style={{
-                    fill: colorFor(d),
-                    opacity: opacityFor(d),
-                    cursor: clickable ? 'pointer' : 'default',
-                    transition: 'd 400ms ease, opacity 300ms ease',
-                    stroke: 'hsl(var(--card))',
-                    strokeWidth: 1,
-                  }}
-                  onClick={clickable ? () => setFocusId(d.id) : undefined}
-                >
-                  <title>{`${d.data.name}: ${peso(d.value ?? 0)}`}</title>
-                </path>
-              );
-            })}
-            {/* Center circle — shows the focused node's total; click to zoom out */}
-            <circle
-              r={RING - 2}
-              style={{ fill: 'hsl(var(--muted))', cursor: isZoomed ? 'pointer' : 'default' }}
-              onClick={() => isZoomed && setFocusId((focus!.parent as RNode | null)?.id ?? 'Cost')}
-            />
-            <text textAnchor="middle" y={-4} style={{ fontSize: 10, fontWeight: 600, fill: 'hsl(var(--foreground))' }}>
-              {focus?.data.name ?? 'Cost'}
-            </text>
-            <text
-              textAnchor="middle" y={11}
-              style={{ fontSize: 11, fontWeight: 700, fill: 'hsl(var(--foreground))', fontFamily: GEO_FONT }}
-              className="tabular-nums"
-            >
-              {peso(focus?.value ?? 0)}
-            </text>
-          </g>
-        </svg>
+      {/* Side-by-side: ring + legend */}
+      <div className="flex gap-3 items-start">
+        {/* SVG ring */}
+        <div className="shrink-0">
+          <svg viewBox={`0 0 ${SIZE} ${SIZE}`} style={{ width: SIZE, height: SIZE }}>
+            <g transform={`translate(${SIZE / 2},${SIZE / 2})`}>
+              {(rootNode!.descendants() as RNode[]).filter((d) => d.depth > 0).map((d) => {
+                if (!focus) return null;
+                const span = visibleSpan(d, focus);
+                if (!span) return null;
+                const clickable = !!d.children?.length;
+                return (
+                  <path
+                    key={d.id}
+                    d={arc(span) ?? undefined}
+                    style={{
+                      fill: colorFor(d),
+                      opacity: opacityFor(d),
+                      cursor: clickable ? 'pointer' : 'default',
+                      transition: 'd 400ms ease, opacity 300ms ease',
+                      stroke: 'hsl(var(--card))',
+                      strokeWidth: 1.5,
+                    }}
+                    onClick={clickable ? () => setFocusId(d.id) : undefined}
+                  >
+                    <title>{`${d.data.name}: ${peso(d.value ?? 0)}`}</title>
+                  </path>
+                );
+              })}
+              {/* Center circle */}
+              <circle
+                r={RING - 3}
+                style={{ fill: 'hsl(var(--muted))', cursor: isZoomed ? 'pointer' : 'default' }}
+                onClick={() => isZoomed && setFocusId((focus!.parent as RNode | null)?.id ?? 'Cost')}
+              />
+              <text textAnchor="middle" y={-6} style={{ fontSize: 9, fontWeight: 500, fill: 'hsl(var(--muted-foreground))' }}>
+                {focus?.data.name ?? 'Cost'}
+              </text>
+              <text
+                textAnchor="middle" y={8}
+                style={{ fontSize: 10, fontWeight: 700, fill: 'hsl(var(--foreground))', fontFamily: GEO_FONT }}
+                className="tabular-nums"
+              >
+                {peso(focus?.value ?? 0)}
+              </text>
+            </g>
+          </svg>
+        </div>
 
-        {/* Breadcrumb-aware legend chips — shows whatever is one level
-            below the current focus, so it updates as you drill in. Chips
-            are sized to their own content and centered/wrapped instead of
-            a `justify-between` column, so they never stretch edge-to-edge
-            across a wide card. Clickable too, not just the arcs. */}
-        <div className="flex flex-wrap justify-center gap-1.5">
+        {/* Right-side legend with % bars */}
+        <div className="flex-1 min-w-0 flex flex-col justify-center gap-2 py-2">
+          {/* Breadcrumb label */}
+          {isZoomed && (
+            <div className="text-[10px] text-muted-foreground mb-1 font-medium tracking-wide uppercase">
+              {focus?.data.name} breakdown
+            </div>
+          )}
+
           {focusChildren.length ? focusChildren.map((c) => {
             const clickable = !!c.children?.length;
             const pct = focusTotal ? ((c.value ?? 0) / focusTotal) * 100 : 0;
+            const globalPct = rootTotal ? ((c.value ?? 0) / rootTotal) * 100 : 0;
+            const swatchColor = categorySwatchStyle(c.data.name);
             return (
-              <button
-                key={c.id}
-                type="button"
-                onClick={clickable ? () => setFocusId(c.id) : undefined}
-                className={`flex items-center gap-1.5 text-xs rounded-full pl-1.5 pr-2 py-0.5 transition-colors ${clickable ? 'bg-muted/50 hover:bg-muted cursor-pointer' : 'bg-muted/30 cursor-default'}`}
-              >
-                <span className="w-2 h-2 rounded-sm shrink-0" style={{ background: colorFor(c), opacity: opacityFor(c) }} />
-                <span className="text-foreground/90 font-medium">{c.data.name}</span>
-                <span className="tabular-nums text-muted-foreground font-numeral">
-                  {peso(c.value ?? 0)} · {fmtNum(pct, 0)}%
-                </span>
-              </button>
+              <div key={c.id} className="space-y-0.5">
+                <button
+                  type="button"
+                  onClick={clickable ? () => setFocusId(c.id) : undefined}
+                  className={`w-full flex items-center gap-1.5 text-xs transition-colors text-left ${clickable ? 'hover:text-foreground cursor-pointer group' : 'cursor-default'}`}
+                >
+                  <span
+                    className="w-2.5 h-2.5 rounded-sm shrink-0 transition-transform group-hover:scale-110"
+                    style={{ background: swatchColor, opacity: opacityFor(c) }}
+                  />
+                  <span className="text-foreground/90 font-medium flex-1 truncate">{c.data.name}</span>
+                  <span className="tabular-nums text-muted-foreground font-numeral text-[10px] shrink-0">
+                    {peso(c.value ?? 0)}
+                  </span>
+                  <span
+                    className="tabular-nums font-bold font-numeral text-[10px] shrink-0 w-8 text-right"
+                    style={{ color: swatchColor }}
+                  >
+                    {fmtNum(pct, 0)}%
+                  </span>
+                </button>
+                {/* % bar */}
+                <div className="h-1 bg-muted rounded-full overflow-hidden ml-4">
+                  <div
+                    className="h-full rounded-full transition-all duration-500"
+                    style={{ width: `${pct}%`, background: swatchColor, opacity: 0.75 }}
+                  />
+                </div>
+              </div>
             );
           }) : (
             <div className="text-xs text-muted-foreground">No further breakdown for {focus?.data.name}.</div>
@@ -280,22 +299,24 @@ export function CostSunburst({ plantIds }: Props) {
         </div>
       </div>
 
-      {!data.hasChemBreakdown && (
-        <p className="text-2xs text-muted-foreground/70 mt-2">
-          No per-chemical prices on file yet — Chemicals shows the total from Production Costs.
-          Add prices on the Costs page to unlock the per-chemical ring.
-        </p>
-      )}
-      {data.hasChemBreakdown && data.unpricedChemicals.length > 0 && (
-        <p className="text-2xs text-muted-foreground/70 mt-2">
-          No price on file for {data.unpricedChemicals.join(', ')} — excluded from the breakdown above.
-        </p>
-      )}
-      {data.solarTotal > 0 && (
-        <p className="text-2xs text-muted-foreground/70 mt-2">
-          Solar is priced at the grid php/kWh rate for comparison — it isn't actually billed, so the center total runs higher than real cash spend.
-        </p>
-      )}
+      {/* Footer notes */}
+      <div className="mt-2 space-y-0.5">
+        {!data.hasChemBreakdown && (
+          <p className="text-2xs text-muted-foreground/70">
+            No per-chemical prices on file — Chemicals shows the total. Add prices on the Costs page to unlock per-chemical detail.
+          </p>
+        )}
+        {data.hasChemBreakdown && data.unpricedChemicals.length > 0 && (
+          <p className="text-2xs text-muted-foreground/70">
+            No price on file for {data.unpricedChemicals.join(', ')} — excluded from breakdown.
+          </p>
+        )}
+        {data.solarTotal > 0 && (
+          <p className="text-2xs text-muted-foreground/70">
+            Solar is priced at the grid php/kWh rate for comparison — it isn't actually billed, so the center total runs higher than real cash spend.
+          </p>
+        )}
+      </div>
     </Card>
   );
 }

@@ -2734,19 +2734,82 @@ export default function Employees() {
     },
   });
 
+  // Compute quick stats for the executive header strip
+  const onlineCount = staff.filter((s) => {
+    const p = getPresence(s.updated_at, s.status, false);
+    return p === 'active' || p === 'idle';
+  }).length;
+  const activeCount = staff.filter((s) => s.status === 'Active').length;
+  const leadershipCount = staff.filter((s) => {
+    const r = (roles as any[]).find((x) => x.user_id === s.id)?.role;
+    return r === 'Admin' || r === 'Manager';
+  }).length;
+  const operatorCount = staff.filter((s) => {
+    const r = (roles as any[]).find((x) => x.user_id === s.id)?.role;
+    return r === 'Operator' || r === 'Technician';
+  }).length;
+
   return (
-    <div className="space-y-4 animate-fade-in">
-      <PageHeader title="Employees" />
+    <div className="space-y-3 animate-fade-in">
+      {/* ── Executive People & Compliance Strip ── */}
+      <div className="relative rounded-2xl overflow-hidden border border-border/80 bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950 text-white p-4 sm:p-5 shadow-lg">
+        <div className="absolute -right-16 -top-16 w-60 h-60 bg-indigo-500/15 rounded-full blur-3xl pointer-events-none" />
+        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          {/* Title */}
+          <div className="space-y-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-lg sm:text-xl font-bold tracking-tight text-white font-display">
+                People &amp; Compliance
+              </h1>
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                HR Management
+              </span>
+            </div>
+            <p className="text-xs text-slate-300 flex items-center gap-1.5">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+              </span>
+              <span>Staff Directory · KPI Heatmap · Org Chart · Operations Manual</span>
+            </p>
+          </div>
+
+          {/* Quick KPI tiles */}
+          <div className="grid grid-cols-4 gap-2 shrink-0">
+            {[
+              { label: 'Total Staff',  value: staff.length,     sub: `${activeCount} active`,  color: 'text-white' },
+              { label: 'Online Now',   value: onlineCount,      sub: 'active / idle',            color: 'text-emerald-300' },
+              { label: 'Leadership',   value: leadershipCount,  sub: 'admin + mgr',              color: 'text-sky-300' },
+              { label: 'Operators',    value: operatorCount,    sub: 'field + tech',             color: 'text-indigo-300' },
+            ].map((stat) => (
+              <div key={stat.label} className="bg-white/[0.08] rounded-xl px-3 py-2 border border-white/10 text-center min-w-[64px]">
+                <div className={`text-lg font-bold tabular-nums font-numeral leading-none ${stat.color}`}>{stat.value}</div>
+                <div className="text-[10px] text-slate-400 mt-0.5 leading-tight">{stat.label}</div>
+                <div className="text-[9px] text-slate-500 mt-0.5">{stat.sub}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
       <Tabs value={tab} onValueChange={(v) => setTab(v as typeof tab)}>
-        <TabsList className="grid grid-cols-3 w-full">
-          <TabsTrigger value="staff" className="flex items-center gap-1.5">
-            <Users className="h-3.5 w-3.5" /> Staff
+        <TabsList className="w-full sm:w-auto grid grid-cols-3 sm:inline-flex gap-0.5 p-1 rounded-xl">
+          <TabsTrigger value="staff" className="flex items-center gap-1.5 rounded-lg data-[state=active]:shadow-sm">
+            <Users className="h-3.5 w-3.5" />
+            <span>Staff</span>
+            {staff.length > 0 && (
+              <span className="ml-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-primary/15 text-primary">
+                {staff.length}
+              </span>
+            )}
           </TabsTrigger>
-          <TabsTrigger value="kpi" className="flex items-center gap-1.5">
-            <BarChart2 className="h-3.5 w-3.5" /> KPI
+          <TabsTrigger value="kpi" className="flex items-center gap-1.5 rounded-lg data-[state=active]:shadow-sm">
+            <BarChart2 className="h-3.5 w-3.5" />
+            <span>KPI</span>
           </TabsTrigger>
-          <TabsTrigger value="info" className="flex items-center gap-1.5">
-            <Info className="h-3.5 w-3.5" /> Info
+          <TabsTrigger value="info" className="flex items-center gap-1.5 rounded-lg data-[state=active]:shadow-sm">
+            <Info className="h-3.5 w-3.5" />
+            <span>Info</span>
           </TabsTrigger>
         </TabsList>
         <TabsContent value="staff" className="mt-3"><Staff /></TabsContent>

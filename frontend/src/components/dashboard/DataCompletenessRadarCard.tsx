@@ -25,7 +25,7 @@
 import { useMemo } from 'react';
 import { format, parseISO } from 'date-fns';
 import { Link } from 'react-router-dom';
-import { Users } from 'lucide-react';
+import { Users, TrendingUp, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { useQueries } from '@tanstack/react-query';
 import {
   Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Tooltip, ResponsiveContainer,
@@ -43,7 +43,7 @@ interface Props {
   plantIds: string[];
 }
 
-const AXES: { id: string; label: string }[] = [
+const AXES: { id: string; label: string; icon?: string }[] = [
   { id: 'wells', label: 'Wells' },
   { id: 'locators', label: 'Locators' },
   { id: 'trains', label: 'RO Trains' },
@@ -84,10 +84,6 @@ async function fetchPlantCompleteness(
     since.setDate(since.getDate() - days);
     sinceIso = since.toISOString();
   }
-  // Same class of bug as fetchPlantMetrics/CostSunburst: with no upper bound
-  // at all, a historical `to` in the past still pulls rows through *today*.
-  // Bound it explicitly — exclusive on the day *after* `to`, since these are
-  // timestamptz columns rather than date columns.
   const untilIso = to
     ? new Date(new Date(`${to}T00:00:00.000Z`).getTime() + 86_400_000).toISOString()
     : undefined;
@@ -136,8 +132,6 @@ async function fetchPlantCompleteness(
     chemQ.then((r) => r.data ?? []),
   ]);
 
-  // Power and chemical dosing are both logged at the plant level (one
-  // entry per day expected), not per-entity — same day-coverage calc.
   const powerDays = new Set(powerRows.map((r: any) => String(r.reading_datetime).slice(0, 10))).size;
   const powerPct = days ? Math.min(100, Math.round((powerDays / days) * 1000) / 10) : null;
 
@@ -154,17 +148,26 @@ async function fetchPlantCompleteness(
   };
 }
 
+function completenessColor(pct: number | null): string {
+  if (pct == null) return 'hsl(var(--muted-foreground))';
+  if (pct >= 90) return 'hsl(var(--success, 142 71% 45%))';
+  if (pct >= 60) return 'hsl(var(--warning, 38 92% 50%))';
+  return 'hsl(var(--destructive))';
+}
+
+function completenessBarColor(pct: number | null): string {
+  if (pct == null) return 'bg-muted';
+  if (pct >= 90) return 'bg-emerald-500';
+  if (pct >= 60) return 'bg-amber-500';
+  return 'bg-red-500';
+}
+
 export function DataCompletenessRadarCard({ plantIds }: Props) {
   const { data: plants } = usePlants();
   const chartRange = useAppStore((s) => s.chartRange);
   const chartFrom = useAppStore((s) => s.chartFrom);
   const chartTo = useAppStore((s) => s.chartTo);
   const days = rangeKeyToDays(chartRange, chartFrom, chartTo);
-  // chartFrom/chartTo only reflect the real selection when chartRange is
-  // CUSTOM (rangeKeyToDays ignores them for the preset buttons) — same fix
-  // as ComplianceRadarCard/CostSunburst, and the same reason this card was
-  // silently showing "last Nd ending today" instead of a picked-in-the-past
-  // custom window.
   const isCustomRange = chartRange === 'CUSTOM';
   const rangeLabel = isCustomRange
     ? (chartFrom === chartTo
@@ -208,47 +211,97 @@ export function DataCompletenessRadarCard({ plantIds }: Props) {
     });
   }, [loaded]);
 
-  // Per-plant status pill driven by the single WORST (lowest) axis — the
-  // inverse of ComplianceRadarCard, where high values are the problem;
-  // here low values are.
-  const plantStatus = loaded.map(({ plant }, i) => {
-    const values = radarData
-      .map((row) => row[plant.id])
-      .filter((v): v is number => typeof v === 'number');
+  // Per-plant derived stats
+  const plantStatus = loaded.map(({ plant, completeness }, i) => {
+    const values = AXES.map((a) => completeness[a.id]).filter((v): v is number => typeof v === 'number');
     const worst = values.length ? Math.min(...values) : null;
+    const avg = values.length ? Math.round(values.reduce((s, v) => s + v, 0) / values.length) : null;
     const tone = worst == null ? 'muted' as const
       : worst < 50 ? 'danger' as const
       : worst < 80 ? 'warn' as const
       : 'accent' as const;
-    return { plant, color: DRILL_COLORS[i % DRILL_COLORS.length], worst, tone };
+    return { plant, color: DRILL_COLORS[i % DRILL_COLORS.length], worst, avg, tone, completeness };
   });
+
+  // Aggregate per-axis breakdown (first plant shown when multiple)
+  const axisBreakdown = useMemo(() => {
+    if (!loaded.length) return [];
+    return AXES.map((axis) => {
+      const vals = loaded.map((p) => p.completeness[axis.id]).filter((v): v is number => v != null);
+      const avg = vals.length ? Math.round(vals.reduce((s, v) => s + v, 0) / vals.length) : null;
+      return { ...axis, avg };
+    });
+  }, [loaded]);
 
   return (
     <Card className="p-3">
-      <div className="flex flex-wrap items-center gap-1 mb-2">
+      {/* Header */}
+      <div className="flex flex-wrap items-center gap-1 mb-3">
         <span className="text-xs font-bold tracking-[-0.01em] text-foreground">Data Completeness Radar</span>
         <span className="text-2xs text-muted-foreground ml-auto">logged ÷ expected · {rangeLabel}</span>
       </div>
 
       {isLoading ? (
-        <Skeleton className="h-[240px] w-full" />
+        <div className="space-y-2">
+          <Skeleton className="h-[200px] w-full rounded-lg" />
+          <div className="grid grid-cols-3 gap-1.5">
+            {[...Array(6)].map((_, i) => <Skeleton key={i} className="h-8 rounded-md" />)}
+          </div>
+        </div>
       ) : !loaded.length || !radarData.length ? (
         <div className="h-[240px] flex items-center justify-center text-xs text-muted-foreground">
           No entity/logging data for this period.
         </div>
       ) : (
-        <div className="flex flex-col items-center gap-2">
-          <div className="w-full max-w-[420px] h-[240px]">
+        <div className="space-y-3">
+          {/* Score pills row */}
+          <div className="flex flex-wrap gap-1.5">
+            {plantStatus.map(({ plant, color, avg, worst, tone }) => {
+              const Icon = tone === 'danger' ? AlertTriangle : tone === 'warn' ? TrendingUp : CheckCircle2;
+              return (
+                <div
+                  key={plant.id}
+                  className="flex items-center gap-1.5 text-xs bg-muted/60 rounded-lg px-2 py-1 border border-border/60"
+                >
+                  <span className="w-2 h-2 rounded-full shrink-0" style={{ background: color }} />
+                  <span className="text-foreground/90 font-medium truncate max-w-[80px]">{plant.name}</span>
+                  <span
+                    className="tabular-nums font-bold font-numeral text-xs ml-0.5"
+                    style={{ color: completenessColor(avg) }}
+                  >
+                    {avg == null ? '—' : `${avg}%`}
+                  </span>
+                  <StatusPill tone={tone} className="px-1.5 py-0 text-[10px]">
+                    {tone === 'danger' ? 'Gaps' : tone === 'warn' ? 'Partial' : tone === 'muted' ? 'No data' : 'Good'}
+                  </StatusPill>
+                  <Link
+                    to={`/employees?tab=kpi&view=individual&plant=${plant.id}`}
+                    className="flex items-center gap-0.5 pl-1 ml-0.5 border-l border-border/60 text-muted-foreground hover:text-foreground transition-colors"
+                    title={`See who's logging at ${plant.name}`}
+                  >
+                    <Users className="h-3 w-3" />
+                  </Link>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Radar chart */}
+          <div className="w-full h-[200px]">
             <ResponsiveContainer width="100%" height="100%">
-              <RadarChart data={radarData} outerRadius="78%">
-                <PolarGrid stroke="hsl(var(--border))" />
-                <PolarAngleAxis dataKey="axis" tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} />
+              <RadarChart data={radarData} outerRadius="75%" margin={{ top: 8, right: 16, bottom: 8, left: 16 }}>
+                <PolarGrid stroke="hsl(var(--border))" strokeOpacity={0.7} />
+                <PolarAngleAxis
+                  dataKey="axis"
+                  tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
+                />
                 <PolarRadiusAxis
                   angle={90}
                   domain={[0, 100]}
                   tick={{ fontSize: 8, fill: 'hsl(var(--muted-foreground))' }}
                   tickCount={5}
                   axisLine={false}
+                  tickFormatter={(v: number) => `${v}%`}
                 />
                 {loaded.map(({ plant }, i) => (
                   <Radar
@@ -257,7 +310,7 @@ export function DataCompletenessRadarCard({ plantIds }: Props) {
                     dataKey={plant.id}
                     stroke={DRILL_COLORS[i % DRILL_COLORS.length]}
                     fill={DRILL_COLORS[i % DRILL_COLORS.length]}
-                    fillOpacity={loaded.length > 1 ? 0.15 : 0.25}
+                    fillOpacity={loaded.length > 1 ? 0.12 : 0.2}
                     strokeWidth={1.5}
                     connectNulls
                   />
@@ -267,33 +320,31 @@ export function DataCompletenessRadarCard({ plantIds }: Props) {
                     background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))',
                     borderRadius: 10, fontSize: 11, boxShadow: 'var(--shadow-elev)',
                   }}
-                  formatter={(v: number) => (v == null ? '—' : `${v}%`)}
+                  formatter={(v: number, name: string) => [`${v == null ? '—' : `${v}%`}`, name]}
                 />
               </RadarChart>
             </ResponsiveContainer>
           </div>
 
-          <div className="flex flex-wrap justify-center gap-1.5">
-            {plantStatus.map(({ plant, color, worst, tone }) => (
-              <div
-                key={plant.id}
-                className="flex items-center gap-1.5 text-xs bg-muted/50 rounded-full pl-1.5 pr-1.5 py-0.5"
-              >
-                <span className="w-2 h-2 rounded-full shrink-0" style={{ background: color }} />
-                <span className="text-foreground/90 font-medium">{plant.name}</span>
-                <span className="tabular-nums text-muted-foreground font-numeral">
-                  {worst == null ? '—' : `${Math.round(worst)}%`}
-                </span>
-                <StatusPill tone={tone} className="px-1.5 py-0">
-                  {tone === 'danger' ? 'Big gaps' : tone === 'warn' ? 'Some gaps' : tone === 'muted' ? 'No data' : 'Complete'}
-                </StatusPill>
-                <Link
-                  to={`/employees?tab=kpi&view=individual&plant=${plant.id}`}
-                  className="flex items-center gap-0.5 pl-1 ml-0.5 border-l border-border/60 text-muted-foreground hover:text-foreground transition-colors"
-                  title={`See who's logging at ${plant.name}`}
-                >
-                  <Users className="h-3 w-3" />
-                </Link>
+          {/* Per-axis breakdown bars */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-2 pt-1 border-t border-border/50">
+            {axisBreakdown.map((axis) => (
+              <div key={axis.id} className="space-y-0.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] text-muted-foreground">{axis.label}</span>
+                  <span
+                    className="text-[10px] tabular-nums font-semibold font-numeral"
+                    style={{ color: completenessColor(axis.avg) }}
+                  >
+                    {axis.avg == null ? '—' : `${axis.avg}%`}
+                  </span>
+                </div>
+                <div className="h-1 bg-muted rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all duration-500 ${completenessBarColor(axis.avg)}`}
+                    style={{ width: `${axis.avg ?? 0}%` }}
+                  />
+                </div>
               </div>
             ))}
           </div>
