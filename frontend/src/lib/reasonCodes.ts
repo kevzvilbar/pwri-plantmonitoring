@@ -45,8 +45,9 @@ export function reasonCategoryLabel(value: string | null | undefined): string {
 }
 
 // Short entity-type prefix used in Data Summary tooltips, e.g. "Well offline:
-// pump problem" / "Locator: locked meter".
-export function reasonEntityPrefix(entityType: 'well' | 'locator' | 'ro_train', isStatusChange: boolean): string {
-  const label = entityType === 'well' ? 'Well' : entityType === 'locator' ? 'Locator' : 'Train';
+// pump problem" / "Locator: locked meter" / "Product Meter: equipment malfunction".
+export function reasonEntityPrefix(entityType: 'well' | 'locator' | 'ro_train' | 'meter', isStatusChange: boolean): string {
+  const label = entityType === 'well' ? 'Well' : entityType === 'locator' ? 'Locator' : entityType === 'ro_train' ? 'Train' : 'Product Meter';
   return isStatusChange ? `${label} offline` : label;
 }
+

@@ -25,7 +25,7 @@ import { StatCard } from '@/components/dashboard/StatCard';
 import {
   Award, Percent, Building2, AlertTriangle, ShieldAlert, ShieldQuestion,
   RefreshCw, Loader2, CheckCircle2, HelpCircle, FileDown, UserCheck,
-  Clock, CheckSquare, XCircle, Users, Sparkles, Check,
+  Clock, CheckSquare, XCircle, Users, Check,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';

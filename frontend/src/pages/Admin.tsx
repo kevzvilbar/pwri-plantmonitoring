@@ -12,7 +12,7 @@ import { StatCard } from '@/components/dashboard/StatCard';
 import {
   ShieldAlert, Users, Building2, ClipboardList, Database,
   ClipboardCheck, ArrowRight, KeyRound, ShieldCheck, Download,
-  Upload, Activity, Sparkles, Server,
+  Upload, Activity, Server,
 } from 'lucide-react';
 
 import { UsersPanel } from './admin/UsersPanel';

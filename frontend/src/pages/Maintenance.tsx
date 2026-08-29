@@ -20,7 +20,7 @@ import { toast } from 'sonner';
 import { friendlyError } from '@/lib/supabaseErrors';
 import { format } from 'date-fns';
 import {
-  Sparkles, Calendar, PlusCircle, ClipboardList, Search,
+  ShieldCheck, Calendar, PlusCircle, ClipboardList, Search,
   Download, Building2, Wrench, CheckCircle2, AlertTriangle, Filter,
 } from 'lucide-react';
 import { PMS_TEMPLATES, PMS_CATEGORIES, PMS_FREQUENCIES } from '@/lib/pmsTemplates';
@@ -92,7 +92,7 @@ export default function Maintenance() {
           tone="accent"
         />
         <StatCard
-          icon={Sparkles}
+          icon={ShieldCheck}
           label="Equipment Standard"
           value="ISO/PWRI Compliant"
         />
@@ -208,7 +208,7 @@ function AddTemplate() {
       <Card className="p-3.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-accent-soft/40 border-accent/30 rounded-xl">
         <div className="flex items-start gap-3">
           <div className="p-2 rounded-lg bg-accent/20 text-accent">
-            <Sparkles className="h-4 w-4 shrink-0" />
+            <Wrench className="h-4 w-4 shrink-0" />
           </div>
           <div>
             <div className="text-xs font-bold text-foreground">Standard Plant PMS Generator</div>

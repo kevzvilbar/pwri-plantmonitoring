@@ -8,7 +8,7 @@ import { usePlants } from '@/hooks/usePlants';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { AlertTriangle, FlaskConical, Zap, Droplet, Tag, Calendar, Download, TrendingUp, Sparkles, Building2 } from 'lucide-react';
+import { AlertTriangle, FlaskConical, Zap, Droplet, Tag, Calendar, Download, TrendingUp, Building2 } from 'lucide-react';
 import { StatusPill } from '@/components/StatusPill';
 import { ExportButton } from '@/components/ExportButton';
 import { PlantPicker } from '@/components/costs/PlantPicker';

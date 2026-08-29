@@ -4,9 +4,7 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { format } from 'date-fns';
-import { Download, Droplet, Receipt, Gauge, Sparkles } from 'lucide-react';
-import { DSMTab, buildEntityPivot, fillDateRange, fmtDateKey } from './TrendChartPivotShared';
+import { Download, Droplet, Receipt, Gauge, TableProperties, Percent } from 'lucide-react';
 import { PivotTable, OverviewTable } from './TrendChartTables';
 
 // ── DataSummaryPopup — 3-tab popup shown when "Data Summary" is clicked ───────
@@ -476,7 +474,7 @@ export function DataSummaryPopup({
         <DialogHeader className="px-5 pt-4 pb-0 border-b shrink-0 bg-card">
           <div className="flex items-center justify-between gap-3 pb-2 flex-wrap">
             <DialogTitle className="text-sm font-semibold flex items-center gap-2">
-              <Sparkles className="h-4 w-4 text-primary" />
+              <TableProperties className="h-4 w-4 text-primary" />
               <span>Data Summary — {title ?? metric}</span>
             </DialogTitle>
 
@@ -531,7 +529,7 @@ export function DataSummaryPopup({
 
             <div className="p-2 rounded-lg bg-muted/40 border border-border/50">
               <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
-                <Sparkles className="h-3 w-3 text-emerald-500" />
+                <Percent className="h-3 w-3 text-emerald-500" />
                 <span>Period NRW Loss</span>
               </div>
               <div className="font-mono text-sm font-bold text-foreground mt-0.5">
@@ -605,7 +603,7 @@ export function DataSummaryPopup({
                   totalLabel={metric === 'rawwater' ? 'Total Raw (m³)' : 'Total Prod. (m³)'}
                   unit="m³"
                   colorClass="text-primary"
-                  entityType={metric === 'rawwater' || metric === 'pv' ? 'well' : hasPermeateData ? 'ro_train' : undefined}
+                  entityType={metric === 'rawwater' || metric === 'pv' ? 'well' : hasPermeateData ? 'ro_train' : 'meter'}
                 />
               )}
               {activeTab === 'consumption' && hasConsTab && (

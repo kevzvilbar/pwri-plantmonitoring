@@ -4,7 +4,7 @@ import {
   Upload, FileSpreadsheet, CheckCircle2, XCircle, AlertCircle,
   Droplet, Zap, FlaskConical, Gauge, Waves, Thermometer,
   ChevronRight, Download, RefreshCw, X, Info, CircleDot, Menu,
-  MapPin, Activity, Building2, ShieldAlert, Layers, Sparkles,
+  MapPin, Activity, Building2, ShieldAlert, Layers,
   Check, ArrowRight,
 } from 'lucide-react';
 import { toast } from 'sonner';

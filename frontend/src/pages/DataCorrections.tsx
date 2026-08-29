@@ -39,7 +39,7 @@ import {
   CheckCircle2, XCircle, AlertCircle, RefreshCw, Loader2,
   ChevronDown, ChevronUp, ClipboardCheck, Inbox, History,
   Users, ArrowRight, Pencil, Search, ShieldAlert, Gauge,
-  AlertTriangle, CheckSquare, Sparkles, FileText,
+  AlertTriangle, CheckSquare, FileText,
 } from 'lucide-react';
 import { StatCard } from '@/components/dashboard/StatCard';
 import { cn } from '@/lib/utils';

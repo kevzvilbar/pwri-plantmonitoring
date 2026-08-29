@@ -15,7 +15,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { toast } from '@/components/ui/sonner';
 import { DataState } from '@/components/DataState';
-import { Sparkles, Loader2, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
+import { Wrench, Loader2, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
 
 // Pre-curated names of plants known to have been imported by mistake via the
 // Smart Import flow. The Admin can still edit/uncheck before running.
@@ -126,7 +126,7 @@ export function BadImportCleanupCard() {
       data-testid="bad-import-cleanup-card"
     >
       <div className="flex items-start gap-2">
-        <Sparkles className="h-4 w-4 mt-0.5 text-warn" />
+        <Wrench className="h-4 w-4 mt-0.5 text-warn" />
         <div className="flex-1 min-w-0 space-y-2">
           <div>
             <h3 className="text-sm font-semibold">

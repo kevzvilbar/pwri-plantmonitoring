@@ -149,8 +149,8 @@ export function fmtV(v: number | null | undefined, dec = 1) {
   return v.toLocaleString(undefined, { maximumFractionDigits: dec });
 }
 
-const GAP_ENTITY_TYPE_LABEL: Record<'well' | 'locator' | 'ro_train', 'Well' | 'Locator' | 'RO Train'> = {
-  well: 'Well', locator: 'Locator', ro_train: 'RO Train',
+const GAP_ENTITY_TYPE_LABEL: Record<'well' | 'locator' | 'ro_train' | 'meter', string> = {
+  well: 'Well', locator: 'Locator', ro_train: 'RO Train', meter: 'Product Meter',
 };
 // Underlying table for each entity type — used to resolve plant_id when
 // retroactively logging a gap reason from the Data Summary pivot (see
@@ -159,21 +159,21 @@ const GAP_ENTITY_TYPE_LABEL: Record<'well' | 'locator' | 'ro_train', 'Well' | 'L
 // (see useTrendChartQueries.ts's "locator_readings has no plant_id column"
 // note), so we look it up directly from the entity's own row instead of
 // threading a plant map through every layer between here and TrendChart.tsx.
-export const GAP_ENTITY_TABLE: Record<'well' | 'locator' | 'ro_train', string> = {
-  well: 'wells', locator: 'locators', ro_train: 'ro_trains',
+export const GAP_ENTITY_TABLE: Record<'well' | 'locator' | 'ro_train' | 'meter', string> = {
+  well: 'wells', locator: 'locators', ro_train: 'ro_trains', meter: 'product_meters',
 };
-const GAP_DOWN_STATUSES = new Set(['Inactive', 'Offline', 'Maintenance']);
+const GAP_DOWN_STATUSES = new Set(['Inactive', 'Offline', 'Maintenance', 'Locked']);
 
 export type GapReasonHit = { category: string; detail: string | null; source: 'gap' | 'status' };
 
 /**
  * Looks up "why is this cell blank" for the Data Summary pivot — checks an
  * explicit per-day reading_gap_reasons entry first, then falls back to
- * whether the entity was Offline/Inactive/Maintenance (per
+ * whether the entity was Offline/Inactive/Maintenance/Locked (per
  * entity_status_audit_log) on that date.
  */
 export function useGapReasonLookup(
-  entityType: 'well' | 'locator' | 'ro_train' | undefined,
+  entityType: 'well' | 'locator' | 'ro_train' | 'meter' | undefined,
   entities: { id: string; label: string }[],
   _dates: string[],
 ): {

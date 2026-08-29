@@ -33,9 +33,8 @@ export function PivotTable({
   totalLabel: string;
   unit?: string;
   colorClass?: string;
-  /** Enables "why is this blank" reason lookups for blank cells. Omit (e.g. for
-   *  product meters) to keep today's plain "—" behavior. */
-  entityType?: 'well' | 'locator' | 'ro_train';
+  /** Enables "why is this blank" reason lookups for blank cells. */
+  entityType?: 'well' | 'locator' | 'ro_train' | 'meter';
 }) {
   const rowTotals = dates.map((d) =>
     entities.reduce((s, e) => s + (pivot.get(d)?.get(e.id) ?? 0), 0),

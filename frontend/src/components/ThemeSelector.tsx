@@ -1,4 +1,4 @@
-import { Palette, Check, Moon, Sun, Sparkles } from 'lucide-react';
+import { Palette, Check, Moon, Sun } from 'lucide-react';
 import { useAppStore } from '@/store/appStore';
 import { COLOR_THEMES } from '@/lib/themes';
 import { Button } from '@/components/ui/button';
@@ -35,16 +35,16 @@ export function ThemeSelector() {
       <PopoverContent
         align="end"
         sideOffset={8}
-        className="w-80 max-w-[94vw] p-4 rounded-2xl bg-card/95 backdrop-blur-xl border border-border/80 shadow-2xl space-y-3.5"
+        className="w-80 max-w-[94vw] p-4 rounded-xl bg-card/95 backdrop-blur-xl border border-border shadow-2xl space-y-3.5"
       >
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="h-7 w-7 rounded-lg bg-primary-soft flex items-center justify-center text-primary">
-              <Sparkles className="h-3.5 w-3.5" />
+            <div className="h-7 w-7 rounded-md bg-primary-soft flex items-center justify-center text-primary">
+              <Palette className="h-3.5 w-3.5" />
             </div>
             <div>
-              <p className="text-xs font-bold text-foreground">Theme & Lighting</p>
+              <p className="text-xs font-semibold text-foreground">Theme & Lighting</p>
               <p className="text-3xs text-muted-foreground">Select your workspace style</p>
             </div>
           </div>

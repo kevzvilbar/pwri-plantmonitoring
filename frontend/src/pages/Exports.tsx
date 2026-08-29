@@ -4,7 +4,7 @@ import {
   Download, Building2, Activity, Waves, FlaskConical,
   Zap, Wrench, ShieldCheck, ShieldAlert, MapPin, BarChart2, ChevronDown,
   CheckCircle2, Loader2, RefreshCw, Search, CheckSquare, Square,
-  Layers, Package, FileSpreadsheet, Sparkles, Filter,
+  Layers, Package, FileSpreadsheet, Filter,
 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { PageHeader } from '@/components/PageHeader';

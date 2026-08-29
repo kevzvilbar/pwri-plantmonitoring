@@ -9,7 +9,7 @@ import {
   GitBranch, Check, CheckCheck,
   Search, BarChart2, ChevronLeft, Info,
   Crown, Briefcase, Cog, UserCircle,
-  RefreshCw, ZoomIn, LayoutGrid, List, Layers, Sparkles, Filter, Download, FileDown, Award,
+  RefreshCw, ZoomIn, LayoutGrid, List, Layers, Filter, Download, FileDown, Award,
 } from 'lucide-react';
 import { BookReader } from '@/components/manual/BookReader';
 import { BOOK_PARTS } from '@/components/manual/bookChapters';
