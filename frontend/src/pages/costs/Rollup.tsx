@@ -5,17 +5,16 @@ import { useAuth } from '@/hooks/useAuth';
 import { usePermission } from '@/hooks/usePermission';
 import { useAppStore } from '@/store/appStore';
 import { usePlants } from '@/hooks/usePlants';
-import { Card } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Select } from '@/components/ui/select';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, FlaskConical, Zap, Droplet, Tag, Calendar, Download, TrendingUp, Sparkles, Building2 } from 'lucide-react';
 import { StatusPill } from '@/components/StatusPill';
 import { ExportButton } from '@/components/ExportButton';
 import { PlantPicker } from '@/components/costs/PlantPicker';
 import { useMonthlyOpex, opexVarianceTone } from '@/hooks/useOpexBudget';
 import { fmtNum } from '@/lib/calculations';
-import { format, startOfMonth, endOfMonth, subMonths, parseISO } from 'date-fns';
+import { format, startOfMonth, endOfMonth, subMonths, parseISO, subDays } from 'date-fns';
 import { XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend, BarChart, Bar } from 'recharts';
 import { CostInsights } from './CostInsights';
 
@@ -28,8 +27,25 @@ export function Rollup() {
   const [from, setFrom] = useState(format(subMonths(new Date(), 1), 'yyyy-MM-dd'));
   const [to, setTo] = useState(format(new Date(), 'yyyy-MM-dd'));
 
-  // ── Budget badge (Manager/Admin only) — only when the selected range is
-  // exactly one calendar month, so we're comparing like with like. ────────────
+  const setRangePreset = (preset: '30d' | 'this_month' | 'last_month' | '90d') => {
+    const now = new Date();
+    if (preset === '30d') {
+      setFrom(format(subDays(now, 30), 'yyyy-MM-dd'));
+      setTo(format(now, 'yyyy-MM-dd'));
+    } else if (preset === 'this_month') {
+      setFrom(format(startOfMonth(now), 'yyyy-MM-dd'));
+      setTo(format(now, 'yyyy-MM-dd'));
+    } else if (preset === 'last_month') {
+      const prev = subMonths(now, 1);
+      setFrom(format(startOfMonth(prev), 'yyyy-MM-dd'));
+      setTo(format(endOfMonth(prev), 'yyyy-MM-dd'));
+    } else if (preset === '90d') {
+      setFrom(format(subDays(now, 90), 'yyyy-MM-dd'));
+      setTo(format(now, 'yyyy-MM-dd'));
+    }
+  };
+
+  // ── Budget badge (Manager/Admin only) ──────────────────────────────────────
   const rangeMonth = (() => {
     const fromD = parseISO(from);
     const isFullMonth = format(startOfMonth(fromD), 'yyyy-MM-dd') === from && format(endOfMonth(fromD), 'yyyy-MM-dd') === to;
@@ -38,7 +54,7 @@ export function Rollup() {
   const { data: opexRows } = useMonthlyOpex(canViewBudget && rangeMonth ? plantId : '', rangeMonth ? +rangeMonth.slice(0, 4) : new Date().getFullYear());
   const budgetRow = rangeMonth ? opexRows?.find((r) => r.month === rangeMonth && r.budgetId) : undefined;
 
-  const { data, refetch } = useQuery({
+  const { data } = useQuery({
     queryKey: ['cost-rollup', plantId, from, to],
     queryFn: async () => {
       if (!plantId) return [];
@@ -57,12 +73,18 @@ export function Rollup() {
       acc.prod += +x.production_m3 || 0;
       return acc;
     }, { chem: 0, power: 0, prod: 0 });
-    return { ...r, total: r.chem + r.power, perM3: r.prod ? (r.chem + r.power) / r.prod : null };
+    const total = r.chem + r.power;
+    const daysCount = (data ?? []).length || 1;
+    return {
+      ...r,
+      total,
+      perM3: r.prod ? total / r.prod : null,
+      chemPct: total ? (r.chem / total) * 100 : 0,
+      powerPct: total ? (r.power / total) * 100 : 0,
+      dailyAvgProd: r.prod / daysCount,
+    };
   }, [data]);
 
-  // Detect rows with negative power cost — a sure sign of bad meter readings in
-  // electric_bills (current_reading < previous_reading causes negative GENERATED
-  // total_kwh, which the production_costs view propagates as negative power cost).
   const negativePowerRows = (data ?? []).filter((d: any) => +d.power_cost < 0);
   const hasNegativePower = negativePowerRows.length > 0;
 
@@ -73,89 +95,250 @@ export function Rollup() {
     perM3: +d.cost_per_m3 || 0,
   }));
 
+  const plantName = plants?.find(p => p.id === plantId)?.name ?? 'Selected Plant';
+
   return (
-    <div className="space-y-3">
-      <Card className="p-3 space-y-2">
-        <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-2 items-end">
-          <div><Label htmlFor="costs-plant-2" className="text-xs">Plant</Label><PlantPicker value={plantId} onChange={setPlantId} id="costs-plant-2" /></div>
-          <div className="flex gap-2 items-end">
-            <div className="flex-1 min-w-0"><Label htmlFor="costs-from" className="text-xs">From</Label><Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} id="costs-from"/></div>
-            <div className="flex-1 min-w-0"><Label htmlFor="costs-to" className="text-xs">To</Label><Input type="date" value={to} onChange={(e) => setTo(e.target.value)} id="costs-to"/></div>
-          </div>
-        </div>
-      </Card>
-      {plantId && (
-        <>
-          <div className="flex justify-end">
-            <ExportButton table="production_costs" label="Export rollup" filters={{ plant_id: plantId }} />
+    <div className="space-y-4">
+      {/* Filter Toolbar Card */}
+      <Card className="rounded-2xl border border-border/80 shadow-2xs overflow-hidden">
+        <CardContent className="p-4 space-y-3">
+          <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
+            <div className="sm:col-span-5 space-y-1">
+              <Label htmlFor="costs-plant-2" className="text-2xs uppercase tracking-wider font-semibold text-muted-foreground flex items-center gap-1">
+                <Building2 className="h-3 w-3 text-primary" />
+                <span>Facility</span>
+              </Label>
+              <PlantPicker value={plantId} onChange={setPlantId} id="costs-plant-2" />
+            </div>
+            
+            <div className="sm:col-span-3 space-y-1">
+              <Label htmlFor="costs-from" className="text-2xs uppercase tracking-wider font-semibold text-muted-foreground">From</Label>
+              <Input type="date" className="h-9 rounded-xl text-xs bg-muted/30" value={from} onChange={(e) => setFrom(e.target.value)} id="costs-from"/>
+            </div>
+
+            <div className="sm:col-span-3 space-y-1">
+              <Label htmlFor="costs-to" className="text-2xs uppercase tracking-wider font-semibold text-muted-foreground">To</Label>
+              <Input type="date" className="h-9 rounded-xl text-xs bg-muted/30" value={to} onChange={(e) => setTo(e.target.value)} id="costs-to"/>
+            </div>
+
+            <div className="sm:col-span-1 flex justify-end">
+              {plantId && (
+                <ExportButton table="production_costs" label="Export" filters={{ plant_id: plantId }} />
+              )}
+            </div>
           </div>
 
-          {/* ── Negative power cost diagnostic banner ───────────────────── */}
+          {/* Quick Date Presets Bar */}
+          <div className="flex items-center gap-1.5 pt-2 border-t border-border/50 text-2xs flex-wrap">
+            <span className="text-muted-foreground font-semibold mr-1">Timeframe:</span>
+            <button
+              type="button"
+              onClick={() => setRangePreset('30d')}
+              className="px-2.5 py-0.5 rounded-lg bg-muted/60 hover:bg-muted border border-border/50 text-muted-foreground hover:text-foreground font-medium transition-colors"
+            >
+              Last 30 Days
+            </button>
+            <button
+              type="button"
+              onClick={() => setRangePreset('this_month')}
+              className="px-2.5 py-0.5 rounded-lg bg-muted/60 hover:bg-muted border border-border/50 text-muted-foreground hover:text-foreground font-medium transition-colors"
+            >
+              This Month
+            </button>
+            <button
+              type="button"
+              onClick={() => setRangePreset('last_month')}
+              className="px-2.5 py-0.5 rounded-lg bg-muted/60 hover:bg-muted border border-border/50 text-muted-foreground hover:text-foreground font-medium transition-colors"
+            >
+              Last Month
+            </button>
+            <button
+              type="button"
+              onClick={() => setRangePreset('90d')}
+              className="px-2.5 py-0.5 rounded-lg bg-muted/60 hover:bg-muted border border-border/50 text-muted-foreground hover:text-foreground font-medium transition-colors"
+            >
+              Last 90 Days
+            </button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {plantId ? (
+        <>
+          {/* Negative power cost diagnostic banner */}
           {hasNegativePower && (
-            <div className="rounded-md border border-destructive/50 bg-destructive/5 p-3 flex items-start gap-2 text-xs">
-              <AlertTriangle className="h-4 w-4 text-destructive shrink-0 mt-0.5" />
+            <div className="rounded-2xl border border-destructive/50 bg-destructive/5 p-4 flex items-start gap-3 text-xs shadow-sm">
+              <AlertTriangle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
               <div className="space-y-1">
-                <p className="font-semibold text-destructive">
+                <p className="font-bold text-destructive">
                   Negative power cost detected on {negativePowerRows.length} day(s) — data is corrupt
                 </p>
                 <p className="text-muted-foreground">
-                  This is caused by an electric bill where <strong>current_reading &lt; previous_reading</strong>
-                  (readings imported in the wrong order). The DB-generated <code>total_kwh</code> becomes
-                  negative, which the cost view carries forward as a negative power cost.
+                  This is caused by an electric bill where <strong>current_reading &lt; previous_reading</strong>. The DB-generated <code>total_kwh</code> becomes negative.
                 </p>
                 <p className="text-muted-foreground">
-                  <strong>Fix:</strong> Go to the <strong>Power</strong> tab → find the bill(s) with a
-                  negative kWh value (shown in red) → delete and re-enter with the correct
-                  previous/current readings, or re-import the corrected CSV.
+                  <strong>Fix:</strong> Go to the <strong>Power</strong> tab → find the bill(s) with negative kWh → delete and re-enter with correct previous/current readings.
                 </p>
               </div>
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-2">
-            <Card className="p-3"><div className="text-xs text-muted-foreground">Chem cost</div><div className="font-mono-num text-lg">₱{fmtNum(totals.chem, 0)}</div></Card>
-            <Card className="p-3"><div className="text-xs text-muted-foreground">Power cost</div><div className="font-mono-num text-lg">₱{fmtNum(totals.power, 0)}</div></Card>
-            <Card className="p-3"><div className="text-xs text-muted-foreground">Production</div><div className="font-mono-num text-lg">{fmtNum(totals.prod, 0)} m³</div></Card>
-            <Card className="p-3"><div className="text-xs text-muted-foreground">Cost/m³</div><div className="font-mono-num text-lg">{totals.perM3 ? `₱${totals.perM3.toFixed(2)}` : '—'}</div></Card>
+          {/* ── 4 Executive KPI Metric Cards ── */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+            {/* Chemical Cost */}
+            <Card className="p-4 rounded-2xl border border-border/80 shadow-2xs space-y-2 bg-gradient-to-b from-card to-muted/20">
+              <div className="flex items-center justify-between">
+                <span className="text-2xs uppercase tracking-wider font-semibold text-muted-foreground">Chemical OPEX</span>
+                <div className="h-7 w-7 rounded-lg bg-highlight-soft text-highlight flex items-center justify-center shadow-2xs">
+                  <FlaskConical className="h-4 w-4" />
+                </div>
+              </div>
+              <div>
+                <p className="font-numeral font-bold text-xl sm:text-2xl text-foreground tabular-nums">
+                  ₱{fmtNum(totals.chem, 0)}
+                </p>
+                <div className="flex items-center justify-between text-2xs text-muted-foreground mt-1">
+                  <span>Share of OPEX</span>
+                  <span className="font-bold font-numeral text-highlight">{fmtNum(totals.chemPct, 1)}%</span>
+                </div>
+              </div>
+              <div className="h-1.5 bg-muted/80 rounded-full overflow-hidden">
+                <div className="h-full bg-highlight rounded-full transition-all duration-500" style={{ width: `${totals.chemPct}%` }} />
+              </div>
+            </Card>
+
+            {/* Power Cost */}
+            <Card className="p-4 rounded-2xl border border-border/80 shadow-2xs space-y-2 bg-gradient-to-b from-card to-muted/20">
+              <div className="flex items-center justify-between">
+                <span className="text-2xs uppercase tracking-wider font-semibold text-muted-foreground">Power &amp; Energy OPEX</span>
+                <div className="h-7 w-7 rounded-lg bg-chart-6/15 text-chart-6 flex items-center justify-center shadow-2xs">
+                  <Zap className="h-4 w-4" />
+                </div>
+              </div>
+              <div>
+                <p className="font-numeral font-bold text-xl sm:text-2xl text-foreground tabular-nums">
+                  ₱{fmtNum(totals.power, 0)}
+                </p>
+                <div className="flex items-center justify-between text-2xs text-muted-foreground mt-1">
+                  <span>Share of OPEX</span>
+                  <span className="font-bold font-numeral text-chart-6">{fmtNum(totals.powerPct, 1)}%</span>
+                </div>
+              </div>
+              <div className="h-1.5 bg-muted/80 rounded-full overflow-hidden">
+                <div className="h-full bg-chart-6 rounded-full transition-all duration-500" style={{ width: `${totals.powerPct}%` }} />
+              </div>
+            </Card>
+
+            {/* Finished Production */}
+            <Card className="p-4 rounded-2xl border border-border/80 shadow-2xs space-y-2 bg-gradient-to-b from-card to-muted/20">
+              <div className="flex items-center justify-between">
+                <span className="text-2xs uppercase tracking-wider font-semibold text-muted-foreground">Total Production</span>
+                <div className="h-7 w-7 rounded-lg bg-info-soft text-info flex items-center justify-center shadow-2xs">
+                  <Droplet className="h-4 w-4" />
+                </div>
+              </div>
+              <div>
+                <p className="font-numeral font-bold text-xl sm:text-2xl text-foreground tabular-nums">
+                  {fmtNum(totals.prod, 0)} <span className="text-sm font-semibold text-muted-foreground">m³</span>
+                </p>
+                <div className="flex items-center justify-between text-2xs text-muted-foreground mt-1">
+                  <span>Daily Avg</span>
+                  <span className="font-bold font-numeral text-foreground">{fmtNum(totals.dailyAvgProd, 0)} m³/day</span>
+                </div>
+              </div>
+              <div className="h-1.5 bg-muted/80 rounded-full overflow-hidden">
+                <div className="h-full bg-info rounded-full transition-all duration-500" style={{ width: '100%' }} />
+              </div>
+            </Card>
+
+            {/* Unit Cost per m3 */}
+            <Card className="p-4 rounded-2xl border border-border/80 shadow-2xs space-y-2 bg-gradient-to-b from-card to-muted/20">
+              <div className="flex items-center justify-between">
+                <span className="text-2xs uppercase tracking-wider font-semibold text-muted-foreground">Unit Production Cost</span>
+                <div className="h-7 w-7 rounded-lg bg-primary-soft text-primary flex items-center justify-center shadow-2xs">
+                  <Tag className="h-4 w-4" />
+                </div>
+              </div>
+              <div>
+                <p className="font-numeral font-bold text-xl sm:text-2xl text-primary tabular-nums">
+                  {totals.perM3 ? `₱${totals.perM3.toFixed(2)}` : '—'}<span className="text-xs font-semibold text-muted-foreground"> / m³</span>
+                </p>
+                <div className="flex items-center justify-between text-2xs text-muted-foreground mt-1">
+                  <span>Total OPEX</span>
+                  <span className="font-bold font-numeral text-foreground">₱{fmtNum(totals.total, 0)}</span>
+                </div>
+              </div>
+              {budgetRow && budgetRow.variancePct != null ? (
+                <div className="flex justify-end pt-0.5">
+                  <StatusPill tone={opexVarianceTone(budgetRow.variancePct)}>
+                    {budgetRow.variancePct >= 0 ? '+' : ''}{budgetRow.variancePct.toFixed(1)}% vs budget
+                  </StatusPill>
+                </div>
+              ) : (
+                <div className="h-1.5 bg-muted/80 rounded-full overflow-hidden">
+                  <div className="h-full bg-primary rounded-full transition-all duration-500" style={{ width: '100%' }} />
+                </div>
+              )}
+            </Card>
           </div>
-          {budgetRow && budgetRow.variancePct != null && (
-            <div className="flex justify-end">
-              <StatusPill tone={opexVarianceTone(budgetRow.variancePct)}>
-                {budgetRow.variancePct >= 0 ? '+' : ''}{budgetRow.variancePct.toFixed(1)}% vs budget
-              </StatusPill>
+
+          {/* Daily Costs Stacked Bar Chart */}
+          <Card className="p-5 rounded-2xl border border-border/80 shadow-2xs space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <h4 className="text-sm font-bold text-foreground tracking-tight">Daily Production Cost Telemetry</h4>
+                <p className="text-2xs text-muted-foreground">Stacked breakdown of chemical &amp; power expenses</p>
+              </div>
+              <span className="text-2xs text-muted-foreground font-mono bg-muted/50 px-2.5 py-1 rounded-lg border border-border/50">
+                {plantName}
+              </span>
             </div>
-          )}
-          <Card className="p-3">
-            <h4 className="text-sm font-semibold mb-2">Daily costs</h4>
-            <div className="h-64 sm:h-72">
-              <ResponsiveContainer>
-                <BarChart data={chartData}>
+
+            <div className="h-64 sm:h-72 w-full pt-2">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                   <defs>
                     <linearGradient id="costsChemFill" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="hsl(var(--chart-2))" stopOpacity={0.95} />
-                      <stop offset="100%" stopColor="hsl(var(--chart-2))" stopOpacity={0.55} />
+                      <stop offset="5%" stopColor="hsl(var(--highlight))" stopOpacity={0.95} />
+                      <stop offset="100%" stopColor="hsl(var(--highlight))" stopOpacity={0.6} />
                     </linearGradient>
                     <linearGradient id="costsPowerFill" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="hsl(var(--chart-1))" stopOpacity={0.95} />
-                      <stop offset="100%" stopColor="hsl(var(--chart-1))" stopOpacity={0.55} />
+                      <stop offset="5%" stopColor="hsl(var(--chart-6))" stopOpacity={0.95} />
+                      <stop offset="100%" stopColor="hsl(var(--chart-6))" stopOpacity={0.6} />
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} strokeOpacity={0.6} />
-                  <XAxis dataKey="date" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
-                  <Tooltip contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 10, fontSize: 12, boxShadow: 'var(--shadow-elev)', backdropFilter: 'blur(8px)' }} />
-                  <Legend wrapperStyle={{ fontSize: 12 }} />
-                  {/* stacked: chem sits below power, so only the top segment (power) is rounded — same convention as the kWh Solar/Grid stack in TrendChart.tsx */}
-                  <Bar dataKey="chem" stackId="c" fill="url(#costsChemFill)" name="Chem ₱" radius={[0, 0, 0, 0]} maxBarSize={32} />
-                  <Bar dataKey="power" stackId="c" fill="url(#costsPowerFill)" name="Power ₱" radius={[6, 6, 0, 0]} maxBarSize={32} />
+                  <XAxis dataKey="date" tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} tickFormatter={(v) => `₱${fmtNum(v, 0)}`} />
+                  <Tooltip
+                    contentStyle={{
+                      background: 'hsl(var(--card))',
+                      border: '1px solid hsl(var(--border))',
+                      borderRadius: 12,
+                      fontSize: 12,
+                      boxShadow: 'var(--shadow-elev)',
+                      backdropFilter: 'blur(8px)',
+                      padding: '8px 12px',
+                    }}
+                    formatter={(v: number, name: string) => [`₱${fmtNum(v, 0)}`, name]}
+                  />
+                  <Legend wrapperStyle={{ fontSize: 11, paddingTop: 6 }} />
+                  <Bar dataKey="chem" stackId="c" fill="url(#costsChemFill)" name="Chemical Cost (₱)" radius={[0, 0, 0, 0]} maxBarSize={32} />
+                  <Bar dataKey="power" stackId="c" fill="url(#costsPowerFill)" name="Power Cost (₱)" radius={[6, 6, 0, 0]} maxBarSize={32} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
           </Card>
+
           <CostInsights rows={data ?? []} totals={totals} from={from} to={to} />
         </>
+      ) : (
+        <Card className="p-8 text-center rounded-2xl border border-border/80 space-y-2">
+          <Building2 className="h-8 w-8 text-muted-foreground mx-auto" />
+          <p className="text-sm font-bold text-foreground">Select a Facility</p>
+          <p className="text-xs text-muted-foreground">Choose a plant facility above to inspect production costs and financial rollups.</p>
+        </Card>
       )}
-      {!plantId && <Card className="p-6 text-center text-sm text-muted-foreground">Select a plant</Card>}
     </div>
   );
 }
