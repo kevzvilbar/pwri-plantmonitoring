@@ -177,8 +177,8 @@ function useCorrectionApprovals(days: number) {
   return useQuery({
     queryKey: ['manager-scorecard-corr-reqs', from],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('correction_requests' as any)
+      const { data, error } = await (supabase
+        .from('correction_requests' as any) as any)
         .select('id, plant_id, status, submitted_by, resolved_by, created_at, resolved_at')
         .gte('created_at', from);
       if (error) return [];

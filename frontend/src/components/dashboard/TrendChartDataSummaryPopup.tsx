@@ -4,7 +4,9 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { format } from 'date-fns';
 import { Download, Droplet, Receipt, Gauge, TableProperties, Percent } from 'lucide-react';
+import { DSMTab, buildEntityPivot, fillDateRange, fmtDateKey } from './TrendChartPivotShared';
 import { PivotTable, OverviewTable } from './TrendChartTables';
 
 // ── DataSummaryPopup — 3-tab popup shown when "Data Summary" is clicked ───────
