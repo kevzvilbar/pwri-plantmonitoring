@@ -28,7 +28,7 @@ import { cn } from '@/lib/utils';
 import { canEditEntry, recalculateTrainDeltas, logReadingEdit } from './helpers';
 import {
   buildStatusTimeline, nonRunningSegmentsInRange, mergeSegmentsForDisplay, formatSegmentDuration,
-  type StatusSegment,
+  capOngoingSegments, type StatusSegment,
 } from '@/lib/trainStatusTimeline';
 import {
   detectHourlyGaps, mergeGapsForDisplay, type FlaggedGap, type GapReason,
@@ -83,6 +83,14 @@ function TrainStatusBannerRow({ segment }: { segment: StatusSegment }) {
           {segment.reason && (
             <span className="text-muted-foreground font-normal truncate max-w-[320px]" title={segment.reason}>
               · {segment.reason}
+            </span>
+          )}
+          {segment.impliedClose && (
+            <span
+              className="text-muted-foreground font-normal whitespace-nowrap"
+              title="No Back Online At was ever submitted for this train — this end time is inferred from the next real reading on record, not a confirmed closure."
+            >
+              · closed by later reading, not confirmed
             </span>
           )}
         </div>
@@ -337,10 +345,23 @@ export function TrainLogModal({ trainId, trainLabel, plantId, onClose, initialTa
   });
 
   const statusTimeline = useMemo(() => buildStatusTimeline(statusLogRows), [statusLogRows]);
+  // Display-only fixup: a still-"ongoing" segment with a real RO or
+  // Pre-Treatment reading logged after it started (typically a CSV
+  // backfill — see capOngoingSegments' own doc comment) gets capped at that
+  // reading's time instead of floating above it as "ongoing" forever. Feeds
+  // only bannerSegments below, not statusTimeline itself — roGaps/preGaps'
+  // hourly-gap detection further down deliberately keeps using the
+  // uncapped timeline, since train_status_log genuinely never closed this
+  // segment and that's a separate signal from "is there a banner to draw".
   const bannerSegments = useMemo(() => {
     if (!dateFrom || !untilNextDay) return [];
-    return nonRunningSegmentsInRange(statusTimeline, `${dateFrom}T00:00:00`, `${untilNextDay}T00:00:00`);
-  }, [statusTimeline, dateFrom, untilNextDay]);
+    const inRange = nonRunningSegmentsInRange(statusTimeline, `${dateFrom}T00:00:00`, `${untilNextDay}T00:00:00`);
+    const readingTimestamps = [
+      ...logs.map((r: any) => r.reading_datetime),
+      ...preLogs.map((r: any) => r.reading_datetime),
+    ];
+    return capOngoingSegments(inRange, readingTimestamps);
+  }, [statusTimeline, dateFrom, untilNextDay, logs, preLogs]);
 
   // Already-logged reasons for flagged gaps, keyed by gap_start_at — same
   // low-volume-per-train reasoning as statusLogRows above: cheaper to fetch

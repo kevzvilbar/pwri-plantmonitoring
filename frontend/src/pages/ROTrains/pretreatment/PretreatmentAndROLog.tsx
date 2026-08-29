@@ -93,6 +93,18 @@ export function PretreatmentAndROLog() {
   const [offlineEnd, setOfflineEnd] = useState('');
   const [offlineReason, setOfflineReason] = useState('');
   const [offlineReasonOther, setOfflineReasonOther] = useState('');
+  // Explicit "yes, this is really back online" acknowledgment — required
+  // before a normal save is allowed to clear a DB status of 'Offline'.
+  // trainOnline itself defaults to true on a fresh page load/session even
+  // when the DB says Offline (see the DB-status-awareness effect below,
+  // which deliberately does NOT flip trainOnline to false — auto-locking
+  // the form that way was the original bug). That means "checked" alone
+  // isn't evidence of an operator decision; it might just be the default.
+  // This flag tracks whether an operator actually made that call this
+  // session, either by ticking the confirmation box in the warning banner,
+  // or by completing the explicit Offline→Online toggle (which already
+  // requires entering a Back Online At time — see the checkbox handler).
+  const [confirmBackOnline, setConfirmBackOnline] = useState(false);
 
   // RO Train readings
   const [roValues, setRoValues] = useState({
@@ -400,6 +412,9 @@ export function PretreatmentAndROLog() {
       setTrainOnline(true); setOfflineStart(''); setOfflineEnd('');
       setOfflineReason(''); setOfflineReasonOther('');
     }
+    // New train selection → any confirmation given for the previous train
+    // doesn't carry over. Re-derived from this train's own DB status below.
+    setConfirmBackOnline(false);
 
     setRoValues({
       feed_pressure_psi: '', reject_pressure_psi: '',
@@ -450,6 +465,12 @@ export function PretreatmentAndROLog() {
       setTrainOnline(true);
       setOfflineStart(''); setOfflineEnd('');
       setOfflineReason(''); setOfflineReasonOther('');
+      // No longer relevant once the DB itself isn't Offline (either the
+      // save that needed it already went through and flipped the status,
+      // or something else resolved it) — moot either way, but reset it
+      // so it doesn't linger true for a stale reason if this train later
+      // gets auto-flagged Offline again this same session.
+      setConfirmBackOnline(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [train?.id, train?.status]);
@@ -635,6 +656,16 @@ export function PretreatmentAndROLog() {
     // in-flight (double-tap, slow network + impatient re-tap, etc.).
     if (isSaving) return;
     if (!plantId || !trainId) { toast.error('Select plant and train'); return; }
+    // trainOnline defaults to true even when the DB still holds 'Offline'
+    // (see confirmBackOnline's declaration above) — don't let an
+    // un-noticed default silently clear a real offline period. The operator
+    // must either tick the confirmation box in the warning banner, or have
+    // gone through the explicit Offline→Online toggle (which sets this
+    // automatically since it already required a Back Online At time).
+    if (trainOnline && train?.status === 'Offline' && !confirmBackOnline) {
+      toast.error('This train is still marked Offline in the database. Confirm it has actually resumed (checkbox above the form) before saving as Online.');
+      return;
+    }
     if (anomalyRemarksMissing) {
       toast.error('One or more meters are outside the normal range — add a remark for each before saving.');
       return;
@@ -1078,6 +1109,13 @@ export function PretreatmentAndROLog() {
       // Clear persisted offline state now that the period is formally resolved.
       try { sessionStorage.removeItem(`pretreat:offline:${trainId}`); } catch { /* ignore */ }
     }
+    // The confirmation this save just relied on (if any) is spent — the DB
+    // write above already cleared the Offline status for this train, so
+    // train.status will read 'Running' once `trains` refetches and the
+    // warning banner (gated on train.status === 'Offline') disappears on
+    // its own. Resetting here just avoids it lingering true in the
+    // in-between render before that refetch lands.
+    setConfirmBackOnline(false);
     // When still offline (no end time), preserve offlineStart + reason so the
     // operator can see context for the ongoing downtime in subsequent readings.
     setRoValues({
@@ -1231,6 +1269,10 @@ export function PretreatmentAndROLog() {
                     toast.error('Please enter a "Back Online At" time before marking the train as Online.');
                     return;
                   }
+                  // This toggle IS the deliberate action — a Back Online At
+                  // time was just required and entered, so no separate
+                  // confirmation checkbox is needed on top of it.
+                  setConfirmBackOnline(true);
                 }
                 setTrainOnline(!!c);
                 if (c) { setOfflineStart(''); setOfflineEnd(''); setOfflineReason(''); setOfflineReasonOther(''); }
@@ -1254,15 +1296,30 @@ export function PretreatmentAndROLog() {
         )}
 
         {/* Warning banner: DB says this train is Offline but form is in online mode.
-            Operator must explicitly uncheck Online + fill reason/start to log offline. */}
+            Operator must explicitly uncheck Online + fill reason/start to log offline —
+            or, to proceed as Online, tick the confirmation box below. trainOnline
+            being checked here is very likely just this form's default state (see
+            confirmBackOnline's declaration above), not a decision anyone made, so
+            submit() refuses to silently clear the DB's Offline status without it. */}
         {train && trainOnline && train.status === 'Offline' && (
           <div className="flex items-start gap-2 rounded-md border border-warn bg-warn-soft px-3 py-2">
             <AlertCircle className="h-4 w-4 text-warn mt-0.5 shrink-0" />
-            <div>
+            <div className="flex-1 min-w-0">
               <p className="text-xs font-semibold text-warn">Train last recorded as Offline</p>
               <p className="text-xs text-warn mt-0.5">
-                The database shows this train was previously offline. If it has resumed, submit a reading as Online and it will clear automatically. If it is still offline, uncheck "Online / Running" above and fill in the offline details.
+                The database shows this train was previously offline. If it is still offline, uncheck "Online / Running" above and fill in the offline details. If it has resumed, confirm below and submit a reading — the offline status will clear automatically.
               </p>
+              <div className="mt-2 flex items-center gap-2">
+                <Checkbox
+                  id="confirm-back-online"
+                  checked={confirmBackOnline}
+                  onCheckedChange={(c) => setConfirmBackOnline(!!c)}
+                  className="shrink-0 h-4 w-4"
+                />
+                <label htmlFor="confirm-back-online" className="text-xs font-medium text-warn cursor-pointer select-none">
+                  This train has actually resumed operation — clear its Offline status when I save.
+                </label>
+              </div>
             </div>
           </div>
         )}
