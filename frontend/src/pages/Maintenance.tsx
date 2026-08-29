@@ -327,7 +327,7 @@ function Records() {
       Findings: r.findings || 'None',
       Status: 'Completed',
     }));
-    downloadCSV(rows, `PMS_Execution_Records_${format(new Date(), 'yyyyMMdd_HHmm')}`);
+    downloadCSV(`PMS_Execution_Records_${format(new Date(), 'yyyyMMdd_HHmm')}`, rows);
     toast.success('Maintenance records exported to CSV');
   };
 

@@ -607,7 +607,7 @@ function History() {
       Corrective_Action: i.corrective_action || '—',
       Preventive_Measures: i.preventive_measures || '—',
     }));
-    downloadCSV(rows, `HSE_Incident_Log_${format(new Date(), 'yyyyMMdd_HHmm')}`);
+    downloadCSV(`HSE_Incident_Log_${format(new Date(), 'yyyyMMdd_HHmm')}`, rows);
     toast.success('Incidents log exported to CSV');
   };
 
