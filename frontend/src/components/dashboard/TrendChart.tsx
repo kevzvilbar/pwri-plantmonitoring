@@ -6,6 +6,7 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ChevronsDown, ChevronsUp, BarChart2, Filter, X, Check, Search, Sun, Zap, Download, MoreVertical, MessageCircleOff, Rows3 } from 'lucide-react';
+import { GridPylonIcon } from '@/components/icons/water-icons';
 import {
   Popover, PopoverContent, PopoverTrigger,
 } from '@/components/ui/popover';
@@ -502,7 +503,7 @@ export function TrendChart({
                 data-testid="kwh-stat-grid"
               >
                 <div className="flex items-center gap-1.5 mb-1.5">
-                  <Zap className="h-3 w-3 text-info shrink-0" />
+                  <GridPylonIcon className="h-3.5 w-3.5 text-info shrink-0" />
                   <span className="text-3xs font-bold uppercase tracking-[0.08em] text-info">
                     Grid · {latest.date}
                   </span>

@@ -9,8 +9,9 @@
 //
 // Moved verbatim from TrendChart.tsx — no logic or markup changes.
 import {
-  ChevronsDown, ChevronsUp, BarChart2, Filter, X, Check, Search, Download, MoreVertical, Rows3,
+  ChevronsDown, ChevronsUp, BarChart2, Filter, X, Check, Search, Download, MoreVertical, Rows3, Sun,
 } from 'lucide-react';
+import { GridPylonIcon } from '@/components/icons/water-icons';
 import { toast } from 'sonner';
 import {
   Popover, PopoverContent, PopoverTrigger,
@@ -236,12 +237,22 @@ export function TrendChartControls(props: Record<string, any>) {
                     {(['both', 'solar', 'grid'] as const).map(s => (
                       <button key={s} onClick={() => setKwhSource(s)}
                         className={[
-                          'px-2 py-0.5 rounded text-2xs font-medium transition-colors',
+                          'px-2 py-0.5 rounded text-2xs font-medium transition-colors inline-flex items-center gap-1',
                           kwhSource === s
                             ? 'bg-primary text-primary-foreground'
                             : 'text-muted-foreground hover:text-foreground',
                         ].join(' ')}>
-                        {s === 'both' ? 'Both' : s === 'solar' ? '☀ Solar' : '⚡ Grid'}
+                        {s === 'both' ? 'Both' : s === 'solar' ? (
+                          <>
+                            <Sun className="h-3 w-3" />
+                            <span>Solar</span>
+                          </>
+                        ) : (
+                          <>
+                            <GridPylonIcon className="h-3 w-3" />
+                            <span>Grid</span>
+                          </>
+                        )}
                       </button>
                     ))}
                   </div>
