@@ -878,42 +878,57 @@
     border-color: hsl(var(--display-border));
   }
   .digital-readout-dim { color: hsl(var(--display-dim)); }
-
 }
 
-/* ── Keyframe definitions ─────────────────────────────────────────────────── */
-@layer base {
-  @keyframes pulse-ring {
-    0%       { transform: scale(1); opacity: 0.6; }
-    80%, 100%{ transform: scale(2.5); opacity: 0; }
-  }
+/* ── Motion & Easing Design Tokens ────────────────────────────────────────── */
+:root {
+  --ease-spring: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-out: cubic-bezier(0, 0, 0.2, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --duration-micro: 120ms;
+  --duration-fast: 200ms;
+  --duration-normal: 300ms;
+  --duration-complex: 450ms;
+}
 
-  @keyframes page-fade-up {
-    from { opacity: 0; transform: translateY(6px); }
-    to   { opacity: 1; transform: translateY(0); }
-  }
+@keyframes pulse-ring {
+  0%       { transform: scale(1); opacity: 0.6; }
+  80%, 100%{ transform: scale(2.5); opacity: 0; }
+}
 
-  @keyframes stagger-fade-up {
-    from { opacity: 0; transform: translateY(8px) scale(0.98); }
-    to   { opacity: 1; transform: translateY(0) scale(1); }
-  }
+@keyframes page-fade-up {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
 
-  @keyframes shimmer {
-    0%   { background-position: -200% 0; }
-    100% { background-position:  200% 0; }
-  }
+@keyframes stagger-fade-up {
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
 
-  /* Skeleton loading shimmer */
-  .skeleton {
-    background: linear-gradient(
-      90deg,
-      hsl(var(--muted)) 25%,
-      hsl(var(--secondary)) 50%,
-      hsl(var(--muted)) 75%
-    );
-    background-size: 200% 100%;
-    animation: shimmer 1.4s ease-in-out infinite;
-    border-radius: calc(var(--radius) * 0.5);
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position:  200% 0; }
+}
+
+/* Skeleton loading shimmer */
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    hsl(var(--muted)) 25%,
+    hsl(var(--secondary)) 50%,
+    hsl(var(--muted)) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+  border-radius: calc(var(--radius) * 0.5);
+}
+
+/* ── Hover trap avoidance for touch screens ─────────────────────────────── */
+@media (hover: hover) and (pointer: fine) {
+  .hover-lift:hover {
+    transform: translateY(-1.5px);
+    transition: transform var(--duration-fast) var(--ease-spring), box-shadow var(--duration-fast) var(--ease-spring);
   }
 }
 
