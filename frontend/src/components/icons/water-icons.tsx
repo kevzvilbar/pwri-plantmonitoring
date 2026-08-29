@@ -31,6 +31,7 @@ import * as React from 'react';
 export interface WaterIconProps extends React.SVGProps<SVGSVGElement> {
   /** Pixel size for both width and height. Defaults to 24, same as lucide. */
   size?: number | string;
+  className?: string;
 }
 
 function baseProps(size: number | string | undefined, props: WaterIconProps) {
