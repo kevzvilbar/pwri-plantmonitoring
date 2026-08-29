@@ -74,14 +74,17 @@ export function PlantTelemetryDrawer({
               <p className="text-xs text-muted-foreground">{plant.address || 'Address unassigned'}</p>
             </div>
 
-            <Button
-              size="sm"
-              variant="ghost"
-              className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
-              onClick={handleRefresh}
-            >
-              <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin text-primary' : ''}`} />
-            </Button>
+            <div className="flex items-center gap-1.5 mr-8">
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground rounded-lg hover:bg-muted"
+                onClick={handleRefresh}
+                title="Refresh live telemetry"
+              >
+                <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin text-primary' : ''}`} />
+              </Button>
+            </div>
           </div>
 
           <div className="flex items-center justify-between mt-4 pt-3 border-t border-border/80 text-xs">

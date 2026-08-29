@@ -480,12 +480,12 @@ export function DataSummaryPopup({
               <span>Data Summary — {title ?? metric}</span>
             </DialogTitle>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 mr-8">
               <Button
                 size="sm"
                 variant="outline"
                 onClick={handleExportCsv}
-                className="h-7 px-2.5 text-2xs gap-1.5 font-semibold text-muted-foreground hover:text-foreground"
+                className="h-7 px-2.5 text-2xs gap-1.5 font-semibold text-muted-foreground hover:text-foreground shadow-xs"
               >
                 <Download className="h-3 w-3 text-primary" />
                 <span>Export CSV</span>
