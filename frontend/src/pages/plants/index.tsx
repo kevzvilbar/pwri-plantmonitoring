@@ -1038,24 +1038,32 @@ function PlantDetail({ plantId }: { plantId: string }) {
                   variant="outline"
                   onClick={openInfoEdit}
                   data-testid="edit-plant-info-btn"
-                  className="h-8 gap-1.5 bg-white/10 hover:bg-white/20 text-white border-white/20 hover:border-white/40 rounded-lg text-xs font-semibold shadow-sm"
+                  className="h-8 px-3 gap-1.5 bg-white/10 hover:bg-white/20 text-white border-white/20 hover:border-white/40 rounded-lg text-xs font-semibold shadow-sm transition-all"
                 >
                   <Pencil className="h-3.5 w-3.5 text-teal-300" />
                   <span>Edit Facility</span>
                 </Button>
               )}
               {isManager && (
-                <div className="[&>button]:bg-white/10 [&>button]:hover:bg-white/20 [&>button]:text-white [&>button]:border [&>button]:border-white/20 [&>button]:rounded-lg [&_svg]:text-white [&>button]:h-8 [&>button]:w-8 [&>button]:p-0 [&>button]:inline-flex [&>button]:items-center [&>button]:justify-center">
-                  <DeleteEntityMenu
-                    kind="plant"
-                    id={plant.id}
-                    label={plant.name}
-                    canSoftDelete={plant.status === 'Active'}
-                    canHardDelete
-                    invalidateKeys={[['plants']]}
-                    onDeleted={() => navigate('/plants')}
-                  />
-                </div>
+                <DeleteEntityMenu
+                  kind="plant"
+                  id={plant.id}
+                  label={plant.name}
+                  canSoftDelete={plant.status === 'Active'}
+                  canHardDelete
+                  invalidateKeys={[['plants']]}
+                  onDeleted={() => navigate('/plants')}
+                  trigger={
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-8 px-3 gap-1.5 bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 hover:text-rose-100 border-rose-500/30 hover:border-rose-500/50 rounded-lg text-xs font-semibold shadow-sm transition-all"
+                    >
+                      <Trash2 className="h-3.5 w-3.5 text-rose-400" />
+                      <span>Delete</span>
+                    </Button>
+                  }
+                />
               )}
             </div>
           </div>
