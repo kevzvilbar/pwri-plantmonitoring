@@ -31,6 +31,15 @@ import { EditRoReadingDialog } from './EditRoReadingDialog';
 import { EditPretreatReadingDialog } from './EditPretreatReadingDialog';
 import { ImportROReadingsDialog } from './ImportROReadingsDialog';
 import { ImportPretreatReadingsDialog } from './ImportPretreatReadingsDialog';
+import {
+  buildStatusTimeline, nonRunningSegmentsInRange, mergeSegmentsForDisplay, formatSegmentDuration,
+  reconcileOngoingSegmentWithReadings, type StatusSegment,
+} from '@/lib/trainStatusTimeline';
+import {
+  detectHourlyGaps, mergeGapsForDisplay, type FlaggedGap, type GapReason,
+} from '@/lib/hourlyGapDetection';
+import { ReasonDialog } from '@/components/ReasonDialog';
+import { reasonCategoryLabel } from '@/lib/reasonCodes';
 
 interface TrainLogModalProps {
   trainId: string;
@@ -42,6 +51,98 @@ interface TrainLogModalProps {
   initialTab?: 'ro' | 'pretreat';
   /** A specific reading id to jump to, scroll into view, and highlight. */
   highlightId?: string;
+}
+
+/**
+ * A single collapsed row spanning an Offline/Maintenance stretch, in place
+ * of the individual (mostly-empty) reading rows that stretch used to leave
+ * behind — or, once useTrainAutoOffline's auto-flip is the cause, in place
+ * of nothing at all, since that path never wrote anything a human could
+ * read here before train_status_log existed. colSpan is intentionally
+ * larger than either tab's real column count — browsers clamp an
+ * oversized colSpan to the table's actual width, so one constant safely
+ * spans both the RO and Pre-Treatment tables without tracking their
+ * column counts separately.
+ */
+function TrainStatusBannerRow({ segment }: { segment: StatusSegment }) {
+  const isMaintenance = segment.status === 'Maintenance';
+  const Icon = isMaintenance ? Wrench : PowerOff;
+  const label = isMaintenance ? 'Maintenance' : 'Offline';
+  const fmtPoint = (iso: string) => format(new Date(iso), 'MMM d, HH:mm');
+  return (
+    <tr className={cn('border-t', isMaintenance ? 'bg-warn-soft/60' : 'bg-danger-soft/60')}>
+      <td colSpan={30} className="px-3 py-2">
+        <div className={cn('flex items-center gap-2 text-xs font-medium flex-wrap', isMaintenance ? 'text-warn' : 'text-danger')}>
+          <Icon className="h-3.5 w-3.5 shrink-0" />
+          <span className="whitespace-nowrap">
+            {label} {fmtPoint(segment.startAt)} → {segment.endAt ? fmtPoint(segment.endAt) : 'ongoing'}
+          </span>
+          <span className="text-muted-foreground font-normal whitespace-nowrap">
+            · {formatSegmentDuration(segment.startAt, segment.endAt)}
+          </span>
+          {segment.reason && (
+            <span className="text-muted-foreground font-normal truncate max-w-[320px]" title={segment.reason}>
+              · {segment.reason}
+            </span>
+          )}
+          {segment.inferredEnd && (
+            <span
+              className="text-muted-foreground font-normal whitespace-nowrap"
+              title="No Back Online At was ever submitted for this train — this end time is inferred from the next real reading on record, not a confirmed closure."
+            >
+              · closed by later reading, not confirmed
+            </span>
+          )}
+        </div>
+      </td>
+    </tr>
+  );
+}
+
+/**
+ * One collapsed row for a flagged unexplained gap. Unresolved: an amber
+ * "N hrs missing — log why" button that opens ReasonDialog. Resolved: the
+ * same span shown muted with its logged reason, still clickable to re-log
+ * (ReasonDialog itself has no prefill, so re-opening starts blank — same
+ * behavior as the well/locator daily version this mirrors).
+ */
+function GapBadgeRow({ gap, existingReason, onClick, highlighted, rowRef }: {
+  gap: FlaggedGap; existingReason: GapReason | null; onClick: () => void;
+  highlighted?: boolean; rowRef?: Ref<HTMLTableRowElement>;
+}) {
+  const label = `${gap.missedHours} hr${gap.missedHours === 1 ? '' : 's'} missing`;
+  const timeRange = `${format(new Date(gap.gapStartAt), 'HH:mm')}–${format(new Date(new Date(gap.gapEndAt).getTime() - 1), 'HH:mm')}`;
+  return (
+    <tr
+      ref={rowRef}
+      className={cn(
+        'border-t transition-colors',
+        highlighted ? 'bg-danger-soft ring-1 ring-inset ring-danger' : existingReason ? 'bg-muted/40' : 'bg-warn-soft/60',
+      )}
+    >
+      <td colSpan={30} className="px-3 py-2">
+        <button
+          type="button"
+          onClick={onClick}
+          className={cn(
+            'flex items-center gap-2 text-xs font-medium hover:underline',
+            existingReason ? 'text-muted-foreground' : 'text-warn',
+          )}
+        >
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+          <span>{label} ({timeRange})</span>
+          {existingReason ? (
+            <span className="font-normal">
+              — {reasonCategoryLabel(existingReason.reasonCategory)}
+              {existingReason.reasonDetail ? `: ${existingReason.reasonDetail}` : ''}
+            </span>
+          ) : (
+            <span className="font-normal">— log why</span>
+          )}
+        </button>
+      </td>
+    </tr>
+  );
 }
 
 export function TrainLogModal({ trainId, trainLabel, plantId, onClose, initialTab, highlightId }: TrainLogModalProps) {
@@ -223,6 +324,122 @@ export function TrainLogModal({ trainId, trainLabel, plantId, onClose, initialTa
     },
     staleTime: 30_000,
   });
+
+  // Fetched unbounded by date (not scoped to dateFrom/untilNextDay) — a
+  // segment overlapping the start of the visible range needs to know the
+  // status *before* the range began, and per-train row volume here is a
+  // handful of transitions total, not readings-scale. Feeds the shutdown /
+  // maintenance banners rendered in both tabs below.
+  const { data: statusLogRows = [] } = useQuery({
+    queryKey: ['train-status-log', trainId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('train_status_log')
+        .select('status,reason,confirmed_at')
+        .eq('train_id', trainId)
+        .order('confirmed_at', { ascending: true });
+      if (error) return [];
+      return (data ?? []).map((r) => ({ status: r.status, reason: r.reason, confirmed_at: r.confirmed_at }));
+    },
+    staleTime: 30_000,
+  });
+
+  const statusTimeline = useMemo(() => buildStatusTimeline(statusLogRows), [statusLogRows]);
+  // Display-only fixup: a still-"ongoing" segment with a real RO or
+  // Pre-Treatment reading logged after it started (typically a CSV
+  // backfill — see reconcileOngoingSegmentWithReadings' own doc comment)
+  // gets clipped to that reading's time instead of floating above it as
+  // "ongoing" forever. Feeds only bannerSegments below, not statusTimeline
+  // itself — roGaps/preGaps' hourly-gap detection further down deliberately
+  // keeps using the uncapped timeline, since train_status_log genuinely
+  // never closed this segment and that's a separate signal from "is there a
+  // banner to draw".
+  const bannerSegments = useMemo(() => {
+    if (!dateFrom || !untilNextDay) return [];
+    const inRange = nonRunningSegmentsInRange(statusTimeline, `${dateFrom}T00:00:00`, `${untilNextDay}T00:00:00`);
+    const latestReadingAt = [...logs, ...preLogs].reduce<string | null>((latest, r: any) => {
+      if (!r.reading_datetime) return latest;
+      if (!latest) return r.reading_datetime;
+      return new Date(r.reading_datetime).getTime() > new Date(latest).getTime() ? r.reading_datetime : latest;
+    }, null);
+    return reconcileOngoingSegmentWithReadings(inRange, latestReadingAt);
+  }, [statusTimeline, dateFrom, untilNextDay, logs, preLogs]);
+
+  // Already-logged reasons for flagged gaps, keyed by gap_start_at — same
+  // low-volume-per-train reasoning as statusLogRows above: cheaper to fetch
+  // this train's full history once than to refetch per date-range change.
+  const { data: gapReasonRows = [] } = useQuery({
+    queryKey: ['ro-train-data-gaps', trainId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('ro_train_data_gaps' as any)
+        .select('id,source_table,gap_start_at,reason_category,reason_detail')
+        .eq('train_id', trainId);
+      if (error) return [];
+      return (data ?? []) as any[];
+    },
+    staleTime: 15_000,
+  });
+  const gapReasonsBySourceTable = useMemo(() => {
+    const byTable: Record<string, Map<string, GapReason>> = {
+      ro_train_readings: new Map(), ro_pretreatment_readings: new Map(),
+    };
+    for (const row of gapReasonRows) {
+      byTable[row.source_table]?.set(row.gap_start_at, {
+        reasonCategory: row.reason_category, reasonDetail: row.reason_detail,
+      });
+    }
+    return byTable;
+  }, [gapReasonRows]);
+
+  const roGaps = useMemo(() => {
+    if (!dateFrom || !untilNextDay) return [];
+    return detectHourlyGaps({
+      readingTimestamps: logs.map((r: any) => r.reading_datetime),
+      statusTimeline,
+      rangeStart: new Date(`${dateFrom}T00:00:00`),
+      rangeEnd: new Date(`${untilNextDay}T00:00:00`),
+    });
+  }, [logs, statusTimeline, dateFrom, untilNextDay]);
+  const preGaps = useMemo(() => {
+    if (!dateFrom || !untilNextDay) return [];
+    return detectHourlyGaps({
+      readingTimestamps: preLogs.map((r: any) => r.reading_datetime),
+      statusTimeline,
+      rangeStart: new Date(`${dateFrom}T00:00:00`),
+      rangeEnd: new Date(`${untilNextDay}T00:00:00`),
+    });
+  }, [preLogs, statusTimeline, dateFrom, untilNextDay]);
+
+  const [gapDialogTarget, setGapDialogTarget] = useState<{
+    gap: FlaggedGap; sourceTable: 'ro_train_readings' | 'ro_pretreatment_readings';
+  } | null>(null);
+  const [gapDialogBusy, setGapDialogBusy] = useState(false);
+
+  const submitGapReason = async (category: string, detail: string) => {
+    if (!gapDialogTarget) return;
+    setGapDialogBusy(true);
+    try {
+      const { error } = await supabase.from('ro_train_data_gaps' as any).upsert({
+        train_id: trainId,
+        plant_id: plantId,
+        source_table: gapDialogTarget.sourceTable,
+        gap_start_at: gapDialogTarget.gap.gapStartAt,
+        gap_end_at: gapDialogTarget.gap.gapEndAt,
+        missed_hours: gapDialogTarget.gap.missedHours,
+        reason_category: category,
+        reason_detail: detail || null,
+        logged_by: activeOperator?.id ?? null,
+        logged_at: new Date().toISOString(),
+      }, { onConflict: 'train_id,source_table,gap_start_at' });
+      if (error) { toast.error(friendlyError(error)); return; }
+      qc.invalidateQueries({ queryKey: ['ro-train-data-gaps', trainId] });
+      toast.success('Reason logged');
+      setGapDialogTarget(null);
+    } finally {
+      setGapDialogBusy(false);
+    }
+  };
 
   const toggleMeterReplacement = async (r: any) => {
     if (!isManager) return;
