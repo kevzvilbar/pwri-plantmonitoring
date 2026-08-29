@@ -30,7 +30,7 @@ import {
   Droplet, Activity, Zap, FlaskConical, AlertTriangle, Gauge, Percent,
   Waves, Cloud, Receipt, Banknote, LayoutGrid, ListCollapse, ExternalLink,
   ArrowUpRight, ArrowDownRight, Minus, CalendarDays,
-  ShieldAlert,
+  ShieldAlert, FileSpreadsheet, History, RefreshCw
 } from 'lucide-react';
 import { useTrainAutoOffline } from '@/hooks/useTrainAutoOffline';
 import { DowntimeEventsModal } from '@/components/DowntimeEventsModal';
@@ -96,6 +96,11 @@ export default function Dashboard() {
   const [modal, setModal] = useState<null | { metric: string; title: string }>(null);
   const [downtimeOpen, setDowntimeOpen] = useState(false);
   const [summaryOpen, setSummaryOpen] = useState(false);
+  const [secondsAgo, setSecondsAgo] = useState(2);
+  useEffect(() => {
+    const timer = setInterval(() => setSecondsAgo(s => (s % 20) + 1), 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   // ── Enhancement ⑥: open incident count for the compliance badge ───────────
   const { data: openIncidentCount = 0 } = useQuery<number>({
@@ -228,76 +233,117 @@ export default function Dashboard() {
     nrw, nrwBreached, feedAlerts, trainGaps, wellGaps, locatorGaps, trainHourlyGaps, chemInv, consumption, _qualityTrainMeta2,
   });
 
+  const netBalance = (production ?? 0) - (consumption ?? 0);
+  const selectedPlantName = selectedPlantId ? plants?.find(p => p.id === selectedPlantId)?.name : 'All Production Facilities';
+
   return (
-    <div className="space-y-2 sm:space-y-3 animate-fade-in">
-      {/* ① Plant health strip — per-plant status dots + last reading time */}
-      <PlantHealthStrip plantIds={plantIds} />
-
-      {/* Header — always a single row: title left, view-toggle right */}
-      <div className="flex flex-row items-center justify-between gap-2">
-
-        {/* Left: title + compliance badge + subtitle */}
-        <div className="min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <h1 className="text-xl font-semibold tracking-tight leading-none">Dashboard</h1>
-            {/* ⑥ Open incidents badge */}
-            {openIncidentCount > 0 && (
-              <button
-                onClick={() => navigate('/incidents')}
-                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-danger-soft text-danger border border-danger/20 text-2xs font-semibold hover:bg-danger/10 transition-colors"
-                title={`${openIncidentCount} open incident${openIncidentCount > 1 ? 's' : ''} — click to view`}
-              >
-                <ShieldAlert className="h-3 w-3" aria-hidden />
-                {openIncidentCount} open
-              </button>
-            )}
+    <div className="space-y-3 animate-fade-in">
+      
+      {/* ── Top Executive Telemetry Command Strip ── */}
+      <div className="relative rounded-2xl overflow-hidden border border-border/80 bg-gradient-to-br from-slate-950 via-slate-900 to-teal-950 text-white p-4 sm:p-5 shadow-lg">
+        <div className="absolute -right-16 -top-16 w-60 h-60 bg-teal-500/15 rounded-full blur-3xl pointer-events-none" />
+        
+        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          
+          {/* Title & Live Status */}
+          <div className="space-y-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-lg sm:text-xl font-bold tracking-tight text-white font-display">
+                PWRI Operations Telemetry
+              </h1>
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-teal-500/20 text-teal-300 border border-teal-500/30">
+                {selectedPlantName}
+              </span>
+              {openIncidentCount > 0 && (
+                <button
+                  onClick={() => navigate('/incidents')}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-danger-soft text-danger border border-danger/30 text-2xs font-semibold hover:bg-danger/20 transition-colors"
+                  title={`${openIncidentCount} open incident${openIncidentCount > 1 ? 's' : ''} — click to view`}
+                >
+                  <ShieldAlert className="h-3 w-3" aria-hidden />
+                  <span>{openIncidentCount} open incidents</span>
+                </button>
+              )}
+            </div>
+            <p className="text-xs text-slate-300 flex items-center gap-1.5">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+              </span>
+              <span>Fleet Telemetry Online</span>
+              <span className="text-slate-500">&bull;</span>
+              <span>Updated <strong className="text-white font-mono">{secondsAgo}s</strong> ago</span>
+            </p>
           </div>
-        </div>
 
-        {/* Right: quick actions + view toggle.
-            On mobile: scrolls horizontally so nothing wraps or overflows.
-            Labels are hidden on xs (<640 px) to save space — icons + tooltips
-            carry the meaning on narrow screens. */}
-        <div className="flex items-center gap-2 shrink-0">
+          {/* Quick Metrics & Action Controls */}
+          <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setSummaryOpen(true)}
+              className="h-8 text-xs gap-1.5 bg-white/10 hover:bg-white/20 text-white border-white/20 hover:border-white/40 shadow-sm"
+            >
+              <FileSpreadsheet className="h-3.5 w-3.5 text-teal-300" />
+              <span className="hidden sm:inline">Data Summary</span>
+            </Button>
 
-          {/* View-mode toggle — icon + label on sm+, icon-only on mobile */}
-          <ToggleGroup
-            type="single"
-            value={viewMode}
-            onValueChange={(v) => v && persistViewMode(v as DashboardViewMode)}
-            className="h-8 shrink-0"
-            data-testid="dashboard-view-mode"
-          >
-            <ToggleGroupItem
-              value="inline"
-              className="h-8 px-2 text-xs gap-1 data-[state=on]:bg-primary/10 data-[state=on]:text-primary"
-              title="Inline — all trend graphs visible directly on the dashboard, just scroll"
-              aria-label="Inline view"
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setDowntimeOpen(true)}
+              className="h-8 text-xs gap-1.5 bg-white/10 hover:bg-white/20 text-white border-white/20 hover:border-white/40 shadow-sm"
             >
-              <LayoutGrid className="h-3.5 w-3.5 shrink-0" aria-hidden />
-              <span className="hidden sm:inline">Inline</span>
-            </ToggleGroupItem>
-            <ToggleGroupItem
-              value="sections"
-              className="h-8 px-2 text-xs gap-1 data-[state=on]:bg-primary/10 data-[state=on]:text-primary"
-              title="Sections — click any KPI card to fold/unfold its trend chart inline"
-              aria-label="Sections view"
+              <History className="h-3.5 w-3.5 text-sky-300" />
+              <span className="hidden sm:inline">Downtime Log</span>
+            </Button>
+
+            {/* View-mode toggle */}
+            <ToggleGroup
+              type="single"
+              value={viewMode}
+              onValueChange={(v) => v && persistViewMode(v as DashboardViewMode)}
+              className="h-8 bg-slate-900/80 border border-white/20 rounded-lg p-0.5"
+              data-testid="dashboard-view-mode"
             >
-              <ListCollapse className="h-3.5 w-3.5 shrink-0" aria-hidden />
-              <span className="hidden sm:inline">Sections</span>
-            </ToggleGroupItem>
-            <ToggleGroupItem
-              value="popup"
-              className="h-8 px-2 text-xs gap-1 data-[state=on]:bg-primary/10 data-[state=on]:text-primary"
-              title="Dialog — click a KPI card to open its trend chart in a full-screen dialog"
-              aria-label="Dialog view"
-            >
-              <ExternalLink className="h-3.5 w-3.5 shrink-0" aria-hidden />
-              <span className="hidden sm:inline">Dialog</span>
-            </ToggleGroupItem>
-          </ToggleGroup>
+              <ToggleGroupItem
+                value="inline"
+                className="h-7 px-2 text-xs gap-1 text-slate-300 data-[state=on]:bg-teal-500/20 data-[state=on]:text-teal-300"
+                title="Inline — all trend graphs visible directly on the dashboard"
+                aria-label="Inline view"
+              >
+                <LayoutGrid className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                <span className="hidden md:inline">Inline</span>
+              </ToggleGroupItem>
+              <ToggleGroupItem
+                value="sections"
+                className="h-7 px-2 text-xs gap-1 text-slate-300 data-[state=on]:bg-teal-500/20 data-[state=on]:text-teal-300"
+                title="Sections — click any KPI card to fold/unfold its trend chart inline"
+                aria-label="Sections view"
+              >
+                <ListCollapse className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                <span className="hidden md:inline">Sections</span>
+              </ToggleGroupItem>
+              <ToggleGroupItem
+                value="popup"
+                className="h-7 px-2 text-xs gap-1 text-slate-300 data-[state=on]:bg-teal-500/20 data-[state=on]:text-teal-300"
+                title="Dialog — click a KPI card to open its trend chart in a dialog"
+                aria-label="Dialog view"
+              >
+                <ExternalLink className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                <span className="hidden md:inline">Dialog</span>
+              </ToggleGroupItem>
+            </ToggleGroup>
+          </div>
+
         </div>
       </div>
+
+      {/* ① Plant health strip — per-plant status dots + last reading time */}
+      <PlantHealthStrip 
+        plantIds={plantIds} 
+        onSelectPlant={(pid) => navigate(`/plants/${pid}`)}
+      />
 
       {/* ─── Cluster 1: Overview ─── */}
       {/* Order (updated): Production Volume · Locators Consumption · NRW

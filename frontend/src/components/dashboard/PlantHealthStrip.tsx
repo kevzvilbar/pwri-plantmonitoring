@@ -4,6 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { usePlants } from '@/hooks/usePlants';
 import { formatDistanceToNow } from 'date-fns';
 import { cn } from '@/lib/utils';
+import { Activity } from 'lucide-react';
 
 // ── Status helpers ────────────────────────────────────────────────────────────
 // A plant is considered "online" when it has at least one reading in the last
@@ -19,23 +20,24 @@ function statusFromLastDt(dt: string | null | undefined): StripStatus {
 }
 
 const DOT_CLS: Record<StripStatus, string> = {
-  online:  'bg-accent',
-  stale:   'bg-warn',
-  offline: 'bg-muted-foreground/30',
+  online:  'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.7)]',
+  stale:   'bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.6)]',
+  offline: 'bg-muted-foreground/40',
 };
 
 const PILL_CLS: Record<StripStatus, string> = {
-  online:  'border-accent/70 bg-accent-soft/40',
-  stale:   'border-warn/70  bg-warn-soft/40  ',
-  offline: 'border-border/60 bg-muted/20',
+  online:  'border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 hover:border-emerald-500/50',
+  stale:   'border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400 hover:border-amber-500/50',
+  offline: 'border-border/60 bg-muted/20 text-muted-foreground hover:border-border',
 };
 
 interface Props {
   /** Plant IDs currently visible on the dashboard (respects global filter) */
   plantIds: string[];
+  onSelectPlant?: (plantId: string) => void;
 }
 
-export function PlantHealthStrip({ plantIds }: Props) {
+export function PlantHealthStrip({ plantIds, onSelectPlant }: Props) {
   const { data: plants } = usePlants();
 
   // Latest well reading datetime per plant
@@ -105,17 +107,15 @@ export function PlantHealthStrip({ plantIds }: Props) {
   if (!visiblePlants.length) return null;
 
   return (
-    /* Outer: clips the scrollable area. The negative x-margin + matching
-       padding lets the pills reach the screen edge on mobile without causing
-       page-level overflow.  On sm+ there is enough room to wrap naturally. */
     <div
-      className="overflow-x-auto -mx-1 px-1 pb-0.5 sm:overflow-visible sm:mx-0 sm:px-0 sm:pb-0"
+      className="overflow-x-auto -mx-1 px-1 py-1 sm:overflow-visible sm:mx-0 sm:px-0"
       aria-label="Per-plant status strip"
     >
-      <div className="flex items-center gap-1.5 sm:flex-wrap min-w-max sm:min-w-0">
-        <span className="text-2xs text-muted-foreground/50 uppercase tracking-wider mr-0.5 shrink-0">
-          Plants
-        </span>
+      <div className="flex items-center gap-2 sm:flex-wrap min-w-max sm:min-w-0">
+        <div className="flex items-center gap-1.5 text-2xs font-bold text-muted-foreground uppercase tracking-wider mr-1 shrink-0">
+          <Activity className="h-3.5 w-3.5 text-primary" />
+          <span>Live Fleet</span>
+        </div>
 
         {visiblePlants.map((plant) => {
           const lastDt    = lastByPlant[plant.id] ?? null;
@@ -125,26 +125,26 @@ export function PlantHealthStrip({ plantIds }: Props) {
           return (
             <div
               key={plant.id}
+              onClick={() => onSelectPlant?.(plant.id)}
               className={cn(
-                'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs whitespace-nowrap select-none shrink-0',
+                'inline-flex items-center gap-2 px-3 py-1 rounded-full border text-xs font-semibold whitespace-nowrap transition-all cursor-pointer select-none shrink-0 shadow-sm',
                 PILL_CLS[status],
               )}
               title={`${plant.name} · Last reading: ${lastDt ? new Date(lastDt).toLocaleString() : 'none'}`}
             >
-              <span
-                className={cn(
-                  'h-1.5 w-1.5 rounded-full shrink-0',
-                  DOT_CLS[status],
-                  status === 'online' && 'animate-pulse',
+              <span className="relative flex h-2 w-2">
+                {status === 'online' && (
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
                 )}
-              />
-              <span className="font-medium">{shortName}</span>
+                <span className={cn('relative inline-flex rounded-full h-2 w-2', DOT_CLS[status])} />
+              </span>
+              <span>{shortName}</span>
               {lastDt ? (
-                <span className="text-muted-foreground/60">
-                  {formatDistanceToNow(new Date(lastDt), { addSuffix: false })} ago
+                <span className="text-2xs font-normal opacity-75 font-mono">
+                  {formatDistanceToNow(new Date(lastDt), { addSuffix: false })}
                 </span>
               ) : (
-                <span className="text-muted-foreground/40">No data</span>
+                <span className="text-2xs font-normal opacity-50">Offline</span>
               )}
             </div>
           );
