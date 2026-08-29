@@ -239,19 +239,17 @@ export default function Dashboard() {
   return (
     <div className="space-y-3 animate-fade-in">
       
-      {/* ── Top Executive Telemetry Command Strip ── */}
-      <div className="relative rounded-2xl overflow-hidden border border-border/80 bg-gradient-to-br from-slate-950 via-slate-900 to-teal-950 text-white p-4 sm:p-5 shadow-lg">
-        <div className="absolute -right-16 -top-16 w-60 h-60 bg-teal-500/15 rounded-full blur-3xl pointer-events-none" />
-        
-        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+      {/* ── Top Telemetry Command Strip ── */}
+      <div className="rounded-lg border border-border bg-card text-foreground p-4 sm:p-5 shadow-xs">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           
           {/* Title & Live Status */}
           <div className="space-y-1">
             <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-lg sm:text-xl font-bold tracking-tight text-white font-display">
+              <h1 className="text-lg sm:text-xl font-semibold tracking-tight text-foreground">
                 PWRI Operations Telemetry
               </h1>
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-teal-500/20 text-teal-300 border border-teal-500/30">
+              <span className="px-2 py-0.5 rounded-full text-2xs font-medium bg-primary-soft text-primary border border-primary/30">
                 {selectedPlantName}
               </span>
               {openIncidentCount > 0 && (

@@ -338,123 +338,90 @@ export default function DataAnalysis() {
   };
 
   return (
-    <div className="space-y-5 animate-fade-in max-w-[1600px] mx-auto pb-10" data-testid="data-analysis-page">
-      
-      {/* ── 1. EXECUTIVE ANALYTICAL BANNER & KPI STRIP ── */}
-      <div className="relative overflow-hidden rounded-2xl border border-border/80 bg-gradient-to-r from-card via-card to-muted/40 p-5 sm:p-6 shadow-sm">
-        <div className="absolute top-0 right-0 w-96 h-96 bg-primary/5 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20" />
-
-        <div className="relative flex flex-col lg:flex-row items-start lg:items-center justify-between gap-5 pb-5 border-b border-border/50">
-          <div className="flex items-center gap-3.5 min-w-0">
-            <div className="h-12 w-12 rounded-2xl bg-gradient-to-tr from-primary to-accent text-white flex items-center justify-center shrink-0 shadow-md">
-              <FlaskConical className="h-6 w-6" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2.5 flex-wrap">
-                <h1 className="text-xl sm:text-2xl font-bold text-foreground tracking-tight">
-                  Data Analysis &amp; Telemetry Quality
-                </h1>
-                <span className="inline-flex items-center gap-1 text-2xs font-extrabold px-2.5 py-0.5 rounded-full bg-primary-soft text-primary border border-primary/30">
-                  <TrendingUp className="h-3 w-3" />
-                  OLS Regression Engine
-                </span>
-                {pendingCount > 0 && (
-                  <span className="inline-flex items-center gap-1 text-2xs font-extrabold px-2.5 py-0.5 rounded-full bg-warn-soft text-warn-foreground border border-warn/30 animate-pulse">
-                    {pendingCount} Pending Review
-                  </span>
-                )}
-              </div>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Centralized regression anomaly detection, gap interpolation, and raw telemetry correction audit.
-              </p>
-            </div>
-          </div>
-
-          {/* Role badge / Notice */}
-          <div className="flex items-center gap-2 w-full lg:w-auto justify-between lg:justify-end shrink-0">
+    <div className="space-y-4 animate-fade-in max-w-[1600px] mx-auto pb-10" data-testid="data-analysis-page">
+      <PageHeader
+        title="Data Analysis & Review"
+        titleIcon={<FlaskConical className="h-5 w-5 text-primary" />}
+        subtitle="Centralised regression analysis, raw-value editing, and normalization. All other pages are read-only — edits happen here only."
+        actions={
+          <div className="flex items-center gap-2">
             {isManager && !canEdit && (
-              <div className="flex items-center gap-2 rounded-xl bg-muted px-3 py-1.5 text-xs text-muted-foreground border border-border/60">
-                <Eye className="h-3.5 w-3.5 text-muted-foreground" />
-                <span>Read-Only Review Access</span>
+              <div className="flex items-center gap-1.5 rounded-md bg-muted px-2.5 py-1 text-xs text-muted-foreground border">
+                <Eye className="h-3.5 w-3.5" />
+                <span>Read-Only Review</span>
               </div>
             )}
             {canEdit && (
               <Button
                 onClick={handleRunRegression}
                 disabled={running}
-                className="h-10 px-4 rounded-xl text-xs font-bold gap-2 shadow-sm bg-primary text-primary-foreground hover:brightness-105 transition-all"
+                size="sm"
+                className="h-8 text-xs gap-1.5"
               >
                 {running ? (
                   <>
-                    <RefreshCw className="h-4 w-4 animate-spin" />
-                    <span>Computing OLS Model…</span>
+                    <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                    <span>Running OLS Model…</span>
                   </>
                 ) : (
                   <>
-                    <Play className="h-4 w-4 fill-current" />
+                    <Play className="h-3.5 w-3.5 fill-current" />
                     <span>Run Regression</span>
                   </>
                 )}
               </Button>
             )}
           </div>
-        </div>
+        }
+      />
 
-        {/* 4-KPI Metric Strip */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-4">
-          <div className="p-3 rounded-xl bg-muted/40 border border-border/60 space-y-0.5">
-            <span className="text-3xs uppercase tracking-wider font-semibold text-muted-foreground">Target Metric</span>
-            <div className="flex items-center gap-1.5">
-              <span className="font-mono font-bold text-xs sm:text-sm text-foreground truncate">{column}</span>
-            </div>
-            <span className="text-3xs text-muted-foreground/80 truncate block">{TABLE_LABELS[sourceTable] ?? sourceTable}</span>
-          </div>
+      {/* 4-KPI Metric Strip */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <Card className="p-3 space-y-0.5">
+          <span className="text-2xs uppercase tracking-wider font-medium text-muted-foreground">Target Metric</span>
+          <p className="font-mono font-semibold text-xs sm:text-sm text-foreground truncate">{column}</p>
+          <span className="text-2xs text-muted-foreground truncate block">{TABLE_LABELS[sourceTable] ?? sourceTable}</span>
+        </Card>
 
-          <div className="p-3 rounded-xl bg-muted/40 border border-border/60 space-y-0.5">
-            <span className="text-3xs uppercase tracking-wider font-semibold text-muted-foreground">Outliers Flagged</span>
-            <div className="flex items-center gap-1.5">
-              <span className="font-bold text-xs sm:text-sm text-danger font-numeral tabular-nums">
-                {totalOutliers} Total
-              </span>
-              {pendingCount > 0 && (
-                <span className="text-3xs px-1.5 py-0.2 rounded-md bg-warn-soft text-warn font-semibold">
-                  {pendingCount} new
-                </span>
-              )}
-            </div>
-            <span className="text-3xs text-muted-foreground/80">Across recent runs</span>
-          </div>
-
-          <div className="p-3 rounded-xl bg-muted/40 border border-border/60 space-y-0.5">
-            <span className="text-3xs uppercase tracking-wider font-semibold text-muted-foreground">Latest Model Fit (R²)</span>
-            <div className="flex items-center gap-1.5">
-              <span className="font-bold text-xs sm:text-sm text-foreground font-numeral tabular-nums">
-                {latestRun?.r_squared != null ? `R² = ${latestRun.r_squared.toFixed(4)}` : '—'}
-              </span>
-              {latestRun?.r_squared != null && (
-                <span className={`text-3xs px-1.5 py-0.2 rounded-md font-semibold ${
-                  latestRun.r_squared > 0.90 ? 'bg-accent-soft text-accent' :
-                  latestRun.r_squared > 0.75 ? 'bg-info-soft text-info' : 'bg-warn-soft text-warn'
-                }`}>
-                  {latestRun.r_squared > 0.90 ? 'Excellent' : latestRun.r_squared > 0.75 ? 'Good' : 'Moderate'}
-                </span>
-              )}
-            </div>
-            <span className="text-3xs text-muted-foreground/80">Linear goodness of fit</span>
-          </div>
-
-          <div className="p-3 rounded-xl bg-muted/40 border border-border/60 space-y-0.5">
-            <span className="text-3xs uppercase tracking-wider font-semibold text-muted-foreground">Scope &amp; Scope Facility</span>
-            <div className="flex items-center gap-1.5">
-              <span className="font-bold text-xs sm:text-sm text-foreground truncate">
-                {plantId === 'all' ? 'All Plants' : plants.find(p => p.id === plantId)?.name ?? plantId}
-              </span>
-            </div>
-            <span className="text-3xs text-muted-foreground/80 font-mono">
-              {entityId === 'all' ? 'Entire Subsystem' : `Entity: ${entityId.slice(0, 8)}…`}
+        <Card className="p-3 space-y-0.5">
+          <span className="text-2xs uppercase tracking-wider font-medium text-muted-foreground">Outliers Flagged</span>
+          <div className="flex items-center gap-1.5">
+            <span className="font-semibold text-xs sm:text-sm text-danger font-numeral tabular-nums">
+              {totalOutliers} Total
             </span>
+            {pendingCount > 0 && (
+              <Badge variant="outline" className="text-3xs px-1.5 py-0 border-warn text-warn">
+                {pendingCount} new
+              </Badge>
+            )}
           </div>
-        </div>
+          <span className="text-2xs text-muted-foreground">Across recent runs</span>
+        </Card>
+
+        <Card className="p-3 space-y-0.5">
+          <span className="text-2xs uppercase tracking-wider font-medium text-muted-foreground">Latest Model Fit (R²)</span>
+          <div className="flex items-center gap-1.5">
+            <span className="font-semibold text-xs sm:text-sm text-foreground font-numeral tabular-nums">
+              {latestRun?.r_squared != null ? `R² = ${latestRun.r_squared.toFixed(4)}` : '—'}
+            </span>
+            {latestRun?.r_squared != null && (
+              <Badge variant="secondary" className="text-3xs px-1 py-0 font-normal">
+                {latestRun.r_squared > 0.90 ? 'Excellent' : latestRun.r_squared > 0.75 ? 'Good' : 'Moderate'}
+              </Badge>
+            )}
+          </div>
+          <span className="text-2xs text-muted-foreground">Linear goodness of fit</span>
+        </Card>
+
+        <Card className="p-3 space-y-0.5">
+          <span className="text-2xs uppercase tracking-wider font-medium text-muted-foreground">Scope Facility</span>
+          <p className="font-semibold text-xs sm:text-sm text-foreground truncate">
+            {plantId === 'all' ? 'All Plants' : plants.find(p => p.id === plantId)?.name ?? plantId}
+          </p>
+          <span className="text-2xs text-muted-foreground font-mono truncate block">
+            {entityId === 'all' ? 'Entire Subsystem' : `Entity: ${entityId.slice(0, 8)}…`}
+          </span>
+        </Card>
       </div>
 
       {/* ── 2. QUICK SOURCE TABLES SELECTOR ── */}
@@ -466,15 +433,15 @@ export default function DataAnalysis() {
               key={k}
               type="button"
               onClick={() => handleTableChange(k)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 border flex items-center gap-1.5 shadow-2xs ${
+              className={`px-3 py-1 rounded-md text-xs font-medium transition-all shrink-0 border flex items-center gap-1.5 ${
                 isActive
                   ? 'bg-primary text-primary-foreground border-primary shadow-xs'
-                  : 'bg-card text-muted-foreground hover:text-foreground hover:bg-muted border-border/70'
+                  : 'bg-card text-muted-foreground hover:text-foreground hover:bg-muted border-border'
               }`}
             >
               <span>{label}</span>
               {isActive && (
-                <span className="h-1.5 w-1.5 rounded-full bg-white animate-pulse" />
+                <span className="h-1.5 w-1.5 rounded-full bg-white" />
               )}
             </button>
           );

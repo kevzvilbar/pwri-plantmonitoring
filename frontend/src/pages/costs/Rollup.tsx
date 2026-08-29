@@ -183,113 +183,73 @@ export function Rollup() {
             </div>
           )}
 
-          {/* ── 4 Executive KPI Metric Cards ── */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+          {/* ── 4 KPI Metric Cards ── */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             {/* Chemical Cost */}
-            <Card className="p-4 rounded-2xl border border-border/80 shadow-2xs space-y-2 bg-gradient-to-b from-card to-muted/20">
+            <Card className="p-3.5 space-y-1">
               <div className="flex items-center justify-between">
-                <span className="text-2xs uppercase tracking-wider font-semibold text-muted-foreground">Chemical OPEX</span>
-                <div className="h-7 w-7 rounded-lg bg-highlight-soft text-highlight flex items-center justify-center shadow-2xs">
-                  <FlaskConical className="h-4 w-4" />
-                </div>
+                <span className="text-2xs uppercase tracking-wider font-medium text-muted-foreground">Chemical OPEX</span>
+                <FlaskConical className="h-4 w-4 text-highlight" />
               </div>
-              <div>
-                <p className="font-numeral font-bold text-xl sm:text-2xl text-foreground tabular-nums">
-                  ₱{fmtNum(totals.chem, 0)}
-                </p>
-                <div className="flex items-center justify-between text-2xs text-muted-foreground mt-1">
-                  <span>Share of OPEX</span>
-                  <span className="font-bold font-numeral text-highlight">{fmtNum(totals.chemPct, 1)}%</span>
-                </div>
-              </div>
-              <div className="h-1.5 bg-muted/80 rounded-full overflow-hidden">
-                <div className="h-full bg-highlight rounded-full transition-all duration-500" style={{ width: `${totals.chemPct}%` }} />
-              </div>
+              <p className="font-numeral font-bold text-xl text-foreground tabular-nums">
+                ₱{fmtNum(totals.chem, 0)}
+              </p>
+              <p className="text-2xs text-muted-foreground">
+                <span className="font-semibold font-numeral text-highlight">{fmtNum(totals.chemPct, 1)}%</span> of total OPEX
+              </p>
             </Card>
 
             {/* Power Cost */}
-            <Card className="p-4 rounded-2xl border border-border/80 shadow-2xs space-y-2 bg-gradient-to-b from-card to-muted/20">
+            <Card className="p-3.5 space-y-1">
               <div className="flex items-center justify-between">
-                <span className="text-2xs uppercase tracking-wider font-semibold text-muted-foreground">Power &amp; Energy OPEX</span>
-                <div className="h-7 w-7 rounded-lg bg-chart-6/15 text-chart-6 flex items-center justify-center shadow-2xs">
-                  <Zap className="h-4 w-4" />
-                </div>
+                <span className="text-2xs uppercase tracking-wider font-medium text-muted-foreground">Power OPEX</span>
+                <Zap className="h-4 w-4 text-chart-6" />
               </div>
-              <div>
-                <p className="font-numeral font-bold text-xl sm:text-2xl text-foreground tabular-nums">
-                  ₱{fmtNum(totals.power, 0)}
-                </p>
-                <div className="flex items-center justify-between text-2xs text-muted-foreground mt-1">
-                  <span>Share of OPEX</span>
-                  <span className="font-bold font-numeral text-chart-6">{fmtNum(totals.powerPct, 1)}%</span>
-                </div>
-              </div>
-              <div className="h-1.5 bg-muted/80 rounded-full overflow-hidden">
-                <div className="h-full bg-chart-6 rounded-full transition-all duration-500" style={{ width: `${totals.powerPct}%` }} />
-              </div>
+              <p className="font-numeral font-bold text-xl text-foreground tabular-nums">
+                ₱{fmtNum(totals.power, 0)}
+              </p>
+              <p className="text-2xs text-muted-foreground">
+                <span className="font-semibold font-numeral text-chart-6">{fmtNum(totals.powerPct, 1)}%</span> of total OPEX
+              </p>
             </Card>
 
             {/* Finished Production */}
-            <Card className="p-4 rounded-2xl border border-border/80 shadow-2xs space-y-2 bg-gradient-to-b from-card to-muted/20">
+            <Card className="p-3.5 space-y-1">
               <div className="flex items-center justify-between">
-                <span className="text-2xs uppercase tracking-wider font-semibold text-muted-foreground">Total Production</span>
-                <div className="h-7 w-7 rounded-lg bg-info-soft text-info flex items-center justify-center shadow-2xs">
-                  <Droplet className="h-4 w-4" />
-                </div>
+                <span className="text-2xs uppercase tracking-wider font-medium text-muted-foreground">Total Production</span>
+                <Droplet className="h-4 w-4 text-info" />
               </div>
-              <div>
-                <p className="font-numeral font-bold text-xl sm:text-2xl text-foreground tabular-nums">
-                  {fmtNum(totals.prod, 0)} <span className="text-sm font-semibold text-muted-foreground">m³</span>
-                </p>
-                <div className="flex items-center justify-between text-2xs text-muted-foreground mt-1">
-                  <span>Daily Avg</span>
-                  <span className="font-bold font-numeral text-foreground">{fmtNum(totals.dailyAvgProd, 0)} m³/day</span>
-                </div>
-              </div>
-              <div className="h-1.5 bg-muted/80 rounded-full overflow-hidden">
-                <div className="h-full bg-info rounded-full transition-all duration-500" style={{ width: '100%' }} />
-              </div>
+              <p className="font-numeral font-bold text-xl text-foreground tabular-nums">
+                {fmtNum(totals.prod, 0)} <span className="text-xs font-normal text-muted-foreground">m³</span>
+              </p>
+              <p className="text-2xs text-muted-foreground">
+                Daily avg: <span className="font-semibold text-foreground font-numeral">{fmtNum(totals.dailyAvgProd, 0)} m³/day</span>
+              </p>
             </Card>
 
             {/* Unit Cost per m3 */}
-            <Card className="p-4 rounded-2xl border border-border/80 shadow-2xs space-y-2 bg-gradient-to-b from-card to-muted/20">
+            <Card className="p-3.5 space-y-1">
               <div className="flex items-center justify-between">
-                <span className="text-2xs uppercase tracking-wider font-semibold text-muted-foreground">Unit Production Cost</span>
-                <div className="h-7 w-7 rounded-lg bg-primary-soft text-primary flex items-center justify-center shadow-2xs">
-                  <Tag className="h-4 w-4" />
-                </div>
+                <span className="text-2xs uppercase tracking-wider font-medium text-muted-foreground">Unit Production Cost</span>
+                <Tag className="h-4 w-4 text-primary" />
               </div>
-              <div>
-                <p className="font-numeral font-bold text-xl sm:text-2xl text-primary tabular-nums">
-                  {totals.perM3 ? `₱${totals.perM3.toFixed(2)}` : '—'}<span className="text-xs font-semibold text-muted-foreground"> / m³</span>
-                </p>
-                <div className="flex items-center justify-between text-2xs text-muted-foreground mt-1">
-                  <span>Total OPEX</span>
-                  <span className="font-bold font-numeral text-foreground">₱{fmtNum(totals.total, 0)}</span>
-                </div>
-              </div>
-              {budgetRow && budgetRow.variancePct != null ? (
-                <div className="flex justify-end pt-0.5">
-                  <StatusPill tone={opexVarianceTone(budgetRow.variancePct)}>
-                    {budgetRow.variancePct >= 0 ? '+' : ''}{budgetRow.variancePct.toFixed(1)}% vs budget
-                  </StatusPill>
-                </div>
-              ) : (
-                <div className="h-1.5 bg-muted/80 rounded-full overflow-hidden">
-                  <div className="h-full bg-primary rounded-full transition-all duration-500" style={{ width: '100%' }} />
-                </div>
-              )}
+              <p className="font-numeral font-bold text-xl text-primary tabular-nums">
+                {totals.perM3 ? `₱${totals.perM3.toFixed(2)}` : '—'}<span className="text-xs font-normal text-muted-foreground"> / m³</span>
+              </p>
+              <p className="text-2xs text-muted-foreground">
+                Total OPEX: <span className="font-semibold text-foreground font-numeral">₱{fmtNum(totals.total, 0)}</span>
+              </p>
             </Card>
           </div>
 
           {/* Daily Costs Stacked Bar Chart */}
-          <Card className="p-5 rounded-2xl border border-border/80 shadow-2xs space-y-3">
+          <Card className="p-4 space-y-3">
             <div className="flex items-center justify-between">
               <div>
-                <h4 className="text-sm font-bold text-foreground tracking-tight">Daily Production Cost Telemetry</h4>
-                <p className="text-2xs text-muted-foreground">Stacked breakdown of chemical &amp; power expenses</p>
+                <h4 className="text-sm font-semibold text-foreground">Daily Production Costs</h4>
+                <p className="text-2xs text-muted-foreground">Chemical &amp; power expenses stacked by day</p>
               </div>
-              <span className="text-2xs text-muted-foreground font-mono bg-muted/50 px-2.5 py-1 rounded-lg border border-border/50">
+              <span className="text-2xs text-muted-foreground font-mono bg-muted px-2 py-0.5 rounded border border-border">
                 {plantName}
               </span>
             </div>

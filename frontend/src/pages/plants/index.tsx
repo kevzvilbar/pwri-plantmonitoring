@@ -506,15 +506,14 @@ export default function Plants() {
   return (
     <div className="space-y-4 animate-fade-in">
 
-      {/* ── Executive Hero Telemetry Strip ── */}
-      <div className="relative rounded-2xl overflow-hidden border border-border/80 bg-gradient-to-br from-slate-950 via-slate-900 to-teal-950 text-white p-4 sm:p-5 shadow-lg">
-        <div className="absolute -right-16 -top-16 w-60 h-60 bg-teal-500/15 rounded-full blur-3xl pointer-events-none" />
-        <div className="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      {/* ── Plants Overview Header ── */}
+      <div className="rounded-lg border border-border bg-card text-foreground p-4 sm:p-5 shadow-xs">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="space-y-1">
             <div className="flex items-center gap-2">
-              <h1 className="text-lg font-bold tracking-tight text-white">PWRI Water Production Network</h1>
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-teal-500/20 text-teal-300 border border-teal-500/30">
-                Live Telemetry
+              <h1 className="text-lg font-semibold tracking-tight text-foreground">Water Production Facilities</h1>
+              <span className="px-2 py-0.5 rounded-full text-2xs font-medium bg-primary-soft text-primary border border-primary/30">
+                Live Overview
               </span>
             </div>
             <p className="text-xs text-slate-300 flex items-center gap-1.5">
@@ -994,38 +993,34 @@ function PlantDetail({ plantId }: { plantId: string }) {
         </span>
       </div>
 
-      {/* ── Executive Facility Hero Card ── */}
-      <div className="relative rounded-2xl overflow-hidden border border-border/80 bg-gradient-to-br from-slate-950 via-slate-900 to-teal-950 text-white p-5 md:p-6 shadow-xl">
-        {/* Ambient mesh glow background */}
-        <div className="absolute -right-20 -top-20 w-80 h-80 bg-teal-500/20 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute left-1/3 -bottom-24 w-72 h-72 bg-sky-500/15 rounded-full blur-3xl pointer-events-none" />
-
-        <div className="relative z-10 space-y-5">
+      {/* ── Facility Detail Header Card ── */}
+      <div className="rounded-lg border border-border bg-card text-foreground p-5 shadow-xs">
+        <div className="space-y-4">
           
           {/* Top Row: Facility Identity + Status + Actions */}
           <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
             
             {/* Name + Address + Code */}
             <div className="space-y-1">
-              <div className="flex items-center gap-2.5 flex-wrap">
-                <span className="text-xs font-mono font-bold px-2 py-0.5 rounded bg-teal-500/20 text-teal-300 border border-teal-500/30">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-2xs font-mono font-medium px-2 py-0.5 rounded bg-primary-soft text-primary border border-primary/30">
                   FACILITY
                 </span>
-                <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white font-display">
+                <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-foreground">
                   {plant.name}
                 </h1>
-                <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-0.5 rounded-full border ${
+                <span className={`inline-flex items-center gap-1.5 text-2xs font-medium px-2.5 py-0.5 rounded-full border ${
                   plant.status === 'Active'
-                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
-                    : 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+                    ? 'bg-accent-soft text-accent border-accent/30'
+                    : 'bg-warn-soft text-warn border-warn/30'
                 }`}>
-                  <span className={`w-2 h-2 rounded-full ${plant.status === 'Active' ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
+                  <span className={`h-1.5 w-1.5 rounded-full ${plant.status === 'Active' ? 'bg-accent' : 'bg-warn'}`} />
                   {plant.status}
                 </span>
               </div>
               
-              <p className="text-xs text-slate-300 flex items-center gap-1.5 pt-0.5">
-                <MapPin className="h-3.5 w-3.5 text-teal-400 shrink-0" />
+              <p className="text-xs text-muted-foreground flex items-center gap-1.5 pt-0.5">
+                <MapPin className="h-3.5 w-3.5 text-primary shrink-0" />
                 <span>{plant.address || 'Address unassigned'}</span>
               </p>
             </div>
@@ -1038,9 +1033,9 @@ function PlantDetail({ plantId }: { plantId: string }) {
                   variant="outline"
                   onClick={openInfoEdit}
                   data-testid="edit-plant-info-btn"
-                  className="h-8 px-3 gap-1.5 bg-white/10 hover:bg-white/20 text-white border-white/20 hover:border-white/40 rounded-lg text-xs font-semibold shadow-sm transition-all"
+                  className="h-8 px-3 gap-1.5 text-xs font-medium"
                 >
-                  <Pencil className="h-3.5 w-3.5 text-teal-300" />
+                  <Pencil className="h-3.5 w-3.5 text-primary" />
                   <span>Edit Facility</span>
                 </Button>
               )}
@@ -1057,9 +1052,9 @@ function PlantDetail({ plantId }: { plantId: string }) {
                     <Button
                       size="sm"
                       variant="outline"
-                      className="h-8 px-3 gap-1.5 bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 hover:text-rose-100 border-rose-500/30 hover:border-rose-500/50 rounded-lg text-xs font-semibold shadow-sm transition-all"
+                      className="h-8 px-3 gap-1.5 border-destructive/40 text-destructive hover:bg-destructive/10 text-xs font-medium"
                     >
-                      <Trash2 className="h-3.5 w-3.5 text-rose-400" />
+                      <Trash2 className="h-3.5 w-3.5" />
                       <span>Delete</span>
                     </Button>
                   }
