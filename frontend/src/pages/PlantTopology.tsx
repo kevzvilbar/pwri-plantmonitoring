@@ -606,73 +606,110 @@ export default function PlantTopology() {
 
   // ─── Render ───────────────────────────────────────────────────────────────────
 
+  const waterNodesCount = topoState?.nodes.filter(n => !['solarSource', 'gridSource', 'solarMeter', 'gridMeter'].includes(n.type)).length ?? 0;
+  const powerNodesCount = topoState?.nodes.filter(n => ['solarSource', 'gridSource', 'solarMeter', 'gridMeter'].includes(n.type)).length ?? 0;
+  const activeLinksCount = topoState?.editLinks.length ?? 0;
+
   return (
-    <div className="flex flex-col h-full bg-background text-foreground overflow-hidden">
+    <div className="flex flex-col h-full bg-background text-foreground overflow-hidden animate-fade-in" data-testid="network-topology-page">
 
-      {/* ── Header ──────────────────────────────────────────────────────────── */}
-      <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-border bg-card shrink-0">
-        <div className="flex items-center gap-4 min-w-0">
-          <div className="shrink-0">
-            <p className="text-2xs tracking-widest text-primary font-mono uppercase font-semibold">Plant Monitor</p>
-            <h1 className="text-xl font-semibold tracking-tight text-foreground leading-tight">Network Topology</h1>
+      {/* ── Executive SCADA Header Banner ── */}
+      <div className="relative overflow-hidden border-b border-border/80 bg-gradient-to-r from-card via-card to-muted/40 px-5 py-3.5 shrink-0 shadow-2xs">
+        <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-3.5">
+          <div className="flex items-center gap-3.5 min-w-0">
+            <div className="h-11 w-11 rounded-2xl bg-gradient-to-tr from-primary to-accent text-white flex items-center justify-center shrink-0 shadow-md">
+              <Droplet className="h-5 w-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h1 className="text-lg sm:text-xl font-bold tracking-tight text-foreground leading-tight">
+                  Network Topology &amp; P&amp;ID Architecture
+                </h1>
+                <span className="inline-flex items-center gap-1 text-3xs font-extrabold px-2 py-0.5 rounded-full bg-primary-soft text-primary border border-primary/30 font-mono">
+                  SCADA Wiring
+                </span>
+              </div>
+              <p className="text-2xs text-muted-foreground mt-0.5">
+                Process flow wiring diagram showing raw well water extraction, treatment trains, product meters, and power distribution.
+              </p>
+            </div>
           </div>
 
-          {/* Plant selector pills */}
-          <div className="flex gap-1.5 flex-wrap">
-            {plants.map((p) => (
+          {/* Plant facility selector pills & Telemetry summary */}
+          <div className="flex items-center gap-2 flex-wrap w-full lg:w-auto justify-between lg:justify-end">
+            <div className="flex gap-1.5 p-1 bg-muted/60 rounded-xl border border-border/60">
+              {plants.map((p) => {
+                const isActive = effectivePlantId === p.id;
+                return (
+                  <button
+                    key={p.id}
+                    onClick={() => { setActivePlantId(p.id); setPendingFrom(null); setEditMode(null); }}
+                    className={`px-3 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                      isActive
+                        ? 'bg-primary text-primary-foreground shadow-xs'
+                        : 'text-muted-foreground hover:text-foreground hover:bg-muted/80'
+                    }`}
+                  >
+                    <span>{p.name}</span>
+                    {isActive && <span className="h-1.5 w-1.5 rounded-full bg-white animate-pulse" />}
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="flex items-center gap-1.5 text-3xs font-mono">
+              <span className="px-2 py-1 rounded-lg bg-info-soft text-info border border-info/20 font-semibold">
+                💧 {waterNodesCount} Nodes
+              </span>
+              <span className="px-2 py-1 rounded-lg bg-chart-6/15 text-chart-6 border border-chart-6/20 font-semibold">
+                ⚡ {powerNodesCount} Feeds
+              </span>
+              <span className="px-2 py-1 rounded-lg bg-accent-soft text-accent border border-accent/20 font-semibold">
+                🔗 {activeLinksCount} Links
+              </span>
+            </div>
+
+            <div className="flex items-center gap-1 border-l border-border/60 pl-2">
               <button
-                key={p.id}
-                onClick={() => { setActivePlantId(p.id); setPendingFrom(null); setEditMode(null); }}
-                className={`px-3 py-1 rounded-full text-xs font-semibold transition-all border ${
-                  effectivePlantId === p.id
-                    ? 'bg-primary text-primary-foreground border-primary shadow-sm'
-                    : 'border-border text-muted-foreground bg-background hover:border-primary/50 hover:text-foreground'
+                onClick={() => setShowHelp((v) => !v)}
+                aria-label={showHelp ? 'Hide help' : 'Show help'}
+                className={`p-1.5 rounded-xl border transition-colors ${
+                  showHelp
+                    ? 'border-primary/50 bg-primary-soft text-primary'
+                    : 'border-border/70 text-muted-foreground hover:text-foreground hover:border-primary/40'
                 }`}
+                title="Help & Keybindings"
               >
-                {p.name}
+                <HelpCircle className="h-4 w-4" />
               </button>
-            ))}
+              <button
+                onClick={() => refetch()}
+                className="p-1.5 rounded-xl border border-border/70 text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors"
+                title="Refresh topology data"
+                aria-label="Refresh"
+              >
+                <RefreshCw className="h-4 w-4" />
+              </button>
+              <button
+                onClick={() => setPanelOpen((v) => !v)}
+                className={`p-1.5 rounded-xl border transition-colors ${
+                  panelOpen
+                    ? 'border-primary/50 bg-primary-soft text-primary'
+                    : 'border-border/70 text-muted-foreground hover:text-foreground hover:border-primary/40'
+                }`}
+                title="Toggle node inspector side panel"
+                aria-label="Toggle node panel"
+              >
+                {panelOpen ? <PanelRightClose className="h-4 w-4" /> : <PanelRightOpen className="h-4 w-4" />}
+              </button>
+            </div>
           </div>
-        </div>
-
-        <div className="flex items-center gap-2 shrink-0">
-          <button
-            onClick={() => setShowHelp((v) => !v)}
-            aria-label={showHelp ? 'Hide help' : 'Show help'}
-            className={`p-1.5 rounded-md border transition-colors ${
-              showHelp
-                ? 'border-primary/50 bg-primary/10 text-primary'
-                : 'border-border text-muted-foreground hover:text-foreground hover:border-primary/40'
-            }`}
-          >
-            <HelpCircle className="h-4 w-4" />
-          </button>
-          <button
-            onClick={() => refetch()}
-            className="p-1.5 rounded-md border border-border text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors"
-            title="Refresh"
-            aria-label="Refresh"
-          >
-            <RefreshCw className="h-4 w-4" />
-          </button>
-          <button
-            onClick={() => setPanelOpen((v) => !v)}
-            className={`p-1.5 rounded-md border transition-colors ${
-              panelOpen
-                ? 'border-primary/50 bg-primary/10 text-primary'
-                : 'border-border text-muted-foreground hover:text-foreground hover:border-primary/40'
-            }`}
-            title="Toggle node panel"
-            aria-label="Toggle node panel"
-          >
-            {panelOpen ? <PanelRightClose className="h-4 w-4" /> : <PanelRightOpen className="h-4 w-4" />}
-          </button>
         </div>
       </div>
 
       {/* ── Help banner ───────────────────────────────────────────────────────── */}
       {showHelp && (
-        <div className="px-5 py-2.5 bg-primary/5 border-b border-primary/20 text-xs text-muted-foreground flex flex-wrap gap-x-6 gap-y-1 shrink-0">
+        <div className="px-5 py-2.5 bg-primary/5 border-b border-primary/20 text-xs text-muted-foreground flex flex-wrap gap-x-6 gap-y-1.5 shrink-0">
           <span>
             <strong className="text-primary">Water flow:</strong>{' '}
             Well → Raw Meter → Pre-treatment → Feed Meter → RO Train → Permeate / Reject → Bulk Meter → Locator
@@ -694,63 +731,62 @@ export default function PlantTopology() {
         </div>
       )}
 
-      {/* ── Edit toolbar ──────────────────────────────────────────────────────── */}
+      {/* ── Elevated SCADA Toolbar ────────────────────────────────────────────── */}
       {canEdit && (
-        <div className="flex items-center gap-2 px-5 py-2 border-b border-border bg-muted/20 shrink-0 flex-wrap">
-          <span className="text-2xs font-mono tracking-widest text-muted-foreground uppercase mr-1">Edit Links:</span>
+        <div className="flex items-center gap-2 px-5 py-2 border-b border-border/70 bg-card/60 shrink-0 flex-wrap shadow-2xs">
+          <span className="text-2xs font-mono tracking-widest text-muted-foreground uppercase mr-1 font-semibold">Edit Links:</span>
           <button
             onClick={() => { setEditMode(editMode === 'connect' ? null : 'connect'); setPendingFrom(null); }}
-            className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium border transition-all ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition-all ${
               editMode === 'connect'
-                ? 'bg-accent-soft border-accent text-accent'
-                : 'border-border text-muted-foreground hover:border-accent/60 hover:text-accent/90'
+                ? 'bg-accent-soft border-accent text-accent shadow-xs'
+                : 'border-border/70 text-muted-foreground hover:border-accent/60 hover:text-accent/90 bg-card'
             }`}
           >
             <Plug className="h-3.5 w-3.5" />
-            {editMode === 'connect' ? (pendingFrom ? 'Pick 2nd node…' : 'Pick node…') : 'Connect'}
+            {editMode === 'connect' ? (pendingFrom ? 'Pick 2nd node…' : 'Pick 1st node…') : 'Connect'}
           </button>
           <button
             onClick={() => { setEditMode(editMode === 'disconnect' ? null : 'disconnect'); setPendingFrom(null); }}
-            className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium border transition-all ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition-all ${
               editMode === 'disconnect'
-                ? 'bg-danger-soft border-danger text-danger'
-                : 'border-border text-muted-foreground hover:border-danger/60 hover:text-danger/90'
+                ? 'bg-danger-soft border-danger text-danger shadow-xs'
+                : 'border-border/70 text-muted-foreground hover:border-danger/60 hover:text-danger/90 bg-card'
             }`}
           >
             <Unplug className="h-3.5 w-3.5" />
-            {editMode === 'disconnect' ? (pendingFrom ? 'Pick 2nd node…' : 'Pick node…') : 'Disconnect'}
+            {editMode === 'disconnect' ? (pendingFrom ? 'Pick 2nd node…' : 'Pick 1st node…') : 'Disconnect'}
           </button>
 
-          <div className="flex items-center gap-1 ml-2 border-l border-border pl-2">
+          <div className="flex items-center gap-1 ml-2 border-l border-border/60 pl-2">
             <button onClick={() => setZoom((z) => Math.min(2.5, z + 0.15))}
               aria-label="Zoom in"
-              className="p-1 rounded border border-border text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors">
-              <ZoomIn className="h-3 w-3" />
+              className="p-1.5 rounded-xl border border-border/70 text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors bg-card">
+              <ZoomIn className="h-3.5 w-3.5" />
             </button>
-            <span className="text-2xs font-mono text-muted-foreground w-8 text-center">{Math.round(zoom * 100)}%</span>
+            <span className="text-2xs font-mono font-bold text-foreground w-10 text-center">{Math.round(zoom * 100)}%</span>
             <button onClick={() => setZoom((z) => Math.max(0.3, z - 0.15))}
               aria-label="Zoom out"
-              className="p-1 rounded border border-border text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors">
-              <ZoomOut className="h-3 w-3" />
+              className="p-1.5 rounded-xl border border-border/70 text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors bg-card">
+              <ZoomOut className="h-3.5 w-3.5" />
             </button>
             <button onClick={resetView}
               aria-label="Reset view"
-              className="p-1 rounded border border-border text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors ml-0.5">
-              <Maximize2 className="h-3 w-3" />
+              className="p-1.5 rounded-xl border border-border/70 text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors ml-0.5 bg-card">
+              <Maximize2 className="h-3.5 w-3.5" />
             </button>
           </div>
 
           <Button
             size="sm"
-            variant="outline"
             onClick={handleSave}
             disabled={saving}
-            className="h-7 text-xs border-primary/40 text-primary hover:bg-primary/5 hover:border-primary ml-auto"
+            className="h-8 text-xs font-bold rounded-xl gap-1.5 shadow-sm ml-auto bg-primary text-primary-foreground hover:brightness-105 transition-all"
           >
             {saving
-              ? <RefreshCw className="h-3 w-3 animate-spin mr-1" />
-              : <Save className="h-3 w-3 mr-1" />}
-            Save Topology
+              ? <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+              : <Save className="h-3.5 w-3.5" />}
+            Save Wiring Diagram
           </Button>
         </div>
       )}
