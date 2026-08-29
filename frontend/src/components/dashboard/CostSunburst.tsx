@@ -1,33 +1,12 @@
 // Cost Composition Sunburst: Cost -> {Power, Chemicals, Filters} -> Power
 // splits into {Grid, Solar}, Chemicals into individual chemicals, Filters
 // into housing type ($). Built with d3-hierarchy
-// (partition layout) + d3-shape (arc path generator) for the math only —
-// all DOM is rendered through React JSX, not d3-selection, so it behaves
-// like any other React component.
-//
-// Layout mirrors the rest of the dashboard's compact chart cards (`p-3`
-// Card, 13px bold title row) instead of the generic shadcn Card
-// header/content padding, and the ring is sized dynamically from the
-// hierarchy's actual depth so it always fills the available circle —
-// previously a fixed radius left 2/3 of the circle blank whenever there
-// was no per-chemical price breakdown to show. Power/Chemicals use the
-// same accent colors (--chart-6 / --highlight) as the Power Cost / Chemical
-// Cost stat cards right above this on the Dashboard, so the sunburst reads
-// as a continuation of those tiles rather than an unrelated chart. Filters
-// gets --chart-4 (violet) — unused elsewhere on this chart, and distinct
-// from both neighbors at a glance.
-//
-// Zoom: clicking a ring segment (or its legend row) re-centers the layout
-// on that node by recomputing every node's angular span relative to the
-// clicked node's x0/x1. The `d` attribute on each <path> transitions via a
-// plain CSS `transition: d`, which modern browsers animate natively since
-// every arc comes from the same generator — no d3-transition/d3-interpolate
-// dependency needed. Older browsers just snap instantly; nothing breaks.
-import { useMemo, useState } from 'react';
+// (partition layout) + d3-shape (arc path generator) for the math only.
+import React, { useMemo, useState } from 'react';
 import { format, parseISO, subDays } from 'date-fns';
 import { hierarchy, partition, type HierarchyRectangularNode } from 'd3-hierarchy';
 import { arc as arcGenerator } from 'd3-shape';
-import { ChevronLeft } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Zap, FlaskConical, Layers, Info } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { fmtNum } from '@/lib/calculations';
@@ -35,11 +14,6 @@ import { useCostComposition, type CostSunburstNode } from '@/hooks/useCostCompos
 import { rangeKeyToDays } from './types';
 import { useAppStore } from '@/store/appStore';
 
-// Same numeral typeface as StatCard/NRWGaugeCard/ComplianceRadarCard —
-// declared once as the `font-numeral` Tailwind token (tailwind.config.ts)
-// and loaded via the single app-wide @import in index.css. Kept as a plain
-// string here too because the arc label below is an SVG <text> styled via
-// inline `style`, which can't take a Tailwind class.
 const GEO_FONT = "'DM Sans', ui-sans-serif, system-ui, sans-serif";
 
 interface Props {
@@ -48,14 +22,11 @@ interface Props {
 
 type RNode = HierarchyRectangularNode<CostSunburstNode> & { id: string };
 
-const SIZE = 200;
+// Expanded diameter for prominent executive presentation
+const SIZE = 270;
 
-// Same accents as the Power Cost / Chemical Cost StatCards above this
-// chart (`text-chart-6` / `text-highlight` in Dashboard.tsx) — fixed by
-// category rather than by sort order, so "Power" is always this color
-// regardless of which slice happens to be bigger this period.
 const POWER_COLOR = 'hsl(var(--chart-6))';
-const SOLAR_COLOR = 'hsl(var(--kpi-solar))'; // same orange token as the Solar KPI/legend dot on the Energy Mix chart
+const SOLAR_COLOR = 'hsl(var(--kpi-solar))';
 const CHEM_COLOR = 'hsl(var(--highlight))';
 const FILTER_COLOR = 'hsl(var(--chart-4))';
 
@@ -67,9 +38,6 @@ function clamp01(x: number) {
   return Math.max(0, Math.min(1, x));
 }
 
-/** Node's angular/radial span re-expressed relative to `focus`. Returns
- *  null when the node shouldn't be drawn at the current zoom level (it's
- *  an ancestor of the focus, or outside its angular slice). */
 function visibleSpan(d: RNode, focus: RNode) {
   if (d.depth <= focus.depth) return null;
   const spanX = focus.x1 - focus.x0;
@@ -80,12 +48,21 @@ function visibleSpan(d: RNode, focus: RNode) {
   return { x0, x1, y0: d.y0 - focus.depth, y1: d.y1 - focus.depth };
 }
 
-/** Color label for each category */
 function categorySwatchStyle(name: string): string {
   if (name === 'Solar') return SOLAR_COLOR;
   if (name === 'Grid' || name === 'Power') return POWER_COLOR;
   if (name === 'Chemicals') return CHEM_COLOR;
   return FILTER_COLOR;
+}
+
+function categoryIcon(name: string) {
+  if (name === 'Power' || name === 'Grid' || name === 'Solar') {
+    return <Zap className="h-3.5 w-3.5" />;
+  }
+  if (name === 'Chemicals') {
+    return <FlaskConical className="h-3.5 w-3.5" />;
+  }
+  return <Layers className="h-3.5 w-3.5" />;
 }
 
 export function CostSunburst({ plantIds }: Props) {
@@ -131,10 +108,10 @@ export function CostSunburst({ plantIds }: Props) {
     () => arcGenerator<{ x0: number; x1: number; y0: number; y1: number }>()
       .startAngle((d) => d.x0)
       .endAngle((d) => d.x1)
-      .padAngle((d) => Math.min((d.x1 - d.x0) / 2, 0.008))
+      .padAngle((d) => Math.min((d.x1 - d.x0) / 2, 0.012))
       .padRadius(RING * 1.5)
       .innerRadius((d) => d.y0 * RING)
-      .outerRadius((d) => Math.max(d.y0 * RING, d.y1 * RING - 1)),
+      .outerRadius((d) => Math.max(d.y0 * RING, d.y1 * RING - 1.5)),
     [RING],
   );
 
@@ -150,30 +127,30 @@ export function CostSunburst({ plantIds }: Props) {
 
   const opacityFor = (d: RNode) => {
     const rel = d.depth - (focus?.depth ?? 0);
-    if (rel !== 2) return 0.92;
+    if (rel !== 2) return 0.95;
     const siblings = (d.parent?.children ?? []) as RNode[];
     const idx = Math.max(0, siblings.indexOf(d));
-    return Math.max(0.35, 0.85 - idx * 0.14);
+    return Math.max(0.4, 0.88 - idx * 0.12);
   };
 
   if (isLoading) {
     return (
-      <Card className="p-3">
+      <Card className="p-4 flex flex-col justify-between">
         <div className="flex flex-wrap items-center gap-1 mb-3">
-          <span className="text-xs font-bold tracking-[-0.01em] text-foreground">Cost Composition</span>
+          <span className="text-sm font-bold tracking-[-0.01em] text-foreground">Cost Composition</span>
         </div>
-        <Skeleton className="h-[220px] w-full rounded-lg" />
+        <Skeleton className="h-[310px] w-full rounded-xl" />
       </Card>
     );
   }
 
   if (!data || !rootNode || !(data.root.children?.length)) {
     return (
-      <Card className="p-3">
+      <Card className="p-4">
         <div className="flex flex-wrap items-center gap-1 mb-2">
-          <span className="text-xs font-bold tracking-[-0.01em] text-foreground">Cost Composition</span>
+          <span className="text-sm font-bold tracking-[-0.01em] text-foreground">Cost Composition</span>
         </div>
-        <div className="h-[220px] flex items-center justify-center text-xs text-muted-foreground">
+        <div className="h-[310px] flex items-center justify-center text-xs text-muted-foreground">
           No cost data for this period.
         </div>
       </Card>
@@ -183,27 +160,43 @@ export function CostSunburst({ plantIds }: Props) {
   const focusChildren = ((focus?.children ?? []) as RNode[]);
   const focusTotal = focus?.value ?? 0;
   const isZoomed = !!focus && focus.id !== 'Cost';
-  const rootTotal = rootNode?.value ?? 0;
 
   return (
-    <Card className="p-3">
+    <Card className="p-4 flex flex-col justify-between">
       {/* Header */}
-      <div className="flex flex-wrap items-center gap-1 mb-3">
-        <span className="text-xs font-bold tracking-[-0.01em] text-foreground">Cost Composition</span>
-        <button
-          type="button"
-          onClick={() => isZoomed && setFocusId((focus!.parent as RNode | null)?.id ?? 'Cost')}
-          className={`ml-auto text-2xs flex items-center gap-0.5 ${isZoomed ? 'text-muted-foreground hover:text-foreground cursor-pointer' : 'text-muted-foreground/70 cursor-default'}`}
-        >
-          {isZoomed ? <><ChevronLeft className="h-3 w-3" /> back to {(focus!.parent as RNode | null)?.data.name ?? 'Cost'}</> : `click a slice · ${rangeLabel}`}
-        </button>
+      <div>
+        <div className="flex flex-wrap items-center gap-1 mb-2">
+          <span className="text-sm font-bold tracking-[-0.01em] text-foreground">Cost Composition</span>
+          <button
+            type="button"
+            onClick={() => isZoomed && setFocusId((focus!.parent as RNode | null)?.id ?? 'Cost')}
+            className={`ml-auto text-2xs flex items-center gap-1 font-medium transition-colors ${
+              isZoomed
+                ? 'text-primary hover:underline cursor-pointer bg-primary/10 px-2 py-0.5 rounded-full'
+                : 'text-muted-foreground/80 cursor-default'
+            }`}
+          >
+            {isZoomed ? (
+              <>
+                <ChevronLeft className="h-3.5 w-3.5" />
+                <span>Zoom out to {(focus!.parent as RNode | null)?.data.name ?? 'Overview'}</span>
+              </>
+            ) : (
+              <span>Click any slice to zoom · {rangeLabel}</span>
+            )}
+          </button>
+        </div>
       </div>
 
-      {/* Side-by-side: ring + legend */}
-      <div className="flex gap-3 items-start">
-        {/* SVG ring */}
-        <div className="shrink-0">
-          <svg viewBox={`0 0 ${SIZE} ${SIZE}`} style={{ width: SIZE, height: SIZE }}>
+      {/* Main Container: Prominent Side-by-side Ring & Breakdown */}
+      <div className="flex flex-col sm:flex-row items-center gap-4 my-auto py-1">
+        {/* Large SVG Ring */}
+        <div className="shrink-0 relative flex items-center justify-center">
+          <svg
+            viewBox={`0 0 ${SIZE} ${SIZE}`}
+            className="shrink-0 drop-shadow-sm transition-transform hover:scale-[1.01]"
+            style={{ width: SIZE, height: SIZE }}
+          >
             <g transform={`translate(${SIZE / 2},${SIZE / 2})`}>
               {(rootNode!.descendants() as RNode[]).filter((d) => d.depth > 0).map((d) => {
                 if (!focus) return null;
@@ -218,29 +211,53 @@ export function CostSunburst({ plantIds }: Props) {
                       fill: colorFor(d),
                       opacity: opacityFor(d),
                       cursor: clickable ? 'pointer' : 'default',
-                      transition: 'd 400ms ease, opacity 300ms ease',
+                      transition: 'd 400ms cubic-bezier(0.4, 0, 0.2, 1), opacity 300ms ease',
                       stroke: 'hsl(var(--card))',
-                      strokeWidth: 1.5,
+                      strokeWidth: 2,
                     }}
+                    className={clickable ? 'hover:brightness-110' : ''}
                     onClick={clickable ? () => setFocusId(d.id) : undefined}
                   >
                     <title>{`${d.data.name}: ${peso(d.value ?? 0)}`}</title>
                   </path>
                 );
               })}
+
               {/* Center circle */}
               <circle
-                r={RING - 3}
-                style={{ fill: 'hsl(var(--muted))', cursor: isZoomed ? 'pointer' : 'default' }}
+                r={RING - 4}
+                className="transition-all duration-300"
+                style={{
+                  fill: 'hsl(var(--card))',
+                  stroke: 'hsl(var(--border))',
+                  strokeWidth: 2,
+                  cursor: isZoomed ? 'pointer' : 'default',
+                }}
                 onClick={() => isZoomed && setFocusId((focus!.parent as RNode | null)?.id ?? 'Cost')}
               />
-              <text textAnchor="middle" y={-6} style={{ fontSize: 9, fontWeight: 500, fill: 'hsl(var(--muted-foreground))' }}>
-                {focus?.data.name ?? 'Cost'}
+              <text
+                textAnchor="middle"
+                y={-8}
+                style={{
+                  fontSize: 11,
+                  fontWeight: 600,
+                  fill: 'hsl(var(--muted-foreground))',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em',
+                }}
+              >
+                {focus?.data.name ?? 'Total Cost'}
               </text>
               <text
-                textAnchor="middle" y={8}
-                style={{ fontSize: 10, fontWeight: 700, fill: 'hsl(var(--foreground))', fontFamily: GEO_FONT }}
-                className="tabular-nums"
+                textAnchor="middle"
+                y={12}
+                style={{
+                  fontSize: 14,
+                  fontWeight: 800,
+                  fill: 'hsl(var(--foreground))',
+                  fontFamily: GEO_FONT,
+                }}
+                className="tabular-nums font-bold"
               >
                 {peso(focus?.value ?? 0)}
               </text>
@@ -248,72 +265,93 @@ export function CostSunburst({ plantIds }: Props) {
           </svg>
         </div>
 
-        {/* Right-side legend with % bars */}
-        <div className="flex-1 min-w-0 flex flex-col justify-center gap-2 py-2">
-          {/* Breadcrumb label */}
+        {/* Breakdown Card List */}
+        <div className="flex-1 w-full flex flex-col justify-center gap-2.5">
           {isZoomed && (
-            <div className="text-[10px] text-muted-foreground mb-1 font-medium tracking-wide uppercase">
-              {focus?.data.name} breakdown
+            <div className="flex items-center gap-1 text-xs font-semibold text-primary px-1">
+              <span>{focus?.data.name} Breakdown</span>
             </div>
           )}
 
-          {focusChildren.length ? focusChildren.map((c) => {
-            const clickable = !!c.children?.length;
-            const pct = focusTotal ? ((c.value ?? 0) / focusTotal) * 100 : 0;
-            const globalPct = rootTotal ? ((c.value ?? 0) / rootTotal) * 100 : 0;
-            const swatchColor = categorySwatchStyle(c.data.name);
-            return (
-              <div key={c.id} className="space-y-0.5">
-                <button
-                  type="button"
+          {focusChildren.length ? (
+            focusChildren.map((c) => {
+              const clickable = !!c.children?.length;
+              const pct = focusTotal ? ((c.value ?? 0) / focusTotal) * 100 : 0;
+              const swatchColor = categorySwatchStyle(c.data.name);
+
+              return (
+                <div
+                  key={c.id}
                   onClick={clickable ? () => setFocusId(c.id) : undefined}
-                  className={`w-full flex items-center gap-1.5 text-xs transition-colors text-left ${clickable ? 'hover:text-foreground cursor-pointer group' : 'cursor-default'}`}
+                  className={`p-2 rounded-xl border border-border/70 bg-muted/40 transition-all ${
+                    clickable
+                      ? 'hover:bg-muted hover:border-primary/50 cursor-pointer shadow-2xs hover:shadow-xs group'
+                      : 'cursor-default'
+                  }`}
                 >
-                  <span
-                    className="w-2.5 h-2.5 rounded-sm shrink-0 transition-transform group-hover:scale-110"
-                    style={{ background: swatchColor, opacity: opacityFor(c) }}
-                  />
-                  <span className="text-foreground/90 font-medium flex-1 truncate">{c.data.name}</span>
-                  <span className="tabular-nums text-muted-foreground font-numeral text-[10px] shrink-0">
-                    {peso(c.value ?? 0)}
-                  </span>
-                  <span
-                    className="tabular-nums font-bold font-numeral text-[10px] shrink-0 w-8 text-right"
-                    style={{ color: swatchColor }}
-                  >
-                    {fmtNum(pct, 0)}%
-                  </span>
-                </button>
-                {/* % bar */}
-                <div className="h-1 bg-muted rounded-full overflow-hidden ml-4">
-                  <div
-                    className="h-full rounded-full transition-all duration-500"
-                    style={{ width: `${pct}%`, background: swatchColor, opacity: 0.75 }}
-                  />
+                  <div className="flex items-center justify-between gap-2 mb-1.5">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div
+                        className="h-6 w-6 rounded-lg flex items-center justify-center text-white shrink-0 shadow-2xs transition-transform group-hover:scale-105"
+                        style={{ background: swatchColor }}
+                      >
+                        {categoryIcon(c.data.name)}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-xs font-bold text-foreground truncate flex items-center gap-1">
+                          <span>{c.data.name}</span>
+                          {clickable && (
+                            <ChevronRight className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="text-right shrink-0">
+                      <div className="text-xs font-bold tabular-nums font-numeral text-foreground">
+                        {peso(c.value ?? 0)}
+                      </div>
+                      <div
+                        className="text-[10px] font-bold tabular-nums font-numeral"
+                        style={{ color: swatchColor }}
+                      >
+                        {fmtNum(pct, 1)}% of total
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Visual Progress Bar */}
+                  <div className="h-1.5 bg-background/80 rounded-full overflow-hidden border border-border/50">
+                    <div
+                      className="h-full rounded-full transition-all duration-500"
+                      style={{
+                        width: `${pct}%`,
+                        background: swatchColor,
+                      }}
+                    />
+                  </div>
                 </div>
-              </div>
-            );
-          }) : (
-            <div className="text-xs text-muted-foreground">No further breakdown for {focus?.data.name}.</div>
+              );
+            })
+          ) : (
+            <div className="p-4 text-center rounded-xl bg-muted/30 border border-border/60 text-xs text-muted-foreground">
+              No further sub-category breakdown for <strong className="text-foreground">{focus?.data.name}</strong>.
+            </div>
           )}
         </div>
       </div>
 
-      {/* Footer notes */}
-      <div className="mt-2 space-y-0.5">
+      {/* Footer Notes */}
+      <div className="mt-2 space-y-1 text-2xs text-muted-foreground/75 border-t border-border/50 pt-2">
         {!data.hasChemBreakdown && (
-          <p className="text-2xs text-muted-foreground/70">
-            No per-chemical prices on file — Chemicals shows the total. Add prices on the Costs page to unlock per-chemical detail.
-          </p>
-        )}
-        {data.hasChemBreakdown && data.unpricedChemicals.length > 0 && (
-          <p className="text-2xs text-muted-foreground/70">
-            No price on file for {data.unpricedChemicals.join(', ')} — excluded from breakdown.
+          <p className="flex items-center gap-1">
+            <Info className="h-3 w-3 shrink-0" />
+            <span>Add chemical pricing on the Costs page to unlock detailed dosing breakdown.</span>
           </p>
         )}
         {data.solarTotal > 0 && (
-          <p className="text-2xs text-muted-foreground/70">
-            Solar is priced at the grid php/kWh rate for comparison — it isn't actually billed, so the center total runs higher than real cash spend.
+          <p>
+            Solar is priced at the grid ₱/kWh tariff rate for comparative generation valuation.
           </p>
         )}
       </div>
