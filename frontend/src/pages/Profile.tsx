@@ -452,7 +452,7 @@ export default function Profile() {
                       </div>
 
                       {isActive ? (
-                        <StatusPill tone="good" className="text-2xs shrink-0">
+                        <StatusPill tone="accent" className="text-2xs shrink-0">
                           Active
                         </StatusPill>
                       ) : (
