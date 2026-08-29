@@ -294,80 +294,90 @@ export function TrainsList({ plantId }: { plantId: string }) {
   const offlineCount = (trains ?? []).filter((t: any) => deriveTrainStatus(t) === 'Offline').length;
 
   return (
-    <div className="space-y-3">
-      {/* Executive Pre-treatment & RO Subsystem Header */}
-      <div className="p-3.5 rounded-xl border border-border/70 bg-card/80 backdrop-blur-sm space-y-2.5 shadow-xs">
-        <div className="flex justify-between items-center gap-2 flex-wrap">
-          <div className="flex items-center gap-2">
-            <div className="h-7 w-7 rounded-lg bg-primary-soft text-primary flex items-center justify-center">
-              <ROTrainIcon className="h-4 w-4" />
+    <div className="space-y-3.5">
+      {/* ── Executive Fleet Header & Controls ── */}
+      <div className="p-4 rounded-2xl border border-border/80 bg-card shadow-2xs space-y-3">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+          <div className="flex items-center gap-3">
+            <div className="h-9 w-9 rounded-xl bg-primary-soft text-primary flex items-center justify-center shrink-0 shadow-2xs">
+              <ROTrainIcon className="h-5 w-5" />
             </div>
             <div>
-              <h3 className="text-xs font-bold text-foreground flex items-center gap-2">
-                <span>RO Trains & Pre-treatment Fleet</span>
-                <span className="text-2xs font-mono font-normal text-muted-foreground">({runningCount}/{trains?.length ?? 0} active)</span>
-              </h3>
-              <p className="text-3xs text-muted-foreground">Media Filtration → Booster → CF Housing → HPP → RO Permeate</p>
+              <div className="flex items-center gap-2">
+                <h2 className="text-sm sm:text-base font-bold text-foreground tracking-tight">
+                  RO Trains &amp; Pre-treatment Fleet
+                </h2>
+                <span className="px-2 py-0.5 rounded-full text-3xs font-bold bg-primary-soft text-primary border border-primary/30">
+                  {runningCount}/{trains?.length ?? 0} Online
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Media Filtration ➔ Booster Pumps ➔ Pre-filter Housings ➔ High Pressure Pumps ➔ RO Permeate
+              </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
             {isManager && (
-              <Button size="sm" variant="outline" className="h-7 px-2.5 text-2xs gap-1 font-semibold" onClick={() => setShowAddTrain(true)}>
-                <Plus className="h-3 w-3 text-primary" />Add Train
+              <Button size="sm" className="h-8 px-3 text-xs gap-1.5 font-bold shadow-2xs" onClick={() => setShowAddTrain(true)}>
+                <Plus className="h-3.5 w-3.5" />
+                <span>Add Train</span>
               </Button>
             )}
             {isAdmin && (
-              <Button size="sm" variant="outline" className="h-7 w-7 p-0" onClick={() => setShowTrainCsv(true)} title="Import CSV">
-                <Upload className="h-3 w-3" />
+              <Button size="sm" variant="outline" className="h-8 px-2.5 text-xs gap-1" onClick={() => setShowTrainCsv(true)} title="Import CSV">
+                <Upload className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Import</span>
               </Button>
             )}
           </div>
         </div>
 
-        {/* Filter bar */}
-        <div className="flex items-center gap-2 flex-wrap pt-1 border-t border-border/40">
-          <div className="relative flex-1 min-w-[140px] max-w-xs">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
+        {/* Filter bar & Quick Status Chips */}
+        <div className="flex flex-col md:flex-row items-center justify-between gap-2.5 pt-2.5 border-t border-border/50">
+          <div className="relative w-full md:max-w-xs">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
             <Input
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="Search train # or name…"
-              className="h-7 pl-7 text-2xs"
+              className="h-8 pl-8 text-xs bg-background"
             />
           </div>
 
-          <div className="flex items-center gap-1 bg-muted/60 p-0.5 rounded-lg border border-border/50">
+          <div className="flex items-center gap-1 w-full md:w-auto overflow-x-auto pb-0.5">
             {(['all', 'Running', 'Maintenance', 'Offline'] as const).map((s) => (
               <button
                 key={s}
                 onClick={() => setStatusFilter(s)}
                 className={[
-                  'h-6 px-2 text-[10px] font-bold rounded-md transition-all',
+                  'h-7 px-2.5 text-2xs font-bold rounded-lg transition-all border shrink-0',
                   statusFilter === s
-                    ? 'bg-card text-primary shadow-xs border border-border/80'
-                    : 'text-muted-foreground hover:text-foreground',
+                    ? 'bg-primary text-primary-foreground border-primary shadow-2xs'
+                    : 'bg-muted/40 text-muted-foreground border-border/60 hover:text-foreground hover:bg-muted',
                 ].join(' ')}
               >
-                {s === 'all' ? `All (${trains?.length ?? 0})` : s === 'Running' ? `Online (${runningCount})` : s === 'Maintenance' ? `Maint (${maintenanceCount})` : `Offline (${offlineCount})`}
+                {s === 'all'
+                  ? `All (${trains?.length ?? 0})`
+                  : s === 'Running'
+                  ? `🟢 Online (${runningCount})`
+                  : s === 'Maintenance'
+                  ? `⚠️ Maintenance (${maintenanceCount})`
+                  : `⚪ Offline (${offlineCount})`}
               </button>
             ))}
           </div>
         </div>
       </div>
 
+      {/* ── Train Cards ── */}
       {filteredTrains.map((t: any) => {
         const mt = effectiveMediaType(t);
         const ft = effectiveFilterType(t);
         const effectiveStatus = deriveTrainStatus(t);
-        const borderColor =
-          effectiveStatus === 'Running'     ? 'border-l-accent' :
-          effectiveStatus === 'Maintenance' ? 'border-l-warn'   :
-                                              'border-l-muted-foreground/30';
         const activeKey = activeSection[t.id] ?? null;
         const trainLabel = `Train ${t.train_number}${t.name ? ` · ${t.name}` : ''}`;
 
-        // Resolved component counts (fall back to 0)
         const numAfm   = t.num_afm            ?? 0;
         const numBp    = t.num_booster_pumps  ?? 0;
         const numHpp   = t.num_hp_pumps       ?? 0;
@@ -375,67 +385,95 @@ export function TrainsList({ plantId }: { plantId: string }) {
         const numCtrl  = t.num_controllers    ?? 0;
 
         return (
-          <Card key={t.id} className={`overflow-hidden border-l-2 card-interactive ${borderColor} shadow-2xs`} data-testid={`train-card-${t.id}`}>
-            {/* ── Train header ── */}
-            <div className="p-3.5 flex justify-between items-start gap-2 bg-gradient-to-r from-card to-muted/20">
-              <div className="min-w-0 flex-1 space-y-1">
-                <div className="font-bold text-sm flex items-center gap-1.5">
-                  <ROTrainIcon className="h-4 w-4 text-primary shrink-0" />
-                  <span>{trainLabel}</span>
+          <Card key={t.id} className="overflow-hidden border border-border/80 rounded-2xl shadow-2xs transition-all hover:border-primary/40" data-testid={`train-card-${t.id}`}>
+            {/* ── Train Header ── */}
+            <div className="p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-gradient-to-r from-card via-card to-muted/30 border-b border-border/60">
+              <div className="min-w-0 flex-1 space-y-1.5">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <div className="h-8 w-8 rounded-lg bg-primary-soft text-primary flex items-center justify-center shrink-0">
+                    <ROTrainIcon className="h-4 w-4" />
+                  </div>
+                  <h3 className="font-bold text-sm sm:text-base text-foreground tracking-tight flex items-center gap-2">
+                    <span>{trainLabel}</span>
+                  </h3>
+                  <span className="inline-flex items-center text-3xs font-bold px-2 py-0.5 rounded-full bg-primary-soft text-primary border border-primary/30">
+                    {mt} Media
+                  </span>
+                  <span className="inline-flex items-center text-3xs font-bold px-2 py-0.5 rounded-full bg-info-soft text-info border border-info/30">
+                    {ft}
+                  </span>
                 </div>
-                <div className="text-xs text-muted-foreground flex flex-wrap gap-x-2.5 gap-y-0.5 font-mono">
-                  <span>{mt} × {numAfm}</span>
+
+                {/* Configuration summary */}
+                <div className="text-xs text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-0.5 font-mono pl-10">
+                  <span>{numAfm} AFM</span>
                   <span>·</span>
-                  <span>BP × {numBp}</span>
+                  <span>{numBp} Booster</span>
                   <span>·</span>
-                  <span>HPP × {numHpp}</span>
+                  <span>{numCf} {ft === 'Bag Filter' ? 'Filter Housing' : 'CF Housing'}</span>
                   <span>·</span>
-                  <span>{ft === 'Bag Filter' ? 'Filter Housing' : 'CF Housing'} × {numCf}</span>
+                  <span>{numHpp} HPP</span>
                   {numCtrl > 0 && (
                     <>
                       <span>·</span>
-                      <span>Ctrl × {numCtrl}</span>
+                      <span>{numCtrl} Ctrl</span>
                     </>
                   )}
                 </div>
-                {/* Type badges */}
-                <div className="flex items-center gap-1.5 pt-0.5 flex-wrap">
-                  <span className="inline-flex items-center text-2xs font-semibold px-2 py-0.5 rounded-full bg-primary-soft text-primary border border-primary/30">{mt}</span>
-                  <span className="inline-flex items-center text-2xs font-semibold px-2 py-0.5 rounded-full bg-info-soft text-info border border-info/30">{ft}</span>
-                </div>
               </div>
-              {/* Status + edit actions */}
-              <div className="flex flex-col items-end gap-1.5 shrink-0">
+
+              {/* Status pill & actions */}
+              <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end">
                 <button
                   type="button"
                   onClick={() => toggleTrainStatus(t)}
                   title={isManager ? `Click to cycle status (currently ${effectiveStatus})` : effectiveStatus}
-                  className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-0.5 rounded-full border transition-all ${
+                  className={`inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1 rounded-full border transition-all shadow-2xs ${
                     effectiveStatus === 'Running'
                       ? 'text-accent bg-accent-soft border-accent/40 hover:bg-accent-soft/80'
                       : effectiveStatus === 'Maintenance'
-                        ? 'text-warn bg-warn-soft border-warn/40 hover:bg-warn-soft/80'
-                        : 'text-muted-foreground bg-muted border-border/70 hover:bg-muted/80'
+                      ? 'text-warn bg-warn-soft border-warn/40 hover:bg-warn-soft/80'
+                      : 'text-muted-foreground bg-muted border-border/80 hover:bg-muted/80'
                   } ${isManager ? 'cursor-pointer' : 'cursor-default'}`}
                 >
-                  <span className={`h-1.5 w-1.5 rounded-full ${
+                  <span className={`h-2 w-2 rounded-full ${
                     effectiveStatus === 'Running' ? 'bg-accent animate-pulse'
                     : effectiveStatus === 'Maintenance' ? 'bg-warn'
                     : 'bg-muted-foreground'
                   }`} />
                   <span>{effectiveStatus}</span>
                 </button>
+
                 <div className="flex items-center gap-1">
-                  <Button size="sm" variant="outline" className="h-7 px-2 text-xs font-medium"
-                    onClick={() => setEditTrain(t)} data-testid={`edit-train-${t.id}`}>
-                    <Pencil className="h-3 w-3 mr-1 text-muted-foreground" />Edit
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-8 px-2.5 text-xs font-medium gap-1 rounded-lg"
+                    onClick={() => setLogTrain({ id: t.id, label: trainLabel })}
+                    title="View Operator Shift Logs"
+                  >
+                    <Calendar className="h-3.5 w-3.5 text-primary" />
+                    <span>Logs</span>
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-8 px-2.5 text-xs font-medium gap-1 rounded-lg"
+                    onClick={() => setEditTrain(t)}
+                    data-testid={`edit-train-${t.id}`}
+                  >
+                    <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
+                    <span>Edit</span>
                   </Button>
                   {isManager && (
-                    <Button size="sm" variant="ghost"
-                      className="h-7 w-7 p-0 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-8 w-8 p-0 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10"
                       title="Delete train"
                       onClick={() => { setTrainDeleteTarget(t); setTrainDeleteReason(''); }}
-                      data-testid={`delete-train-${t.id}`}>
+                      data-testid={`delete-train-${t.id}`}
+                    >
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>
                   )}
@@ -443,101 +481,147 @@ export function TrainsList({ plantId }: { plantId: string }) {
               </div>
             </div>
 
-            {/* ══ PRE-TREATMENT SECTION ══ */}
-            <div className="border-t border-border/60 bg-muted/10">
-              <div className="flex items-center gap-2 px-3.5 pt-2.5 pb-1.5">
-                <span className="text-3xs font-extrabold uppercase tracking-widest px-2 py-0.5 rounded-full bg-accent-soft text-accent border border-accent/40">
-                  Pre-treatment
-                </span>
-                <span className="text-2xs text-muted-foreground font-mono">{mt} → Booster Pump → Pre-filter</span>
-              </div>
-              <div className="px-3.5 pb-3 flex flex-wrap gap-2">
-                {numAfm > 0 && (
-                  <CompBtn trainId={t.id} activeKey={activeKey} sectionKey="afm"
-                    icon={<Gauge className="h-3.5 w-3.5" />} label={mt} count={numAfm} />
-                )}
-                {numBp > 0 && (
-                  <CompBtn trainId={t.id} activeKey={activeKey} sectionKey="booster"
-                    icon={<Wrench className="h-3.5 w-3.5" />} label="Booster Pump" count={numBp} />
-                )}
-                {/* CF Housing */}
-                {numCf > 0 && (
-                  <CompBtn trainId={t.id} activeKey={activeKey} sectionKey="cf"
-                    icon={<Wrench className="h-3.5 w-3.5" />}
-                    label={ft === 'Bag Filter' ? 'Filter Housing' : 'CF Housing'}
-                    count={numCf} />
-                )}
+            {/* ══ INTEGRATED SUBSYSTEM PIPELINE ══ */}
+            <div className="p-3.5 bg-muted/20 space-y-3">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                {/* Stage 1: Pre-treatment */}
+                <div className="p-3 rounded-xl border border-border/70 bg-card/80 space-y-2">
+                  <div className="flex items-center justify-between gap-1 pb-1 border-b border-border/40">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-3xs font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full bg-accent-soft text-accent border border-accent/40">
+                        Pre-treatment
+                      </span>
+                      <span className="text-3xs text-muted-foreground font-mono">Stage 1</span>
+                    </div>
+                    <span className="text-[10px] text-muted-foreground font-medium">Filtration &amp; Boost</span>
+                  </div>
+
+                  <div className="flex flex-wrap gap-1.5 pt-0.5">
+                    {numAfm > 0 && (
+                      <CompBtn trainId={t.id} activeKey={activeKey} sectionKey="afm"
+                        icon={<Gauge className="h-3.5 w-3.5" />} label={mt} count={numAfm} />
+                    )}
+                    {numBp > 0 && (
+                      <CompBtn trainId={t.id} activeKey={activeKey} sectionKey="booster"
+                        icon={<Wrench className="h-3.5 w-3.5" />} label="Booster Pump" count={numBp} />
+                    )}
+                    {numCf > 0 && (
+                      <CompBtn trainId={t.id} activeKey={activeKey} sectionKey="cf"
+                        icon={<Wrench className="h-3.5 w-3.5" />}
+                        label={ft === 'Bag Filter' ? 'Filter Housing' : 'CF Housing'}
+                        count={numCf} />
+                    )}
+                  </div>
+                </div>
+
+                {/* Stage 2: Reverse Osmosis */}
+                <div className="p-3 rounded-xl border border-border/70 bg-card/80 space-y-2">
+                  <div className="flex items-center justify-between gap-1 pb-1 border-b border-border/40">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-3xs font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full bg-info-soft text-info border border-info/40">
+                        RO Stage
+                      </span>
+                      <span className="text-3xs text-muted-foreground font-mono">Stage 2</span>
+                    </div>
+                    <span className="text-[10px] text-muted-foreground font-medium">High Pressure &amp; Permeate</span>
+                  </div>
+
+                  <div className="flex flex-wrap gap-1.5 pt-0.5">
+                    {numHpp > 0 && (
+                      <CompBtn trainId={t.id} activeKey={activeKey} sectionKey="hpp"
+                        icon={<Zap className="h-3.5 w-3.5" />} label="High Pressure Pump" count={numHpp} />
+                    )}
+                    <CompBtn trainId={t.id} activeKey={activeKey} sectionKey="ro"
+                      icon={<BarChart2 className="h-3.5 w-3.5" />} label="RO Performance" />
+                    <CompBtn trainId={t.id} activeKey={activeKey} sectionKey="meters"
+                      icon={<Gauge className="h-3.5 w-3.5" />} label="Meters" />
+                  </div>
+                </div>
               </div>
 
-              {/* AFM expanded */}
+              {/* ── EXPANDED MODULE DRAWERS ── */}
               {activeKey === 'afm' && (
-                <div className="px-3.5 pb-3 pt-0 border-t border-dashed border-border/60 bg-card/60">
-                  <div className="mt-3">
-                    <PretreatAFMChart trainId={t.id} mediaType={mt} />
+                <div className="p-3.5 rounded-xl border border-accent/40 bg-card animate-fade-in shadow-sm">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-bold text-accent flex items-center gap-1.5">
+                      <Gauge className="h-4 w-4" /> {mt} Media Filtration Telemetry
+                    </span>
+                    <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-muted-foreground" onClick={() => toggleSection(t.id, 'afm')}>
+                      <X className="h-3.5 w-3.5" />
+                    </Button>
                   </div>
+                  <PretreatAFMChart trainId={t.id} mediaType={mt} />
                 </div>
               )}
 
-              {/* Booster expanded */}
               {activeKey === 'booster' && (
-                <div className="px-3.5 pb-3 pt-0 border-t border-dashed border-border/60 bg-card/60">
-                  <div className="mt-3">
-                    <PretreatBoosterChart trainId={t.id} />
+                <div className="p-3.5 rounded-xl border border-accent/40 bg-card animate-fade-in shadow-sm">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-bold text-accent flex items-center gap-1.5">
+                      <Wrench className="h-4 w-4" /> Booster Pump Pressure &amp; Flow
+                    </span>
+                    <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-muted-foreground" onClick={() => toggleSection(t.id, 'booster')}>
+                      <X className="h-3.5 w-3.5" />
+                    </Button>
                   </div>
+                  <PretreatBoosterChart trainId={t.id} />
                 </div>
               )}
 
-              {/* CF Housing expanded */}
               {activeKey === 'cf' && (
-                <div className="px-3.5 pb-3 pt-0 border-t border-dashed border-border/60 bg-card/60">
-                  <div className="mt-3">
-                    <PretreatCFChart trainId={t.id} filterType={ft} />
+                <div className="p-3.5 rounded-xl border border-accent/40 bg-card animate-fade-in shadow-sm">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-bold text-accent flex items-center gap-1.5">
+                      <Wrench className="h-4 w-4" /> {ft} Differential Pressure &amp; Replacement History
+                    </span>
+                    <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-muted-foreground" onClick={() => toggleSection(t.id, 'cf')}>
+                      <X className="h-3.5 w-3.5" />
+                    </Button>
                   </div>
+                  <PretreatCFChart trainId={t.id} filterType={ft} />
                 </div>
               )}
-            </div>
 
-            {/* ══ RO SECTION ══ */}
-            <div className="border-t border-border/60 bg-card">
-              <div className="flex items-center gap-2 px-3.5 pt-2.5 pb-1.5">
-                <span className="text-3xs font-extrabold uppercase tracking-widest px-2 py-0.5 rounded-full bg-info-soft text-info border border-info/40">
-                  RO Stage
-                </span>
-                <span className="text-2xs text-muted-foreground font-mono">HPP → Membranes → Permeate Output</span>
-              </div>
-              <div className="px-3.5 pb-3 flex flex-wrap gap-2">
-                {numHpp > 0 && (
-                  <CompBtn trainId={t.id} activeKey={activeKey} sectionKey="hpp"
-                    icon={<Zap className="h-3.5 w-3.5" />} label="High Pressure Pump" count={numHpp} />
-                )}
-                <CompBtn trainId={t.id} activeKey={activeKey} sectionKey="ro"
-                  icon={<BarChart2 className="h-3.5 w-3.5" />} label="RO Performance" />
-                <CompBtn trainId={t.id} activeKey={activeKey} sectionKey="meters"
-                  icon={<Gauge className="h-3.5 w-3.5" />} label="Meters" />
-              </div>
-
-              {/* HPP expanded — target vs actual */}
               {activeKey === 'hpp' && (
-                <div className="px-3.5 pb-3 pt-0 border-t border-dashed border-border/60 bg-card/60">
-                  <div className="mt-3">
-                    <PretreatHPPChart trainId={t.id} />
+                <div className="p-3.5 rounded-xl border border-info/40 bg-card animate-fade-in shadow-sm">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-bold text-info flex items-center gap-1.5">
+                      <Zap className="h-4 w-4" /> High Pressure Pump Performance &amp; Current Draw
+                    </span>
+                    <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-muted-foreground" onClick={() => toggleSection(t.id, 'hpp')}>
+                      <X className="h-3.5 w-3.5" />
+                    </Button>
                   </div>
+                  <PretreatHPPChart trainId={t.id} />
                 </div>
               )}
-              {/* Expanded RO performance mini-charts grid */}
+
               {activeKey === 'ro' && (
-                <div className="px-3.5 pb-3 pt-0 border-t border-dashed border-border/60 bg-card/60">
-                  <div className="mt-3">
-                    <TrainRODetailCharts trainId={t.id} trainLabel={trainLabel} />
+                <div className="p-3.5 rounded-xl border border-info/40 bg-card animate-fade-in shadow-sm">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-bold text-info flex items-center gap-1.5">
+                      <BarChart2 className="h-4 w-4" /> Reverse Osmosis Recovery &amp; Salt Rejection
+                    </span>
+                    <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-muted-foreground" onClick={() => toggleSection(t.id, 'ro')}>
+                      <X className="h-3.5 w-3.5" />
+                    </Button>
                   </div>
+                  <TrainRODetailCharts trainId={t.id} trainLabel={trainLabel} />
                 </div>
               )}
-              {/* Feed / Permeate / Reject meter identity — Replace Meter dialog
-                  itself asks which of the three was swapped (see
-                  ReplaceTrainMeterDialog), so one button covers all three. */}
+
               {activeKey === 'meters' && (
-                <div className="px-3 pb-3 pt-0 border-t border-dashed border-border/50">
-                  <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                <div className="p-3.5 rounded-xl border border-info/40 bg-card animate-fade-in shadow-sm space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-info flex items-center gap-1.5">
+                      <Gauge className="h-4 w-4" /> Train Meters &amp; Calibration Identity
+                    </span>
+                    <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-muted-foreground" onClick={() => toggleSection(t.id, 'meters')}>
+                      <X className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+
+                  <div className="grid gap-2 sm:grid-cols-3">
                     {(['feed', 'permeate', 'reject'] as const).map((mt) => {
                       const latest = latestTrainReplacement[`${t.id}:${mt}`];
                       const replacerName = latest?.replacer
@@ -560,10 +644,11 @@ export function TrainsList({ plantId }: { plantId: string }) {
                       );
                     })}
                   </div>
+
                   {isManager && (
-                    <Button size="sm" variant="outline" className="mt-2 gap-1.5"
+                    <Button size="sm" variant="outline" className="gap-1.5 text-xs"
                       onClick={() => setReplaceTrainMeter({ trainId: t.id })}>
-                      <ChangeMeterIcon className="h-3.5 w-3.5" /> Replace Meter
+                      <ChangeMeterIcon className="h-3.5 w-3.5" /> Replace Meter / Calibrate
                     </Button>
                   )}
                 </div>
@@ -572,7 +657,11 @@ export function TrainsList({ plantId }: { plantId: string }) {
           </Card>
         );
       })}
-      {!trains?.length && <Card className="p-4 text-center text-xs text-muted-foreground">No trains yet</Card>}
+      {!trains?.length && (
+        <Card className="p-8 text-center text-xs text-muted-foreground border-dashed">
+          No RO trains configured for this plant yet.
+        </Card>
+      )}
 
       <AddTrainDialog
         open={showAddTrain}
