@@ -413,7 +413,7 @@ export function WellsList({ plantId, highlightId }: { plantId: string; highlight
                 <Checkbox
                   checked={checked}
                   onCheckedChange={() => toggle(w.id)}
-                  className="mt-1 h-5 w-5 sm:h-4 sm:w-4 [&]:rounded-full sm:[&]:rounded-sm"
+                  className="mt-1 h-4 w-4 shrink-0 rounded-sm"
                   data-testid={`well-select-${w.id}`}
                 />
               )}

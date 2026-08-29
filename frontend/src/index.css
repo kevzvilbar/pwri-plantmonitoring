@@ -864,13 +864,30 @@
 
 /* ── Mobile tap targets ───────────────────────────────────────────────────── */
 @media (pointer: coarse) and (max-width: 768px) {
-  button, [role="button"], a.button, .btn { min-height: 44px; }
-  button[data-size="sm"] { min-height: 40px; }
-  /* Icon-only buttons (size="icon" / "icon-sm") need min-width raised too,
-     or they end up as 44px-tall rectangles instead of proper 44x44 squares. */
-  button[data-size="icon"], button[data-size="icon-sm"] { min-width: 44px; }
-  input, select, textarea {
-    min-height: 44px;
+  button:not([role="switch"]):not([role="checkbox"]):not([role="tab"]):not(.shrink-0),
+  [role="button"]:not([role="switch"]):not([role="checkbox"]):not([role="tab"]),
+  a.button,
+  .btn {
+    min-height: 38px;
+  }
+
+  button[role="checkbox"], [role="checkbox"] {
+    min-height: unset !important;
+    min-width: unset !important;
+  }
+
+  button[role="switch"], [role="switch"] {
+    min-height: unset !important;
+    min-width: unset !important;
+  }
+
+  button[data-size="sm"] { min-height: 34px; }
+  button[data-size="icon"], button[data-size="icon-sm"] { min-width: 34px; min-height: 34px; }
+
+  input:not([type="checkbox"]):not([type="radio"]):not(.h-6):not(.h-7):not(.h-8),
+  select:not(.h-6):not(.h-7):not(.h-8),
+  textarea {
+    min-height: 38px;
     font-size: 16px !important; /* prevents iOS auto-zoom */
   }
   input[type="datetime-local"],

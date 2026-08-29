@@ -349,7 +349,7 @@ export function LocatorsList({ plantId, highlightId }: { plantId: string; highli
                 <Checkbox
                   checked={checked}
                   onCheckedChange={() => toggleOne(l.id)}
-                  className="mt-0.5 h-5 w-5 sm:h-4 sm:w-4 shrink-0 [&]:rounded-full sm:[&]:rounded-sm"
+                  className="mt-1 h-4 w-4 shrink-0 rounded-sm"
                   data-testid={`locator-select-${l.id}`}
                 />
               )}
