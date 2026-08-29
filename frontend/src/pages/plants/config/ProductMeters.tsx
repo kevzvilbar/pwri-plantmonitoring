@@ -761,63 +761,34 @@ export function ProductMetersCard({ plant, highlightId }: { plant: any; highligh
     staleTime: 0,
     gcTime: 0,
     queryFn: async () => {
-      const METER_COLS = 'meter_brand, meter_size, meter_serial, meter_installed_date';
-      const missingMeterCols = (msg?: string | null) => !!msg && (
-        msg.includes('meter_brand') || msg.includes('meter_size') ||
-        msg.includes('meter_serial') || msg.includes('meter_installed_date')
-      );
-
-      // Try full schema first (status + sort_order + meter identity columns all present)
+      // Fetch verified product_meters columns directly
       let { data, error } = await supabase
         .from('product_meters' as any)
-        .select(`id, name, status, sort_order, is_derived, ${METER_COLS}, created_at`)
+        .select('id, name, status, sort_order, is_derived, created_at')
         .eq('plant_id', plant.id)
         .order('sort_order', { ascending: true });
 
-      // Meter identity columns missing (pre-2026-07-27 migration DB) → retry without them
-      if (missingMeterCols(error?.message)) {
-        ({ data, error } = await supabase
-          .from('product_meters' as any)
-          .select('id, name, status, sort_order, is_derived, created_at')
-          .eq('plant_id', plant.id)
-          .order('sort_order', { ascending: true }));
-      }
-
-      // sort_order column missing → retry without it
+      // If sort_order column missing on older DBs → fall back to created_at
       if (error?.message?.includes('sort_order')) {
         ({ data, error } = await supabase
           .from('product_meters' as any)
-          .select(`id, name, status, is_derived, ${METER_COLS}, created_at`)
+          .select('id, name, status, is_derived, created_at')
           .eq('plant_id', plant.id)
           .order('created_at', { ascending: true }));
-        if (missingMeterCols(error?.message)) {
-          ({ data, error } = await supabase
-            .from('product_meters' as any)
-            .select('id, name, status, is_derived, created_at')
-            .eq('plant_id', plant.id)
-            .order('created_at', { ascending: true }));
-        }
       }
 
-      // status column missing (not yet migrated) → fetch without it, default to 'Active'
+      // If status column missing → fetch without it, default to 'Active'
       if (error?.message?.includes('status')) {
-        const initialFallback = await supabase
+        const { data: fallback, error: fbError } = await supabase
           .from('product_meters' as any)
-          .select(`id, name, is_derived, ${METER_COLS}, created_at`)
+          .select('id, name, is_derived, created_at')
           .eq('plant_id', plant.id)
           .order('created_at', { ascending: true });
-        let fallback = initialFallback.data;
-        const fbError = initialFallback.error;
-        if (missingMeterCols(fbError?.message)) {
-          ({ data: fallback } = await supabase
-            .from('product_meters' as any)
-            .select('id, name, is_derived, created_at')
-            .eq('plant_id', plant.id)
-            .order('created_at', { ascending: true }));
-        }
+        if (fbError) throw fbError;
         return ((fallback ?? []) as any[]).map((m: any) => ({ ...m, status: 'Active' }));
       }
 
+      if (error) throw error;
       return (data ?? []) as any[];
     },
   });

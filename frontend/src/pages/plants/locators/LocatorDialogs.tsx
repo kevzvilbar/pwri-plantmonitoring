@@ -631,8 +631,11 @@ export function ReplaceMeterDialog({
       assetTable = 'wells';
     }
     const { data: inserted, error } = await supabase.from(replacementTable as any).insert(payload).select('id').single();
-    if (error) { toast.error(friendlyError(error)); return; }
-    await supabase.from(assetTable as any).update({ meter_brand: form.new_brand, meter_size: form.new_size, meter_serial: form.new_serial, meter_installed_date: form.new_installed_date }).eq('id', assetId);
+    if (assetTable === 'product_meters') {
+      await supabase.from(assetTable as any).update({ meter_serial: form.new_serial || null }).eq('id', assetId);
+    } else {
+      await supabase.from(assetTable as any).update({ meter_brand: form.new_brand, meter_size: form.new_size, meter_serial: form.new_serial, meter_installed_date: form.new_installed_date }).eq('id', assetId);
+    }
 
     if (readingId) {
       const readingTable = kind === 'locator' ? 'locator_readings' : kind === 'well' ? 'well_readings' : 'product_meter_readings';

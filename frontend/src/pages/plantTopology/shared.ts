@@ -298,7 +298,7 @@ export function useTopologyData(plantId: string | null) {
           .select('solar_meter_count,solar_meter_names,grid_meter_count,grid_meter_names')
           .eq('plant_id', plantId).maybeSingle(),
         (supabase.from('plant_meter_config' as any) as any)
-          .select('has_solar,has_grid,ro_has_permeate_meter,ro_has_reject_meter,ro_has_feed_meter')
+          .select('config,permeate_is_production')
           .eq('plant_id', plantId).maybeSingle(),
       ]);
 
@@ -359,11 +359,12 @@ export function buildTopology(
 
   const { wells, roTrains, locators, productMeters, powerCfg, meterCfg, savedLinks } = data;
 
-  const hasSolar     = meterCfg?.has_solar ?? false;
-  const hasGrid      = meterCfg?.has_grid  ?? true;
-  const hasFeedMeter = meterCfg?.ro_has_feed_meter     ?? true;
-  const hasPermeate  = meterCfg?.ro_has_permeate_meter ?? true;
-  const hasReject    = meterCfg?.ro_has_reject_meter   ?? true;
+  const cfg = (meterCfg?.config ?? meterCfg ?? {}) as any;
+  const hasSolar     = cfg?.has_solar ?? false;
+  const hasGrid      = cfg?.has_grid  ?? true;
+  const hasFeedMeter = cfg?.ro_has_feed_meter     ?? true;
+  const hasPermeate  = cfg?.ro_has_permeate_meter ?? true;
+  const hasReject    = cfg?.ro_has_reject_meter   ?? true;
 
   const solarCount = powerCfg?.solar_meter_count ?? 1;
   const gridCount  = powerCfg?.grid_meter_count  ?? 1;
