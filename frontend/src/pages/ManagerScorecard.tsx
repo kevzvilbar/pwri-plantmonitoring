@@ -1,21 +1,15 @@
 /**
  * ManagerScorecard.tsx
  * ════════════════════
- * Per-plant data-quality oversight, attributed to whichever Manager(s) have
- * that plant in their plant_assignments. Answers "is the plant's data being
- * watched" (completeness, unexplained gaps, flagged/error rate, open
- * corrections) rather than "who typed what" — see the rationale in
- * fn_manager_plant_scorecard's own migration comment
- * (20260807_manager_plant_scorecard.sql) for why this stays at the
- * plant/Manager grain instead of scoring individual operators.
- *
- * All numbers come from one RPC call; this file is purely presentation +
- * the window (days) control.
+ * Per-plant & per-manager data-quality oversight:
+ * - Operator input completeness and error rates
+ * - Requested correction approvals, review speed, and SLA compliance
+ * - Comprehensive Manager Oversight & Annual Appraisal Score
  */
 
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { format, subDays } from 'date-fns';
+import { format, subDays, differenceInHours } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
 import { usePermission } from '@/hooks/usePermission';
 import { Card } from '@/components/ui/card';
@@ -30,9 +24,11 @@ import { StatusPill } from '@/components/StatusPill';
 import { StatCard } from '@/components/dashboard/StatCard';
 import {
   Award, Percent, Building2, AlertTriangle, ShieldAlert, ShieldQuestion,
-  RefreshCw, Loader2, CheckCircle2, HelpCircle,
+  RefreshCw, Loader2, CheckCircle2, HelpCircle, FileDown, UserCheck,
+  Clock, CheckSquare, XCircle, Users, Sparkles, Check,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -61,8 +57,70 @@ interface ScorecardRow {
   status: ScorecardStatus;
 }
 
-// Worse-first ordering, so an Admin scanning the table sees the plants that
-// need attention before the ones that don't.
+interface CorrectionRequestRow {
+  id: string;
+  plant_id: string;
+  status: string;
+  submitted_by: string | null;
+  resolved_by: string | null;
+  created_at: string;
+  resolved_at: string | null;
+}
+
+export type ManagerAppraisalTier = {
+  tier: string;
+  badge: string;
+  dot: string;
+  icon: string;
+  minScore: number;
+  description: string;
+};
+
+export const MANAGER_APPRAISAL_TIERS: ManagerAppraisalTier[] = [
+  { tier: 'Exemplary Oversight', badge: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/40', dot: 'bg-emerald-500', icon: '🏆', minScore: 90, description: 'Outstanding data completeness and prompt approvals' },
+  { tier: 'Active Oversight', badge: 'bg-teal-500/15 text-teal-700 dark:text-teal-300 border-teal-500/40', dot: 'bg-teal-500', icon: '⭐', minScore: 80, description: 'High data quality and regular review resolution' },
+  { tier: 'Meets Standards', badge: 'bg-sky-500/15 text-sky-700 dark:text-sky-300 border-sky-500/40', dot: 'bg-sky-500', icon: '✓', minScore: 70, description: 'Satisfactory oversight with minor review delays' },
+  { tier: 'Attention Required', badge: 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/40', dot: 'bg-amber-500', icon: '⚠️', minScore: 50, description: 'Backlog in correction approvals or lower completeness' },
+  { tier: 'Critical Oversight Gap', badge: 'bg-rose-500/15 text-rose-700 dark:text-rose-300 border-rose-500/40', dot: 'bg-rose-500', icon: '❌', minScore: 0, description: 'Unassigned manager or persistent unreviewed anomalies' },
+];
+
+export function getManagerAppraisalTier(scorePct: number): ManagerAppraisalTier {
+  for (const t of MANAGER_APPRAISAL_TIERS) {
+    if (scorePct >= t.minScore) return t;
+  }
+  return MANAGER_APPRAISAL_TIERS[MANAGER_APPRAISAL_TIERS.length - 1];
+}
+
+// Computes combined manager oversight score (0-100)
+export function computeManagerOversightScore(
+  completenessPct: number | null,
+  errorRatePct: number | null,
+  openExceptions: number,
+  pendingCorrections: number,
+): { score: number; tier: ManagerAppraisalTier } {
+  if (completenessPct === null) {
+    return { score: 0, tier: MANAGER_APPRAISAL_TIERS[MANAGER_APPRAISAL_TIERS.length - 1] };
+  }
+
+  // Completeness component (45% max)
+  const compScore = (Math.min(100, Math.max(0, completenessPct)) / 100) * 45;
+
+  // Quality / low error rate component (25% max)
+  const errVal = errorRatePct ?? 0;
+  const qualityScore = Math.max(0, 100 - errVal * 10) * 0.25;
+
+  // Responsiveness to exceptions & operator correction requests (30% max)
+  const exceptionPenalty = openExceptions * 1.5;
+  const correctionPenalty = pendingCorrections * 3;
+  const respScore = Math.max(0, 100 - exceptionPenalty - correctionPenalty) * 0.30;
+
+  const totalScore = Math.min(100, Math.max(0, Math.round(compScore + qualityScore + respScore)));
+  return {
+    score: totalScore,
+    tier: getManagerAppraisalTier(totalScore),
+  };
+}
+
 const STATUS_RANK: Record<ScorecardStatus, number> = {
   unmonitored: 0, at_risk: 1, watch: 2, good: 3,
 };
@@ -74,12 +132,18 @@ const STATUS_META: Record<ScorecardStatus, { label: string; tone: 'accent' | 'wa
   unmonitored: { label: 'Unmonitored', tone: 'muted',  icon: ShieldQuestion },
 };
 
-const WINDOW_OPTIONS = [7, 14, 30, 90] as const;
+const WINDOW_OPTIONS: { label: string; value: number }[] = [
+  { label: '7d', value: 7 },
+  { label: '14d', value: 14 },
+  { label: '30d', value: 30 },
+  { label: '90d (Qtr)', value: 90 },
+  { label: '365d (Annual YTD)', value: 365 },
+];
 
 function pctColor(pct: number | null): string {
   if (pct === null) return 'bg-muted-foreground/30';
-  if (pct >= 95) return 'bg-accent';
-  if (pct >= 80) return 'bg-warn';
+  if (pct >= 90) return 'bg-accent';
+  if (pct >= 75) return 'bg-warn';
   return 'bg-destructive';
 }
 
@@ -87,7 +151,7 @@ function fmtPct(pct: number | null): string {
   return pct === null ? '—' : `${pct.toFixed(1)}%`;
 }
 
-// ── Data ──────────────────────────────────────────────────────────────────────
+// ── Data Hooks ────────────────────────────────────────────────────────────────
 
 function useScorecard(days: number) {
   const to = useMemo(() => format(new Date(), 'yyyy-MM-dd'), []);
@@ -107,30 +171,135 @@ function useScorecard(days: number) {
   });
 }
 
-// ── Page root ─────────────────────────────────────────────────────────────────
+function useCorrectionApprovals(days: number) {
+  const from = useMemo(() => format(subDays(new Date(), days - 1), 'yyyy-MM-dd'), [days]);
+
+  return useQuery({
+    queryKey: ['manager-scorecard-corr-reqs', from],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('correction_requests' as any)
+        .select('id, plant_id, status, submitted_by, resolved_by, created_at, resolved_at')
+        .gte('created_at', from);
+      if (error) return [];
+      return (data ?? []) as CorrectionRequestRow[];
+    },
+    staleTime: 2 * 60_000,
+  });
+}
+
+// ── Page Root ─────────────────────────────────────────────────────────────────
 
 export default function ManagerScorecard() {
-  // Default set is Admin/Manager/Data Analyst — same three roles
-  // fn_manager_plant_scorecard's own has_role() check enforces at the DB
-  // layer (see the matrix comment in lib/permissions.ts). A custom role
-  // can restrict this page away from a Manager-based role; it can't
-  // meaningfully grant it to a role the RPC itself doesn't recognize.
   const canView = usePermission('manager_scorecard', 'view');
   const [days, setDays] = useState<number>(30);
-  const { data: rows = [], isLoading, error, refetch, isFetching } = useScorecard(days);
+  const [viewBy, setViewBy] = useState<'plant' | 'manager'>('plant');
 
-  // These two useMemo calls must run on every render, before the
-  // canView early return below — React's Rules of Hooks forbid calling a
-  // hook conditionally (caught by eslint's react-hooks/rules-of-hooks, not
-  // by tsc, so worth calling out: this is exactly the kind of bug a type
-  // check alone won't catch).
+  const { data: rows = [], isLoading, error, refetch, isFetching } = useScorecard(days);
+  const { data: corrReqs = [], refetch: refetchCorr } = useCorrectionApprovals(days);
+
+  // Group correction requests by plant
+  const plantCorrMap = useMemo(() => {
+    const map: Record<string, { pending: number; approved: number; rejected: number; total: number; avgHours: number | null; oldestPendingHours: number }> = {};
+    const now = new Date();
+
+    corrReqs.forEach((r) => {
+      if (!map[r.plant_id]) {
+        map[r.plant_id] = { pending: 0, approved: 0, rejected: 0, total: 0, avgHours: null, oldestPendingHours: 0 };
+      }
+      const entry = map[r.plant_id];
+      entry.total++;
+
+      if (r.status === 'pending') {
+        entry.pending++;
+        const hoursWaiting = differenceInHours(now, new Date(r.created_at));
+        if (hoursWaiting > entry.oldestPendingHours) {
+          entry.oldestPendingHours = hoursWaiting;
+        }
+      } else if (r.status === 'approved') {
+        entry.approved++;
+      } else if (r.status === 'rejected') {
+        entry.rejected++;
+      }
+    });
+
+    return map;
+  }, [corrReqs]);
+
+  // Manager-centric aggregation rollup
+  const managerRollup = useMemo(() => {
+    const managers: Record<string, {
+      name: string;
+      plants: string[];
+      totalReadings: number;
+      completenessSum: number;
+      completenessCount: number;
+      errorRateSum: number;
+      openExceptions: number;
+      pendingCorrections: number;
+      approvedCorrections: number;
+      rejectedCorrections: number;
+      statusCounts: Record<ScorecardStatus, number>;
+    }> = {};
+
+    rows.forEach((r) => {
+      const plantNames = r.manager_names.length ? r.manager_names : ['Unassigned'];
+      plantNames.forEach((name) => {
+        if (!managers[name]) {
+          managers[name] = {
+            name,
+            plants: [],
+            totalReadings: 0,
+            completenessSum: 0,
+            completenessCount: 0,
+            errorRateSum: 0,
+            openExceptions: 0,
+            pendingCorrections: 0,
+            approvedCorrections: 0,
+            rejectedCorrections: 0,
+            statusCounts: { good: 0, watch: 0, at_risk: 0, unmonitored: 0 },
+          };
+        }
+        const m = managers[name];
+        m.plants.push(r.plant_name);
+        m.totalReadings += r.readings_in_window;
+        if (r.overall_completeness_pct !== null) {
+          m.completenessSum += r.overall_completeness_pct;
+          m.completenessCount++;
+        }
+        m.errorRateSum += (r.error_rate_pct ?? 0);
+        m.openExceptions += r.unexplained_gaps_in_window + r.open_pending_review_count;
+        m.statusCounts[r.status] = (m.statusCounts[r.status] ?? 0) + 1;
+
+        const corr = plantCorrMap[r.plant_id];
+        if (corr) {
+          m.pendingCorrections += corr.pending;
+          m.approvedCorrections += corr.approved;
+          m.rejectedCorrections += corr.rejected;
+        }
+      });
+    });
+
+    return Object.values(managers).map((m) => {
+      const avgCompleteness = m.completenessCount > 0 ? m.completenessSum / m.completenessCount : null;
+      const avgErrorRate = m.plants.length > 0 ? m.errorRateSum / m.plants.length : 0;
+      const oversight = computeManagerOversightScore(avgCompleteness, avgErrorRate, m.openExceptions, m.pendingCorrections);
+
+      return {
+        ...m,
+        avgCompleteness,
+        avgErrorRate,
+        oversightScore: oversight.score,
+        tier: oversight.tier,
+      };
+    }).sort((a, b) => b.oversightScore - a.oversightScore);
+  }, [rows, plantCorrMap]);
+
   const sorted = useMemo(
     () => [...rows].sort((a, b) => STATUS_RANK[a.status] - STATUS_RANK[b.status] || a.plant_name.localeCompare(b.plant_name)),
     [rows],
   );
 
-  // Client-side rollups for the summary tiles — cheap over a handful of
-  // plant rows, no need for a second round trip.
   const summary = useMemo(() => {
     const monitored = rows.filter((r) => r.status !== 'unmonitored').length;
     const withCompleteness = rows.filter((r) => r.overall_completeness_pct !== null);
@@ -140,9 +309,68 @@ export default function ManagerScorecard() {
     const openExceptions = rows.reduce(
       (sum, r) => sum + r.unexplained_gaps_in_window + r.open_pending_review_count + r.open_correction_count, 0,
     );
+    const totalPendingCorrections = Object.values(plantCorrMap).reduce((sum, c) => sum + c.pending, 0);
     const atRisk = rows.filter((r) => r.status === 'at_risk' || r.status === 'unmonitored').length;
-    return { monitored, total: rows.length, avgCompleteness, openExceptions, atRisk };
-  }, [rows]);
+
+    const fleetOversight = computeManagerOversightScore(avgCompleteness, null, openExceptions, totalPendingCorrections);
+
+    return {
+      monitored,
+      total: rows.length,
+      avgCompleteness,
+      openExceptions,
+      totalPendingCorrections,
+      atRisk,
+      fleetOversightScore: fleetOversight.score,
+      fleetTier: fleetOversight.tier,
+    };
+  }, [rows, plantCorrMap]);
+
+  // CSV Export for Annual & Management Appraisals
+  const exportManagerScorecardCsv = () => {
+    const headers = [
+      'Manager Name',
+      'Assigned Plants',
+      'Monitored Operator Readings',
+      'Data Completeness %',
+      'Open Exceptions / Gaps',
+      'Pending Correction Approvals',
+      'Approved Corrections',
+      'Rejected Corrections',
+      'Manager Oversight Score %',
+      'Appraisal Rating Tier',
+      'Evaluation Window',
+    ];
+
+    const rowsData = managerRollup.map((m) => [
+      `"${m.name}"`,
+      `"${m.plants.join(', ')}"`,
+      `"${m.totalReadings}"`,
+      `"${m.avgCompleteness ? m.avgCompleteness.toFixed(1) + '%' : 'N/A'}"`,
+      `"${m.openExceptions}"`,
+      `"${m.pendingCorrections}"`,
+      `"${m.approvedCorrections}"`,
+      `"${m.rejectedCorrections}"`,
+      `"${m.oversightScore}%"`,
+      `"${m.tier.tier}"`,
+      `"${days} Days"`,
+    ]);
+
+    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rowsData.map((r) => r.join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `manager_oversight_scorecard_${days}d_${format(new Date(), 'yyyy-MM-dd')}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast.success('Manager Scorecard exported successfully.');
+  };
+
+  const handleRefresh = () => {
+    refetch();
+    refetchCorr();
+  };
 
   if (!canView) {
     return (
@@ -159,75 +387,183 @@ export default function ManagerScorecard() {
   return (
     <div className="space-y-4 animate-fade-in">
       <PageHeader
-        title="Manager Scorecard"
+        title="Manager Scorecard & Oversight"
         titleIcon={<Award className="h-5 w-5 text-accent" />}
-        subtitle="Data-quality oversight per plant — completeness, unexplained gaps, and open exceptions, rolled up to whoever's managing it."
+        subtitle="Data-quality oversight per manager & plant — monitor operator input diligence, correction approval speed, and annual management ratings."
       />
 
-      {/* Controls */}
-      <Card className="p-3">
-        <div className="grid gap-2 grid-cols-[140px_auto] items-end">
-          <div>
-            <Label htmlFor="managerscorecard-window" className="text-xs">Window</Label>
-            <Select value={String(days)} onValueChange={(v) => setDays(Number(v))}>
-              <SelectTrigger className="mt-1" id="managerscorecard-window"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {WINDOW_OPTIONS.map((d) => (
-                  <SelectItem key={d} value={String(d)}>{d}d</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+      {/* ── Executive Oversight & Appraisal Strip ── */}
+      <div className="p-3.5 rounded-xl border border-border/70 bg-card/80 backdrop-blur-sm space-y-3 shadow-2xs">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <div className="h-9 w-9 rounded-xl bg-primary-soft text-primary flex items-center justify-center shrink-0">
+              <UserCheck className="h-5 w-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-xs font-bold text-foreground">Management Oversight Index</h3>
+                <span className={cn('text-3xs font-bold px-2 py-0.5 rounded-full border', summary.fleetTier.badge)}>
+                  {summary.fleetTier.icon} Fleet Rating: {summary.fleetOversightScore}% ({summary.fleetTier.tier})
+                </span>
+              </div>
+              <p className="text-3xs text-muted-foreground">Tracks completeness, operator input error rates, and requested correction approval velocity</p>
+            </div>
           </div>
-          <Button variant="outline" disabled={isFetching} onClick={() => refetch()}>
-            {isFetching ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <RefreshCw className="h-3.5 w-3.5 mr-1" />}
-            Refresh
-          </Button>
+
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 px-2.5 text-2xs gap-1.5 font-semibold bg-background"
+              onClick={exportManagerScorecardCsv}
+              title="Download full manager oversight evaluation matrix in CSV"
+            >
+              <FileDown className="h-3.5 w-3.5 text-primary" />
+              <span>Export Manager Scorecard (.csv)</span>
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={isFetching}
+              className="h-8 px-2.5 text-2xs gap-1.5"
+              onClick={handleRefresh}
+            >
+              {isFetching ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+              <span>Refresh</span>
+            </Button>
+          </div>
         </div>
-      </Card>
+
+        {/* Oversight breakdown pills */}
+        <div className="flex items-center gap-2 flex-wrap pt-2 border-t border-border/40 text-2xs">
+          <span className="text-3xs uppercase font-bold text-muted-foreground tracking-wider">Manager Appraisal Tiers:</span>
+          {MANAGER_APPRAISAL_TIERS.map((tier) => (
+            <span key={tier.tier} className={cn('inline-flex items-center gap-1 px-2 py-0.5 rounded-full border font-bold text-3xs', tier.badge)}>
+              {tier.icon} {tier.tier} (≥{tier.minScore}%)
+            </span>
+          ))}
+        </div>
+      </div>
+
+      {/* ── Controls (Period & View Mode) ── */}
+      <div className="flex flex-wrap items-center justify-between gap-2.5 p-2 rounded-xl bg-muted/40 border border-border/60">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {/* Time range selector */}
+          <div className="flex rounded-lg border bg-background overflow-hidden p-0.5 shadow-2xs">
+            {WINDOW_OPTIONS.map(({ label, value }) => (
+              <button
+                key={String(value)}
+                className={cn(
+                  'px-2.5 py-1 text-2xs font-bold rounded-md transition-all',
+                  days === value
+                    ? 'bg-primary text-primary-foreground shadow-xs'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-muted/50',
+                )}
+                onClick={() => setDays(value)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {/* View Mode */}
+          <div className="flex rounded-lg border bg-background overflow-hidden p-0.5 shadow-2xs">
+            <button
+              className={cn(
+                'flex items-center gap-1 px-2.5 py-1 text-2xs font-bold rounded-md transition-all',
+                viewBy === 'plant'
+                  ? 'bg-kpi-ro text-white shadow-xs'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-muted/50',
+              )}
+              onClick={() => setViewBy('plant')}
+            >
+              <Building2 className="h-3 w-3" /> View by Plant
+            </button>
+            <button
+              className={cn(
+                'flex items-center gap-1 px-2.5 py-1 text-2xs font-bold rounded-md transition-all',
+                viewBy === 'manager'
+                  ? 'bg-kpi-ro text-white shadow-xs'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-muted/50',
+              )}
+              onClick={() => setViewBy('manager')}
+            >
+              <Users className="h-3 w-3" /> View by Manager
+            </button>
+          </div>
+        </div>
+
+        <div className="text-2xs text-muted-foreground flex items-center gap-2">
+          <span><strong className="text-foreground">{managerRollup.length}</strong> managers</span>
+          <span>·</span>
+          <span><strong className="text-foreground">{rows.length}</strong> plants</span>
+          <span>·</span>
+          <span className={cn('font-bold', (summary.avgCompleteness ?? 0) >= 80 ? 'text-accent' : 'text-warn')}>
+            {fmtPct(summary.avgCompleteness)} Avg Completeness
+          </span>
+        </div>
+      </div>
 
       {/* Summary tiles */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <StatCard icon={Building2} label="Plants monitored" value={`${summary.monitored} / ${summary.total || 0}`}
-          tone={summary.monitored < summary.total ? 'warn' : undefined} />
-        <StatCard icon={Percent} label="Avg completeness" value={fmtPct(summary.avgCompleteness)}
-          tone={summary.avgCompleteness !== null && summary.avgCompleteness < 80 ? 'danger' : undefined} />
-        <StatCard icon={AlertTriangle} label="Open exceptions" value={summary.openExceptions.toLocaleString()}
-          tone={summary.openExceptions > 0 ? 'warn' : undefined} />
-        <StatCard icon={ShieldAlert} label="Plants needing attention" value={summary.atRisk}
-          tone={summary.atRisk > 0 ? 'danger' : undefined} />
+        <StatCard
+          icon={Building2}
+          label="Plants Monitored"
+          value={`${summary.monitored} / ${summary.total || 0}`}
+          tone={summary.monitored < summary.total ? 'warn' : undefined}
+        />
+        <StatCard
+          icon={Percent}
+          label="Avg Completeness"
+          value={fmtPct(summary.avgCompleteness)}
+          tone={summary.avgCompleteness !== null && summary.avgCompleteness < 80 ? 'danger' : undefined}
+        />
+        <StatCard
+          icon={CheckSquare}
+          label="Pending Correction Approvals"
+          value={summary.totalPendingCorrections.toLocaleString()}
+          tone={summary.totalPendingCorrections > 0 ? 'warn' : undefined}
+        />
+        <StatCard
+          icon={ShieldAlert}
+          label="Open Gaps & Exceptions"
+          value={summary.openExceptions.toLocaleString()}
+          tone={summary.openExceptions > 0 ? 'danger' : undefined}
+        />
       </div>
 
-      {/* Per-plant table */}
-      <Card className="p-3">
-        <div className="flex items-center justify-between mb-2">
+      {/* ── Main Scorecard Table ── */}
+      <Card className="p-0 border border-border/70 overflow-hidden shadow-2xs">
+        <div className="p-3 border-b bg-muted/20 flex items-center justify-between">
           <p className="text-xs text-muted-foreground">
-            Completeness/flagged-rate/gaps are scoped to the last {days} days. Open reviews and corrections are
-            current backlog as of today, not the selected window — see the tooltip on each column.
+            {viewBy === 'plant'
+              ? `Plant-level view: Evaluates data completeness, error rate, open exceptions, and requested correction approval backlog over the last ${days} days.`
+              : `Manager-level view: Evaluates each manager's direct oversight across all assigned plant facilities, operator inputs, and correction approval velocity.`}
           </p>
         </div>
+
         <DataState
           loading={isLoading}
           error={error}
-          isEmpty={sorted.length === 0}
-          emptyTitle="No plants to show"
-          onRetry={refetch}
+          isEmpty={rows.length === 0}
+          emptyTitle="No plants or managers to show"
+          onRetry={handleRefresh}
         >
-          <div className="border rounded-lg overflow-hidden text-xs">
-            {/* overflow-x-auto on this inner wrapper, not the outer
-                overflow-hidden (kept purely for the rounded-corner clipping
-                trick) — same fix as DataCorrections.tsx's three tables:
-                without it, this 6-column table doesn't just get cramped on
-                a phone, overflow-hidden silently *hides* the rightmost
-                columns with no way to scroll to them. */}
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[640px]">
-                <thead className="bg-muted/40">
+          <div className="overflow-x-auto">
+            {viewBy === 'plant' ? (
+              <table className="w-full min-w-[760px] text-xs">
+                <thead className="bg-muted/50 border-b">
                   <tr>
-                    {['Plant', 'Manager(s)', 'Completeness', 'Open exceptions', 'Error rate', 'Status'].map((h) => (
-                      <th key={h} className="text-left px-3 py-2 font-medium text-muted-foreground text-2xs uppercase tracking-wide whitespace-nowrap">
-                        {h}
-                      </th>
-                    ))}
+                    <th className="text-left px-3 py-2.5 font-bold text-xs">Plant Facility</th>
+                    <th className="text-left px-3 py-2.5 font-bold text-xs">Manager(s)</th>
+                    <th className="text-center px-3 py-2.5 font-bold text-xs bg-muted/80 border-x border-border/60">
+                      Oversight Score &amp; Rating
+                    </th>
+                    <th className="text-left px-3 py-2.5 font-bold text-xs">Completeness</th>
+                    <th className="text-center px-3 py-2.5 font-bold text-xs">Correction Approvals</th>
+                    <th className="text-center px-3 py-2.5 font-bold text-xs">Open Gaps</th>
+                    <th className="text-center px-3 py-2.5 font-bold text-xs">Error Rate</th>
+                    <th className="text-center px-3 py-2.5 font-bold text-xs">Status</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -236,15 +572,39 @@ export default function ManagerScorecard() {
                     const StatusIcon = meta.icon;
                     const oldestOpenDays = Math.max(r.open_pending_review_oldest_days, r.open_correction_oldest_days);
                     const openCount = r.unexplained_gaps_in_window + r.open_pending_review_count + r.open_correction_count;
+                    const corr = plantCorrMap[r.plant_id] ?? { pending: 0, approved: 0, rejected: 0, total: 0, oldestPendingHours: 0 };
+                    const plantOversight = computeManagerOversightScore(r.overall_completeness_pct, r.error_rate_pct, openCount, corr.pending);
+
                     return (
-                      <tr key={r.plant_id} className="border-t">
-                        <td className="px-3 py-2.5 font-medium whitespace-nowrap">{r.plant_name}</td>
+                      <tr key={r.plant_id} className="border-b hover:bg-muted/20 transition-colors">
+                        <td className="px-3 py-2.5 font-bold text-foreground whitespace-nowrap">{r.plant_name}</td>
                         <td className="px-3 py-2.5 whitespace-nowrap">
-                          {r.manager_names.length
-                            ? <span className="text-foreground/90">{r.manager_names.join(', ')}</span>
-                            : <span className="text-destructive font-medium">Unassigned</span>}
+                          {r.manager_names.length ? (
+                            <span className="font-medium text-foreground/90">{r.manager_names.join(', ')}</span>
+                          ) : (
+                            <span className="text-destructive font-semibold">Unassigned</span>
+                          )}
                         </td>
-                        <td className="px-3 py-2.5 min-w-[120px]">
+
+                        {/* Plant Oversight Score */}
+                        <td className="py-2 px-3 border-x border-border/60 bg-muted/10 text-center whitespace-nowrap">
+                          <div className="flex flex-col items-center gap-0.5">
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-extrabold text-xs text-foreground">{plantOversight.score}%</span>
+                              <span className={cn('text-3xs px-1.5 py-0.2 rounded-full border font-bold', plantOversight.tier.badge)}>
+                                {plantOversight.tier.icon} {plantOversight.tier.tier}
+                              </span>
+                            </div>
+                            <div className="w-24 h-1.5 rounded-full bg-muted overflow-hidden border border-border/50">
+                              <div
+                                className={cn('h-full transition-all', plantOversight.tier.dot)}
+                                style={{ width: `${plantOversight.score}%` }}
+                              />
+                            </div>
+                          </div>
+                        </td>
+
+                        <td className="px-3 py-2.5 min-w-[130px]">
                           <div className="flex items-center gap-2">
                             <div className="flex-1 bg-muted rounded-full h-1.5">
                               <div
@@ -252,27 +612,47 @@ export default function ManagerScorecard() {
                                 style={{ width: `${Math.max(2, r.overall_completeness_pct ?? 0)}%` }}
                               />
                             </div>
-                            <span className="tabular-nums text-muted-foreground shrink-0">{fmtPct(r.overall_completeness_pct)}</span>
+                            <span className="tabular-nums font-semibold text-foreground shrink-0">{fmtPct(r.overall_completeness_pct)}</span>
                           </div>
                         </td>
-                        <td className="px-3 py-2.5 whitespace-nowrap">
+
+                        {/* Correction Approvals Monitoring */}
+                        <td className="px-3 py-2.5 text-center whitespace-nowrap">
+                          <div className="flex items-center justify-center gap-1.5">
+                            {corr.pending > 0 ? (
+                              <span className="px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-700 dark:text-amber-300 font-bold text-3xs border border-amber-500/30">
+                                {corr.pending} pending ({corr.oldestPendingHours}h)
+                              </span>
+                            ) : (
+                              <span className="text-3xs text-muted-foreground">0 pending</span>
+                            )}
+                            <span className="text-3xs text-muted-foreground">·</span>
+                            <span className="text-3xs text-emerald-600 dark:text-emerald-400 font-medium">
+                              ✓ {corr.approved} app
+                            </span>
+                          </div>
+                        </td>
+
+                        <td className="px-3 py-2.5 text-center whitespace-nowrap">
                           {openCount > 0 ? (
-                            <span title="Unexplained gaps + pending reviews + pending correction requests">
-                              <span className="font-medium">{openCount}</span>
+                            <span title="Unexplained gaps + pending reviews" className="font-semibold text-warn">
+                              {openCount}
                               {oldestOpenDays > 0 && (
-                                <span className="text-muted-foreground"> · oldest {oldestOpenDays}d</span>
+                                <span className="text-muted-foreground font-normal text-3xs"> ({oldestOpenDays}d old)</span>
                               )}
                             </span>
                           ) : (
                             <span className="text-muted-foreground">0</span>
                           )}
                         </td>
-                        <td className="px-3 py-2.5 whitespace-nowrap">
-                          <span className={cn('font-mono', (r.error_rate_pct ?? 0) >= 10 ? 'text-destructive font-semibold' : 'text-muted-foreground')}>
+
+                        <td className="px-3 py-2.5 text-center whitespace-nowrap">
+                          <span className={cn('font-mono font-medium', (r.error_rate_pct ?? 0) >= 5 ? 'text-destructive font-bold' : 'text-muted-foreground')}>
                             {r.error_rate_pct === null ? '—' : `${r.error_rate_pct.toFixed(1)}%`}
                           </span>
                         </td>
-                        <td className="px-3 py-2.5 whitespace-nowrap">
+
+                        <td className="px-3 py-2.5 text-center whitespace-nowrap">
                           <StatusPill tone={meta.tone}>
                             <StatusIcon className="h-3 w-3" />
                             {meta.label}
@@ -283,10 +663,107 @@ export default function ManagerScorecard() {
                   })}
                 </tbody>
               </table>
-            </div>
+            ) : (
+              /* View by Manager Profile */
+              <table className="w-full min-w-[760px] text-xs">
+                <thead className="bg-muted/50 border-b">
+                  <tr>
+                    <th className="text-left px-3 py-2.5 font-bold text-xs">Manager Name</th>
+                    <th className="text-left px-3 py-2.5 font-bold text-xs">Assigned Facilities</th>
+                    <th className="text-center px-3 py-2.5 font-bold text-xs bg-muted/80 border-x border-border/60">
+                      Overall Oversight Score &amp; Appraisal Tier
+                    </th>
+                    <th className="text-left px-3 py-2.5 font-bold text-xs">Avg Completeness</th>
+                    <th className="text-center px-3 py-2.5 font-bold text-xs">Correction Approval Status</th>
+                    <th className="text-center px-3 py-2.5 font-bold text-xs">Total Monitored Logs</th>
+                    <th className="text-center px-3 py-2.5 font-bold text-xs">Open Exceptions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {managerRollup.map((m) => (
+                    <tr key={m.name} className="border-b hover:bg-muted/20 transition-colors">
+                      <td className="px-3 py-2.5 whitespace-nowrap font-bold text-foreground">
+                        <div className="flex items-center gap-1.5">
+                          <UserCheck className="h-4 w-4 text-primary shrink-0" />
+                          <span>{m.name}</span>
+                        </div>
+                      </td>
+
+                      <td className="px-3 py-2.5">
+                        <div className="flex flex-wrap gap-1 max-w-[200px]">
+                          {m.plants.map((p) => (
+                            <span key={p} className="px-1.5 py-0.2 rounded bg-muted text-3xs font-semibold text-foreground border border-border/60">
+                              {p}
+                            </span>
+                          ))}
+                        </div>
+                      </td>
+
+                      {/* Manager Oversight Score */}
+                      <td className="py-2 px-3 border-x border-border/60 bg-muted/10 text-center whitespace-nowrap">
+                        <div className="flex flex-col items-center gap-0.5">
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-extrabold text-xs text-foreground">{m.oversightScore}%</span>
+                            <span className={cn('text-3xs px-2 py-0.5 rounded-full border font-bold', m.tier.badge)}>
+                              {m.tier.icon} {m.tier.tier}
+                            </span>
+                          </div>
+                          <div className="w-28 h-1.5 rounded-full bg-muted overflow-hidden border border-border/50">
+                            <div
+                              className={cn('h-full transition-all', m.tier.dot)}
+                              style={{ width: `${m.oversightScore}%` }}
+                            />
+                          </div>
+                        </div>
+                      </td>
+
+                      <td className="px-3 py-2.5 min-w-[130px]">
+                        <div className="flex items-center gap-2">
+                          <div className="flex-1 bg-muted rounded-full h-1.5">
+                            <div
+                              className={cn('h-1.5 rounded-full', pctColor(m.avgCompleteness))}
+                              style={{ width: `${Math.max(2, m.avgCompleteness ?? 0)}%` }}
+                            />
+                          </div>
+                          <span className="tabular-nums font-semibold text-foreground shrink-0">{fmtPct(m.avgCompleteness)}</span>
+                        </div>
+                      </td>
+
+                      {/* Manager's Correction Approvals */}
+                      <td className="px-3 py-2.5 text-center whitespace-nowrap">
+                        <div className="flex items-center justify-center gap-1.5">
+                          {m.pendingCorrections > 0 ? (
+                            <span className="px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-700 dark:text-amber-300 font-bold text-3xs border border-amber-500/30">
+                              {m.pendingCorrections} pending
+                            </span>
+                          ) : (
+                            <span className="text-3xs text-emerald-600 font-bold">0 pending backlog</span>
+                          )}
+                          <span className="text-3xs text-muted-foreground">·</span>
+                          <span className="text-3xs text-muted-foreground">
+                            ✓ {m.approvedCorrections} / ✗ {m.rejectedCorrections}
+                          </span>
+                        </div>
+                      </td>
+
+                      <td className="px-3 py-2.5 text-center whitespace-nowrap font-mono font-medium text-foreground">
+                        {m.totalReadings.toLocaleString()}
+                      </td>
+
+                      <td className="px-3 py-2.5 text-center whitespace-nowrap">
+                        <span className={cn('font-semibold', m.openExceptions > 0 ? 'text-warn' : 'text-muted-foreground')}>
+                          {m.openExceptions}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
           </div>
         </DataState>
       </Card>
     </div>
   );
 }
+

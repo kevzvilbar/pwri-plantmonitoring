@@ -39,7 +39,9 @@ import {
   CheckCircle2, XCircle, AlertCircle, RefreshCw, Loader2,
   ChevronDown, ChevronUp, ClipboardCheck, Inbox, History,
   Users, ArrowRight, Pencil, Search, ShieldAlert, Gauge,
+  AlertTriangle, CheckSquare, Sparkles, FileText,
 } from 'lucide-react';
+import { StatCard } from '@/components/dashboard/StatCard';
 import { cn } from '@/lib/utils';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -1033,58 +1035,133 @@ function PendingReviewTab() {
         </div>
       )}
 
-      {/* Item 8: Operator correction requests */}
+      {/* Item 8: Operator correction requests with quick-reason presets and visual diff */}
       {corrReqs.length > 0 && (
-        <div className="space-y-2 pb-1">
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide px-1">
-            Operator correction requests ({corrReqs.length})
-          </p>
-          {corrReqs.map(req => (
-            <Card key={req.id} className="p-4 border-info/40 bg-info-soft/20">
-              <div className="space-y-2">
-                <div className="flex items-start justify-between gap-2 flex-wrap">
-                  <div>
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className="text-sm font-medium">{tableLabel[req.source_table]}</span>
-                      <Badge variant="outline" className="text-2xs px-1.5 py-0">{req.plant_name}</Badge>
-                      <span className="text-2xs px-1.5 py-0.5 rounded font-medium bg-info-soft text-info">
-                        Operator request
-                      </span>
-                    </div>
-                    <div className="text-xs text-muted-foreground mt-0.5">
-                      {req.submitter_email} · {fmtDt(req.created_at)}
+        <div className="space-y-2.5 pb-2">
+          <div className="flex items-center justify-between px-1">
+            <div className="flex items-center gap-2">
+              <p className="text-xs font-bold text-foreground uppercase tracking-wide">
+                Operator Correction Requests
+              </p>
+              <Badge className="h-5 px-2 text-3xs font-bold bg-amber-500 text-white animate-pulse">
+                {corrReqs.length} Awaiting Approval
+              </Badge>
+            </div>
+            <span className="text-3xs text-muted-foreground">Action required by Manager or Admin</span>
+          </div>
+
+          <div className="grid gap-3">
+            {corrReqs.map(req => {
+              const diff = req.proposed_value - req.original_value;
+              const isPositive = diff > 0;
+              const hasDiff = diff !== 0;
+
+              return (
+                <Card key={req.id} className="p-4 border-amber-500/40 bg-amber-500/5 shadow-2xs space-y-3">
+                  <div className="flex items-start justify-between gap-2 flex-wrap">
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs font-bold text-foreground">{tableLabel[req.source_table]}</span>
+                        <Badge variant="outline" className="text-3xs px-2 py-0 font-bold border-amber-500/40 bg-background">
+                          {req.plant_name}
+                        </Badge>
+                        <span className="text-3xs px-2 py-0.5 rounded-full font-bold bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30">
+                          Operator Requested
+                        </span>
+                      </div>
+                      <div className="text-3xs text-muted-foreground mt-1 flex items-center gap-1.5">
+                        <span>Submitted by <strong className="text-foreground">{req.submitter_email}</strong></span>
+                        <span>·</span>
+                        <span>{fmtDt(req.created_at)}</span>
+                      </div>
                     </div>
                   </div>
-                </div>
-                <div className="grid grid-cols-3 gap-3 text-xs">
-                  <div><div className="text-muted-foreground">Original</div><div className="font-mono font-medium text-warn">{fmtNum(req.original_value)}</div></div>
-                  <div>
-                    <div className="text-muted-foreground flex items-center gap-1"><ArrowRight className="h-2.5 w-2.5" />Proposed</div>
-                    <div className="font-mono font-medium text-accent">{fmtNum(req.proposed_value)}</div>
+
+                  {/* Side-by-side Visual Diff */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-2.5 rounded-lg bg-background/80 border border-border/60 text-xs">
+                    <div>
+                      <div className="text-3xs uppercase font-bold text-muted-foreground tracking-wider">Original Recorded</div>
+                      <div className="font-mono font-bold text-sm text-destructive mt-0.5">{fmtNum(req.original_value)}</div>
+                    </div>
+                    <div>
+                      <div className="text-3xs uppercase font-bold text-muted-foreground tracking-wider flex items-center gap-1">
+                        <ArrowRight className="h-3 w-3 text-primary" /> Proposed New Value
+                      </div>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span className="font-mono font-bold text-sm text-accent">{fmtNum(req.proposed_value)}</span>
+                        {hasDiff && (
+                          <span className={cn('text-3xs font-mono font-bold px-1.5 py-0.2 rounded',
+                            isPositive ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400' : 'bg-rose-500/15 text-rose-600 dark:text-rose-400')}>
+                            {isPositive ? `+${fmtNum(diff)}` : fmtNum(diff)}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-3xs uppercase font-bold text-muted-foreground tracking-wider">Operator Reason</div>
+                      <div className="text-xs font-semibold text-foreground mt-0.5 leading-snug">{req.reason}</div>
+                    </div>
                   </div>
-                  <div><div className="text-muted-foreground">Reason</div><div className="text-xs leading-tight">{req.reason}</div></div>
-                </div>
-                {req.note && <p className="text-xs text-muted-foreground italic">"{req.note}"</p>}
-                <div className="flex gap-2 items-center flex-wrap">
-                  <Input
-                    placeholder="Reason for rejection (required to reject)…"
-                    value={reqNotes[req.id] ?? ''}
-                    onChange={e => setReqNotes(p => ({ ...p, [req.id]: e.target.value }))}
-                    className="h-7 text-xs flex-1 min-w-[180px]"
-                  />
-                  <Button size="sm" variant="outline" className="h-7 gap-1 text-xs border-accent/40 text-accent hover:bg-accent-soft"
-                    onClick={() => approveRequest(req)}>
-                    <CheckCircle2 className="h-3 w-3" />Apply correction
-                  </Button>
-                  <Button size="sm" variant="outline" className="h-7 gap-1 text-xs border-destructive/40 text-destructive hover:bg-destructive/5"
-                    disabled={!reqNotes[req.id]?.trim()}
-                    onClick={() => rejectRequest(req, reqNotes[req.id] ?? '')}>
-                    <XCircle className="h-3 w-3" />Reject
-                  </Button>
-                </div>
-              </div>
-            </Card>
-          ))}
+
+                  {req.note && (
+                    <div className="text-xs text-muted-foreground bg-muted/40 p-2 rounded border border-border/40 italic">
+                      "{req.note}"
+                    </div>
+                  )}
+
+                  {/* Action & Preset Rejection Reason Row */}
+                  <div className="space-y-2 pt-1 border-t border-border/40">
+                    <div className="flex gap-2 items-center flex-wrap">
+                      <Input
+                        placeholder="Rejection explanation (required to reject)…"
+                        value={reqNotes[req.id] ?? ''}
+                        onChange={e => setReqNotes(p => ({ ...p, [req.id]: e.target.value }))}
+                        className="h-8 text-xs flex-1 min-w-[200px] bg-background"
+                      />
+                      <Button
+                        size="sm"
+                        className="h-8 gap-1.5 text-xs font-bold bg-accent text-accent-foreground hover:bg-accent/90"
+                        onClick={() => approveRequest(req)}
+                      >
+                        <CheckCircle2 className="h-3.5 w-3.5" />
+                        <span>Approve &amp; Apply</span>
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-8 gap-1.5 text-xs font-bold border-destructive/40 text-destructive hover:bg-destructive/10"
+                        disabled={!reqNotes[req.id]?.trim()}
+                        onClick={() => rejectRequest(req, reqNotes[req.id] ?? '')}
+                      >
+                        <XCircle className="h-3.5 w-3.5" />
+                        <span>Reject</span>
+                      </Button>
+                    </div>
+
+                    {/* Quick preset reason chips */}
+                    <div className="flex items-center gap-1.5 flex-wrap text-3xs">
+                      <span className="text-muted-foreground font-semibold">Quick rejection presets:</span>
+                      {[
+                        'Verified accurate against field logbook',
+                        'Exceeds plausibility threshold',
+                        'Duplicate correction request',
+                        'Requires meter replacement flow',
+                      ].map((preset) => (
+                        <button
+                          key={preset}
+                          type="button"
+                          className="px-2 py-0.5 rounded-md bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground border border-border/60 transition-colors"
+                          onClick={() => setReqNotes(p => ({ ...p, [req.id]: preset }))}
+                        >
+                          + {preset}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </Card>
+              );
+            })}
+          </div>
         </div>
       )}
 
@@ -1593,7 +1670,7 @@ function OperatorStatsTab() {
   );
 }
 
-// ── Pending count hook (for tab badge) ────────────────────────────────────────
+// ── Summary hooks ─────────────────────────────────────────────────────────────
 
 function usePendingCount() {
   return useQuery({
@@ -1609,11 +1686,45 @@ function usePendingCount() {
   });
 }
 
+function useCorrectionRequestsCount() {
+  return useQuery({
+    queryKey: ['correction-requests-pending-count'],
+    queryFn: async () => {
+      const { count } = await (supabase
+        .from('correction_requests' as any)
+        .select('id', { count: 'exact', head: true })
+        .eq('status', 'pending') as any);
+      return count ?? 0;
+    },
+    refetchInterval: 60_000,
+  });
+}
+
+function useInboxCount() {
+  return useQuery({
+    queryKey: ['correction-inbox-count'],
+    queryFn: async () => {
+      const tables = ['locator_readings', 'well_readings', 'product_meter_readings'];
+      const counts = await Promise.all(tables.map(t =>
+        (supabase.from(t as any)
+          .select('id', { count: 'exact', head: true })
+          .eq('norm_status', 'normal')
+          .lt('daily_volume', 0)
+          .eq('is_meter_replacement', false) as any)
+      ));
+      return counts.reduce((sum, r) => sum + (r.count ?? 0), 0);
+    },
+    staleTime: 60_000,
+  });
+}
+
 // ── Page root ─────────────────────────────────────────────────────────────────
 
 export default function DataCorrections() {
   const { isAdmin, isManager, isDataAnalyst } = useAuth();
   const { data: pendingCount = 0 } = usePendingCount();
+  const { data: corrReqsCount = 0 } = useCorrectionRequestsCount();
+  const { data: inboxCount = 0 } = useInboxCount();
 
   if (!isAdmin && !isManager && !isDataAnalyst) {
     return (
@@ -1630,32 +1741,65 @@ export default function DataCorrections() {
   return (
     <div className="space-y-4 animate-fade-in">
       <PageHeader
-        title="Data Corrections"
-        subtitle="Review flagged readings, correct values, retract errors, and track operator accuracy — all in one place."
+        title="Data Corrections & Review Hub"
+        subtitle="Review flagged readings, approve operator requested corrections, retract errors, and track data quality in one place."
       />
+
+      {/* ── Summary Tiles ── */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <StatCard
+          icon={ClipboardCheck}
+          label="Pending Flagged Readings"
+          value={pendingCount.toLocaleString()}
+          tone={pendingCount > 0 ? 'warn' : undefined}
+        />
+        <StatCard
+          icon={CheckSquare}
+          label="Operator Requests Awaiting Approval"
+          value={corrReqsCount.toLocaleString()}
+          tone={corrReqsCount > 0 ? 'danger' : undefined}
+        />
+        <StatCard
+          icon={Inbox}
+          label="Active Backward Anomalies"
+          value={inboxCount.toLocaleString()}
+          tone={inboxCount > 0 ? 'warn' : undefined}
+        />
+        <StatCard
+          icon={CheckCircle2}
+          label="Review Pipeline Status"
+          value={pendingCount === 0 && corrReqsCount === 0 ? 'All Clear' : 'Action Required'}
+          tone={pendingCount === 0 && corrReqsCount === 0 ? 'accent' : 'warn'}
+        />
+      </div>
 
       <Tabs defaultValue="pending">
         <TabsList className="grid grid-cols-2 sm:grid-cols-4 gap-1 h-auto sm:h-10 w-full">
           <TabsTrigger value="pending" className="gap-1.5 text-xs">
             <ClipboardCheck className="h-3.5 w-3.5" />
-            Pending
-            {pendingCount > 0 && (
+            Pending Reviews
+            {(pendingCount > 0 || corrReqsCount > 0) && (
               <Badge className="ml-1 h-4 min-w-4 px-1 text-2xs bg-destructive text-destructive-foreground">
-                {pendingCount}
+                {pendingCount + corrReqsCount}
               </Badge>
             )}
           </TabsTrigger>
           <TabsTrigger value="inbox" className="gap-1.5 text-xs">
             <Inbox className="h-3.5 w-3.5" />
             Inbox
+            {inboxCount > 0 && (
+              <Badge className="ml-1 h-4 min-w-4 px-1 text-2xs bg-warn text-warn-foreground">
+                {inboxCount}
+              </Badge>
+            )}
           </TabsTrigger>
           <TabsTrigger value="history" className="gap-1.5 text-xs">
             <History className="h-3.5 w-3.5" />
-            History
+            History &amp; Audits
           </TabsTrigger>
           <TabsTrigger value="operators" className="gap-1.5 text-xs">
             <Users className="h-3.5 w-3.5" />
-            Operators
+            Operator Accuracy
           </TabsTrigger>
         </TabsList>
 
