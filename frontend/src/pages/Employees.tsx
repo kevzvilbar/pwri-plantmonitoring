@@ -9,7 +9,7 @@ import {
   GitBranch, Check, CheckCheck,
   Search, BarChart2, ChevronLeft, Info,
   Crown, Briefcase, Cog, UserCircle,
-  RefreshCw, ZoomIn, LayoutGrid, List, Layers, Sparkles, Filter,
+  RefreshCw, ZoomIn, LayoutGrid, List, Layers, Sparkles, Filter, Download, FileDown, Award,
 } from 'lucide-react';
 import { BookReader } from '@/components/manual/BookReader';
 import { BOOK_PARTS } from '@/components/manual/bookChapters';
@@ -25,6 +25,7 @@ import { Input } from '@/components/ui/input';
 import { DeleteEntityMenu } from '@/components/DeleteEntityMenu';
 import { fmtIsoDate } from '@/lib/format';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -1317,8 +1318,66 @@ function OrgChart({ staff, roles, plants }: { staff: StaffMember[]; roles: any[]
 //     single-handedly hit 100% unless duties genuinely aren't split.
 // ---------------------------------------------------------------------------
 
-type KpiRange2 = 'today' | 7 | 14 | 30;
+type KpiRange2 = 'today' | 7 | 14 | 30 | 90 | 365;
 type KpiViewMode = 'team' | 'individual';
+
+// ── Appraisal Rating System (for Annual & Quarterly Performance Reviews) ──
+export type AppraisalTier = {
+  tier: string;
+  badge: string;
+  dot: string;
+  icon: string;
+  minScore: number;
+  description: string;
+};
+
+export const APPRAISAL_TIERS: AppraisalTier[] = [
+  { tier: 'Outstanding', badge: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/40', dot: 'bg-emerald-500', icon: '🏆', minScore: 90, description: 'Exemplary operational logging compliance' },
+  { tier: 'Exceeds Expectations', badge: 'bg-teal-500/15 text-teal-700 dark:text-teal-300 border-teal-500/40', dot: 'bg-teal-500', icon: '⭐', minScore: 80, description: 'Consistently surpasses standard logging targets' },
+  { tier: 'Meets Target', badge: 'bg-sky-500/15 text-sky-700 dark:text-sky-300 border-sky-500/40', dot: 'bg-sky-500', icon: '✓', minScore: 70, description: 'Meets operational logging expectations' },
+  { tier: 'Needs Improvement', badge: 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/40', dot: 'bg-amber-500', icon: '⚠️', minScore: 50, description: 'Below standard compliance targets' },
+  { tier: 'Unsatisfactory', badge: 'bg-rose-500/15 text-rose-700 dark:text-rose-300 border-rose-500/40', dot: 'bg-rose-500', icon: '❌', minScore: 0, description: 'Critical gaps in operational logs' },
+];
+
+export function getAppraisalTier(scorePct: number): AppraisalTier {
+  for (const t of APPRAISAL_TIERS) {
+    if (scorePct >= t.minScore) return t;
+  }
+  return APPRAISAL_TIERS[APPRAISAL_TIERS.length - 1];
+}
+
+// Computes overall weighted KPI score across all active categories and days in range
+export function computeEntityOverallScore(ts: EntityTypeScore, days: string[], todayStr: string): {
+  scorePct: number;
+  totalValid: number;
+  totalComplete: number;
+  tier: AppraisalTier;
+} {
+  let scoreSum = 0;
+  let scoreCount = 0;
+  let totalComplete = 0;
+
+  for (const col of INPUT_COLS) {
+    const dayMap = ts[col.key];
+    if (!dayMap) continue;
+    for (const day of days) {
+      const s = dayMap[day];
+      if (s === null || s === undefined) continue;
+      scoreCount++;
+      const val = typeof s === 'number' ? Math.min(1, Math.max(0, s)) : 0;
+      scoreSum += val;
+      if (val >= 1.0) totalComplete++;
+    }
+  }
+
+  const scorePct = scoreCount > 0 ? Math.round((scoreSum / scoreCount) * 100) : 0;
+  return {
+    scorePct,
+    totalValid: scoreCount,
+    totalComplete,
+    tier: getAppraisalTier(scorePct),
+  };
+}
 
 // Each input type column definition — same 7-category taxonomy as the
 // app's kpi-* dashboard tokens (Wells/Locator/RO/Meter/Solar/Grid/Chem),
@@ -1377,16 +1436,12 @@ function scoreStatus(s: DayScore2, isToday = false): keyof typeof KPI_STATUS {
 function scoreColor(s: DayScore2, isToday = false) { return KPI_STATUS[scoreStatus(s, isToday)].color; }
 
 function generateDays2(range: KpiRange2): string[] {
-  // Manila calendar days, not UTC — toISOString() always reports the UTC
-  // date, which runs up to 8h behind Asia/Manila. For the first ~8 hours of
-  // every Manila day (00:00–07:59), that made "today" resolve to yesterday
-  // and pushed the whole rolling window back a day. Same root cause as the
-  // reading_datetime bucketing below — see EntityHistoryChart.tsx.
   if (range === 'today') {
     return [fmtIsoDate(new Date())];
   }
+  const count = typeof range === 'number' ? range : 30;
   const days: string[] = [];
-  for (let i = range - 1; i >= 0; i--) {
+  for (let i = count - 1; i >= 0; i--) {
     const d = new Date(); d.setDate(d.getDate() - i);
     days.push(fmtIsoDate(d));
   }
@@ -1862,79 +1917,225 @@ function KpiTab({ staff, roles, plants }: { staff: StaffMember[]; roles: any[]; 
     { label: '7D',    value: 7 },
     { label: '14D',   value: 14 },
     { label: '30D',   value: 30 },
+    { label: '90D (Qtr)', value: 90 },
+    { label: 'Annual (YTD)', value: 365 },
   ];
 
+  // Appraisal CSV export generator for HR / Annual Review
+  const exportAppraisalCsv = () => {
+    const headers = [
+      'Operator Name', 'Username', 'Plant',
+      'Wells %', 'Locator %', 'RO Train %', 'Prod Meter %', 'Solar %', 'Grid %', 'Chemicals %',
+      'Overall KPI Score %', 'Appraisal Rating Tier', 'Period Range',
+    ];
+    const rows: string[][] = [];
+
+    plantsWithOps.forEach((plant) => {
+      const plantOps = operators.filter((op) => op.plant_assignments?.includes(plant.id));
+      plantOps.forEach((op) => {
+        const matKey = `${op.id}:${plant.id}`;
+        const ts = individual[matKey] ?? {};
+        const overall = computeEntityOverallScore(ts, days, todayStr);
+
+        const catScores = INPUT_COLS.map((col) => {
+          const dayMap = ts[col.key] ?? {};
+          const validDays = days.map((d) => dayMap[d]).filter((s): s is number => typeof s === 'number');
+          if (!validDays.length) return 'N/A';
+          const avg = Math.round((validDays.reduce((a, b) => a + b, 0) / validDays.length) * 100);
+          return `${avg}%`;
+        });
+
+        rows.push([
+          `"${fullName(op)}"`,
+          `"${op.username ?? ''}"`,
+          `"${plant.name}"`,
+          ...catScores.map((s) => `"${s}"`),
+          `"${overall.scorePct}%"`,
+          `"${overall.tier.tier}"`,
+          `"${range === 'today' ? 'Today' : `${range} Days`}"`,
+        ]);
+      });
+    });
+
+    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `operator_annual_appraisal_kpi_${range}_${todayStr}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast.success('Annual appraisal KPI report exported successfully.');
+  };
+
+  // Pre-calculate appraisal breakdown for summary
+  const appraisalStats = useMemo(() => {
+    let outstanding = 0, exceeds = 0, meets = 0, needsImp = 0, unsat = 0;
+    const operatorScores: { op: StaffMember; plantName: string; scorePct: number; tier: AppraisalTier }[] = [];
+
+    plantsWithOps.forEach((plant) => {
+      const plantOps = operators.filter((op) => op.plant_assignments?.includes(plant.id));
+      plantOps.forEach((op) => {
+        const matKey = `${op.id}:${plant.id}`;
+        const ts = individual[matKey] ?? {};
+        const overall = computeEntityOverallScore(ts, days, todayStr);
+        operatorScores.push({ op, plantName: plant.name, scorePct: overall.scorePct, tier: overall.tier });
+
+        if (overall.scorePct >= 90) outstanding++;
+        else if (overall.scorePct >= 80) exceeds++;
+        else if (overall.scorePct >= 70) meets++;
+        else if (overall.scorePct >= 50) needsImp++;
+        else unsat++;
+      });
+    });
+
+    const avgScore = operatorScores.length > 0
+      ? Math.round(operatorScores.reduce((a, b) => a + b.scorePct, 0) / operatorScores.length)
+      : 0;
+
+    return { outstanding, exceeds, meets, needsImp, unsat, avgScore, totalEvaluated: operatorScores.length };
+  }, [plantsWithOps, operators, individual, days, todayStr]);
+
   return (
-    <div className="space-y-3">
+    <div className="space-y-3.5">
+      {/* ── Annual Appraisal Overview Strip ── */}
+      <div className="p-3.5 rounded-xl border border-border/70 bg-card/80 backdrop-blur-sm space-y-2.5 shadow-2xs">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+          <div className="flex items-center gap-2.5">
+            <div className="h-9 w-9 rounded-xl bg-primary-soft text-primary flex items-center justify-center shrink-0">
+              <Award className="h-5 w-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-xs font-bold text-foreground">Operational KPI & Appraisal Index</h3>
+                <span className={cn('text-3xs font-bold px-2 py-0.5 rounded-full border', getAppraisalTier(appraisalStats.avgScore).badge)}>
+                  {getAppraisalTier(appraisalStats.avgScore).icon} Fleet Avg: {appraisalStats.avgScore}%
+                </span>
+              </div>
+              <p className="text-3xs text-muted-foreground">Comprehensive weighted logging compliance for operator evaluations</p>
+            </div>
+          </div>
 
-      {/* Controls */}
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="flex rounded-lg border overflow-hidden">
-          {RANGES.map(({ label, value }) => (
-            <button key={String(value)}
-              className={cn('px-3 py-1.5 text-xs font-medium transition-colors',
-                range === value ? 'bg-info text-white' : 'hover:bg-muted')}
-              onClick={() => setRange(value)}>
-              {label}
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 px-2.5 text-2xs gap-1.5 font-semibold bg-background"
+              onClick={exportAppraisalCsv}
+              title="Download full operator appraisal matrix in CSV"
+            >
+              <FileDown className="h-3.5 w-3.5 text-primary" />
+              <span>Export Appraisal CSV</span>
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 w-8 p-0"
+              onClick={() => setRefreshKey((k) => k + 1)}
+              title="Refresh matrix"
+            >
+              <RefreshCw className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        </div>
+
+        {/* Appraisal tier breakdown bar */}
+        <div className="flex items-center gap-2 flex-wrap pt-2 border-t border-border/40 text-2xs">
+          <span className="text-3xs uppercase font-bold text-muted-foreground tracking-wider">Appraisal Tiers:</span>
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 font-bold">
+            🏆 Outstanding (≥90%): {appraisalStats.outstanding}
+          </span>
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-teal-500/10 text-teal-600 dark:text-teal-400 border border-teal-500/30 font-bold">
+            ⭐ Exceeds (80-89%): {appraisalStats.exceeds}
+          </span>
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/30 font-bold">
+            ✓ Meets (70-79%): {appraisalStats.meets}
+          </span>
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/30 font-bold">
+            ⚠️ Needs Imp (&lt;70%): {appraisalStats.needsImp + appraisalStats.unsat}
+          </span>
+        </div>
+      </div>
+
+      {/* ── Controls (Period & View Mode) ── */}
+      <div className="flex flex-wrap items-center justify-between gap-2.5 p-2 rounded-xl bg-muted/40 border border-border/60">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {/* Time range selector */}
+          <div className="flex rounded-lg border bg-background overflow-hidden p-0.5 shadow-2xs">
+            {RANGES.map(({ label, value }) => (
+              <button
+                key={String(value)}
+                className={cn(
+                  'px-2.5 py-1 text-2xs font-bold rounded-md transition-all',
+                  range === value
+                    ? 'bg-primary text-primary-foreground shadow-xs'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-muted/50',
+                )}
+                onClick={() => setRange(value)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {/* Mode switch */}
+          <div className="flex rounded-lg border bg-background overflow-hidden p-0.5 shadow-2xs">
+            <button
+              className={cn(
+                'flex items-center gap-1 px-2.5 py-1 text-2xs font-bold rounded-md transition-all',
+                viewMode === 'team'
+                  ? 'bg-kpi-ro text-white shadow-xs'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-muted/50',
+              )}
+              onClick={() => setViewMode('team')}
+            >
+              <Building2 className="h-3 w-3" /> Team Coverage
             </button>
-          ))}
+            <button
+              className={cn(
+                'flex items-center gap-1 px-2.5 py-1 text-2xs font-bold rounded-md transition-all',
+                viewMode === 'individual'
+                  ? 'bg-kpi-ro text-white shadow-xs'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-muted/50',
+              )}
+              onClick={() => setViewMode('individual')}
+            >
+              <User className="h-3 w-3" /> Individual Activity
+            </button>
+          </div>
         </div>
 
-        <div className="flex rounded-lg border overflow-hidden">
-          <button
-            className={cn('flex items-center gap-1 px-3 py-1.5 text-xs font-medium transition-colors',
-              viewMode === 'team' ? 'bg-kpi-ro text-white' : 'hover:bg-muted')}
-            onClick={() => setViewMode('team')}>
-            <Building2 className="h-3 w-3" /> Team Coverage
-          </button>
-          <button
-            className={cn('flex items-center gap-1 px-3 py-1.5 text-xs font-medium transition-colors',
-              viewMode === 'individual' ? 'bg-kpi-ro text-white' : 'hover:bg-muted')}
-            onClick={() => setViewMode('individual')}>
-            <User className="h-3 w-3" /> Individual Activity
-          </button>
-        </div>
-
-        <div className="text-xs text-muted-foreground">
+        <div className="text-2xs text-muted-foreground flex items-center gap-2">
           {viewMode === 'team' ? (
-            <><span className="font-semibold text-foreground">{plantsWithOps.length}</span> plants ·{' '}</>
+            <span><strong className="text-foreground">{plantsWithOps.length}</strong> plants</span>
           ) : (
-            <><span className="font-semibold text-foreground">{operators.length}</span> operators ·{' '}</>
+            <span><strong className="text-foreground">{operators.length}</strong> evaluated operators</span>
           )}
-          <span className={cn('font-semibold',
-            summary.pct >= 80 ? 'text-accent' : summary.pct >= 50 ? 'text-warn' : 'text-danger')}>
-            {summary.pct}%
-          </span>{' '}{viewMode === 'team' ? 'covered' : 'logged (of full plant target)'}
+          <span>·</span>
+          <span className={cn('font-bold', summary.pct >= 80 ? 'text-accent' : summary.pct >= 50 ? 'text-warn' : 'text-danger')}>
+            {summary.pct}% Overall Logging Rate
+          </span>
         </div>
-
-        <div className="flex-1" />
-        <Button size="sm" variant="outline" className="h-7 gap-1.5 text-xs"
-          onClick={() => setRefreshKey((k) => k + 1)}>
-          <RefreshCw className="h-3 w-3" /> Refresh
-        </Button>
       </div>
 
       {/* Legend */}
       <KpiLegend2 />
 
       {/* Info banner */}
-      <div className="flex items-start gap-2 bg-info-soft border border-info rounded-lg px-3 py-2 text-xs text-info">
-        <Info className="h-3.5 w-3.5 mt-0.5 shrink-0" />
-        <span>
+      <div className="flex items-start gap-2 bg-info-soft border border-info/40 rounded-xl px-3.5 py-2.5 text-xs text-info shadow-2xs">
+        <Info className="h-4 w-4 mt-0.5 shrink-0" />
+        <span className="leading-relaxed">
           {viewMode === 'team' ? (
-            <><strong>Team Coverage.</strong> Was each asset logged by <em>anyone</em> that day — operator or automated feed? This is the plant-level "is it being monitored" view and isn't affected by how work is split across operators.</>
+            <><strong>Team Coverage Lens:</strong> Verifies if each asset was logged by anyone on schedule (operator shift or automated feed). This evaluates overall plant compliance.</>
           ) : (
-            <><strong>Individual Activity.</strong> Each operator is scored against the plant's <em>full</em> daily target — on plants with several operators sharing the round, nobody is expected to single-handedly reach 100% unless duties aren't actually split. Use Team Coverage for the "is it getting done" answer.</>
+            <><strong>Individual Activity Lens (Annual Appraisal Metric):</strong> Evaluates individual operator diligence across all logging responsibilities. The <strong>Overall Appraisal KPI</strong> score provides a weighted percentage and rating tier (🏆 Outstanding to ❌ Unsatisfactory) for annual appraisals.</>
           )}
-          {' '}Targets per day: Wells ≥1/well · Locator ≥1/locator (pre-treatment &amp; RO) · RO Train {DEFAULT_RO_HOURLY_TARGET}/train (prorated by elapsed hours for today — verify against actual SOP) · Prod. Meter ≥1/meter · Solar/Grid ≥1 if applicable · Chemicals ≥1 log.
-          {' '}Today's cells read <strong>Pending</strong>, not Missed, until the day ends.
-          {viewMode === 'individual' && ' Click a plant row to expand its operators.'}
-          {range !== 'today' && ' Each cell is a day-by-day mini heatmap.'}
+          {' '}Targets: Wells ≥1/well/day · Locators ≥1/day · RO Train {DEFAULT_RO_HOURLY_TARGET}/train/day · Prod. Meters ≥1/day · Power ≥1/day · Chemicals ≥1/day.
         </span>
       </div>
 
-      {/* Matrix table */}
-      <Card className="overflow-auto p-0">
+      {/* ── Matrix Table with Overall Score Column ── */}
+      <Card className="overflow-hidden border border-border/70 shadow-2xs">
         <DataState
           loading={isLoading}
           error={kpiError}
@@ -1942,154 +2143,246 @@ function KpiTab({ staff, roles, plants }: { staff: StaffMember[]; roles: any[]; 
           emptyTitle="No operators assigned to any plant."
           onRetry={retryKpiQueries}
         >
-          <table className="w-full border-collapse text-xs">
-            {/* Column headers */}
-            <thead>
-              <tr className="border-b bg-muted/50">
-                <th className="text-left px-3 py-2 font-semibold text-xs sticky left-0 bg-muted/50 z-10 min-w-[148px] max-w-[148px]">
-                  {viewMode === 'team' ? 'Plant' : 'Operator'}
-                </th>
-                {INPUT_COLS.map((col) => (
-                  <th key={col.key} className="py-2 px-1 font-semibold text-center">
-                    <span
-                      className="inline-block px-2 py-0.5 rounded text-white text-3xs font-bold whitespace-nowrap"
-                      style={{ background: col.color }}>
-                      {col.label}
-                    </span>
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse text-xs">
+              {/* Column headers */}
+              <thead>
+                <tr className="border-b bg-muted/60">
+                  <th className="text-left px-3 py-2.5 font-bold text-xs sticky left-0 bg-muted/60 z-10 min-w-[170px]">
+                    {viewMode === 'team' ? 'Plant Facility' : 'Operator / Facility'}
                   </th>
-                ))}
-              </tr>
-            </thead>
+                  {/* Overall KPI Column */}
+                  <th className="py-2.5 px-3 font-bold text-center bg-muted/80 border-x border-border/60 min-w-[140px]">
+                    <div className="flex flex-col items-center">
+                      <span className="text-2xs font-extrabold uppercase tracking-wide text-foreground">Overall KPI Score</span>
+                      <span className="text-[10px] text-muted-foreground font-normal">Appraisal Rating</span>
+                    </div>
+                  </th>
+                  {INPUT_COLS.map((col) => (
+                    <th key={col.key} className="py-2.5 px-1 font-semibold text-center">
+                      <span
+                        className="inline-block px-2 py-0.5 rounded text-white text-3xs font-bold whitespace-nowrap shadow-2xs"
+                        style={{ background: col.color }}
+                      >
+                        {col.label}
+                      </span>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
 
-            <tbody>
-              {viewMode === 'team' ? (
-                plantsWithOps.map((plant, pi) => {
-                  const accent = PLANT_COLUMN_ACCENTS[pi % PLANT_COLUMN_ACCENTS.length];
-                  const ts = teamCoverage[plant.id] ?? {};
-                  return (
-                    <tr key={`team:${plant.id}`} className="border-b hover:bg-muted/20 transition-colors">
-                      <td className="px-3 py-1 sticky left-0 z-10 bg-background"
-                        style={{ borderLeft: `2px solid ${accent.line}` }}>
-                        <div className="flex items-center gap-1.5">
-                          <Building2 className={cn('h-3 w-3 shrink-0', accent.text)} />
-                          <span className={cn('font-semibold text-xs', accent.text)}>{plant.name}</span>
-                        </div>
-                      </td>
-                      {INPUT_COLS.map((col) => (
-                        <td key={col.key} className="py-0 px-0 align-middle">
-                          <MiniHeatmap
-                            scores={(ts[col.key] ?? {}) as ScoreMap2}
-                            days={days}
-                            todayStr={todayStr}
-                            label={`${plant.name} · ${col.full}`}
-                            onHover={onHover}
-                          />
+              <tbody>
+                {viewMode === 'team' ? (
+                  plantsWithOps.map((plant, pi) => {
+                    const accent = PLANT_COLUMN_ACCENTS[pi % PLANT_COLUMN_ACCENTS.length];
+                    const ts = teamCoverage[plant.id] ?? {};
+                    const overall = computeEntityOverallScore(ts, days, todayStr);
+
+                    return (
+                      <tr key={`team:${plant.id}`} className="border-b hover:bg-muted/20 transition-colors">
+                        <td className="px-3 py-2 sticky left-0 z-10 bg-background"
+                          style={{ borderLeft: `3px solid ${accent.line}` }}>
+                          <div className="flex items-center gap-2">
+                            <Building2 className={cn('h-3.5 w-3.5 shrink-0', accent.text)} />
+                            <span className={cn('font-bold text-xs', accent.text)}>{plant.name}</span>
+                          </div>
                         </td>
-                      ))}
-                    </tr>
-                  );
-                })
-              ) : (
-                plantsWithOps.flatMap((plant, pi) => {
-                  const accent = PLANT_COLUMN_ACCENTS[pi % PLANT_COLUMN_ACCENTS.length];
-                  const plantOps = operators.filter((op) => op.plant_assignments?.includes(plant.id));
-                  const isExpanded = expandedPlants.has(plant.id);
-                  const rows: React.ReactNode[] = [];
 
-                  // Plant header row (always visible)
-                  rows.push(
-                    <tr key={`ph:${plant.id}`}
-                      className="border-b cursor-pointer select-none hover:bg-muted/40 transition-colors"
-                      onClick={() => togglePlant(plant.id)}>
-                      <td className="px-3 py-2 sticky left-0 z-10 bg-background"
-                        style={{ borderLeft: `2px solid ${accent.line}` }}>
-                        <div className="flex items-center gap-1.5">
-                          <ChevronRight className={cn('h-3.5 w-3.5 transition-transform shrink-0',
-                            accent.text, isExpanded && 'rotate-90')} />
-                          <Building2 className={cn('h-3 w-3 shrink-0', accent.text)} />
-                          <span className={cn('font-semibold text-xs', accent.text)}>{plant.name}</span>
-                          <span className="text-2xs text-muted-foreground">
-                            ({plantOps.length})
-                          </span>
-                        </div>
-                      </td>
-                      {/* Plant aggregate summary dots — average of this plant's operators, individual lens */}
-                      {INPUT_COLS.map((col) => {
-                        const allDayScores = plantOps.flatMap((op) =>
-                          days.map((d) => {
-                            const s = individual[`${op.id}:${plant.id}`]?.[col.key]?.[d];
-                            return s === undefined ? 0 : s;
-                          })
-                        ).filter((s): s is number => s !== null);
-                        const avg = allDayScores.length > 0
-                          ? allDayScores.reduce((a, b) => a + b, 0) / allDayScores.length
-                          : null;
-                        return (
-                          <td key={col.key} className={cn('py-2 px-1 text-center', accent.bg)}>
-                            <div className="flex items-center justify-center">
-                              <div className="h-2.5 w-2.5 rounded-sm"
-                                style={{ background: scoreColor(avg), opacity: 0.85 }} />
-                            </div>
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  );
-
-                  // Operator rows (only when expanded)
-                  if (isExpanded) {
-                    plantOps.forEach((op) => {
-                      const matKey = `${op.id}:${plant.id}`;
-                      const ts = individual[matKey] ?? {};
-                      rows.push(
-                        <tr key={`op:${matKey}`}
-                          className="border-b hover:bg-muted/20 transition-colors">
-                          <td className="px-3 py-1 sticky left-0 z-10 bg-background pl-8"
-                            style={{ borderLeft: `2px solid ${accent.line}` }}>
+                        {/* Plant Overall Score */}
+                        <td className="py-2 px-3 border-x border-border/60 bg-muted/10 text-center">
+                          <div className="flex flex-col items-center gap-0.5">
                             <div className="flex items-center gap-1.5">
-                              <div className={cn('h-5 w-5 rounded-full flex items-center justify-center text-3xs font-bold text-white shrink-0', avatarColor(op.id))}>
-                                {initials(op)}
-                              </div>
-                              <span className="text-xs font-medium truncate max-w-[90px] leading-tight">
-                                {fullName(op)}
+                              <span className="font-extrabold text-xs text-foreground">{overall.scorePct}%</span>
+                              <span className={cn('text-3xs px-1.5 py-0.2 rounded-full border font-bold', overall.tier.badge)}>
+                                {overall.tier.icon} {overall.tier.tier}
                               </span>
                             </div>
-                          </td>
-                          {INPUT_COLS.map((col) => (
-                            <td key={col.key} className="py-0 px-0 align-middle">
-                              <MiniHeatmap
-                                scores={(ts[col.key] ?? {}) as ScoreMap2}
-                                days={days}
-                                todayStr={todayStr}
-                                label={`${fullName(op)} · ${col.full}`}
-                                onHover={onHover}
+                            <div className="w-24 h-1.5 rounded-full bg-muted overflow-hidden border border-border/50">
+                              <div
+                                className={cn('h-full transition-all', overall.tier.dot)}
+                                style={{ width: `${overall.scorePct}%` }}
                               />
-                            </td>
-                          ))}
-                        </tr>
-                      );
-                    });
-                  }
+                            </div>
+                          </div>
+                        </td>
 
-                  return rows;
-                })
-              )}
-            </tbody>
-          </table>
+                        {INPUT_COLS.map((col) => (
+                          <td key={col.key} className="py-0 px-0 align-middle">
+                            <MiniHeatmap
+                              scores={(ts[col.key] ?? {}) as ScoreMap2}
+                              days={days}
+                              todayStr={todayStr}
+                              label={`${plant.name} · ${col.full}`}
+                              onHover={onHover}
+                            />
+                          </td>
+                        ))}
+                      </tr>
+                    );
+                  })
+                ) : (
+                  plantsWithOps.flatMap((plant, pi) => {
+                    const accent = PLANT_COLUMN_ACCENTS[pi % PLANT_COLUMN_ACCENTS.length];
+                    const plantOps = operators.filter((op) => op.plant_assignments?.includes(plant.id));
+                    const isExpanded = expandedPlants.has(plant.id);
+                    const rows: React.ReactNode[] = [];
+
+                    // Compute plant aggregate score
+                    const plantOpScores = plantOps.map((op) => {
+                      const matKey = `${op.id}:${plant.id}`;
+                      return computeEntityOverallScore(individual[matKey] ?? {}, days, todayStr).scorePct;
+                    });
+                    const plantAvgScore = plantOpScores.length > 0
+                      ? Math.round(plantOpScores.reduce((a, b) => a + b, 0) / plantOpScores.length)
+                      : 0;
+                    const plantTier = getAppraisalTier(plantAvgScore);
+
+                    // Plant header row
+                    rows.push(
+                      <tr
+                        key={`ph:${plant.id}`}
+                        className="border-b cursor-pointer select-none bg-muted/20 hover:bg-muted/40 transition-colors"
+                        onClick={() => togglePlant(plant.id)}
+                      >
+                        <td
+                          className="px-3 py-2.5 sticky left-0 z-10 bg-background"
+                          style={{ borderLeft: `3px solid ${accent.line}` }}
+                        >
+                          <div className="flex items-center gap-2">
+                            <ChevronRight className={cn('h-3.5 w-3.5 transition-transform shrink-0', accent.text, isExpanded && 'rotate-90')} />
+                            <Building2 className={cn('h-3.5 w-3.5 shrink-0', accent.text)} />
+                            <span className={cn('font-bold text-xs', accent.text)}>{plant.name}</span>
+                            <span className="text-3xs px-1.5 py-0.2 rounded-full bg-muted font-bold text-muted-foreground border border-border/60">
+                              {plantOps.length} staff
+                            </span>
+                          </div>
+                        </td>
+
+                        {/* Plant aggregate KPI score */}
+                        <td className="py-2 px-3 border-x border-border/60 bg-muted/30 text-center">
+                          <div className="flex flex-col items-center gap-0.5">
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-extrabold text-xs text-foreground">{plantAvgScore}%</span>
+                              <span className={cn('text-3xs px-1.5 py-0.2 rounded-full border font-bold', plantTier.badge)}>
+                                {plantTier.icon} {plantTier.tier}
+                              </span>
+                            </div>
+                            <div className="w-24 h-1.5 rounded-full bg-muted overflow-hidden border border-border/50">
+                              <div
+                                className={cn('h-full transition-all', plantTier.dot)}
+                                style={{ width: `${plantAvgScore}%` }}
+                              />
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* Plant aggregate summary dots */}
+                        {INPUT_COLS.map((col) => {
+                          const allDayScores = plantOps.flatMap((op) =>
+                            days.map((d) => {
+                              const s = individual[`${op.id}:${plant.id}`]?.[col.key]?.[d];
+                              return s === undefined ? 0 : s;
+                            })
+                          ).filter((s): s is number => s !== null);
+                          const avg = allDayScores.length > 0
+                            ? allDayScores.reduce((a, b) => a + b, 0) / allDayScores.length
+                            : null;
+                          return (
+                            <td key={col.key} className={cn('py-2 px-1 text-center', accent.bg)}>
+                              <div className="flex items-center justify-center">
+                                <div
+                                  className="h-2.5 w-2.5 rounded-sm shadow-2xs"
+                                  style={{ background: scoreColor(avg), opacity: 0.9 }}
+                                />
+                              </div>
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    );
+
+                    // Operator rows (when expanded)
+                    if (isExpanded) {
+                      plantOps.forEach((op) => {
+                        const matKey = `${op.id}:${plant.id}`;
+                        const ts = individual[matKey] ?? {};
+                        const opOverall = computeEntityOverallScore(ts, days, todayStr);
+
+                        rows.push(
+                          <tr key={`op:${matKey}`} className="border-b hover:bg-muted/30 transition-colors">
+                            <td
+                              className="px-3 py-2 sticky left-0 z-10 bg-background pl-8"
+                              style={{ borderLeft: `3px solid ${accent.line}` }}
+                            >
+                              <div className="flex items-center gap-2">
+                                <div className={cn('h-6 w-6 rounded-lg flex items-center justify-center text-3xs font-bold text-white shrink-0 shadow-2xs', avatarColor(op.id))}>
+                                  {initials(op)}
+                                </div>
+                                <div className="min-w-0">
+                                  <div className="text-xs font-bold text-foreground truncate max-w-[120px] leading-tight">
+                                    {fullName(op)}
+                                  </div>
+                                  {op.username && (
+                                    <div className="text-3xs text-muted-foreground font-mono truncate">@{op.username}</div>
+                                  )}
+                                </div>
+                              </div>
+                            </td>
+
+                            {/* Operator Overall KPI score */}
+                            <td className="py-1.5 px-3 border-x border-border/60 bg-muted/15 text-center">
+                              <div className="flex flex-col items-center gap-0.5">
+                                <div className="flex items-center gap-1">
+                                  <span className="font-extrabold text-xs text-foreground">{opOverall.scorePct}%</span>
+                                  <span className={cn('text-3xs px-1.5 py-0.2 rounded-md border font-semibold truncate max-w-[100px]', opOverall.tier.badge)}>
+                                    {opOverall.tier.icon} {opOverall.tier.tier}
+                                  </span>
+                                </div>
+                                <div className="w-24 h-1.5 rounded-full bg-muted/80 overflow-hidden border border-border/40">
+                                  <div
+                                    className={cn('h-full transition-all', opOverall.tier.dot)}
+                                    style={{ width: `${opOverall.scorePct}%` }}
+                                  />
+                                </div>
+                              </div>
+                            </td>
+
+                            {INPUT_COLS.map((col) => (
+                              <td key={col.key} className="py-0 px-0 align-middle">
+                                <MiniHeatmap
+                                  scores={(ts[col.key] ?? {}) as ScoreMap2}
+                                  days={days}
+                                  todayStr={todayStr}
+                                  label={`${fullName(op)} · ${col.full}`}
+                                  onHover={onHover}
+                                />
+                              </td>
+                            ))}
+                          </tr>
+                        );
+                      });
+                    }
+
+                    return rows;
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
         </DataState>
       </Card>
 
       {/* Summary stats */}
-      <div className="grid grid-cols-4 gap-2">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
         {[
-          { label: viewMode === 'team' ? 'Coverage Rate' : 'Logging Rate', value: `${summary.pct}%`, color: summary.pct >= 80 ? 'text-accent' : summary.pct >= 50 ? 'text-warn' : 'text-danger' },
+          { label: viewMode === 'team' ? 'Coverage Rate' : 'Overall Logging Rate', value: `${summary.pct}%`, color: summary.pct >= 80 ? 'text-accent' : summary.pct >= 50 ? 'text-warn' : 'text-danger' },
           { label: viewMode === 'team' ? 'Asset-Days Logged' : 'Cells Completed', value: `${summary.complete}/${summary.total}`, color: 'text-info' },
           { label: viewMode === 'team' ? 'Assets Missed' : 'Cells Missed', value: `${summary.missed}`, color: summary.missed === 0 ? 'text-accent' : 'text-danger' },
           { label: 'Pending Today', value: `${summary.pending}`, color: summary.pending === 0 ? 'text-muted-foreground' : 'text-info' },
         ].map((s) => (
-          <div key={s.label} className="flex flex-col items-center bg-muted/40 rounded-lg py-3 px-2 text-center gap-0.5">
+          <div key={s.label} className="flex flex-col items-center bg-card rounded-xl border border-border/70 py-3 px-2 text-center gap-0.5 shadow-2xs">
             <span className={cn('text-xl font-bold leading-none', s.color)}>{s.value}</span>
-            <span className="text-2xs text-muted-foreground">{s.label}</span>
+            <span className="text-3xs uppercase font-bold text-muted-foreground tracking-wider">{s.label}</span>
           </div>
         ))}
       </div>
