@@ -976,98 +976,194 @@ function PlantDetail({ plantId }: { plantId: string }) {
   };
 
   return (
-    <div className="space-y-3 animate-fade-in">
-      {/* Back nav */}
-      <button onClick={() => navigate('/plants')}
-        className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground w-fit">
-        <ChevronLeft className="h-4 w-4" /> All plants
-      </button>
+    <div className="space-y-4 animate-fade-in">
+      {/* ── Breadcrumb Header ── */}
+      <div className="flex items-center justify-between">
+        <button
+          onClick={() => navigate('/plants')}
+          className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground hover:text-primary transition-colors group"
+        >
+          <ChevronLeft className="h-4 w-4 transition-transform group-hover:-translate-x-0.5" />
+          <span>All Facilities</span>
+          <span className="text-border">/</span>
+          <span className="text-foreground">{plant.name}</span>
+        </button>
 
-      {/* Hero card */}
-      <Card className="p-4 bg-gradient-stat text-topbar-foreground overflow-hidden">
+        <span className="text-2xs font-mono text-muted-foreground">
+          ID: {plant.id.slice(0, 8)}
+        </span>
+      </div>
 
-        {/* Top row: Name/address (left) + Status pill + Edit + Delete (right) */}
-        <div className="flex items-start justify-between gap-3 flex-wrap">
-          {/* Name + address */}
-          <div className="min-w-0 flex-1">
-            <h1 className="text-xl font-bold leading-tight">{plant.name}</h1>
-            <p className="text-xs opacity-60 flex items-center gap-1 mt-0.5">
-              <MapPin className="h-3 w-3 shrink-0" />
-              <span className="truncate">{plant.address}</span>
-            </p>
-          </div>
+      {/* ── Executive Facility Hero Card ── */}
+      <div className="relative rounded-2xl overflow-hidden border border-border/80 bg-gradient-to-br from-slate-950 via-slate-900 to-teal-950 text-white p-5 md:p-6 shadow-xl">
+        {/* Ambient mesh glow background */}
+        <div className="absolute -right-20 -top-20 w-80 h-80 bg-teal-500/20 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute left-1/3 -bottom-24 w-72 h-72 bg-sky-500/15 rounded-full blur-3xl pointer-events-none" />
 
-          {/* Status pill + Edit + Delete — now in normal flow, never overlaps */}
-          <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
-            <span className={[
-              'text-xs font-semibold px-3 py-1 rounded-full border',
-              plant.status === 'Active'
-                ? 'bg-accent/20 text-accent border-accent/30'
-                : 'bg-warn/20 text-warn border-warn/30',
-            ].join(' ')}>
-              Status: <span className="font-bold">{plant.status}</span>
-            </span>
-            {isManager && (
-              <Button size="sm" variant="ghost"
-                onClick={openInfoEdit}
-                data-testid="edit-plant-info-btn"
-                className="h-8 gap-1.5 bg-white/15 hover:bg-white/25 text-white border border-white/30 rounded-lg text-xs font-medium">
-                <Pencil className="h-3.5 w-3.5" /> Edit
-              </Button>
-            )}
-            {isManager && (
-              // text-[0px] here isn't a body/label text size (not part of the
-              // text-3xs/2xs type scale) — it's a mobile-collapse trick that
-              // visually hides the button label below `sm:`, replaced by
-              // sm:text-xs above that breakpoint. Icon stays visible either way.
-              <div className="flex items-center justify-center [&>button]:bg-white/15 [&>button]:hover:bg-white/25 [&>button]:text-white [&>button]:border [&>button]:border-white/30 [&>button]:rounded-lg [&_svg]:text-white [&>button]:h-8 [&>button]:w-8 [&>button]:p-0 [&>button]:inline-flex [&>button]:items-center [&>button]:justify-center [&>button]:text-[0px] [&>button]:sm:w-auto [&>button]:sm:px-3 [&>button]:sm:text-xs [&>button]:sm:gap-1.5">
-                <DeleteEntityMenu
-                  kind="plant" id={plant.id} label={plant.name}
-                  canSoftDelete={plant.status === 'Active'} canHardDelete
-                  invalidateKeys={[['plants']]} onDeleted={() => navigate('/plants')}
-                />
+        <div className="relative z-10 space-y-5">
+          
+          {/* Top Row: Facility Identity + Status + Actions */}
+          <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+            
+            {/* Name + Address + Code */}
+            <div className="space-y-1">
+              <div className="flex items-center gap-2.5 flex-wrap">
+                <span className="text-xs font-mono font-bold px-2 py-0.5 rounded bg-teal-500/20 text-teal-300 border border-teal-500/30">
+                  FACILITY
+                </span>
+                <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white font-display">
+                  {plant.name}
+                </h1>
+                <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-0.5 rounded-full border ${
+                  plant.status === 'Active'
+                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                    : 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+                }`}>
+                  <span className={`w-2 h-2 rounded-full ${plant.status === 'Active' ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
+                  {plant.status}
+                </span>
               </div>
-            )}
-          </div>
-        </div>
-
-        {/* Stats: Capacity / RO Trains / Product Meters */}
-        <div className="grid grid-cols-3 gap-4 mt-4 text-xs">
-          <div>
-            <div className="opacity-50 text-2xs uppercase tracking-widest mb-1">Capacity</div>
-            <div className="font-mono-num text-lg font-bold">{fmtNum(plant.design_capacity_m3 ?? 0)} MLD</div>
-          </div>
-          <div>
-            <div className="opacity-50 text-2xs uppercase tracking-widest mb-1">RO Trains</div>
-            <div className="font-mono-num text-lg font-bold">
-              {trainCounts ? (
-                <>
-                  <span className={
-                    trainCounts.active === trainCounts.total && trainCounts.total > 0
-                      ? 'text-accent'
-                      : trainCounts.active === 0 && trainCounts.total > 0
-                        ? 'text-warn' : ''
-                  }>{trainCounts.active}</span>
-                  <span className="opacity-40 font-normal text-base">/{trainCounts.total}</span>
-                </>
-              ) : (plant.num_ro_trains ?? '—')}
+              
+              <p className="text-xs text-slate-300 flex items-center gap-1.5 pt-0.5">
+                <MapPin className="h-3.5 w-3.5 text-teal-400 shrink-0" />
+                <span>{plant.address || 'Address unassigned'}</span>
+              </p>
             </div>
-            <div className="opacity-40 text-2xs mt-0.5">active / total</div>
-          </div>
-          <div>
-            <div className="opacity-50 text-2xs uppercase tracking-widest mb-1">Product Meters</div>
-            <ProductMetersStat plantId={plant.id} />
-          </div>
-        </div>
 
-        {/* Energy Sources */}
-        <div className="mt-4 pt-3 border-t border-white/10">
-          <EnergySourceInline plant={plant} />
-        </div>
-      </Card>
+            {/* Actions: Edit + Delete */}
+            <div className="flex items-center gap-2 shrink-0">
+              {isManager && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={openInfoEdit}
+                  data-testid="edit-plant-info-btn"
+                  className="h-8 gap-1.5 bg-white/10 hover:bg-white/20 text-white border-white/20 hover:border-white/40 rounded-lg text-xs font-semibold shadow-sm"
+                >
+                  <Pencil className="h-3.5 w-3.5 text-teal-300" />
+                  <span>Edit Facility</span>
+                </Button>
+              )}
+              {isManager && (
+                <div className="[&>button]:bg-white/10 [&>button]:hover:bg-white/20 [&>button]:text-white [&>button]:border [&>button]:border-white/20 [&>button]:rounded-lg [&_svg]:text-white [&>button]:h-8 [&>button]:w-8 [&>button]:p-0 [&>button]:inline-flex [&>button]:items-center [&>button]:justify-center">
+                  <DeleteEntityMenu
+                    kind="plant"
+                    id={plant.id}
+                    label={plant.name}
+                    canSoftDelete={plant.status === 'Active'}
+                    canHardDelete
+                    invalidateKeys={[['plants']]}
+                    onDeleted={() => navigate('/plants')}
+                  />
+                </div>
+              )}
+            </div>
+          </div>
 
-      {/* Plant Configuration Settings — promoted to its own tab (Section 7.2); see the
-          'configuration' tab content further down instead of always-visible here. */}
+          {/* 3 Telemetry Metric Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+            
+            {/* Design Capacity Tile */}
+            <div className="p-3.5 rounded-xl bg-white/5 border border-white/10 backdrop-blur-sm space-y-1">
+              <div className="text-[10px] uppercase font-bold tracking-wider text-slate-400 flex items-center gap-1">
+                <Droplet className="h-3 w-3 text-sky-400" />
+                <span>Design Capacity</span>
+              </div>
+              <div className="flex items-baseline gap-1.5">
+                <span className="font-mono text-2xl font-extrabold text-white">
+                  {fmtNum(plant.design_capacity_m3 ?? 0)}
+                </span>
+                <span className="text-xs font-semibold text-teal-300">MLD</span>
+              </div>
+              <div className="text-[10px] text-slate-400">Peak extraction throughput</div>
+            </div>
+
+            {/* RO Trains Status Tile */}
+            <div className="p-3.5 rounded-xl bg-white/5 border border-white/10 backdrop-blur-sm space-y-1">
+              <div className="text-[10px] uppercase font-bold tracking-wider text-slate-400 flex items-center gap-1">
+                <ROTrainIcon className="h-3 w-3 text-violet-400" />
+                <span>RO Trains Fleet</span>
+              </div>
+              <div className="font-mono text-2xl font-extrabold text-white">
+                {trainCounts ? (
+                  <>
+                    <span className={
+                      trainCounts.active === trainCounts.total && trainCounts.total > 0
+                        ? 'text-emerald-400'
+                        : trainCounts.active === 0 && trainCounts.total > 0
+                          ? 'text-rose-400'
+                          : 'text-sky-400'
+                    }>{trainCounts.active}</span>
+                    <span className="text-slate-400 font-normal text-lg">/{trainCounts.total}</span>
+                  </>
+                ) : (
+                  <span>{plant.num_ro_trains ?? '—'}</span>
+                )}
+              </div>
+              <div className="text-[10px] text-slate-400">
+                {trainCounts && trainCounts.total > 0 
+                  ? `${Math.round((trainCounts.active / trainCounts.total) * 100)}% fleet operational`
+                  : 'Active train telemetry'}
+              </div>
+            </div>
+
+            {/* Product Distribution Meters Tile */}
+            <div className="p-3.5 rounded-xl bg-white/5 border border-white/10 backdrop-blur-sm space-y-1">
+              <div className="text-[10px] uppercase font-bold tracking-wider text-slate-400 flex items-center gap-1">
+                <Gauge className="h-3 w-3 text-teal-400" />
+                <span>Product Distribution</span>
+              </div>
+              <div className="font-mono text-2xl font-extrabold text-white">
+                <ProductMetersStat plantId={plant.id} />
+              </div>
+              <div className="text-[10px] text-slate-400">Offtake & bulk consumption</div>
+            </div>
+
+          </div>
+
+          {/* Energy Sources Strip */}
+          <div className="pt-3 border-t border-white/10">
+            <EnergySourceInline plant={plant} />
+          </div>
+
+        </div>
+      </div>
+
+      {/* ── Subsystem Segmented Tab Navigation ── */}
+      <div className="flex gap-1 p-1 bg-muted/60 border border-border/60 rounded-xl w-full overflow-x-auto shadow-sm">
+        {([
+          { id: 'locators', label: 'Locators', short: 'LOC', icon: <MapPin className="h-3.5 w-3.5" /> },
+          { id: 'wells', label: 'Wells', short: 'WELL', icon: <Droplet className="h-3.5 w-3.5" /> },
+          { id: 'product', label: 'Product', short: 'PROD', icon: <Gauge className="h-3.5 w-3.5" /> },
+          { id: 'trains', label: 'RO Trains', short: 'RO', icon: <ROTrainIcon className="h-3.5 w-3.5" /> },
+          { id: 'power', label: 'Power & Energy', short: 'PWR', icon: <Zap className="h-3.5 w-3.5" /> },
+          { id: 'configuration', label: 'Configuration', short: 'CONFIG', icon: <Settings2 className="h-3.5 w-3.5" /> },
+        ] as const).map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            onClick={() => setTab(t.id)}
+            className={[
+              'flex-1 py-2 px-2 flex items-center justify-center gap-1.5 text-xs font-semibold rounded-lg transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring whitespace-nowrap min-w-max sm:min-w-0',
+              tab === t.id
+                ? 'bg-card text-primary shadow-sm border border-border/80'
+                : 'text-muted-foreground hover:text-foreground hover:bg-muted/40',
+            ].join(' ')}
+          >
+            {t.icon}
+            <span className="hidden sm:inline">{t.label}</span>
+            <span className="sm:hidden">{t.short}</span>
+          </button>
+        ))}
+      </div>
+
+      {/* Subsystem Tab Content Panels */}
+      <div className={tab === 'locators' ? undefined : 'hidden'}><LocatorsList plantId={plantId} highlightId={tab === 'locators' ? highlightId : null} /></div>
+      <div className={tab === 'wells'    ? undefined : 'hidden'}><WellsList plantId={plantId} highlightId={tab === 'wells' ? highlightId : null} /></div>
+      <div className={tab === 'product'  ? undefined : 'hidden'}><ProductMetersCard plant={plant} highlightId={tab === 'product' ? highlightId : null} /></div>
+      <div className={tab === 'trains'   ? undefined : 'hidden'}><TrainsList plantId={plantId} /></div>
+      <div className={tab === 'power'    ? undefined : 'hidden'}><PowerMetersCard plant={plant} /></div>
+      <div className={tab === 'configuration' ? undefined : 'hidden'}><PlantMeterConfigCard plant={plant} /></div>
 
       {/* Edit Plant Info Dialog */}
       {editingInfo && (
@@ -1082,18 +1178,20 @@ function PlantDetail({ plantId }: { plantId: string }) {
                 <Input
                   value={infoForm.name}
                   onChange={(e) => setInfoForm({ ...infoForm, name: e.target.value })}
-                  placeholder="e.g. SRP"
+                  placeholder="e.g. Guizo"
                   data-testid="edit-plant-name"
-                id="index-plant-name"/>
+                  id="index-plant-name"
+                />
               </div>
               <div>
                 <Label htmlFor="index-address" className="text-xs">Address</Label>
                 <Input
                   value={infoForm.address}
                   onChange={(e) => setInfoForm({ ...infoForm, address: e.target.value })}
-                  placeholder="e.g. South Road Properties, Cebu City"
+                  placeholder="e.g. Guizo, Mandaue City"
                   data-testid="edit-plant-address"
-                id="index-address"/>
+                  id="index-address"
+                />
               </div>
               <div>
                 <Label htmlFor="index-capacity-mld" className="text-xs">Capacity (MLD)</Label>
@@ -1103,9 +1201,10 @@ function PlantDetail({ plantId }: { plantId: string }) {
                   min="0"
                   value={infoForm.capacity}
                   onChange={(e) => setInfoForm({ ...infoForm, capacity: e.target.value })}
-                  placeholder="e.g. 4200"
+                  placeholder="e.g. 8"
                   data-testid="edit-plant-capacity"
-                id="index-capacity-mld"/>
+                  id="index-capacity-mld"
+                />
               </div>
             </div>
             <DialogFooter>
@@ -1117,41 +1216,6 @@ function PlantDetail({ plantId }: { plantId: string }) {
           </DialogContent>
         </Dialog>
       )}
-
-      <div className="grid grid-cols-6 gap-0.5 p-1 bg-muted rounded-lg w-full">
-        {([
-          { id: 'locators', label: 'Locators', short: 'LOC', icon: <MapPin className="h-3.5 w-3.5" /> },
-          { id: 'wells', label: 'Wells', short: 'WELL', icon: <Droplet className="h-3.5 w-3.5" /> },
-          { id: 'product', label: 'Product', short: 'PROD', icon: <Gauge className="h-3.5 w-3.5" /> },
-          { id: 'trains', label: 'Trains', short: 'RO', icon: <ROTrainIcon className="h-3.5 w-3.5" /> },
-          { id: 'power', label: 'Power', short: 'PWR', icon: <Zap className="h-3.5 w-3.5" /> },
-          { id: 'configuration', label: 'Configuration', short: 'CONFIG', icon: <Settings2 className="h-3.5 w-3.5" /> },
-        ] as const).map((t) => (
-          <button
-            key={t.id}
-            onClick={() => setTab(t.id)}
-            className={[
-              'py-1.5 px-1 flex flex-col sm:flex-row items-center justify-center gap-1 text-xs font-medium rounded-md transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring min-w-0',
-              tab === t.id
-                ? 'bg-primary text-primary-foreground shadow-sm'
-                : 'text-muted-foreground hover:text-foreground',
-            ].join(' ')}
-          >
-            {t.icon}
-            <span className="hidden sm:inline truncate">{t.label}</span>
-            <span className="sm:hidden text-3xs font-semibold tracking-wide">{t.short}</span>
-          </button>
-        ))}
-      </div>
-
-      <div className={tab === 'locators' ? undefined : 'hidden'}><LocatorsList plantId={plantId} highlightId={tab === 'locators' ? highlightId : null} /></div>
-      <div className={tab === 'wells'    ? undefined : 'hidden'}><WellsList plantId={plantId} highlightId={tab === 'wells' ? highlightId : null} /></div>
-      <div className={tab === 'product'  ? undefined : 'hidden'}><ProductMetersCard plant={plant} highlightId={tab === 'product' ? highlightId : null} /></div>
-      <div className={tab === 'trains'   ? undefined : 'hidden'}>
-        <TrainsList plantId={plantId} />
-      </div>
-      <div className={tab === 'power'    ? undefined : 'hidden'}><PowerMetersCard plant={plant} /></div>
-      <div className={tab === 'configuration' ? undefined : 'hidden'}><PlantMeterConfigCard plant={plant} /></div>
     </div>
   );
 }

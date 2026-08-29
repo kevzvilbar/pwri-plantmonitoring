@@ -371,81 +371,74 @@ export function LocatorsList({ plantId, highlightId }: { plantId: string; highli
                     <div className="text-xs text-muted-foreground truncate">
                       {l.meter_brand} {l.meter_size} · SN {l.meter_serial ?? '—'}
                     </div>
-                    {/* Fed by: product meter badge */}
-                    {(() => {
-                      const supplyMeter = (productMeters ?? []).find((m: any) => m.id === l.product_meter_id);
-                      if (!supplyMeter) return null;
-                      return (
-                        <div className="mt-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-2xs bg-primary-soft text-primary border border-primary/30">
-                          <Droplet className="h-2.5 w-2.5" />
-                          Fed by: {supplyMeter.name}
-                        </div>
-                      );
-                    })()}
-                    {/* "Last reading" freshness — see lastReadingFreshness()
-                        in lib/format.ts for why this isn't called a "flag".
-                        Same data + thresholds as the Operations entry card,
-                        via locator_readings_latest. */}
-                    {(() => {
-                      const fresh = lastReadingFreshness(latestByLocator[l.id]);
-                      return (
-                        <div className="mt-1">
+                    {/* Telemetry badge strip */}
+                    <div className="mt-2 flex items-center gap-1.5 flex-wrap">
+                      {/* Fed by: product meter badge */}
+                      {(() => {
+                        const supplyMeter = (productMeters ?? []).find((m: any) => m.id === l.product_meter_id);
+                        if (!supplyMeter) return null;
+                        return (
+                          <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-2xs font-medium bg-primary-soft text-primary border border-primary/30">
+                            <Droplet className="h-2.5 w-2.5" />
+                            <span>Fed by: {supplyMeter.name}</span>
+                          </div>
+                        );
+                      })()}
+
+                      {/* "Last reading" freshness */}
+                      {(() => {
+                        const fresh = lastReadingFreshness(latestByLocator[l.id]);
+                        return (
                           <StatusPill tone={fresh.tone}>
                             <CalendarClock className="h-2.5 w-2.5" />
                             {fresh.label}
                           </StatusPill>
-                        </div>
-                      );
-                    })()}
-                    {/* Cross-navigation to this locator's entry card in
-                        Operations. A separate small link, not a click on
-                        the card body — the card already owns clicks for
-                        the inline history toggle above. */}
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        navigate(`/operations?tab=locator&highlight=${l.id}`);
-                      }}
-                      title="Open this locator in Operations"
-                      aria-label="Open this locator in Operations"
-                      className="mt-1 inline-flex items-center gap-0.5 text-2xs font-medium text-muted-foreground hover:text-foreground bg-muted hover:bg-muted/80 px-1.5 py-0.5 rounded-full transition-colors"
-                    >
-                      <ArrowUpRight className="h-2.5 w-2.5" />
-                      Operations
-                    </button>
-                    {/* Meter lock state — independent of the Active/Inactive
-                        status pill to the right. Managers get a checkbox to
-                        toggle it (checking it opens a reason dialog, same as
-                        marking a locator Inactive); everyone else sees a
-                        read-only badge, and only when it's checked. */}
-                    {isManager ? (
-                      // eslint-disable-next-line jsx-a11y/label-has-associated-control -- Checkbox (Radix) renders button[role=checkbox], not a native input; same false positive as ThemeSelector's Switch.
-                      <label
-                        className={`mt-1 inline-flex items-center gap-1.5 text-2xs font-medium px-1.5 py-0.5 rounded border cursor-pointer ${
-                          l.is_locked
-                            ? 'text-danger bg-danger-soft border-danger/40'
-                            : 'text-muted-foreground border-dashed'
-                        }`}
-                        onClick={(e) => e.stopPropagation()}
+                        );
+                      })()}
+
+                      {/* Meter lock state */}
+                      {isManager ? (
+                        <label
+                          className={`inline-flex items-center gap-1.5 text-2xs font-medium px-2 py-0.5 rounded-full border cursor-pointer transition-colors ${
+                            l.is_locked
+                              ? 'text-danger bg-danger-soft border-danger/40'
+                              : 'text-muted-foreground bg-muted/40 border-border/60 hover:bg-muted'
+                          }`}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <Checkbox
+                            checked={!!l.is_locked}
+                            onCheckedChange={(checked) => handleLockCheckboxChange(l, checked === true)}
+                            className="h-3 w-3"
+                            data-testid={`locator-lock-checkbox-${l.id}`}
+                          />
+                          <ShieldAlert className="h-2.5 w-2.5 shrink-0" />
+                          <span>{l.is_locked ? 'Locked' : 'Unlocked'}</span>
+                        </label>
+                      ) : (
+                        l.is_locked && (
+                          <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-2xs font-medium bg-danger-soft text-danger border border-danger/40">
+                            <ShieldAlert className="h-2.5 w-2.5" />
+                            <span>Locked</span>
+                          </div>
+                        )
+                      )}
+
+                      {/* Cross-navigation to Operations */}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigate(`/operations?tab=locator&highlight=${l.id}`);
+                        }}
+                        title="Open this locator in Operations"
+                        aria-label="Open this locator in Operations"
+                        className="inline-flex items-center gap-1 text-2xs font-medium text-muted-foreground hover:text-foreground bg-muted/60 hover:bg-muted px-2 py-0.5 rounded-full transition-colors border border-border/50"
                       >
-                        <Checkbox
-                          checked={!!l.is_locked}
-                          onCheckedChange={(checked) => handleLockCheckboxChange(l, checked === true)}
-                          className="h-3 w-3"
-                          data-testid={`locator-lock-checkbox-${l.id}`}
-                        />
-                        <ShieldAlert className="h-2.5 w-2.5 shrink-0" />
-                        Meter locked
-                      </label>
-                    ) : (
-                      l.is_locked && (
-                        <div className="mt-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-2xs font-medium bg-danger-soft text-danger border border-danger/40">
-                          <ShieldAlert className="h-2.5 w-2.5" />
-                          Meter locked
-                        </div>
-                      )
-                    )}
+                        <ArrowUpRight className="h-2.5 w-2.5" />
+                        <span>Operations</span>
+                      </button>
+                    </div>
                   </div>
                   <button
                     type="button"
