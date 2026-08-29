@@ -4,7 +4,8 @@ import {
   Upload, FileSpreadsheet, CheckCircle2, XCircle, AlertCircle,
   Droplet, Zap, FlaskConical, Gauge, Waves, Thermometer,
   ChevronRight, Download, RefreshCw, X, Info, CircleDot, Menu,
-  MapPin, Activity, Building2, ShieldAlert,
+  MapPin, Activity, Building2, ShieldAlert, Layers, Sparkles,
+  Check, ArrowRight,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { friendlyError } from '@/lib/supabaseErrors';
@@ -16,6 +17,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
+import { StatCard } from '@/components/dashboard/StatCard';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
@@ -448,25 +450,58 @@ function validateRow(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Template download
+// Template download (Plant Entity Aware)
 // ─────────────────────────────────────────────────────────────────────────────
 
-function downloadTemplate(config: ImportTypeConfig) {
-  const example = config.columns.map(c => {
-    if (c.type === 'date') return '2025-01-15T08:00';
-    if (c.type === 'number') return '0';
-    if (c.type === 'select') return c.selectOptions?.[0] ?? '';
-    if (c.key.endsWith('_name')) return c.key === 'locator_name' ? 'MCWD - M1' : c.key === 'well_name' ? 'Well #1' : 'Meter A';
-    if (c.key === 'train_id') return 'paste-ro-train-uuid-here';
-    return '';
-  });
-  const blob = new Blob(
-    [config.csvTemplate + '\n' + example.join(',')],
-    { type: 'text/csv' },
-  );
+async function downloadTemplate(
+  config: ImportTypeConfig,
+  plantId?: string,
+  plants?: Array<{ id: string; name: string }>,
+) {
+  let sampleRows: string[][] = [];
+
+  if (plantId && config.entityTable && config.entityNameKey) {
+    try {
+      const { data: entities } = await (supabase
+        .from(config.entityTable as any) as any)
+        .select('name')
+        .eq('plant_id', plantId)
+        .limit(5);
+
+      if (entities && entities.length > 0) {
+        sampleRows = entities.map((e: any, idx: number) => {
+          return config.columns.map(c => {
+            if (c.key === config.entityNameKey) return `"${e.name}"`;
+            if (c.type === 'date') return `2025-01-15T08:00`;
+            if (c.type === 'number') return `${100 + idx * 25}`;
+            if (c.type === 'select') return c.selectOptions?.[0] ?? '';
+            return '';
+          });
+        });
+      }
+    } catch {
+      // fallback to generic
+    }
+  }
+
+  if (sampleRows.length === 0) {
+    const example = config.columns.map(c => {
+      if (c.type === 'date') return '2025-01-15T08:00';
+      if (c.type === 'number') return '100';
+      if (c.type === 'select') return c.selectOptions?.[0] ?? '';
+      if (c.key.endsWith('_name')) return c.key === 'locator_name' ? 'MCWD - M1' : c.key === 'well_name' ? 'Well #1' : 'Meter A';
+      if (c.key === 'train_id') return 'paste-ro-train-uuid-here';
+      return '';
+    });
+    sampleRows.push(example);
+  }
+
+  const csvContent = [config.csvTemplate, ...sampleRows.map(r => r.join(','))].join('\n');
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = `template_${config.id}.csv`;
+  const plantSlug = plants?.find(p => p.id === plantId)?.name?.toLowerCase().replace(/\s+/g, '_') ?? 'general';
+  a.download = `template_${config.id}_${plantSlug}.csv`;
   a.click();
 }
 
@@ -488,7 +523,7 @@ function ImportTypeCard({
       className={cn(
         'w-full text-left rounded-lg border px-3 py-2.5 transition-all duration-150 group',
         selected
-          ? 'border-primary bg-primary/5 shadow-sm'
+          ? 'border-primary bg-primary/5 shadow-sm ring-1 ring-primary/20'
           : 'border-border hover:border-border/80 hover:bg-muted/40',
       )}
     >
@@ -498,7 +533,7 @@ function ImportTypeCard({
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex items-center justify-between gap-1">
-            <span className="text-xs font-medium truncate leading-tight">{config.label}</span>
+            <span className="text-xs font-semibold truncate leading-tight">{config.label}</span>
             <ChevronRight className={cn(
               'h-3 w-3 shrink-0 transition-transform',
               selected ? 'text-primary rotate-90' : 'text-muted-foreground/40 group-hover:translate-x-0.5',
@@ -526,7 +561,7 @@ function SidebarContent({
             <p className={cn(
               'text-3xs font-bold tracking-[0.12em] uppercase px-1 mb-1',
               gi > 0 && 'border-t border-border/50 pt-2',
-              'text-muted-foreground/50',
+              'text-muted-foreground/60',
             )}>
               {group.label}
             </p>
@@ -601,10 +636,10 @@ function DropZone({
           <Upload className="h-5 w-5 text-muted-foreground/50" />
           <div>
             <p className="text-sm text-muted-foreground">
-              Drop a <span className="font-medium text-foreground">.csv</span> or{' '}
-              <span className="font-medium text-foreground">.txt</span> file here
+              Drop a <span className="font-semibold text-foreground">.csv</span> or{' '}
+              <span className="font-semibold text-foreground">.txt</span> file here
             </p>
-            <p className="text-xs text-muted-foreground/60 mt-0.5">or click to browse</p>
+            <p className="text-xs text-muted-foreground/60 mt-0.5">or click to browse from device</p>
           </div>
         </div>
       )}
@@ -612,23 +647,31 @@ function DropZone({
   );
 }
 
-function ColumnReference({ config }: { config: ImportTypeConfig }) {
+function ColumnReference({
+  config,
+  plantId,
+  plants,
+}: {
+  config: ImportTypeConfig;
+  plantId?: string;
+  plants?: Array<{ id: string; name: string }>;
+}) {
   return (
-    <div className="rounded-lg border bg-muted/30 overflow-hidden">
-      <div className="px-3 py-1.5 border-b bg-muted/50 flex items-center justify-between">
+    <div className="rounded-lg border bg-muted/30 overflow-hidden border-border/70">
+      <div className="px-3.5 py-2 border-b bg-muted/50 flex items-center justify-between">
         <span className="text-2xs font-semibold uppercase tracking-wider text-muted-foreground">
-          Expected Columns
+          Expected CSV Schema Columns ({config.columns.length})
         </span>
         <button
-          onClick={() => downloadTemplate(config)}
-          className="flex items-center gap-1 text-xs text-primary hover:text-primary/80 transition-colors"
+          onClick={() => downloadTemplate(config, plantId, plants)}
+          className="flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline transition-colors"
         >
-          <Download className="h-3 w-3" /> CSV Template
+          <Download className="h-3 w-3" /> Download Template (.csv)
         </button>
       </div>
-      <div className="divide-y">
+      <div className="divide-y divide-border/40">
         {config.columns.map(col => (
-          <div key={col.key} className="flex items-center gap-2 px-3 py-[5px]">
+          <div key={col.key} className="flex items-center gap-2 px-3 py-1.5 hover:bg-muted/20">
             <code className="text-2xs font-mono bg-background border rounded px-1.5 py-px shrink-0 whitespace-nowrap leading-tight">
               {col.key}
             </code>
@@ -637,21 +680,16 @@ function ColumnReference({ config }: { config: ImportTypeConfig }) {
             </span>
             <span className="flex items-center gap-1 shrink-0">
               {col.required && (
-                <Badge variant="outline" className="text-3xs px-1 py-0 h-4 border-danger text-danger leading-none">
-                  req
+                <Badge variant="outline" className="text-3xs px-1 py-0 h-4 border-danger/60 text-danger leading-none">
+                  required
                 </Badge>
               )}
               <Badge variant="outline" className="text-3xs px-1 py-0 h-4 text-muted-foreground leading-none">
                 {col.type}
               </Badge>
               {col.hint && (
-                <span className="text-3xs text-muted-foreground/50 italic hidden sm:inline max-w-[90px] truncate" title={col.hint}>
+                <span className="text-3xs text-muted-foreground/60 italic hidden sm:inline max-w-[120px] truncate" title={col.hint}>
                   {col.hint}
-                </span>
-              )}
-              {col.type === 'select' && col.selectOptions && (
-                <span className="text-3xs text-muted-foreground/50 italic hidden sm:inline max-w-[100px] truncate" title={col.selectOptions.join(', ')}>
-                  {col.selectOptions.join('/')}
                 </span>
               )}
             </span>
@@ -661,10 +699,10 @@ function ColumnReference({ config }: { config: ImportTypeConfig }) {
       {/* Entity note */}
       {config.entityTable && (
         <div className="flex items-start gap-2 px-3 py-2 border-t bg-warn-soft/60">
-          <Info className="h-3 w-3 mt-0.5 shrink-0 text-warn" />
+          <Info className="h-3.5 w-3.5 mt-0.5 shrink-0 text-warn" />
           <p className="text-2xs text-warn">
-            <span className="font-medium">{config.entityNameKey?.replace(/_/g, ' ')}</span> is matched by name to existing{' '}
-            {config.entityTable} in the selected plant — make sure names match exactly.
+            <span className="font-semibold">{config.entityNameKey?.replace(/_/g, ' ')}</span> is matched by name to existing{' '}
+            {config.entityTable} in the selected plant facility.
           </p>
         </div>
       )}
@@ -672,50 +710,64 @@ function ColumnReference({ config }: { config: ImportTypeConfig }) {
   );
 }
 
-function PreviewTable({ rows, config }: { rows: ParsedRow[]; config: ImportTypeConfig }) {
+function PreviewTable({
+  rows,
+  config,
+  filterMode,
+}: {
+  rows: ParsedRow[];
+  config: ImportTypeConfig;
+  filterMode: 'all' | 'valid' | 'errors';
+}) {
   const visibleCols = config.columns.slice(0, 6);
+  const displayRows = rows.filter(r => {
+    if (filterMode === 'valid') return r.valid;
+    if (filterMode === 'errors') return !r.valid;
+    return true;
+  });
+
   return (
-    <div className="rounded-lg border overflow-hidden">
+    <div className="rounded-lg border overflow-hidden border-border/70">
       <div className="overflow-x-auto">
         <table className="w-full text-xs">
           <thead>
-            <tr className="bg-muted/50 border-b">
-              <th className="w-8 px-2 py-2 text-left text-muted-foreground font-medium">#</th>
+            <tr className="bg-muted/50 border-b text-muted-foreground">
+              <th className="w-8 px-2.5 py-2 text-left font-semibold">#</th>
               {visibleCols.map(c => (
-                <th key={c.key} className="px-2.5 py-2 text-left font-medium text-muted-foreground whitespace-nowrap">
+                <th key={c.key} className="px-2.5 py-2 text-left font-semibold whitespace-nowrap">
                   {c.label}
                 </th>
               ))}
-              <th className="px-2.5 py-2 text-left font-medium text-muted-foreground">Status</th>
+              <th className="px-2.5 py-2 text-left font-semibold">Validation</th>
             </tr>
           </thead>
-          <tbody className="divide-y">
-            {rows.slice(0, 50).map(row => (
+          <tbody className="divide-y divide-border/40">
+            {displayRows.slice(0, 50).map(row => (
               <tr
                 key={row.rowIndex}
                 className={cn(
                   'transition-colors',
-                  row.valid ? 'hover:bg-muted/20' : 'bg-danger-soft/50',
+                  row.valid ? 'hover:bg-muted/20' : 'bg-danger-soft/40',
                 )}
               >
-                <td className="px-2 py-1.5 text-muted-foreground tabular-nums">{row.rowIndex + 1}</td>
+                <td className="px-2.5 py-1.5 text-muted-foreground tabular-nums">{row.rowIndex + 1}</td>
                 {visibleCols.map(c => (
-                  <td key={c.key} className="px-2.5 py-1.5 max-w-[120px] truncate" title={row.data[c.key]}>
+                  <td key={c.key} className="px-2.5 py-1.5 max-w-[140px] truncate" title={row.data[c.key]}>
                     {row.data[c.key] || <span className="text-muted-foreground/40">—</span>}
                   </td>
                 ))}
                 <td className="px-2.5 py-1.5 whitespace-nowrap">
                   {row.valid ? (
-                    <span className="inline-flex items-center gap-1 text-accent">
-                      <CheckCircle2 className="h-3 w-3" /> OK
+                    <span className="inline-flex items-center gap-1 font-semibold text-accent">
+                      <CheckCircle2 className="h-3 w-3" /> Valid
                     </span>
                   ) : (
                     <span
-                      className="inline-flex items-center gap-1 text-danger cursor-help"
+                      className="inline-flex items-center gap-1 font-semibold text-danger cursor-help"
                       title={row.errors.join('; ')}
                     >
                       <XCircle className="h-3 w-3" />
-                      {row.errors.length} error{row.errors.length > 1 ? 's' : ''}
+                      {row.errors.length} error{row.errors.length > 1 ? 's' : ''} ({row.errors[0]})
                     </span>
                   )}
                 </td>
@@ -724,9 +776,9 @@ function PreviewTable({ rows, config }: { rows: ParsedRow[]; config: ImportTypeC
           </tbody>
         </table>
       </div>
-      {rows.length > 50 && (
+      {displayRows.length > 50 && (
         <div className="px-3 py-2 border-t bg-muted/30 text-xs text-muted-foreground">
-          Showing first 50 of {rows.length} rows
+          Showing first 50 of {displayRows.length} rows in view
         </div>
       )}
     </div>
@@ -753,6 +805,8 @@ export default function SmartImportPanel() {
   const [importLog, setImportLog] = useState<string[]>([]);
   const [skipInvalid, setSkipInvalid] = useState(true);
 
+  const [filterMode, setFilterMode] = useState<'all' | 'valid' | 'errors'>('all');
+
   const config = CONFIG_MAP[selected];
 
   // ── File handling ──────────────────────────────────────────────────────────
@@ -761,6 +815,7 @@ export default function SmartImportPanel() {
     setStatus('parsing');
     setParsedRows([]);
     setImportLog([]);
+    setFilterMode('all');
 
     try {
       const text = await f.text();
@@ -793,6 +848,7 @@ export default function SmartImportPanel() {
     setStatus('idle');
     setImportProgress(0);
     setImportLog([]);
+    setFilterMode('all');
   }, []);
 
   const handleSelectType = useCallback((t: ImportType) => {
@@ -932,12 +988,6 @@ export default function SmartImportPanel() {
     }
   }, [plantId, parsedRows, skipInvalid, config]);
 
-  // Same gap as Exports.tsx: this component inserts directly into tables
-  // (see the .insert(insertBatch) call above) with no role check of its own
-  // — only the hidden nav link stood between a Technician and a direct
-  // /import visit. Kept below all hooks (rather than right after `canView`
-  // is read) so the hooks above always run in the same order every render —
-  // an early return before them made React Hooks conditional.
   if (!canView) {
     return (
       <Card className="p-6 text-center space-y-2" data-testid="import-access-denied">
@@ -959,6 +1009,7 @@ export default function SmartImportPanel() {
   // ── Stats ──────────────────────────────────────────────────────────────────
   const validCount = parsedRows.filter(r => r.valid).length;
   const invalidCount = parsedRows.length - validCount;
+  const selectedPlantName = plants?.find(p => p.id === plantId)?.name ?? 'Select Target Facility';
 
   // ─────────────────────────────────────────────────────────────────────────
   // Render
@@ -966,24 +1017,88 @@ export default function SmartImportPanel() {
   return (
     <div className="space-y-4 animate-fade-in">
       {/* Page header */}
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight">Smart Import</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            Select a type, upload a CSV, review, then sync to the database.
-          </p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5">
+          <div className="p-2 rounded-xl bg-primary/10 text-primary">
+            <Upload className="h-5 w-5" />
+          </div>
+          <div>
+            <h1 className="text-xl font-bold tracking-tight">Smart Multi-Import Studio</h1>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Intelligent multi-format CSV batch loader with entity auto-resolution and pre-flight validation.
+            </p>
+          </div>
         </div>
-        {/* Mobile: compact type button */}
-        <button
-          className="lg:hidden mt-1 flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted/40 transition-colors shrink-0"
-          onClick={() => setSidebarOpen(true)}
-        >
-          <Menu className="h-3.5 w-3.5" />
-          <span className={cn('flex h-4 w-4 items-center justify-center rounded-sm shrink-0', config.accent)}>
-            <config.icon className={cn('h-2.5 w-2.5', config.color)} />
-          </span>
-          <span className="truncate max-w-[100px]">{config.label}</span>
-        </button>
+
+        <div className="flex items-center gap-2 flex-wrap">
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8 px-2.5 text-2xs gap-1.5 font-semibold bg-background"
+            onClick={() => downloadTemplate(config, plantId, plants)}
+          >
+            <Download className="h-3.5 w-3.5 text-primary" />
+            <span>Download Template (.csv)</span>
+          </Button>
+          {/* Mobile: compact type button */}
+          <button
+            className="lg:hidden flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-semibold text-muted-foreground hover:bg-muted/40 transition-colors shrink-0"
+            onClick={() => setSidebarOpen(true)}
+          >
+            <Menu className="h-3.5 w-3.5" />
+            <span className={cn('flex h-4 w-4 items-center justify-center rounded-sm shrink-0', config.accent)}>
+              <config.icon className={cn('h-2.5 w-2.5', config.color)} />
+            </span>
+            <span className="truncate max-w-[100px]">{config.label}</span>
+          </button>
+        </div>
+      </div>
+
+      {/* ── Executive Studio Strip ── */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <StatCard
+          icon={Layers}
+          label="Supported Schemas"
+          value="11 Data Types"
+        />
+        <StatCard
+          icon={Building2}
+          label="Target Plant"
+          value={plantId ? selectedPlantName : 'Required'}
+          tone={plantId ? 'accent' : 'warn'}
+        />
+        <StatCard
+          icon={CheckCircle2}
+          label="Parsed Records"
+          value={parsedRows.length > 0 ? `${validCount} Valid / ${parsedRows.length} Total` : '0 Uploaded'}
+          tone={invalidCount > 0 ? 'warn' : 'default'}
+        />
+        <StatCard
+          icon={Activity}
+          label="Import Pipeline Status"
+          value={status === 'importing' ? 'Syncing...' : status === 'done' ? 'Sync Complete' : status === 'preview' ? 'Ready to Sync' : 'Awaiting CSV'}
+          tone={status === 'done' ? 'accent' : 'default'}
+        />
+      </div>
+
+      {/* 4-Step Guided Wizard Bar */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 p-2 rounded-xl bg-muted/30 border border-border/60 text-xs">
+        <div className="flex items-center gap-2 px-2 py-1">
+          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary text-primary-foreground font-bold text-3xs shrink-0">1</span>
+          <span className="font-semibold truncate">Select Schema</span>
+        </div>
+        <div className="flex items-center gap-2 px-2 py-1">
+          <span className={cn('flex h-5 w-5 items-center justify-center rounded-full font-bold text-3xs shrink-0', plantId ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground')}>2</span>
+          <span className="font-semibold truncate">Pick Plant Facility</span>
+        </div>
+        <div className="flex items-center gap-2 px-2 py-1">
+          <span className={cn('flex h-5 w-5 items-center justify-center rounded-full font-bold text-3xs shrink-0', file ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground')}>3</span>
+          <span className="font-semibold truncate">Upload & Validate</span>
+        </div>
+        <div className="flex items-center gap-2 px-2 py-1">
+          <span className={cn('flex h-5 w-5 items-center justify-center rounded-full font-bold text-3xs shrink-0', status === 'done' ? 'bg-accent text-accent-foreground' : 'bg-muted text-muted-foreground')}>4</span>
+          <span className="font-semibold truncate">Sync to Database</span>
+        </div>
       </div>
 
       {/* Mobile sidebar drawer */}
@@ -1013,9 +1128,9 @@ export default function SmartImportPanel() {
 
       <div className="grid grid-cols-1 lg:grid-cols-[240px_1fr] gap-4 items-start">
         {/* Left: type selector (desktop) */}
-        <Card className="p-3 hidden lg:block sticky top-20">
-          <p className="text-2xs font-bold uppercase tracking-[0.12em] text-muted-foreground/50 px-0.5 mb-2">
-            Import Type
+        <Card className="p-3 hidden lg:block sticky top-20 border-border/70">
+          <p className="text-2xs font-bold uppercase tracking-[0.12em] text-muted-foreground/60 px-0.5 mb-2">
+            Import Schema Type
           </p>
           <SidebarContent selected={selected} onSelect={handleSelectType} />
         </Card>
@@ -1023,7 +1138,7 @@ export default function SmartImportPanel() {
         {/* Right: main panel */}
         <div className="space-y-3 min-w-0">
           {/* Config card */}
-          <Card className="p-4 space-y-3">
+          <Card className="p-4 space-y-3.5 border-border/70">
             {/* Type header */}
             <div className="flex items-center gap-3">
               <span className={cn('flex h-8 w-8 shrink-0 items-center justify-center rounded-lg', config.accent)}>
@@ -1033,20 +1148,20 @@ export default function SmartImportPanel() {
                 <h2 className="text-sm font-semibold">{config.label}</h2>
                 <p className="text-xs text-muted-foreground">{config.description}</p>
               </div>
-              <Badge variant="outline" className="ml-auto text-2xs px-1.5 py-0 h-5 text-muted-foreground shrink-0">
+              <Badge variant="outline" className="ml-auto text-2xs px-2 py-0.5 h-5 font-semibold text-muted-foreground shrink-0">
                 {config.category}
               </Badge>
             </div>
 
             {/* Plant + skip-invalid row */}
-            <div className="flex flex-wrap items-end gap-3">
-              <div className="space-y-1 flex-1 min-w-[160px]">
-                <Label htmlFor="smartimportpanel-target-plant" className="text-xs">
-                  Target Plant <span className="text-danger">*</span>
+            <div className="flex flex-wrap items-end gap-3 pt-1">
+              <div className="space-y-1 flex-1 min-w-[200px]">
+                <Label htmlFor="smartimportpanel-target-plant" className="text-xs font-semibold">
+                  Target Plant Facility <span className="text-danger">*</span>
                 </Label>
                 <Select value={plantId} onValueChange={setPlantId}>
-                  <SelectTrigger className="h-8 text-xs" id="smartimportpanel-target-plant">
-                    <SelectValue placeholder="Pick a plant…" />
+                  <SelectTrigger className="h-8 text-xs font-medium" id="smartimportpanel-target-plant">
+                    <SelectValue placeholder="Select facility for entity resolution…" />
                   </SelectTrigger>
                   <SelectContent>
                     {plants?.map(p => (
@@ -1056,7 +1171,7 @@ export default function SmartImportPanel() {
                 </Select>
               </div>
 
-              <div className="flex items-center gap-2 pb-px shrink-0">
+              <div className="flex items-center gap-2 pb-1 shrink-0">
                 <button
                   role="switch"
                   aria-checked={skipInvalid}
@@ -1072,51 +1187,76 @@ export default function SmartImportPanel() {
                     skipInvalid ? 'translate-x-4' : 'translate-x-0',
                   )} />
                 </button>
-                <span className="text-xs text-muted-foreground whitespace-nowrap">Skip invalid</span>
+                <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">Skip invalid rows</span>
               </div>
             </div>
 
             {/* Drop zone */}
             <div className="space-y-1">
-              <Label htmlFor="smartimport-csv-file" className="text-xs">CSV File</Label>
+              <Label htmlFor="smartimport-csv-file" className="text-xs font-semibold">CSV File Upload</Label>
               <DropZone file={file} onFile={handleFile} onClear={handleClear} id="smartimport-csv-file" />
               {status === 'parsing' && (
-                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                  <RefreshCw className="h-3 w-3 animate-spin" /> Parsing…
+                <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground pt-1">
+                  <RefreshCw className="h-3.5 w-3.5 animate-spin text-primary" /> Validating and auto-mapping headers…
                 </div>
               )}
             </div>
           </Card>
 
           {/* Column reference */}
-          <ColumnReference config={config} />
+          <ColumnReference config={config} plantId={plantId} plants={plants} />
 
           {/* Preview */}
           {status === 'preview' && parsedRows.length > 0 && (
-            <Card className="p-4 space-y-3">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-sm font-semibold">Preview</span>
-                <Badge variant="outline" className="text-accent border-accent gap-1 text-xs px-1.5 py-0">
-                  <CheckCircle2 className="h-3 w-3" /> {validCount} valid
-                </Badge>
-                {invalidCount > 0 && (
-                  <Badge variant="outline" className="text-danger border-danger gap-1 text-xs px-1.5 py-0">
-                    <XCircle className="h-3 w-3" /> {invalidCount} invalid
-                  </Badge>
-                )}
-                <span className="text-xs text-muted-foreground ml-auto">
-                  {parsedRows.length} row{parsedRows.length !== 1 ? 's' : ''} total
+            <Card className="p-4 space-y-3.5 border-border/70">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-sm font-bold">Data Preview & Validation</span>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => setFilterMode('all')}
+                      className={cn(
+                        'text-3xs px-2 py-0.5 rounded-full border font-semibold transition-colors',
+                        filterMode === 'all' ? 'bg-primary text-primary-foreground border-primary' : 'bg-muted/40 text-muted-foreground',
+                      )}
+                    >
+                      All ({parsedRows.length})
+                    </button>
+                    <button
+                      onClick={() => setFilterMode('valid')}
+                      className={cn(
+                        'text-3xs px-2 py-0.5 rounded-full border font-semibold transition-colors',
+                        filterMode === 'valid' ? 'bg-accent text-accent-foreground border-accent' : 'bg-muted/40 text-muted-foreground',
+                      )}
+                    >
+                      Valid ({validCount})
+                    </button>
+                    {invalidCount > 0 && (
+                      <button
+                        onClick={() => setFilterMode('errors')}
+                        className={cn(
+                          'text-3xs px-2 py-0.5 rounded-full border font-semibold transition-colors',
+                          filterMode === 'errors' ? 'bg-danger text-danger-foreground border-danger' : 'bg-muted/40 text-danger border-danger/40',
+                        )}
+                      >
+                        Errors ({invalidCount})
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <span className="text-xs font-medium text-muted-foreground">
+                  {parsedRows.length} row{parsedRows.length !== 1 ? 's' : ''} parsed
                 </span>
               </div>
 
               {invalidCount > 0 && skipInvalid && (
-                <div className="flex items-start gap-2 rounded-md bg-warn-soft border border-warn px-3 py-2 text-xs text-warn">
+                <div className="flex items-start gap-2 rounded-md bg-warn-soft border border-warn px-3 py-2 text-xs text-warn font-medium">
                   <AlertCircle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
-                  {invalidCount} row(s) will be skipped. Hover an error badge for details.
+                  {invalidCount} row(s) contain validation errors and will be omitted from database sync.
                 </div>
               )}
 
-              <PreviewTable rows={parsedRows} config={config} />
+              <PreviewTable rows={parsedRows} config={config} filterMode={filterMode} />
 
               <div className="flex justify-end gap-2 pt-1">
                 <Button variant="outline" size="sm" onClick={handleClear}>Cancel</Button>
@@ -1124,9 +1264,10 @@ export default function SmartImportPanel() {
                   size="sm"
                   onClick={runImport}
                   disabled={!plantId || (skipInvalid ? validCount === 0 : parsedRows.length === 0)}
+                  className="font-semibold gap-1.5"
                 >
-                  <Upload className="h-3.5 w-3.5 mr-1.5" />
-                  Import {skipInvalid ? validCount : parsedRows.length} row{(skipInvalid ? validCount : parsedRows.length) !== 1 ? 's' : ''}
+                  <Upload className="h-3.5 w-3.5" />
+                  Sync {skipInvalid ? validCount : parsedRows.length} row{(skipInvalid ? validCount : parsedRows.length) !== 1 ? 's' : ''} to Database
                 </Button>
               </div>
             </Card>
@@ -1134,19 +1275,19 @@ export default function SmartImportPanel() {
 
           {/* Import progress */}
           {(status === 'importing' || status === 'done') && (
-            <Card className="p-4 space-y-3">
+            <Card className="p-4 space-y-3 border-border/70">
               <div className="flex items-center justify-between">
                 <span className="text-sm font-semibold">
-                  {status === 'importing' ? 'Importing…' : 'Import Complete'}
+                  {status === 'importing' ? 'Syncing to Database…' : 'Database Sync Complete'}
                 </span>
-                <span className="text-xs text-muted-foreground tabular-nums">{importProgress}%</span>
+                <span className="text-xs text-muted-foreground tabular-nums font-semibold">{importProgress}%</span>
               </div>
               <Progress value={importProgress} className="h-1.5" />
-              <div className="max-h-40 overflow-y-auto rounded-md bg-muted/40 p-2 space-y-0.5">
+              <div className="max-h-48 overflow-y-auto rounded-md bg-muted/40 p-2.5 space-y-1">
                 {importLog.map((line, i) => (
                   <p key={i} className={cn(
                     'text-xs font-mono',
-                    line.startsWith('❌') ? 'text-danger' :
+                    line.startsWith('❌') ? 'text-danger font-semibold' :
                     line.startsWith('⚠') ? 'text-warn' :
                     'text-muted-foreground',
                   )}>
@@ -1155,8 +1296,10 @@ export default function SmartImportPanel() {
                 ))}
               </div>
               {status === 'done' && (
-                <div className="flex justify-end">
-                  <Button variant="outline" size="sm" onClick={handleClear}>Import Another File</Button>
+                <div className="flex justify-end pt-1">
+                  <Button variant="outline" size="sm" onClick={handleClear} className="font-semibold">
+                    Import Another File
+                  </Button>
                 </div>
               )}
             </Card>
@@ -1164,32 +1307,32 @@ export default function SmartImportPanel() {
 
           {/* Error state */}
           {status === 'error' && (
-            <Card className="p-4">
+            <Card className="p-4 border-danger/40">
               <div className="flex items-center gap-2 text-danger">
                 <XCircle className="h-4 w-4" />
-                <span className="text-sm font-medium">Parse failed — check file format</span>
+                <span className="text-sm font-semibold">Parse failed — check file format</span>
               </div>
               <p className="text-xs text-muted-foreground mt-1.5">
                 Make sure it's a valid CSV with the expected headers.{' '}
-                <button onClick={() => downloadTemplate(config)} className="text-primary underline underline-offset-2">
+                <button onClick={() => downloadTemplate(config, plantId, plants)} className="text-primary underline underline-offset-2 font-semibold">
                   Download a template
                 </button>{' '}
-                to see the exact format.
+                to inspect the expected structure.
               </p>
-              <Button variant="outline" size="sm" className="mt-3" onClick={handleClear}>Try again</Button>
+              <Button variant="outline" size="sm" className="mt-3 font-semibold" onClick={handleClear}>Try again</Button>
             </Card>
           )}
 
           {/* Idle / how-to */}
           {status === 'idle' && (
-            <div className="flex items-start gap-2 rounded-lg border bg-muted/20 px-3 py-2.5 text-xs text-muted-foreground">
-              <Info className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+            <div className="flex items-start gap-2.5 rounded-lg border bg-muted/20 px-3.5 py-3 text-xs text-muted-foreground border-border/70">
+              <Info className="h-4 w-4 mt-0.5 shrink-0 text-primary" />
               <span>
-                Pick an import type, select a plant, then drop a CSV that matches the columns above.{' '}
-                <button onClick={() => downloadTemplate(config)} className="text-primary underline underline-offset-2">
-                  Download a template
+                Pick an import type, select a plant facility, then drop a CSV that matches the columns above.{' '}
+                <button onClick={() => downloadTemplate(config, plantId, plants)} className="text-primary underline underline-offset-2 font-semibold">
+                  Download a pre-filled template
                 </button>{' '}
-                for <span className="font-medium text-foreground">{config.label}</span>.
+                for <span className="font-semibold text-foreground">{config.label}</span>.
               </span>
             </div>
           )}

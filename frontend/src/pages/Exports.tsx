@@ -1,9 +1,10 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Download, Building2, Activity, Waves, FlaskConical,
   Zap, Wrench, ShieldCheck, ShieldAlert, MapPin, BarChart2, ChevronDown,
-  CheckCircle2, Loader2, RefreshCw,
+  CheckCircle2, Loader2, RefreshCw, Search, CheckSquare, Square,
+  Layers, Package, FileSpreadsheet, Sparkles, Filter,
 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { PageHeader } from '@/components/PageHeader';
@@ -21,6 +22,8 @@ import { friendlyError } from '@/lib/supabaseErrors';
 import { format, subDays } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
+import { StatCard } from '@/components/dashboard/StatCard';
+import { Checkbox } from '@/components/ui/checkbox';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Table registry
@@ -177,11 +180,15 @@ function ExportRow({
   plantId,
   from,
   to,
+  isSelected,
+  onToggleSelect,
 }: {
   table: ExportTable;
   plantId: string;
   from: string;
   to: string;
+  isSelected: boolean;
+  onToggleSelect: (id: string) => void;
 }) {
   const [state, setState] = useState<'idle' | 'busy' | 'done' | 'empty'>('idle');
   const [count, setCount] = useState<number | null>(null);
@@ -207,10 +214,19 @@ function ExportRow({
   }, [table, plantId, from, to]);
 
   return (
-    <div className="flex items-center gap-3 py-2 px-3 hover:bg-muted/30 rounded-md transition-colors group">
+    <div className={cn(
+      'flex items-center gap-3 py-2 px-3 hover:bg-muted/30 rounded-md transition-colors group',
+      isSelected && 'bg-primary/5',
+    )}>
+      <Checkbox
+        checked={isSelected}
+        onCheckedChange={() => onToggleSelect(table.id)}
+        className="h-4 w-4 shrink-0"
+        aria-label={`Select ${table.label}`}
+      />
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5 flex-wrap">
-          <span className="text-xs font-medium text-foreground leading-tight">{table.label}</span>
+          <span className="text-xs font-semibold text-foreground leading-tight">{table.label}</span>
           {state === 'done' && count !== null && (
             <Badge variant="outline" className="text-3xs px-1.5 h-4 text-accent border-accent py-0">
               {count.toLocaleString()} rows
@@ -221,7 +237,7 @@ function ExportRow({
           )}
         </div>
         <div className="flex items-center gap-2 mt-0.5">
-          <code className="text-3xs font-mono text-muted-foreground/60">{table.id}</code>
+          <code className="text-3xs font-mono text-muted-foreground/70">{table.id}</code>
           <span className="text-2xs text-muted-foreground hidden sm:block truncate">{table.description}</span>
         </div>
       </div>
@@ -231,7 +247,7 @@ function ExportRow({
         size="sm"
         disabled={state === 'busy'}
         className={cn(
-          'shrink-0 h-7 px-2.5 text-xs gap-1.5 transition-colors',
+          'shrink-0 h-7 px-2.5 text-xs gap-1.5 transition-colors font-semibold',
           state === 'done' && 'border-accent text-accent',
           state === 'empty' && 'text-muted-foreground',
         )}
@@ -255,12 +271,16 @@ function CategorySection({
   from,
   to,
   defaultOpen,
+  selectedTableIds,
+  onToggleSelect,
 }: {
   category: ExportCategory;
   plantId: string;
   from: string;
   to: string;
   defaultOpen: boolean;
+  selectedTableIds: Set<string>;
+  onToggleSelect: (id: string) => void;
 }) {
   const [open, setOpen] = useState(defaultOpen);
   const [bulkState, setBulkState] = useState<'idle' | 'busy' | 'done'>('idle');
@@ -274,7 +294,7 @@ function CategorySection({
       try {
         const res = await runExport(table, plantId, from, to);
         if (res) total += res.count;
-      } catch (e) {
+      } catch (e: any) {
         errors.push(`${table.label}: ${e.message}`);
       }
     }
@@ -288,19 +308,21 @@ function CategorySection({
   }, [category, plantId, from, to]);
 
   return (
-    <Card className="overflow-hidden">
+    <Card className="overflow-hidden border-border/70">
       {/* Category header — clickable to expand/collapse */}
       <button
         onClick={() => setOpen(o => !o)}
-        className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-muted/30 transition-colors text-left"
+        className="w-full flex items-center gap-3 px-3.5 py-2.5 hover:bg-muted/30 transition-colors text-left"
       >
-        <span className={cn('flex h-7 w-7 shrink-0 items-center justify-center rounded-md', category.accent)}>
-          <Icon className={cn('h-3.5 w-3.5', category.color)} />
+        <span className={cn('flex h-7 w-7 shrink-0 items-center justify-center rounded-lg', category.accent)}>
+          <Icon className={cn('h-4 w-4', category.color)} />
         </span>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
             <span className="text-xs font-semibold">{category.label}</span>
-            <span className="text-2xs text-muted-foreground">{category.tables.length} table{category.tables.length !== 1 ? 's' : ''}</span>
+            <Badge variant="outline" className="text-3xs py-0 h-4 font-normal text-muted-foreground">
+              {category.tables.length} table{category.tables.length !== 1 ? 's' : ''}
+            </Badge>
           </div>
         </div>
         <div className="flex items-center gap-2 ml-auto">
@@ -309,18 +331,18 @@ function CategorySection({
             <Button
               variant="ghost"
               size="sm"
-              className="h-7 px-2 text-xs gap-1 text-muted-foreground hover:text-foreground"
+              className="h-7 px-2 text-xs gap-1 text-muted-foreground hover:text-foreground font-semibold"
               disabled={bulkState === 'busy'}
               onClick={exportAll}
             >
               {bulkState === 'busy' ? (
                 <Loader2 className="h-3 w-3 animate-spin" />
               ) : bulkState === 'done' ? (
-                <CheckCircle2 className="h-3 w-3" />
+                <CheckCircle2 className="h-3 w-3 text-accent" />
               ) : (
                 <Download className="h-3 w-3" />
               )}
-              {bulkState === 'busy' ? 'Exporting…' : bulkState === 'done' ? 'Done' : 'Export all'}
+              {bulkState === 'busy' ? 'Exporting…' : bulkState === 'done' ? 'Done' : 'Export category'}
             </Button>
           </div>
           <ChevronDown className={cn(
@@ -332,9 +354,17 @@ function CategorySection({
 
       {/* Table rows */}
       {open && (
-        <div className="border-t divide-y divide-border/40 px-0">
+        <div className="border-t divide-y divide-border/40 px-1 py-1">
           {category.tables.map(t => (
-            <ExportRow key={t.id} table={t} plantId={plantId} from={from} to={to} />
+            <ExportRow
+              key={t.id}
+              table={t}
+              plantId={plantId}
+              from={from}
+              to={to}
+              isSelected={selectedTableIds.has(t.id)}
+              onToggleSelect={onToggleSelect}
+            />
           ))}
         </div>
       )}
@@ -355,7 +385,9 @@ export default function Exports() {
   const [from, setFrom]       = useState(format(subDays(new Date(), 30), 'yyyy-MM-dd'));
   const [to, setTo]           = useState(format(new Date(), 'yyyy-MM-dd'));
   const [activePreset, setActivePreset] = useState<number | null>(30);
-  const [exportAllState, setExportAllState] = useState<'idle' | 'busy' | 'done'>('idle');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedTableIds, setSelectedTableIds] = useState<Set<string>>(new Set());
+  const [exportState, setExportState] = useState<'idle' | 'busy' | 'done'>('idle');
 
   const handlePreset = (days: number) => {
     applyPreset(days, setFrom, setTo);
@@ -364,11 +396,41 @@ export default function Exports() {
 
   const handleDateChange = (setter: (s: string) => void) => (e: React.ChangeEvent<HTMLInputElement>) => {
     setter(e.target.value);
-    setActivePreset(null); // clear preset highlight on manual edit
+    setActivePreset(null);
   };
 
+  const toggleSelectTable = useCallback((id: string) => {
+    setSelectedTableIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const selectAll = useCallback(() => {
+    setSelectedTableIds(new Set(ALL_TABLES.map(t => t.id)));
+  }, []);
+
+  const clearSelection = useCallback(() => {
+    setSelectedTableIds(new Set());
+  }, []);
+
+  // Quick Preset Package Selectors
+  const selectCuratedPackage = useCallback((pkgType: 'ops' | 'ro' | 'chem' | 'power') => {
+    const pkgMap: Record<string, string[]> = {
+      ops: ['daily_plant_summary', 'locator_readings', 'well_readings', 'product_meter_readings'],
+      ro: ['ro_train_readings', 'ro_pretreatment_readings', 'pump_readings', 'afm_readings', 'cip_logs'],
+      chem: ['chemical_dosing_logs', 'chemical_deliveries', 'chemical_inventory', 'chemical_residual_samples'],
+      power: ['power_readings', 'electric_bills', 'power_tariffs', 'production_costs'],
+    };
+    setSelectedTableIds(new Set(pkgMap[pkgType] || []));
+    toast.success(`Selected ${pkgType.toUpperCase()} table package (${(pkgMap[pkgType] || []).length} tables)`);
+  }, []);
+
+  // Export all tables
   const exportAll = useCallback(async () => {
-    setExportAllState('busy');
+    setExportState('busy');
     let total = 0;
     let failed = 0;
     for (const table of ALL_TABLES) {
@@ -379,20 +441,50 @@ export default function Exports() {
         failed++;
       }
     }
-    setExportAllState('done');
+    setExportState('done');
     if (failed) toast.info(`Export complete — ${failed} table(s) had errors`);
     else toast.success(`All tables exported — ${total.toLocaleString()} total rows`);
-    setTimeout(() => setExportAllState('idle'), 3000);
+    setTimeout(() => setExportState('idle'), 3000);
   }, [plantId, from, to]);
 
-  // Was previously enforced only by hiding the nav link (AppSidebar/BottomNav)
-  // — this page itself, and the tables it reads from Exports.tsx line 155,
-  // had no role check, so a direct /exports visit bypassed the intended
-  // Technician/Operator restriction from Appendix A. Underlying table RLS
-  // still applies regardless, but the page should agree with the nav. Kept
-  // below the exportAll hook (rather than right after `canView` is read) so
-  // that hook always runs in the same order every render — an early return
-  // before it made the React Hook conditional.
+  // Export selected tables
+  const exportSelected = useCallback(async () => {
+    if (selectedTableIds.size === 0) {
+      toast.error('Select at least one table to export');
+      return;
+    }
+    setExportState('busy');
+    let total = 0;
+    let failed = 0;
+    const targetTables = ALL_TABLES.filter(t => selectedTableIds.has(t.id));
+    for (const table of targetTables) {
+      try {
+        const res = await runExport(table, plantId, from, to);
+        if (res) total += res.count;
+      } catch {
+        failed++;
+      }
+    }
+    setExportState('done');
+    if (failed) toast.info(`Export complete — ${failed} table(s) had errors`);
+    else toast.success(`Exported ${total.toLocaleString()} rows across ${targetTables.length} selected tables`);
+    setTimeout(() => setExportState('idle'), 3000);
+  }, [selectedTableIds, plantId, from, to]);
+
+  // Filtered categories based on search
+  const filteredCategories = useMemo(() => {
+    const q = searchQuery.toLowerCase().trim();
+    if (!q) return EXPORT_CATEGORIES;
+    return EXPORT_CATEGORIES.map(cat => ({
+      ...cat,
+      tables: cat.tables.filter(t =>
+        t.label.toLowerCase().includes(q) ||
+        t.description.toLowerCase().includes(q) ||
+        t.id.toLowerCase().includes(q)
+      ),
+    })).filter(cat => cat.tables.length > 0);
+  }, [searchQuery]);
+
   if (!canView) {
     return (
       <Card className="p-6 text-center space-y-2" data-testid="exports-access-denied">
@@ -411,46 +503,93 @@ export default function Exports() {
     );
   }
 
+  const selectedPlantName = plantId === 'all'
+    ? 'Fleet Global (All Plants)'
+    : plants?.find(p => p.id === plantId)?.name ?? 'Selected Plant';
+
   return (
     <div className="space-y-4 animate-fade-in">
       {/* Page header */}
-      <PageHeader
-        title="Data Exports"
-        subtitle={<>Download any dataset as a CSV. {ALL_TABLES.length} tables across {EXPORT_CATEGORIES.length} categories.</>}
-        actions={
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <PageHeader
+          title="Data Warehouse & Exports"
+          titleIcon={<FileSpreadsheet className="h-5 w-5 text-primary" />}
+          subtitle={<>Enterprise telemetry and operational database export hub. Download datasets across {ALL_TABLES.length} system tables.</>}
+        />
+        <div className="flex items-center gap-2 flex-wrap">
+          {selectedTableIds.size > 0 && (
+            <Button
+              variant="default"
+              size="sm"
+              onClick={exportSelected}
+              disabled={exportState === 'busy'}
+              className="h-8 gap-1.5 font-semibold shrink-0"
+            >
+              {exportState === 'busy' ? (
+                <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Exporting…</>
+              ) : (
+                <><Download className="h-3.5 w-3.5" /> Export Selected ({selectedTableIds.size})</>
+              )}
+            </Button>
+          )}
           <Button
             variant="outline"
             size="sm"
             onClick={exportAll}
-            disabled={exportAllState === 'busy'}
+            disabled={exportState === 'busy'}
             className={cn(
-              'gap-1.5 shrink-0',
-              exportAllState === 'done' && 'border-accent/40 text-accent',
+              'h-8 gap-1.5 shrink-0 font-semibold',
+              exportState === 'done' && 'border-accent/40 text-accent',
             )}
           >
-            {exportAllState === 'busy' ? (
+            {exportState === 'busy' ? (
               <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Exporting…</>
-            ) : exportAllState === 'done' ? (
+            ) : exportState === 'done' ? (
               <><CheckCircle2 className="h-3.5 w-3.5" /> Done</>
             ) : (
-              <><Download className="h-3.5 w-3.5" /> Export all tables</>
+              <><Download className="h-3.5 w-3.5" /> Export All ({ALL_TABLES.length})</>
             )}
           </Button>
-        }
-      />
+        </div>
+      </div>
 
-      {/* Filters */}
-      <Card className="p-3">
-        <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto_auto_auto] gap-2 items-end">
+      {/* ── Executive Warehouse Strip ── */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <StatCard
+          icon={Layers}
+          label="Available Export Tables"
+          value={`${ALL_TABLES.length} Tables`}
+        />
+        <StatCard
+          icon={Building2}
+          label="Target Facility"
+          value={selectedPlantName}
+        />
+        <StatCard
+          icon={Activity}
+          label="Active Time Range"
+          value={activePreset ? `${activePreset} Days Horizon` : `${from} → ${to}`}
+        />
+        <StatCard
+          icon={CheckCircle2}
+          label="Selected Export Package"
+          value={selectedTableIds.size > 0 ? `${selectedTableIds.size} Selected` : 'Ready to Export'}
+          tone={selectedTableIds.size > 0 ? 'accent' : 'default'}
+        />
+      </div>
+
+      {/* Filters & Range Toolbar */}
+      <Card className="p-3.5 space-y-3 border-border/70">
+        <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto_auto_auto] gap-2.5 items-end">
           {/* Plant */}
           <div className="space-y-1">
-            <Label htmlFor="exports-plant" className="text-xs">Plant</Label>
+            <Label htmlFor="exports-plant" className="text-xs font-semibold">Plant Facility</Label>
             <Select value={plantId} onValueChange={setPlantId}>
-              <SelectTrigger className="h-8 text-xs" id="exports-plant">
+              <SelectTrigger className="h-8 text-xs font-medium" id="exports-plant">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All plants</SelectItem>
+                <SelectItem value="all">All plants (Fleet Global)</SelectItem>
                 {plants?.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
               </SelectContent>
             </Select>
@@ -458,36 +597,38 @@ export default function Exports() {
 
           {/* From */}
           <div className="space-y-1">
-            <Label htmlFor="exports-from" className="text-xs">From</Label>
+            <Label htmlFor="exports-from" className="text-xs font-semibold">From Date</Label>
             <Input
               type="date"
               value={from}
               onChange={handleDateChange(setFrom)}
-              className="h-8 text-xs w-[130px]"
-            id="exports-from"/>
+              className="h-8 text-xs w-[135px]"
+              id="exports-from"
+            />
           </div>
 
           {/* To */}
           <div className="space-y-1">
-            <Label htmlFor="exports-to" className="text-xs">To</Label>
+            <Label htmlFor="exports-to" className="text-xs font-semibold">To Date</Label>
             <Input
               type="date"
               value={to}
               onChange={handleDateChange(setTo)}
-              className="h-8 text-xs w-[130px]"
-            id="exports-to"/>
+              className="h-8 text-xs w-[135px]"
+              id="exports-to"
+            />
           </div>
 
           {/* Quick presets */}
           <div className="space-y-1">
-            <p className="text-xs text-muted-foreground/60">Quick range</p>
+            <p className="text-xs font-semibold text-muted-foreground">Range Horizon</p>
             <div className="flex gap-1">
               {PRESETS.map(p => (
                 <button
                   key={p.days}
                   onClick={() => handlePreset(p.days)}
                   className={cn(
-                    'h-8 px-2 rounded-md border text-xs font-medium transition-colors',
+                    'h-8 px-2.5 rounded-md border text-xs font-semibold transition-colors',
                     activePreset === p.days
                       ? 'border-primary bg-primary/10 text-primary'
                       : 'border-border text-muted-foreground hover:bg-muted/40 hover:text-foreground',
@@ -500,25 +641,85 @@ export default function Exports() {
           </div>
         </div>
 
-        {/* Global-table note */}
-        <p className="mt-2 text-2xs text-muted-foreground/60">
-          Tables marked <span className="font-medium text-muted-foreground">global</span> export across all plants regardless of plant filter.
-          Date filters apply only to tables with a date column.
-        </p>
+        {/* Curated Package Presets & Table Search Bar */}
+        <div className="pt-2 border-t border-border/50 flex flex-col md:flex-row items-start md:items-center justify-between gap-2.5">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-3xs font-bold uppercase tracking-wider text-muted-foreground">Curated Packages:</span>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-6 px-2 text-3xs font-semibold rounded-full"
+              onClick={() => selectCuratedPackage('ops')}
+            >
+              💧 Operations (4)
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-6 px-2 text-3xs font-semibold rounded-full"
+              onClick={() => selectCuratedPackage('ro')}
+            >
+              🌊 RO Trains (5)
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-6 px-2 text-3xs font-semibold rounded-full"
+              onClick={() => selectCuratedPackage('chem')}
+            >
+              🧪 Chemicals (4)
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-6 px-2 text-3xs font-semibold rounded-full"
+              onClick={() => selectCuratedPackage('power')}
+            >
+              ⚡ Energy & Costs (4)
+            </Button>
+            {selectedTableIds.size > 0 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 px-2 text-3xs text-muted-foreground hover:text-foreground"
+                onClick={clearSelection}
+              >
+                Clear selection ({selectedTableIds.size})
+              </Button>
+            )}
+          </div>
+
+          <div className="relative w-full md:w-64">
+            <Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-muted-foreground" />
+            <Input
+              placeholder="Search tables (e.g. dosing, train)..."
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              className="h-7 text-xs pl-8 font-medium"
+            />
+          </div>
+        </div>
       </Card>
 
       {/* Category sections */}
-      <div className="space-y-2">
-        {EXPORT_CATEGORIES.map((cat, i) => (
+      <div className="space-y-2.5">
+        {filteredCategories.map((cat, i) => (
           <CategorySection
             key={cat.label}
             category={cat}
             plantId={plantId}
             from={from}
             to={to}
-            defaultOpen={i < 2}
+            defaultOpen={i < 2 || searchQuery.length > 0}
+            selectedTableIds={selectedTableIds}
+            onToggleSelect={toggleSelectTable}
           />
         ))}
+        {filteredCategories.length === 0 && (
+          <Card className="p-8 text-center text-sm text-muted-foreground">
+            No export tables match "{searchQuery}".
+          </Card>
+        )}
       </div>
     </div>
   );
