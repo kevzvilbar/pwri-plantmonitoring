@@ -6,31 +6,39 @@ import { useAuth } from '@/hooks/useAuth';
 import { useAppStore } from '@/store/appStore';
 import { usePlants } from '@/hooks/usePlants';
 import { Card } from '@/components/ui/card';
-import { PageHeader } from '@/components/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { StatusPill } from '@/components/StatusPill';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { DesignationCombobox, accessLevelFromRoles } from '@/components/DesignationCombobox';
 import { toast } from '@/components/ui/sonner';
-import { Loader2, Pencil, ShieldCheck, Building2, MapPin } from 'lucide-react';
+import {
+  Loader2, Pencil, ShieldCheck, Building2, MapPin, User, Mail,
+  CheckCircle2, Shield, Key, Sparkles, Building, ChevronRight, Activity, Database
+} from 'lucide-react';
 import { ProfileEmailChange } from '@/components/ProfileEmailChange';
 import { useMyCustomRole } from '@/hooks/useCustomRoles';
 
+function getInitials(first?: string | null, last?: string | null, username?: string | null): string {
+  if (first || last) {
+    return `${first?.[0] ?? ''}${last?.[0] ?? ''}`.toUpperCase() || 'U';
+  }
+  return username?.slice(0, 2).toUpperCase() || 'U';
+}
+
 export default function Profile() {
-  const { user, profile, activeOperator, roles, refreshProfile, loading } = useAuth();
+  const { user, profile, activeOperator, roles, refreshProfile, loading, signOut } = useAuth();
   const { data: myCustomRole } = useMyCustomRole();
   const { data: plants } = usePlants();
   const { selectedPlantId, setSelectedPlantId } = useAppStore();
 
-  // activeOperator falls back to profile when no override is set (see useAuth)
-  // so we detect an override by comparing ids
   const isOverride = !!activeOperator && !!profile && activeOperator.id !== profile.id;
-  const displayProfile = activeOperator; // already equals profile when no override
+  const displayProfile = activeOperator;
 
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -50,11 +58,9 @@ export default function Profile() {
         designation: displayProfile.designation ?? '',
       });
     }
-    // Exit edit mode whenever active operator changes
     setEditing(false);
   }, [displayProfile?.id]);
 
-  // Preload designation hints from all known profiles for better suggestions
   const { data: existingDesignations } = useQuery({
     queryKey: ['designation-suggestions'],
     queryFn: async () => {
@@ -70,6 +76,11 @@ export default function Profile() {
     return plants.filter((p) => displayProfile?.plant_assignments?.includes(p.id));
   }, [plants, displayProfile]);
 
+  const currentActivePlant = useMemo(() => {
+    if (!plants) return null;
+    return plants.find((p) => p.id === selectedPlantId);
+  }, [plants, selectedPlantId]);
+
   const save = async () => {
     setSaving(true);
     try {
@@ -82,7 +93,7 @@ export default function Profile() {
         _username: form.username || '',
       });
       if (error) throw new Error(error.message);
-      toast.success('Profile updated');
+      toast.success('Profile updated successfully');
       await refreshProfile();
       setEditing(false);
     } catch (e) {
@@ -92,11 +103,21 @@ export default function Profile() {
     }
   };
 
-  if (loading) return <div className="p-4 text-sm text-muted-foreground">Loading…</div>;
+  if (loading) {
+    return (
+      <div className="p-8 flex items-center justify-center text-sm text-muted-foreground gap-2">
+        <Loader2 className="h-4 w-4 animate-spin text-primary" />
+        <span>Loading profile data…</span>
+      </div>
+    );
+  }
+
   if (!user || !profile) {
     return (
-      <Card className="p-6 text-sm text-muted-foreground" data-testid="profile-empty">
-        Sign in to view your profile.
+      <Card className="p-8 text-center max-w-md mx-auto my-12 space-y-3" data-testid="profile-empty">
+        <User className="h-8 w-8 text-muted-foreground mx-auto" />
+        <h3 className="font-bold text-base text-foreground">Sign in Required</h3>
+        <p className="text-xs text-muted-foreground">Please sign in to access your user profile and plant assignments.</p>
       </Card>
     );
   }
@@ -105,216 +126,395 @@ export default function Profile() {
   const displayName = [
     displayProfile?.first_name, displayProfile?.middle_name,
     displayProfile?.last_name, displayProfile?.suffix,
-  ].filter(Boolean).join(' ') || '—';
+  ].filter(Boolean).join(' ') || displayProfile?.username || 'PWRI Operator';
+
+  const initials = getInitials(displayProfile?.first_name, displayProfile?.last_name, displayProfile?.username);
 
   return (
-    <div className="space-y-4 animate-fade-in" data-testid="profile-page">
-      <PageHeader
-        title={isOverride ? `${displayProfile?.first_name ?? ''} ${displayProfile?.last_name ?? ''} — Profile`.trim() : 'My profile'}
-        actions={!editing && !isOverride && (
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => setEditing(true)}
-            data-testid="profile-edit-toggle"
-          >
-            <Pencil className="h-3 w-3 mr-1" /> Edit
-          </Button>
-        )}
-      />
+    <div className="space-y-5 animate-fade-in max-w-6xl mx-auto pb-8" data-testid="profile-page">
+      
+      {/* ── 1. EXECUTIVE PROFILE HERO BANNER ── */}
+      <div className="relative overflow-hidden rounded-2xl border border-border/80 bg-gradient-to-r from-card via-card to-muted/40 p-5 sm:p-6 shadow-sm">
+        <div className="absolute top-0 right-0 w-80 h-80 bg-primary/5 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20" />
 
-      {/* Plant selector — ensures plant choice is visible post-login */}
-      <Card className="p-3" data-testid="profile-plant-selector">
-        <div className="flex items-center gap-2">
-          <Building2 className="h-4 w-4 text-accent" />
-          <Label htmlFor="profile-active-plant" className="text-xs uppercase tracking-wide text-muted-foreground">
-            Active plant
-          </Label>
-        </div>
-        <Select
-          value={selectedPlantId ?? 'all'}
-          onValueChange={(v) => setSelectedPlantId(v === 'all' ? null : v)}
-        >
-          <SelectTrigger className="mt-2 w-full" data-testid="profile-plant-select" id="profile-active-plant">
-            <SelectValue placeholder="Choose a plant…" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All plants</SelectItem>
-            {assignedPlants.map((p) => (
-              <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <p className="text-xs text-muted-foreground mt-1.5">
-          You can always switch plant from the top-bar selector.
-        </p>
-      </Card>
-
-      {/* Role / access level */}
-      <Card className="p-3 space-y-2" data-testid="profile-role-card">
-        <div className="flex items-center gap-2">
-          <ShieldCheck className="h-4 w-4 text-accent" />
-          <p className="text-xs uppercase tracking-wide text-muted-foreground">
-            Role &amp; access
-          </p>
-        </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          {roles.length === 0 && !myCustomRole && (
-            <Badge variant="secondary">No role assigned</Badge>
-          )}
-          {myCustomRole && (
-            <Badge data-testid="profile-role-custom">
-              {myCustomRole.role.name}
-            </Badge>
-          )}
-          {roles
-            .filter((r) => !myCustomRole || r !== myCustomRole.role.base_role)
-            .map((r) => (
-              <Badge key={r} variant="outline" data-testid={`profile-role-${r}`}>
-                {r}
-              </Badge>
-            ))}
-          <StatusPill tone={access.tone}>{access.label}</StatusPill>
-        </div>
-        {myCustomRole && (
-          <div className="text-xs text-muted-foreground">
-            Based on {myCustomRole.role.base_role} — customized by your Admin. Some modules may differ from the standard {myCustomRole.role.base_role} role.
-          </div>
-        )}
-        <div className="text-xs text-muted-foreground">
-          Access level is computed from role:{' '}
-          Admin → Full access · Manager → Elevated · Supervisor → Limited · others → Restricted.
-        </div>
-      </Card>
-
-      {/* Identity */}
-      <Card className="p-3 space-y-3" data-testid="profile-identity-card">
-        <p className="text-xs uppercase tracking-wide text-muted-foreground">
-          Identity
-        </p>
-        {editing ? (
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <Label htmlFor="profile-first-name">First name</Label>
-              <Input
-                value={form.first_name}
-                onChange={(e) => setForm({ ...form, first_name: e.target.value })}
-                data-testid="profile-first-name"
-              id="profile-first-name"/>
-            </div>
-            <div>
-              <Label htmlFor="profile-middle-name">Middle name</Label>
-              <Input
-                value={form.middle_name}
-                onChange={(e) => setForm({ ...form, middle_name: e.target.value })}
-              id="profile-middle-name"/>
-            </div>
-            <div>
-              <Label htmlFor="profile-last-name">Last name</Label>
-              <Input
-                value={form.last_name}
-                onChange={(e) => setForm({ ...form, last_name: e.target.value })}
-                data-testid="profile-last-name"
-              id="profile-last-name"/>
-            </div>
-            <div>
-              <Label htmlFor="profile-suffix">Suffix</Label>
-              <Input
-                value={form.suffix}
-                onChange={(e) => setForm({ ...form, suffix: e.target.value })}
-                placeholder="Jr., III…"
-              id="profile-suffix"/>
-            </div>
-            <div className="col-span-2">
-              <Label htmlFor="profile-username">Username</Label>
-              <Input
-                value={form.username}
-                onChange={(e) => setForm({ ...form, username: e.target.value })}
-                data-testid="profile-username"
-              id="profile-username"/>
-            </div>
-            <div className="col-span-2">
-              <Label htmlFor="profile-designation">Designation</Label>
-              <DesignationCombobox
-                id="profile-designation"
-                value={form.designation}
-                onChange={(v) => setForm({ ...form, designation: v })}
-                extraOptions={existingDesignations}
-                data-testid="profile-designation"
+        <div className="relative flex flex-col sm:flex-row items-start sm:items-center justify-between gap-5">
+          <div className="flex items-center gap-4 min-w-0">
+            <div className="relative shrink-0">
+              <Avatar className="h-16 w-16 sm:h-20 sm:w-20 ring-4 ring-card shadow-md">
+                <AvatarFallback className="bg-gradient-to-tr from-primary to-accent text-white font-bold text-xl sm:text-2xl tracking-wider">
+                  {initials}
+                </AvatarFallback>
+              </Avatar>
+              <span
+                className="absolute bottom-0.5 right-0.5 h-4 w-4 rounded-full bg-accent ring-2 ring-card shadow-xs"
+                title="Active Account"
               />
             </div>
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-sm">
-            <Meta label="Name" value={displayName} />
-            <Meta label="Username" value={displayProfile?.username ? `@${displayProfile.username}` : '—'} />
-            <Meta label="Designation" value={displayProfile?.designation ?? '—'} />
-            <Meta label="Status" value={displayProfile?.status ?? '—'} />
-          </div>
-        )}
-        {editing && (
-          <div className="flex justify-end gap-2">
-            <Button variant="ghost" onClick={() => setEditing(false)} disabled={saving}>
-              Cancel
-            </Button>
-            <Button onClick={save} disabled={saving} data-testid="profile-save">
-              {saving && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
-              Save changes
-            </Button>
-          </div>
-        )}
-      </Card>
 
-      {/* Email — self-service change for non-operators; read-only notice for operators */}
-      {!isOverride && (
-        <Card className="p-3 space-y-2" data-testid="profile-email-card">
-          <p className="text-xs uppercase tracking-wide text-muted-foreground">
-            Email address
-          </p>
-          <ProfileEmailChange />
-        </Card>
-      )}
+            <div className="space-y-1 min-w-0">
+              <div className="flex items-center gap-2.5 flex-wrap">
+                <h1 className="text-lg sm:text-2xl font-bold text-foreground tracking-tight truncate">
+                  {displayName}
+                </h1>
+                <span className="inline-flex items-center gap-1 text-2xs font-extrabold px-2.5 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20">
+                  <Sparkles className="h-3 w-3" />
+                  {displayProfile?.designation || 'Operator'}
+                </span>
+                <StatusPill tone={access.tone} className="text-2xs px-2.5 py-0.5 font-bold">
+                  {access.label}
+                </StatusPill>
+              </div>
 
-      {/* Assigned plants (EnumList badges) */}
-      <Card className="p-3 space-y-2" data-testid="profile-plants-card">
-        <div className="flex items-center gap-2">
-          <MapPin className="h-4 w-4 text-accent" />
-          <Label className="text-xs uppercase tracking-wide text-muted-foreground">
-            Assigned plants ({assignedPlants.length})
-          </Label>
-        </div>
-        {assignedPlants.length === 0 ? (
-          <p className="text-xs text-muted-foreground">
-            No plants assigned. Ask your Admin to add plants in the Admin console.
-          </p>
-        ) : (
-          <div className="flex flex-wrap gap-1.5">
-            {assignedPlants.map((p) => (
-              <Badge
-                key={p.id}
+              <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap font-mono">
+                {displayProfile?.username && (
+                  <span>@{displayProfile.username}</span>
+                )}
+                {displayProfile?.username && user?.email && <span>·</span>}
+                {user?.email && (
+                  <span className="truncate">{user.email}</span>
+                )}
+                {isOverride && (
+                  <>
+                    <span>·</span>
+                    <span className="text-warn font-semibold">Operator Override Session</span>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 w-full sm:w-auto justify-end shrink-0">
+            {!editing && !isOverride ? (
+              <Button
                 variant="outline"
-                className="gap-1"
-                data-testid={`profile-plant-badge-${p.id}`}
+                size="sm"
+                onClick={() => setEditing(true)}
+                className="h-9 px-3.5 gap-1.5 rounded-xl font-medium shadow-2xs hover:bg-muted"
+                data-testid="profile-edit-toggle"
               >
-                <Building2 className="h-3 w-3" />
-                {p.name}
-              </Badge>
-            ))}
+                <Pencil className="h-3.5 w-3.5 text-primary" />
+                <span>Edit Profile</span>
+              </Button>
+            ) : null}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={signOut}
+              className="h-9 px-3 text-destructive hover:bg-destructive/10 rounded-xl font-medium"
+            >
+              Sign out
+            </Button>
           </div>
-        )}
-        <p className="text-xs text-muted-foreground">
-          Plant assignments can only be changed by an Admin.
-        </p>
-      </Card>
-    </div>
-  );
-}
+        </div>
+      </div>
 
-function Meta({ label, value }: { label: string; value: string }) {
-  return (
-    <>
-      <span className="text-muted-foreground">{label}</span>
-      <span className="font-medium truncate">{value}</span>
-    </>
+      {/* ── 2. TWO-COLUMN RESPONSIVE LAYOUT ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+
+        {/* ── LEFT COLUMN: Identity & Security (7 cols) ── */}
+        <div className="lg:col-span-7 space-y-5">
+
+          {/* Account Identity Card */}
+          <Card className="p-5 rounded-2xl border border-border/80 shadow-2xs space-y-4" data-testid="profile-identity-card">
+            <div className="flex items-center justify-between border-b border-border/50 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="h-7 w-7 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
+                  <User className="h-4 w-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-foreground">Identity &amp; Profile Details</h3>
+                  <p className="text-2xs text-muted-foreground">Personal credentials recorded for operational logs</p>
+                </div>
+              </div>
+              {!editing && !isOverride && (
+                <button
+                  type="button"
+                  onClick={() => setEditing(true)}
+                  className="text-2xs font-semibold text-primary hover:underline flex items-center gap-1"
+                >
+                  <Pencil className="h-3 w-3" /> Edit
+                </button>
+              )}
+            </div>
+
+            {editing ? (
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <Label htmlFor="profile-first-name" className="text-xs font-semibold">First name</Label>
+                    <Input
+                      id="profile-first-name"
+                      value={form.first_name}
+                      onChange={(e) => setForm({ ...form, first_name: e.target.value })}
+                      placeholder="e.g. Kevin"
+                      className="h-9 rounded-xl text-xs"
+                      data-testid="profile-first-name"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="profile-middle-name" className="text-xs font-semibold">Middle name</Label>
+                    <Input
+                      id="profile-middle-name"
+                      value={form.middle_name}
+                      onChange={(e) => setForm({ ...form, middle_name: e.target.value })}
+                      placeholder="Optional"
+                      className="h-9 rounded-xl text-xs"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="profile-last-name" className="text-xs font-semibold">Last name</Label>
+                    <Input
+                      id="profile-last-name"
+                      value={form.last_name}
+                      onChange={(e) => setForm({ ...form, last_name: e.target.value })}
+                      placeholder="e.g. Vilbar"
+                      className="h-9 rounded-xl text-xs"
+                      data-testid="profile-last-name"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="profile-suffix" className="text-xs font-semibold">Suffix</Label>
+                    <Input
+                      id="profile-suffix"
+                      value={form.suffix}
+                      onChange={(e) => setForm({ ...form, suffix: e.target.value })}
+                      placeholder="Jr., III…"
+                      className="h-9 rounded-xl text-xs"
+                    />
+                  </div>
+                  <div className="space-y-1 sm:col-span-2">
+                    <Label htmlFor="profile-username" className="text-xs font-semibold">Username handle</Label>
+                    <Input
+                      id="profile-username"
+                      value={form.username}
+                      onChange={(e) => setForm({ ...form, username: e.target.value })}
+                      placeholder="e.g. Kevz"
+                      className="h-9 rounded-xl text-xs font-mono"
+                      data-testid="profile-username"
+                    />
+                  </div>
+                  <div className="space-y-1 sm:col-span-2">
+                    <Label htmlFor="profile-designation" className="text-xs font-semibold">Designation</Label>
+                    <DesignationCombobox
+                      id="profile-designation"
+                      value={form.designation}
+                      onChange={(v) => setForm({ ...form, designation: v })}
+                      extraOptions={existingDesignations}
+                      data-testid="profile-designation"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-2 pt-2 border-t border-border/50">
+                  <Button variant="ghost" size="sm" onClick={() => setEditing(false)} disabled={saving} className="rounded-xl h-8 text-xs">
+                    Cancel
+                  </Button>
+                  <Button size="sm" onClick={save} disabled={saving} className="rounded-xl h-8 text-xs gap-1" data-testid="profile-save">
+                    {saving && <Loader2 className="h-3 w-3 animate-spin" />}
+                    Save changes
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                <div className="p-3 rounded-xl bg-muted/40 border border-border/60 space-y-0.5">
+                  <span className="text-3xs uppercase tracking-wider font-semibold text-muted-foreground">Full Name</span>
+                  <p className="font-bold text-foreground text-sm">{displayName}</p>
+                </div>
+                <div className="p-3 rounded-xl bg-muted/40 border border-border/60 space-y-0.5">
+                  <span className="text-3xs uppercase tracking-wider font-semibold text-muted-foreground">Username</span>
+                  <p className="font-bold text-foreground text-sm font-mono">{displayProfile?.username ? `@${displayProfile.username}` : '—'}</p>
+                </div>
+                <div className="p-3 rounded-xl bg-muted/40 border border-border/60 space-y-0.5">
+                  <span className="text-3xs uppercase tracking-wider font-semibold text-muted-foreground">Designation</span>
+                  <p className="font-bold text-foreground text-sm">{displayProfile?.designation ?? 'Operator'}</p>
+                </div>
+                <div className="p-3 rounded-xl bg-muted/40 border border-border/60 space-y-0.5">
+                  <span className="text-3xs uppercase tracking-wider font-semibold text-muted-foreground">Account Status</span>
+                  <div className="flex items-center gap-1.5 font-bold text-accent text-sm">
+                    <span className="h-2 w-2 rounded-full bg-accent animate-pulse" />
+                    <span>{displayProfile?.status ?? 'Active'}</span>
+                  </div>
+                </div>
+              </div>
+            )}
+          </Card>
+
+          {/* Email & Security Card */}
+          {!isOverride && (
+            <Card className="p-5 rounded-2xl border border-border/80 shadow-2xs space-y-4" data-testid="profile-email-card">
+              <div className="flex items-center justify-between border-b border-border/50 pb-3">
+                <div className="flex items-center gap-2">
+                  <div className="h-7 w-7 rounded-lg bg-info/10 text-info flex items-center justify-center">
+                    <Mail className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-foreground">Email &amp; Security</h3>
+                    <p className="text-2xs text-muted-foreground">Primary login address and security notifications</p>
+                  </div>
+                </div>
+                <span className="inline-flex items-center gap-1 text-3xs font-semibold px-2 py-0.5 rounded-full bg-accent-soft text-accent border border-accent/30">
+                  <CheckCircle2 className="h-3 w-3" /> Verified
+                </span>
+              </div>
+
+              <ProfileEmailChange />
+            </Card>
+          )}
+
+          {/* Role & Access Matrix */}
+          <Card className="p-5 rounded-2xl border border-border/80 shadow-2xs space-y-4" data-testid="profile-role-card">
+            <div className="flex items-center justify-between border-b border-border/50 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="h-7 w-7 rounded-lg bg-accent/10 text-accent flex items-center justify-center">
+                  <ShieldCheck className="h-4 w-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-foreground">Role &amp; Permissions</h3>
+                  <p className="text-2xs text-muted-foreground">Configured authorization and system capabilities</p>
+                </div>
+              </div>
+              <StatusPill tone={access.tone} className="text-2xs font-bold px-2 py-0.5">
+                {access.label}
+              </StatusPill>
+            </div>
+
+            <div className="flex items-center gap-2 flex-wrap">
+              {roles.length === 0 && !myCustomRole && (
+                <Badge variant="secondary">No role assigned</Badge>
+              )}
+              {myCustomRole && (
+                <Badge className="bg-primary text-primary-foreground font-bold" data-testid="profile-role-custom">
+                  {myCustomRole.role.name}
+                </Badge>
+              )}
+              {roles
+                .filter((r) => !myCustomRole || r !== myCustomRole.role.base_role)
+                .map((r) => (
+                  <Badge key={r} variant="outline" className="font-semibold" data-testid={`profile-role-${r}`}>
+                    {r}
+                  </Badge>
+                ))}
+            </div>
+
+            {myCustomRole ? (
+              <div className="text-xs text-muted-foreground p-3 rounded-xl bg-muted/40 border border-border/60">
+                Based on <strong className="text-foreground">{myCustomRole.role.base_role}</strong> — tailored by system administrator.
+              </div>
+            ) : (
+              <div className="text-xs text-muted-foreground p-3 rounded-xl bg-muted/40 border border-border/60 leading-relaxed">
+                Role hierarchy: <span className="font-semibold text-foreground">Admin</span> (Full system access) · <span className="font-semibold text-foreground">Manager</span> (Elevated plant config) · <span className="font-semibold text-foreground">Supervisor</span> (Limited approval) · <span className="font-semibold text-foreground">Operator</span> (Telemetry logging).
+              </div>
+            )}
+          </Card>
+        </div>
+
+        {/* ── RIGHT COLUMN: Active Plant & Assigned Facilities (5 cols) ── */}
+        <div className="lg:col-span-5 space-y-5">
+
+          {/* Active Facility Card */}
+          <Card className="p-5 rounded-2xl border border-border/80 shadow-2xs space-y-4" data-testid="profile-plant-selector">
+            <div className="flex items-center gap-2 border-b border-border/50 pb-3">
+              <div className="h-7 w-7 rounded-lg bg-accent/10 text-accent flex items-center justify-center">
+                <Building2 className="h-4 w-4" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-foreground">Active Monitoring Plant</h3>
+                <p className="text-2xs text-muted-foreground">Currently selected facility context</p>
+              </div>
+            </div>
+
+            <div className="p-3.5 rounded-xl bg-muted/30 border border-border/70 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-3xs uppercase font-semibold text-muted-foreground tracking-wider">Current Context</span>
+                <span className="h-2 w-2 rounded-full bg-accent animate-pulse" />
+              </div>
+              <p className="text-base font-bold text-foreground">
+                {currentActivePlant ? currentActivePlant.name : 'All Assigned Facilities'}
+              </p>
+              <Select
+                value={selectedPlantId ?? 'all'}
+                onValueChange={(v) => setSelectedPlantId(v === 'all' ? null : v)}
+              >
+                <SelectTrigger className="w-full h-9 rounded-xl text-xs bg-card" data-testid="profile-plant-select" id="profile-active-plant">
+                  <SelectValue placeholder="Choose a plant…" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All plants (Combined View)</SelectItem>
+                  {assignedPlants.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </Card>
+
+          {/* Assigned Facilities List */}
+          <Card className="p-5 rounded-2xl border border-border/80 shadow-2xs space-y-4" data-testid="profile-plants-card">
+            <div className="flex items-center justify-between border-b border-border/50 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="h-7 w-7 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
+                  <MapPin className="h-4 w-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-foreground">Assigned Facilities</h3>
+                  <p className="text-2xs text-muted-foreground">{assignedPlants.length} plant{assignedPlants.length === 1 ? '' : 's'} authorized</p>
+                </div>
+              </div>
+            </div>
+
+            {assignedPlants.length === 0 ? (
+              <div className="p-4 text-center rounded-xl bg-muted/30 border border-border/60 text-xs text-muted-foreground">
+                No plants assigned. Contact system administrator for facility assignments.
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {assignedPlants.map((p) => {
+                  const isActive = selectedPlantId === p.id;
+                  return (
+                    <div
+                      key={p.id}
+                      onClick={() => setSelectedPlantId(p.id)}
+                      className={`p-3 rounded-xl border transition-all flex items-center justify-between gap-3 cursor-pointer ${
+                        isActive
+                          ? 'border-accent bg-accent-soft/30 shadow-2xs'
+                          : 'border-border/70 bg-card hover:bg-muted/40 hover:border-primary/40'
+                      }`}
+                      data-testid={`profile-plant-badge-${p.id}`}
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className={`h-8 w-8 rounded-lg flex items-center justify-center text-xs font-bold shrink-0 ${
+                          isActive ? 'bg-accent text-accent-foreground' : 'bg-muted text-muted-foreground'
+                        }`}>
+                          <Building className="h-4 w-4" />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-xs font-bold text-foreground truncate">{p.name}</p>
+                          <p className="text-3xs text-muted-foreground font-mono">ID: {p.id.slice(0, 8)}…</p>
+                        </div>
+                      </div>
+
+                      {isActive ? (
+                        <span className="text-3xs font-extrabold text-accent px-2 py-0.5 rounded-full bg-accent-soft border border-accent/40 shrink-0">
+                          ACTIVE
+                        </span>
+                      ) : (
+                        <span className="text-3xs font-semibold text-muted-foreground hover:text-foreground flex items-center gap-0.5 shrink-0">
+                          Switch →
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            <p className="text-3xs text-muted-foreground/80 leading-normal pt-1">
+              Plant assignments and facility access privileges are managed centrally in the Admin Console.
+            </p>
+          </Card>
+        </div>
+      </div>
+    </div>
   );
 }

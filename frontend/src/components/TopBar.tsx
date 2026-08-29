@@ -164,16 +164,27 @@ export function TopBar() {
     }),
   [plantAlerts]);
 
-  const hasCritical = plantAlerts.some((a) => sevTier(a.severity) === 'critical');
+  const [activeTab, setActiveTab] = useState<'all' | 'critical' | 'warning' | 'info' | 'notifications'>('all');
+
+  const criticalAlerts = useMemo(() => sortedAlerts.filter(a => sevTier(a.severity) === 'critical'), [sortedAlerts]);
+  const warningAlerts  = useMemo(() => sortedAlerts.filter(a => sevTier(a.severity) === 'warning'), [sortedAlerts]);
+  const infoAlerts     = useMemo(() => sortedAlerts.filter(a => sevTier(a.severity) === 'info'), [sortedAlerts]);
+
+  const displayedAlerts = useMemo(() => {
+    if (activeTab === 'critical') return criticalAlerts;
+    if (activeTab === 'warning') return warningAlerts;
+    if (activeTab === 'info') return infoAlerts;
+    if (activeTab === 'notifications') return [];
+    return sortedAlerts;
+  }, [activeTab, sortedAlerts, criticalAlerts, warningAlerts, infoAlerts]);
+
+  const showNotifications = activeTab === 'all' || activeTab === 'notifications';
 
   return (
     <header className="sticky top-0 z-40 bg-topbar text-topbar-foreground border-b border-white/8 shadow-sm">
       <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 sm:gap-3 px-3 sm:px-4 h-12">
 
-        {/* ── Left: brand mark — only shown when sidebar is collapsed ──
-            Always occupies the left grid cell (even when empty) so its
-            width mirrors the right-side icon cluster's cell, keeping the
-            center cell (plant selector) truly centered on the bar. */}
+        {/* ── Left: brand mark ── */}
         <div className="flex items-center min-w-0">
           {showBrand && (
             <div className="flex items-center gap-2 shrink-0">
@@ -188,7 +199,7 @@ export function TopBar() {
           )}
         </div>
 
-        {/* ── Center: plant selector ─────────────────────────────── */}
+        {/* ── Center: plant selector ── */}
         <div className="flex justify-center">
           <Select
             value={selectedPlantId ?? 'all'}
@@ -214,16 +225,13 @@ export function TopBar() {
           </Select>
         </div>
 
-        {/* ── Right: sync / theme / notifications / avatar ────────── */}
+        {/* ── Right: sync / theme / notifications / avatar ── */}
         <div className="flex items-center justify-end gap-2 sm:gap-3 min-w-0">
 
-          {/* ── Sync indicator ───────────────────────────────────── */}
           <SyncIndicator />
-
-          {/* ── Color theme picker ───────────────────────────────── */}
           <ThemeSelector />
 
-        {/* ── Notifications bell ─────────────────────────────────── */}
+        {/* ── Notifications bell ── */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
@@ -231,12 +239,8 @@ export function TopBar() {
               size="icon"
               aria-label={totalBadge > 0 ? `Notifications (${totalBadge} unread)` : 'Notifications'}
               className={cn(
-                // 40px hit area (was 32px) — closer to the 44px touch-target
-                // guideline; kept under 44 so it still fits the 48px-tall
-                // TopBar row alongside the plant selector without crowding.
                 'relative h-10 w-10',
                 'hover:bg-white/10 focus-visible:ring-white/30',
-                // Bell icon colour escalates with severity
                 hasCritical
                   ? 'text-danger'
                   : plantAlerts.length > 0
@@ -244,7 +248,6 @@ export function TopBar() {
                     : 'text-topbar-foreground hover:text-topbar-foreground',
               )}
             >
-              {/* Bell — shakes when there are unread critical alerts */}
               <Bell
                 className={cn(
                   'h-[17px] w-[17px] transition-colors',
@@ -252,7 +255,6 @@ export function TopBar() {
                 )}
               />
 
-              {/* Outer pulse ring — only on critical */}
               {hasCritical && (
                 <span
                   className="absolute inset-0 rounded-full animate-ping bg-danger/30 pointer-events-none"
@@ -260,7 +262,6 @@ export function TopBar() {
                 />
               )}
 
-              {/* Badge counter */}
               {totalBadge > 0 && (
                 <span
                   className={cn(
@@ -278,79 +279,202 @@ export function TopBar() {
             </Button>
           </DropdownMenuTrigger>
 
-          <DropdownMenuContent align="end" className="w-80 max-h-[75vh] overflow-y-auto">
+          <DropdownMenuContent align="end" className="w-[360px] sm:w-[440px] p-0 rounded-2xl shadow-xl border border-border/80 bg-popover/95 backdrop-blur-md overflow-hidden flex flex-col max-h-[82vh]">
 
-            {/* Plant alerts */}
-            {sortedAlerts.length > 0 && (
-              <>
-                <DropdownMenuLabel className="flex items-center justify-between py-2">
-                  <span className="flex items-center gap-1.5">
-                    <AlertTriangle className="h-3.5 w-3.5 text-danger" />
-                    <span className="text-xs">Plant Alerts</span>
+            {/* Header with Title & Batch Actions */}
+            <div className="p-3 bg-muted/40 border-b border-border/60">
+              <div className="flex items-center justify-between gap-2 mb-2.5">
+                <div className="flex items-center gap-2">
+                  <div className="h-6 w-6 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
+                    <Bell className="h-3.5 w-3.5" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold text-foreground tracking-tight">Plant Alerts &amp; Activity</h4>
+                  </div>
+                  {totalBadge > 0 && (
                     <span className={cn(
                       'text-3xs font-bold px-1.5 py-0.5 rounded-full',
-                      hasCritical
-                        ? 'bg-danger-soft text-danger'
-                        : 'bg-warn-soft text-warn-foreground',
+                      hasCritical ? 'bg-danger-soft text-danger' : 'bg-warn-soft text-warn-foreground'
                     )}>
-                      {sortedAlerts.length}
+                      {totalBadge} new
                     </span>
-                  </span>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => sortedAlerts.forEach((a) => snoozeAlert(a.id, 60 * 60 * 1000))}
-                      className="flex items-center gap-1 text-xs text-muted-foreground hover:text-warn transition-colors"
-                      title="Snooze all alerts for 1 hour"
-                    >
-                      <BellOff className="h-3 w-3" />
-                      <span>Snooze all</span>
-                    </button>
-                    <span className="text-muted-foreground/30">|</span>
-                    <button
-                      onClick={clearAlerts}
-                      className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors"
-                    >
-                      Dismiss all
-                    </button>
-                  </div>
-                </DropdownMenuLabel>
+                  )}
+                </div>
 
-                {sortedAlerts.map((alert) => {
-                  const Icon = sevIcon(alert.severity);
-                  const plantName = plantNameById.get(alert.plantId);
-                  return (
-                    <div
-                      key={alert.id}
-                      className={cn(
-                        'flex gap-2.5 px-3 py-2.5 border-b border-border/40 last:border-0',
-                        sevBgCls(alert.severity),
-                        alert.linkPath ? 'cursor-pointer hover:brightness-95 transition-[filter]' : '',
-                      )}
-                      onClick={(e) => {
-                        // stopPropagation keeps this click from being treated as a
-                        // dropdown "select" — see the DB Notifications rows above.
-                        e.stopPropagation();
-                        if (alert.linkPath) navigate(alert.linkPath);
-                      }}
+                <div className="flex items-center gap-1">
+                  {sortedAlerts.length > 0 && (
+                    <>
+                      <button
+                        onClick={() => sortedAlerts.forEach((a) => snoozeAlert(a.id, 60 * 60 * 1000))}
+                        className="flex items-center gap-1 text-2xs px-2 py-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors font-medium"
+                        title="Snooze all active alerts for 1 hour"
+                      >
+                        <BellOff className="h-3 w-3 text-warn" />
+                        <span>Snooze all</span>
+                      </button>
+                      <button
+                        onClick={clearAlerts}
+                        className="text-2xs px-2 py-1 rounded-md text-muted-foreground hover:text-danger hover:bg-danger-soft transition-colors font-medium"
+                        title="Dismiss all alerts"
+                      >
+                        Dismiss all
+                      </button>
+                    </>
+                  )}
+                  {unreadCount > 0 && (
+                    <button
+                      onClick={markAllRead}
+                      className="text-2xs px-2 py-1 rounded-md text-accent hover:bg-accent-soft transition-colors font-medium"
+                      title="Mark all notifications as read"
                     >
-                      <Icon className={cn('h-3.5 w-3.5 mt-0.5 shrink-0', sevTextCls(alert.severity))} />
-                      <div className="flex-1 min-w-0 space-y-0.5">
-                        <div className="flex items-start justify-between gap-1">
-                          <span className={cn('text-xs font-semibold leading-snug', sevTextCls(alert.severity))}>
+                      Mark read
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Category Filter Tabs */}
+              <div className="flex items-center gap-1 p-0.5 rounded-xl bg-background/80 border border-border/60">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('all')}
+                  className={cn(
+                    'flex-1 py-1 px-2 text-2xs font-semibold rounded-lg transition-all text-center',
+                    activeTab === 'all'
+                      ? 'bg-primary text-primary-foreground shadow-2xs'
+                      : 'text-muted-foreground hover:text-foreground'
+                  )}
+                >
+                  All ({totalBadge})
+                </button>
+                {criticalAlerts.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('critical')}
+                    className={cn(
+                      'py-1 px-2 text-2xs font-semibold rounded-lg transition-all flex items-center gap-1',
+                      activeTab === 'critical'
+                        ? 'bg-danger text-white shadow-2xs'
+                        : 'text-danger hover:bg-danger-soft'
+                    )}
+                  >
+                    <span className="h-1.5 w-1.5 rounded-full bg-current" />
+                    <span>Crit ({criticalAlerts.length})</span>
+                  </button>
+                )}
+                {warningAlerts.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('warning')}
+                    className={cn(
+                      'py-1 px-2 text-2xs font-semibold rounded-lg transition-all flex items-center gap-1',
+                      activeTab === 'warning'
+                        ? 'bg-warn text-warn-foreground shadow-2xs'
+                        : 'text-warn-foreground hover:bg-warn-soft'
+                    )}
+                  >
+                    <span className="h-1.5 w-1.5 rounded-full bg-current" />
+                    <span>Warn ({warningAlerts.length})</span>
+                  </button>
+                )}
+                {infoAlerts.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('info')}
+                    className={cn(
+                      'py-1 px-2 text-2xs font-semibold rounded-lg transition-all flex items-center gap-1',
+                      activeTab === 'info'
+                        ? 'bg-info text-white shadow-2xs'
+                        : 'text-info hover:bg-info-soft'
+                    )}
+                  >
+                    <span>Info ({infoAlerts.length})</span>
+                  </button>
+                )}
+                {notifs.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('notifications')}
+                    className={cn(
+                      'py-1 px-2 text-2xs font-semibold rounded-lg transition-all text-center',
+                      activeTab === 'notifications'
+                        ? 'bg-primary text-primary-foreground shadow-2xs'
+                        : 'text-muted-foreground hover:text-foreground'
+                    )}
+                  >
+                    Logs ({notifs.length})
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Scrollable Alerts List */}
+            <div className="overflow-y-auto divide-y divide-border/50 max-h-[60vh] p-2 space-y-1.5">
+
+              {/* Plant Alerts */}
+              {displayedAlerts.map((alert) => {
+                const Icon = sevIcon(alert.severity);
+                const tier = sevTier(alert.severity);
+                const plantName = plantNameById.get(alert.plantId);
+
+                return (
+                  <div
+                    key={alert.id}
+                    className={cn(
+                      'group p-3 rounded-xl border transition-all relative',
+                      tier === 'critical'
+                        ? 'bg-danger-soft/40 border-danger/30 hover:border-danger/60'
+                        : tier === 'warning'
+                        ? 'bg-warn-soft/40 border-warn/30 hover:border-warn/60'
+                        : 'bg-card border-border/70 hover:border-primary/40',
+                      alert.linkPath ? 'cursor-pointer hover:shadow-2xs' : '',
+                    )}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (alert.linkPath) navigate(alert.linkPath);
+                    }}
+                  >
+                    <div className="flex items-start gap-2.5">
+                      <div className={cn(
+                        'h-7 w-7 rounded-lg flex items-center justify-center shrink-0 mt-0.5 shadow-2xs',
+                        tier === 'critical' ? 'bg-danger text-white' :
+                        tier === 'warning' ? 'bg-warn text-warn-foreground' :
+                        'bg-info text-white'
+                      )}>
+                        <Icon className="h-4 w-4" />
+                      </div>
+
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-start justify-between gap-1.5 mb-1">
+                          <span className={cn(
+                            'text-xs font-bold leading-tight line-clamp-1',
+                            tier === 'critical' ? 'text-danger' :
+                            tier === 'warning' ? 'text-foreground' : 'text-foreground'
+                          )}>
                             {alert.title}
                           </span>
-                          <div className="flex items-center gap-1 shrink-0 ml-1 mt-0.5">
+
+                          {/* Action controls */}
+                          <div className="flex items-center gap-1 shrink-0">
                             <button
                               onClick={(e) => { e.stopPropagation(); snoozeAlert(alert.id, 60 * 60 * 1000); }}
-                              className="text-muted-foreground/40 hover:text-warn transition-colors"
-                              aria-label="Snooze 1 hour"
-                              title="Snooze 1 hour"
+                              className="h-6 px-1.5 rounded-md text-3xs font-medium text-muted-foreground hover:text-warn hover:bg-warn-soft transition-colors flex items-center gap-0.5"
+                              title="Snooze alert for 1 hour"
                             >
-                              <Clock className="h-3 w-3" />
+                              <Clock className="h-2.5 w-2.5" />
+                              <span>1h</span>
+                            </button>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); snoozeAlert(alert.id, 24 * 60 * 60 * 1000); }}
+                              className="h-6 px-1.5 rounded-md text-3xs font-medium text-muted-foreground hover:text-warn hover:bg-warn-soft transition-colors flex items-center gap-0.5"
+                              title="Snooze alert for 24 hours"
+                            >
+                              <Clock className="h-2.5 w-2.5" />
+                              <span>24h</span>
                             </button>
                             <button
                               onClick={(e) => { e.stopPropagation(); removeAlerts([alert.id]); }}
-                              className="text-muted-foreground/50 hover:text-muted-foreground transition-colors text-2xs"
+                              className="h-6 w-6 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors flex items-center justify-center text-xs"
                               aria-label="Dismiss"
                               title="Dismiss"
                             >
@@ -358,99 +482,94 @@ export function TopBar() {
                             </button>
                           </div>
                         </div>
-                        <p className="text-xs text-muted-foreground leading-snug">{alert.description}</p>
-                        <div className="flex items-center gap-1.5 text-2xs text-muted-foreground/60">
-                          <span className={cn('h-1.5 w-1.5 rounded-full shrink-0', sevDotCls(alert.severity))} />
-                          {/* Plant name — only shown when user has multi-plant access */}
-                          {isMultiPlant && plantName && (
-                            <>
-                              <span className="font-medium text-foreground/70">{plantName}</span>
-                              <span>·</span>
-                            </>
+
+                        <p className="text-xs text-muted-foreground leading-snug mb-2 font-normal">
+                          {alert.description}
+                        </p>
+
+                        {/* Metadata Tag Strip */}
+                        <div className="flex items-center gap-1.5 text-3xs font-medium text-muted-foreground flex-wrap">
+                          {plantName && (
+                            <span className="px-1.5 py-0.5 rounded-md bg-muted border border-border/60 text-foreground font-semibold">
+                              {plantName}
+                            </span>
                           )}
-                          <span>{alert.source}</span>
+                          <span className="px-1.5 py-0.5 rounded-md bg-muted/60 text-muted-foreground font-mono">
+                            {alert.source}
+                          </span>
                           <span>·</span>
                           <span>{format(new Date(alert.timestamp), 'hh:mm aa')}</span>
-                          <span>·</span>
-                          <button
-                            onClick={(e) => { e.stopPropagation(); snoozeAlert(alert.id, 60 * 60 * 1000); }}
-                            className="flex items-center gap-0.5 hover:text-warn transition-colors"
-                            title="Snooze 1 hour"
-                          >
-                            <BellOff className="h-2.5 w-2.5" />
-                            <span>1h</span>
-                          </button>
+                          {alert.linkPath && (
+                            <span className="ml-auto text-primary font-bold hover:underline flex items-center gap-0.5">
+                              View →
+                            </span>
+                          )}
                         </div>
                       </div>
                     </div>
-                  );
-                })}
-                <DropdownMenuSeparator />
-              </>
-            )}
+                  </div>
+                );
+              })}
 
-            {/* DB Notifications */}
-            <DropdownMenuLabel className="flex items-center justify-between py-2">
-              <span className="text-xs">Notifications</span>
-              {unreadCount > 0 && (
-                <button
-                  onClick={markAllRead}
-                  className="text-xs text-accent hover:text-accent/80 underline underline-offset-2 transition-colors"
-                >
-                  Mark all read
-                </button>
-              )}
-            </DropdownMenuLabel>
-            <DropdownMenuSeparator />
-
-            {notifs.length === 0 && (
-              <div className="px-3 py-6 text-center">
-                <Bell className="h-8 w-8 text-muted-foreground/20 mx-auto mb-2" />
-                <p className="text-sm text-muted-foreground">No notifications</p>
-              </div>
-            )}
-
-            {notifs.map((n) => (
-              // Plain div (not DropdownMenuItem) — same reason as the Plant
-              // Alerts rows above: Radix's Item onSelect/close-on-click
-              // behavior would swallow clicks on the nested X button before
-              // our stopPropagation could run. This keeps click-to-navigate
-              // working while letting the dismiss button opt out cleanly.
-              <div
-                key={n.id}
-                onClick={() => n.link_path && navigate(n.link_path)}
-                className={cn(
-                  'relative flex flex-col items-start gap-1 rounded-sm px-2 py-2.5',
-                  'text-sm outline-none transition-colors hover:bg-accent',
-                  n.link_path ? 'cursor-pointer' : 'cursor-default',
-                )}
-              >
-                <div className="flex items-center gap-2 w-full">
-                  {!n.read && (
-                    <span className="h-1.5 w-1.5 rounded-full bg-danger flex-shrink-0" />
-                  )}
-                  <span className={cn('text-xs flex-1', n.read ? 'font-normal' : 'font-semibold')}>
-                    {n.title}
-                  </span>
-                  <span className="text-2xs text-muted-foreground shrink-0">
-                    {formatDistanceToNow(new Date(n.created_at), { addSuffix: true })}
-                  </span>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); deleteNotification(n.id); }}
-                    className="text-muted-foreground/50 hover:text-muted-foreground transition-colors text-2xs shrink-0 ml-0.5"
-                    aria-label="Dismiss notification"
-                    title="Dismiss"
-                  >
-                    ✕
-                  </button>
+              {/* DB Notifications */}
+              {showNotifications && notifs.length > 0 && (
+                <div className="pt-2 space-y-1.5">
+                  <div className="px-2 py-1 text-3xs font-extrabold uppercase tracking-wider text-muted-foreground">
+                    System Notifications
+                  </div>
+                  {notifs.map((n) => (
+                    <div
+                      key={n.id}
+                      onClick={() => n.link_path && navigate(n.link_path)}
+                      className={cn(
+                        'p-2.5 rounded-xl border border-border/70 bg-card hover:bg-muted/40 transition-colors flex items-start gap-2.5',
+                        n.link_path ? 'cursor-pointer' : 'cursor-default',
+                        !n.read ? 'border-primary/40 bg-primary-soft/10' : ''
+                      )}
+                    >
+                      <div className="h-6 w-6 rounded-md bg-primary-soft text-primary flex items-center justify-center shrink-0 mt-0.5">
+                        <Info className="h-3.5 w-3.5" />
+                      </div>
+                      <div className="flex-1 min-w-0 space-y-0.5">
+                        <div className="flex items-center justify-between gap-1">
+                          <span className={cn('text-xs truncate', n.read ? 'font-medium text-foreground' : 'font-bold text-primary')}>
+                            {n.title}
+                          </span>
+                          <span className="text-3xs text-muted-foreground shrink-0">
+                            {formatDistanceToNow(new Date(n.created_at), { addSuffix: true })}
+                          </span>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); deleteNotification(n.id); }}
+                            className="text-muted-foreground/50 hover:text-muted-foreground transition-colors text-xs shrink-0 ml-1"
+                            title="Dismiss"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                        {n.message && (
+                          <p className="text-xs text-muted-foreground leading-snug line-clamp-2">
+                            {n.message}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
                 </div>
-                {n.message && (
-                  <p className="text-xs text-muted-foreground leading-snug line-clamp-2 pl-3.5">
-                    {n.message}
-                  </p>
-                )}
-              </div>
-            ))}
+              )}
+
+              {/* Empty state */}
+              {displayedAlerts.length === 0 && (!showNotifications || notifs.length === 0) && (
+                <div className="py-8 text-center space-y-2">
+                  <div className="h-10 w-10 rounded-full bg-accent-soft text-accent flex items-center justify-center mx-auto">
+                    <Bell className="h-5 w-5" />
+                  </div>
+                  <div className="space-y-0.5">
+                    <p className="text-xs font-bold text-foreground">No alerts active</p>
+                    <p className="text-2xs text-muted-foreground">All plant systems and sensors operating normally</p>
+                  </div>
+                </div>
+              )}
+            </div>
           </DropdownMenuContent>
         </DropdownMenu>
 
