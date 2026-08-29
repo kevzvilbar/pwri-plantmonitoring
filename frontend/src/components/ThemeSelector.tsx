@@ -1,21 +1,7 @@
-/**
- * ThemeSelector
- * ─────────────────────────────────────────────────────────────────────────────
- * Renders a compact swatch grid letting the user switch between the curated
- * color palettes defined in lib/themes.ts.
- *
- * Appearance: a Palette icon button that opens a Popover with a grid of
- * labeled swatches.  The selected theme gets a ring outline.
- *
- * Usage: drop <ThemeSelector /> anywhere in the chrome (TopBar, Profile page,
- * sidebar footer, etc.).
- */
-
-import { Palette, Check, Moon } from 'lucide-react';
+import { Palette, Check, Moon, Sun, Sparkles } from 'lucide-react';
 import { useAppStore } from '@/store/appStore';
 import { COLOR_THEMES } from '@/lib/themes';
 import { Button } from '@/components/ui/button';
-import { Switch } from '@/components/ui/switch';
 import {
   Popover,
   PopoverContent,
@@ -26,104 +12,119 @@ import { cn } from '@/lib/utils';
 export function ThemeSelector() {
   const { colorTheme, setColorTheme, darkMode, setDarkMode } = useAppStore();
 
+  const currentThemeObj = COLOR_THEMES.find(t => t.id === colorTheme) || COLOR_THEMES[0];
+
   return (
     <Popover>
       <PopoverTrigger asChild>
         <Button
           variant="ghost"
           size="icon"
-          // Matches the 40px hit area used for Bell/SyncIndicator — see TopBar.tsx.
-          className="h-10 w-10 text-topbar-foreground/70 hover:text-topbar-foreground hover:bg-white/10"
+          className="h-10 w-10 text-topbar-foreground/70 hover:text-topbar-foreground hover:bg-white/10 relative"
           aria-label="Choose color theme"
-          title="Color theme"
+          title="Theme & Appearance"
         >
           <Palette className="h-4 w-4" />
+          <span
+            className="absolute bottom-2 right-2 w-2 h-2 rounded-full border border-topbar"
+            style={{ background: currentThemeObj.swatches[1] }}
+          />
         </Button>
       </PopoverTrigger>
 
       <PopoverContent
         align="end"
         sideOffset={8}
-        className="w-72 p-4 shadow-[var(--shadow-modal)]"
+        className="w-80 max-w-[94vw] p-4 rounded-2xl bg-card/95 backdrop-blur-xl border border-border/80 shadow-2xl space-y-3.5"
       >
-        <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-          Color Theme
-        </p>
-
-        <div className="grid grid-cols-1 gap-2">
-          {COLOR_THEMES.map((theme) => {
-            const active = colorTheme === theme.id;
-            const [sidebarSwatch, primarySwatch, accentSwatch, bgSwatch] =
-              theme.swatches;
-
-            return (
-              <button
-                key={theme.id}
-                onClick={() => setColorTheme(theme.id)}
-                className={cn(
-                  'group flex w-full items-center gap-3 rounded-lg border px-3 py-2.5 text-left',
-                  'transition-all duration-150',
-                  active
-                    ? 'border-primary bg-primary-soft shadow-[0_0_0_2px_hsl(var(--primary)/0.35)]'
-                    : 'border-border hover:border-primary/40 hover:bg-muted/60',
-                )}
-              >
-                {/* Swatch row */}
-                <span className="flex shrink-0 overflow-hidden rounded-md shadow-sm" aria-hidden>
-                  {[sidebarSwatch, primarySwatch, accentSwatch, bgSwatch].map(
-                    (color, i) => (
-                      <span
-                        key={i}
-                        className="h-6 w-6"
-                        style={{ background: color }}
-                      />
-                    ),
-                  )}
-                </span>
-
-                {/* Label */}
-                <span className="min-w-0 flex-1">
-                  <span className="block text-xs font-medium leading-tight text-foreground">
-                    {theme.name}
-                  </span>
-                  <span className="block truncate text-xs text-muted-foreground">
-                    {theme.description}
-                  </span>
-                </span>
-
-                {/* Active check */}
-                {active && (
-                  <Check className="ml-auto h-4 w-4 shrink-0 text-primary" />
-                )}
-              </button>
-            );
-          })}
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="h-7 w-7 rounded-lg bg-primary-soft flex items-center justify-center text-primary">
+              <Sparkles className="h-3.5 w-3.5" />
+            </div>
+            <div>
+              <p className="text-xs font-bold text-foreground">Theme & Lighting</p>
+              <p className="text-3xs text-muted-foreground">Select your workspace style</p>
+            </div>
+          </div>
+          <span className="text-3xs font-semibold px-2 py-0.5 rounded-full bg-muted text-muted-foreground border border-border/60">
+            {currentThemeObj.name}
+          </span>
         </div>
 
-        <div className="mt-4 border-t pt-3">
-          {/* eslint-disable-next-line jsx-a11y/label-has-associated-control --
-              Switch (Radix) renders a button[role=switch], not a native
-              input/select/textarea, so eslint's control-recognition doesn't
-              see it as "associated" even though it's nested inside this
-              label. It already has its own aria-label below; wrapping it in
-              a native <label> is the standard WAI-ARIA switch pattern purely
-              for click-target delegation (clicking "Dark Mode" toggles it),
-              not for the accessible name. */}
-          <label className="flex items-center justify-between gap-2 text-sm cursor-pointer">
-            <span className="flex items-center gap-2 font-medium text-foreground">
-              <Moon className="h-3.5 w-3.5 text-muted-foreground" />
-              Dark Mode
-            </span>
-            <Switch
-              checked={darkMode}
-              onCheckedChange={setDarkMode}
-              aria-label="Toggle dark mode"
-            />
-          </label>
-          <p className="mt-1.5 text-xs text-muted-foreground">
-            Newer than the color themes above — most of the app adapts
-            automatically, but a few spots may not have caught up yet.
+        {/* Segmented Light / Dark Mode Toggle */}
+        <div className="p-1 rounded-xl bg-muted/60 border border-border/50 grid grid-cols-2 gap-1">
+          <button
+            type="button"
+            onClick={() => setDarkMode(false)}
+            className={cn(
+              'h-8 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all',
+              !darkMode
+                ? 'bg-card text-foreground shadow-xs border border-border/80'
+                : 'text-muted-foreground hover:text-foreground',
+            )}
+          >
+            <Sun className="h-3.5 w-3.5 text-amber-500" />
+            <span>Light Mode</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setDarkMode(true)}
+            className={cn(
+              'h-8 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all',
+              darkMode
+                ? 'bg-card text-foreground shadow-xs border border-border/80'
+                : 'text-muted-foreground hover:text-foreground',
+            )}
+          >
+            <Moon className="h-3.5 w-3.5 text-sky-400" />
+            <span>Dark Mode</span>
+          </button>
+        </div>
+
+        {/* Color Palette Grid */}
+        <div className="space-y-1.5">
+          <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+            Color Palettes
           </p>
+          <div className="grid grid-cols-2 gap-2">
+            {COLOR_THEMES.map((theme) => {
+              const active = colorTheme === theme.id;
+              const [sidebarSwatch, primarySwatch, accentSwatch, bgSwatch] = theme.swatches;
+
+              return (
+                <button
+                  key={theme.id}
+                  onClick={() => setColorTheme(theme.id)}
+                  className={cn(
+                    'group relative p-2 rounded-xl border text-left transition-all',
+                    active
+                      ? 'border-primary bg-primary-soft/40 ring-1 ring-primary shadow-2xs'
+                      : 'border-border/60 bg-muted/20 hover:bg-muted/60 hover:border-border',
+                  )}
+                >
+                  {/* Swatch Bar */}
+                  <div className="flex h-2.5 w-full rounded-full overflow-hidden mb-1.5 shadow-2xs">
+                    <span className="flex-1" style={{ background: sidebarSwatch }} />
+                    <span className="flex-1" style={{ background: primarySwatch }} />
+                    <span className="flex-1" style={{ background: accentSwatch }} />
+                    <span className="flex-1" style={{ background: bgSwatch }} />
+                  </div>
+
+                  {/* Title & Active Dot */}
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="text-2xs font-bold text-foreground truncate">
+                      {theme.name}
+                    </span>
+                    {active && (
+                      <Check className="h-3 w-3 text-primary shrink-0 stroke-[3]" />
+                    )}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
         </div>
       </PopoverContent>
     </Popover>
