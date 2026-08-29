@@ -178,7 +178,7 @@ export default function Admin() {
             variant="ghost"
             size="sm"
             className="h-7 px-2 text-2xs font-semibold hover:bg-background"
-            onClick={() => navigate('/scorecard')}
+            onClick={() => navigate('/manager-scorecard')}
           >
             <Activity className="h-3.5 w-3.5 mr-1 text-kpi-ro" />
             Manager Scorecard &rarr;

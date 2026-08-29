@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect } from "react";
 import { QueryClient, QueryClientProvider, QueryCache, MutationCache } from "@tanstack/react-query";
-import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Route, Routes, Navigate } from "react-router-dom";
 import { Toaster as Sonner, toast } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -129,8 +129,9 @@ const App = () => (
                 <Route path="/maintenance" element={<Maintenance />} />
                 <Route path="/incidents" element={<Incidents />} />
                 <Route path="/employees" element={<Employees />} />
-              <Route path="/data-corrections" element={<DataCorrections />} />
+                <Route path="/data-corrections" element={<DataCorrections />} />
                 <Route path="/manager-scorecard" element={<ManagerScorecard />} />
+                <Route path="/scorecard" element={<Navigate to="/manager-scorecard" replace />} />
                 <Route path="/import" element={<Import />} />
                 <Route path="/exports" element={<Exports />} />
                 <Route path="/compliance" element={<Compliance />} />
