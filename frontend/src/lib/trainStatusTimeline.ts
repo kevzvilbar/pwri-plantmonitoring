@@ -39,6 +39,14 @@ export interface StatusSegment {
    * directly; only the reconcile step ever sets this.
    */
   inferredEnd?: boolean;
+  /**
+   * True when reading rows exist strictly inside [startAt, endAt) despite
+   * this segment having a real, confirmed close event. Set by
+   * flagConflictingClosedSegments — see that function's doc comment for why
+   * this is an annotation rather than reconcileOngoingSegmentWithReadings-
+   * style clipping.
+   */
+  hasConflictingReadings?: boolean;
 }
 
 /**
@@ -117,6 +125,50 @@ export function reconcileOngoingSegmentWithReadings(
     ...segments.slice(0, -1),
     { ...last, endAt: latestReadingAt, inferredEnd: true },
   ];
+}
+
+/**
+ * Flags — but does not clip — a *closed* non-Running segment when reading
+ * rows exist strictly inside its [startAt, endAt) window.
+ *
+ * reconcileOngoingSegmentWithReadings above only ever touches the timeline's
+ * one still-open segment. It deliberately leaves every already-closed
+ * segment alone, on the reasoning that a real train_status_log close event
+ * is authoritative and shouldn't be second-guessed by a reading's
+ * timestamp — the right call when the close event itself is correct.
+ *
+ * But a *closed* segment's boundaries can still be wrong: train_status_log
+ * gets written from three independent places (the 2h auto-offline hook in
+ * useTrainAutoOffline.ts, the operator's own Offline/Online toggle in
+ * PretreatmentAndROLog.tsx, and a manager's manual override in
+ * TrainsList.tsx — the last of which inserts unconditionally with no check
+ * against the train's current status at all) that don't coordinate with
+ * each other. A stray extra Offline row with no Running row between it and
+ * the next real one, or a close event logged at the wrong timestamp, both
+ * produce a segment that *looks* confirmed but isn't trustworthy. Silently
+ * clipping it the way reconcileOngoingSegmentWithReadings does for an open
+ * segment would hide that problem instead of surfacing it — so this only
+ * annotates the segment for the caller to render a "this looks off, go
+ * check the log" affordance. The banner's displayed range is untouched.
+ */
+export function flagConflictingClosedSegments(
+  segments: StatusSegment[],
+  readingTimestamps: (string | null | undefined)[],
+): StatusSegment[] {
+  const sortedMs = readingTimestamps
+    .filter((t): t is string => !!t)
+    .map((t) => new Date(t).getTime())
+    .filter((ms) => !Number.isNaN(ms))
+    .sort((a, b) => a - b);
+  if (!sortedMs.length) return segments;
+
+  return segments.map((s) => {
+    if (s.status === 'Running' || s.endAt === null) return s; // only closed segments
+    const startMs = new Date(s.startAt).getTime();
+    const endMs = new Date(s.endAt).getTime();
+    const hasConflict = sortedMs.some((ms) => ms > startMs && ms < endMs);
+    return hasConflict ? { ...s, hasConflictingReadings: true } : s;
+  });
 }
 
 export type DisplayItem<T> =

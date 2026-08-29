@@ -33,7 +33,7 @@ import { ImportROReadingsDialog } from './ImportROReadingsDialog';
 import { ImportPretreatReadingsDialog } from './ImportPretreatReadingsDialog';
 import {
   buildStatusTimeline, nonRunningSegmentsInRange, mergeSegmentsForDisplay, formatSegmentDuration,
-  reconcileOngoingSegmentWithReadings, type StatusSegment,
+  reconcileOngoingSegmentWithReadings, flagConflictingClosedSegments, type StatusSegment,
 } from '@/lib/trainStatusTimeline';
 import {
   detectHourlyGaps, mergeGapsForDisplay, type FlaggedGap, type GapReason,
@@ -91,6 +91,15 @@ function TrainStatusBannerRow({ segment }: { segment: StatusSegment }) {
               title="No Back Online At was ever submitted for this train — this end time is inferred from the next real reading on record, not a confirmed closure."
             >
               · closed by later reading, not confirmed
+            </span>
+          )}
+          {segment.hasConflictingReadings && (
+            <span
+              className="inline-flex items-center gap-1 text-warn font-normal whitespace-nowrap"
+              title="One or more readings are logged with timestamps inside this window, despite this segment having a confirmed close event. Check train_status_log for a stray or mistimed entry — this banner's range is shown as recorded, not adjusted."
+            >
+              <AlertTriangle className="h-3 w-3" />
+              readings exist in this window — check status log
             </span>
           )}
         </div>
@@ -357,12 +366,20 @@ export function TrainLogModal({ trainId, trainLabel, plantId, onClose, initialTa
   const bannerSegments = useMemo(() => {
     if (!dateFrom || !untilNextDay) return [];
     const inRange = nonRunningSegmentsInRange(statusTimeline, `${dateFrom}T00:00:00`, `${untilNextDay}T00:00:00`);
-    const latestReadingAt = [...logs, ...preLogs].reduce<string | null>((latest, r: any) => {
-      if (!r.reading_datetime) return latest;
-      if (!latest) return r.reading_datetime;
-      return new Date(r.reading_datetime).getTime() > new Date(latest).getTime() ? r.reading_datetime : latest;
+    const readingTimestamps = [...logs, ...preLogs].map((r: any) => r.reading_datetime);
+    const latestReadingAt = readingTimestamps.reduce<string | null>((latest, at) => {
+      if (!at) return latest;
+      if (!latest) return at;
+      return new Date(at).getTime() > new Date(latest).getTime() ? at : latest;
     }, null);
-    return reconcileOngoingSegmentWithReadings(inRange, latestReadingAt);
+    const reconciled = reconcileOngoingSegmentWithReadings(inRange, latestReadingAt);
+    // reconcileOngoingSegmentWithReadings only ever fixes the one still-open
+    // segment. flagConflictingClosedSegments catches the sibling case — a
+    // segment that DOES have a confirmed close but still disagrees with
+    // readings sitting inside it (stray status_log row, wrong-timestamp
+    // close, etc.) — by annotating rather than clipping, since a confirmed
+    // closure shouldn't be silently overridden by a reading's timestamp.
+    return flagConflictingClosedSegments(reconciled, readingTimestamps);
   }, [statusTimeline, dateFrom, untilNextDay, logs, preLogs]);
 
   // Already-logged reasons for flagged gaps, keyed by gap_start_at — same

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   buildStatusTimeline, nonRunningSegmentsInRange, mergeSegmentsForDisplay, formatSegmentDuration,
-  reconcileOngoingSegmentWithReadings,
+  reconcileOngoingSegmentWithReadings, flagConflictingClosedSegments,
 } from './trainStatusTimeline';
 
 describe('buildStatusTimeline', () => {
@@ -162,5 +162,63 @@ describe('reconcileOngoingSegmentWithReadings', () => {
 
   it('is a no-op on an empty timeline', () => {
     expect(reconcileOngoingSegmentWithReadings([], '2026-08-28T02:50:00Z')).toEqual([]);
+  });
+});
+
+describe('flagConflictingClosedSegments', () => {
+  it('flags a closed segment when a reading timestamp falls inside it', () => {
+    // Mirrors the RO2 Aug 28 02:57 -> 22:39 case: a confirmed close, but a
+    // reading (e.g. CSV-backfilled) landed inside the window anyway.
+    const segments = buildStatusTimeline([
+      { status: 'Offline', confirmed_at: '2026-08-28T02:57:00Z', reason: 'Auto-flagged: no reading for 2.0h' },
+      { status: 'Running', confirmed_at: '2026-08-28T22:39:00Z', reason: null },
+    ]);
+    const [result] = flagConflictingClosedSegments(segments, ['2026-08-28T20:39:00Z']);
+    expect(result.hasConflictingReadings).toBe(true);
+    // Boundaries stay exactly as recorded — this is annotation, not clipping.
+    expect(result.endAt).toBe('2026-08-28T22:39:00Z');
+  });
+
+  it('does not flag a closed segment when no reading falls inside it', () => {
+    const segments = buildStatusTimeline([
+      { status: 'Offline', confirmed_at: '2026-08-26T05:10:00Z', reason: 'Operator Shutdown' },
+      { status: 'Running', confirmed_at: '2026-08-26T08:42:00Z', reason: null },
+    ]);
+    const [result] = flagConflictingClosedSegments(segments, ['2026-08-26T09:00:00Z', '2026-08-26T04:00:00Z']);
+    expect(result.hasConflictingReadings).toBeUndefined();
+  });
+
+  it('ignores readings exactly at the segment boundary', () => {
+    const segments = buildStatusTimeline([
+      { status: 'Offline', confirmed_at: '2026-08-26T05:10:00Z', reason: null },
+      { status: 'Running', confirmed_at: '2026-08-26T08:42:00Z', reason: null },
+    ]);
+    const [result] = flagConflictingClosedSegments(segments, ['2026-08-26T05:10:00Z', '2026-08-26T08:42:00Z']);
+    expect(result.hasConflictingReadings).toBeUndefined();
+  });
+
+  it('never flags an ongoing segment (endAt null) — that is reconcileOngoingSegmentWithReadings\' job', () => {
+    const segments = buildStatusTimeline([
+      { status: 'Offline', confirmed_at: '2026-08-28T02:50:00Z', reason: null },
+    ]);
+    const result = flagConflictingClosedSegments(segments, ['2026-08-28T23:45:00Z']);
+    expect(result[0].hasConflictingReadings).toBeUndefined();
+  });
+
+  it('never flags a Running segment', () => {
+    const segments = buildStatusTimeline([
+      { status: 'Running', confirmed_at: '2026-08-26T05:10:00Z', reason: null },
+      { status: 'Offline', confirmed_at: '2026-08-26T08:42:00Z', reason: null },
+    ]);
+    const result = flagConflictingClosedSegments(segments, ['2026-08-26T06:00:00Z']);
+    expect(result[0].hasConflictingReadings).toBeUndefined();
+  });
+
+  it('is a no-op when there are no readings at all', () => {
+    const segments = buildStatusTimeline([
+      { status: 'Offline', confirmed_at: '2026-08-26T05:10:00Z', reason: null },
+      { status: 'Running', confirmed_at: '2026-08-26T08:42:00Z', reason: null },
+    ]);
+    expect(flagConflictingClosedSegments(segments, [])).toEqual(segments);
   });
 });

@@ -9,6 +9,8 @@
 import { supabase } from '@/integrations/supabase/client';
 import { flushDeltaCache } from '@/lib/deltaCache';
 import { normalizeRODatetime } from './csv';
+import { classifyDeviation } from '@/lib/flowRateGuards';
+import { ALERTS } from '@/lib/calculations';
 
 // ─── Permeate date attribution ────────────────────────────────────────────────
 // All readings are attributed to the plain local calendar date of
@@ -72,6 +74,47 @@ export async function insertROTrainReadings(
   let skipped = 0;
   const errors: string[] = [];
   const affectedTrainIds = new Set<string>();
+
+  // ─── Rate-field sanity guard ────────────────────────────────────────────
+  // feed_flow / permeate_flow / reject_flow are entered as ready-made rates
+  // (m³/h), not meter deltas, so they've never gone through
+  // evaluateROMeterSpike (roReadingGuards.ts) the way feed/permeate/reject
+  // meter deltas do on the manual-entry form — and that guard only runs on
+  // that form anyway, never here. A mis-keyed CSV cell (e.g. a decimal
+  // slip, or a cumulative total pasted into a rate column) has therefore
+  // had no check at all up to this point. This reuses the same
+  // 'critical'-tier deviation classifier and threshold roReadingGuards.ts
+  // already uses for meter spikes, just applied directly to the rate value
+  // instead of a delta/hours computation — flagging for review rather than
+  // rejecting, since a genuinely bad CSV shouldn't fail silently or block
+  // the rows around it.
+  const trainIdsForAvg = options?.trainIdOverride
+    ? [options.trainIdOverride]
+    : Array.from(new Set(rows.map((r) => numToId[r.train_number?.trim()]).filter(Boolean)));
+
+  type RateField = 'feed_flow' | 'permeate_flow' | 'reject_flow';
+  const RATE_FIELDS: RateField[] = ['feed_flow', 'permeate_flow', 'reject_flow'];
+  const avgByTrain: Record<string, Record<RateField, number | null>> = {};
+
+  if (trainIdsForAvg.length) {
+    const since = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString();
+    const { data: recentForAvg } = await supabase
+      .from('ro_train_readings')
+      .select('train_id, feed_flow, permeate_flow, reject_flow')
+      .in('train_id', trainIdsForAvg)
+      .gte('reading_datetime', since);
+
+    for (const tid of trainIdsForAvg) {
+      const rowsForTrain = (recentForAvg ?? []).filter((r: any) => r.train_id === tid);
+      const avg = (field: RateField) => {
+        const vals = rowsForTrain
+          .map((r: any) => r[field])
+          .filter((v: any): v is number => v != null && v > 0);
+        return vals.length ? vals.reduce((s: number, n: number) => s + n, 0) / vals.length : null;
+      };
+      avgByTrain[tid] = { feed_flow: avg('feed_flow'), permeate_flow: avg('permeate_flow'), reject_flow: avg('reject_flow') };
+    }
+  }
 
   for (const r of rows) {
     const trainId = options?.trainIdOverride ?? numToId[r.train_number?.trim()];
@@ -142,6 +185,16 @@ export async function insertROTrainReadings(
       suction_pressure_psi: num('suction_pressure_psi'),
     };
 
+    // Flag (don't block) rows whose rate fields are wildly off this train's
+    // recent average — same 'critical' tier roReadingGuards.ts uses for
+    // meter-delta spikes. See the guard block above the loop for why this
+    // needs its own check: CSV import never ran anything like it before.
+    const avgs = avgByTrain[trainId];
+    const flaggedRateFields = RATE_FIELDS.filter((f) => {
+      const v = corePayload[f];
+      return v != null && avgs && classifyDeviation(v, avgs[f], ALERTS.ro_meter_spike_multiplier).tier === 'critical';
+    });
+
     // Optional columns — added by migrations; may not exist in all DBs.
     // Only include each key when it has a real value so un-migrated DBs don't
     // get a schema-cache error.
@@ -154,6 +207,13 @@ export async function insertROTrainReadings(
     if (permCurr !== null) optionalPayload.permeate_meter           = permCurr;
     if (permPrev !== null) optionalPayload.permeate_meter_prev      = permPrev;
     if (permDelta !== null) optionalPayload.permeate_meter_delta    = permDelta;
+    if (flaggedRateFields.length) {
+      optionalPayload.norm_status = 'pending_review';
+      errors.push(
+        `Row at ${dt} flagged for review — ${flaggedRateFields.join(', ')} ` +
+        `far outside train ${r.train_number ?? trainId}'s recent average. Saved, not rejected.`,
+      );
+    }
 
     // Column-fallback: full payload → core-only on schema-cache miss.
     // Mirrors the pattern in insertPowerReadings / insertWellReadings.
@@ -163,6 +223,7 @@ export async function insertROTrainReadings(
       'feed_meter', 'feed_meter_prev', 'feed_meter_delta',
       'permeate_meter', 'permeate_meter_prev', 'permeate_meter_delta',
       'reject_meter', 'reject_meter_prev', 'reject_meter_delta',
+      'norm_status',
     ];
     const isOptionalColError = (msg: string) =>
       OPTIONAL_KEYS.some(k => msg.includes(`'${k}'`));
