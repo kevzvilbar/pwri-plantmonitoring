@@ -321,47 +321,178 @@ export default function DataAnalysis() {
     );
   }
 
+  const latestRun = regressionResults[0] ?? null;
+  const totalOutliers = useMemo(() => regressionResults.reduce((acc, r) => acc + (r.outlier_count || 0), 0), [regressionResults]);
+  const pendingCount = useMemo(() => regressionResults.filter(r => r.status === 'pending').length, [regressionResults]);
+
+  const applyPreset = (days: number | null) => {
+    if (!days) {
+      setDateFrom('');
+      setDateTo('');
+      return;
+    }
+    const to = new Date().toISOString().split('T')[0];
+    const from = new Date(Date.now() - days * 86400000).toISOString().split('T')[0];
+    setDateFrom(from);
+    setDateTo(to);
+  };
+
   return (
-    <div className="space-y-4 animate-fade-in" data-testid="data-analysis-page">
-      {/* Page header */}
-      <PageHeader
-        title="Data Analysis & Review"
-        titleIcon={<FlaskConical className="h-5 w-5 text-primary" />}
-        subtitle="Centralised regression analysis, raw-value editing, and normalization. All other pages are read-only — edits happen here only."
-      />
+    <div className="space-y-5 animate-fade-in max-w-[1600px] mx-auto pb-10" data-testid="data-analysis-page">
+      
+      {/* ── 1. EXECUTIVE ANALYTICAL BANNER & KPI STRIP ── */}
+      <div className="relative overflow-hidden rounded-2xl border border-border/80 bg-gradient-to-r from-card via-card to-muted/40 p-5 sm:p-6 shadow-sm">
+        <div className="absolute top-0 right-0 w-96 h-96 bg-primary/5 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20" />
 
-      {/* Role notice for Manager */}
-      {isManager && !canEdit && (
-        <div className="flex items-center gap-2 rounded bg-muted px-3 py-2 text-xs text-muted-foreground">
-          <Eye className="h-3.5 w-3.5" />
-          You have read-only access. Admin or Data Analyst role is required to edit or run regression.
-        </div>
-      )}
-
-      {/* ── Filter bar ── */}
-      <Card>
-        <CardContent className="pt-4 pb-4">
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-3 items-end">
-            {/* Source table */}
-            <div className="space-y-1">
-              <Label htmlFor="dataanalysis-source-table" className="text-xs">Source table</Label>
-              <Select value={sourceTable} onValueChange={handleTableChange}>
-                <SelectTrigger className="h-8 text-xs" id="dataanalysis-source-table">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {Object.entries(TABLE_LABELS).map(([k, v]) => (
-                    <SelectItem key={k} value={k} className="text-xs">{v}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+        <div className="relative flex flex-col lg:flex-row items-start lg:items-center justify-between gap-5 pb-5 border-b border-border/50">
+          <div className="flex items-center gap-3.5 min-w-0">
+            <div className="h-12 w-12 rounded-2xl bg-gradient-to-tr from-primary to-accent text-white flex items-center justify-center shrink-0 shadow-md">
+              <FlaskConical className="h-6 w-6" />
             </div>
+            <div>
+              <div className="flex items-center gap-2.5 flex-wrap">
+                <h1 className="text-xl sm:text-2xl font-bold text-foreground tracking-tight">
+                  Data Analysis &amp; Telemetry Quality
+                </h1>
+                <span className="inline-flex items-center gap-1 text-2xs font-extrabold px-2.5 py-0.5 rounded-full bg-primary-soft text-primary border border-primary/30">
+                  <TrendingUp className="h-3 w-3" />
+                  OLS Regression Engine
+                </span>
+                {pendingCount > 0 && (
+                  <span className="inline-flex items-center gap-1 text-2xs font-extrabold px-2.5 py-0.5 rounded-full bg-warn-soft text-warn-foreground border border-warn/30 animate-pulse">
+                    {pendingCount} Pending Review
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Centralized regression anomaly detection, gap interpolation, and raw telemetry correction audit.
+              </p>
+            </div>
+          </div>
 
-            {/* Column */}
-            <div className="space-y-1">
-              <Label htmlFor="dataanalysis-column" className="text-xs">Column</Label>
+          {/* Role badge / Notice */}
+          <div className="flex items-center gap-2 w-full lg:w-auto justify-between lg:justify-end shrink-0">
+            {isManager && !canEdit && (
+              <div className="flex items-center gap-2 rounded-xl bg-muted px-3 py-1.5 text-xs text-muted-foreground border border-border/60">
+                <Eye className="h-3.5 w-3.5 text-muted-foreground" />
+                <span>Read-Only Review Access</span>
+              </div>
+            )}
+            {canEdit && (
+              <Button
+                onClick={handleRunRegression}
+                disabled={running}
+                className="h-10 px-4 rounded-xl text-xs font-bold gap-2 shadow-sm bg-primary text-primary-foreground hover:brightness-105 transition-all"
+              >
+                {running ? (
+                  <>
+                    <RefreshCw className="h-4 w-4 animate-spin" />
+                    <span>Computing OLS Model…</span>
+                  </>
+                ) : (
+                  <>
+                    <Play className="h-4 w-4 fill-current" />
+                    <span>Run Regression</span>
+                  </>
+                )}
+              </Button>
+            )}
+          </div>
+        </div>
+
+        {/* 4-KPI Metric Strip */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-4">
+          <div className="p-3 rounded-xl bg-muted/40 border border-border/60 space-y-0.5">
+            <span className="text-3xs uppercase tracking-wider font-semibold text-muted-foreground">Target Metric</span>
+            <div className="flex items-center gap-1.5">
+              <span className="font-mono font-bold text-xs sm:text-sm text-foreground truncate">{column}</span>
+            </div>
+            <span className="text-3xs text-muted-foreground/80 truncate block">{TABLE_LABELS[sourceTable] ?? sourceTable}</span>
+          </div>
+
+          <div className="p-3 rounded-xl bg-muted/40 border border-border/60 space-y-0.5">
+            <span className="text-3xs uppercase tracking-wider font-semibold text-muted-foreground">Outliers Flagged</span>
+            <div className="flex items-center gap-1.5">
+              <span className="font-bold text-xs sm:text-sm text-danger font-numeral tabular-nums">
+                {totalOutliers} Total
+              </span>
+              {pendingCount > 0 && (
+                <span className="text-3xs px-1.5 py-0.2 rounded-md bg-warn-soft text-warn font-semibold">
+                  {pendingCount} new
+                </span>
+              )}
+            </div>
+            <span className="text-3xs text-muted-foreground/80">Across recent runs</span>
+          </div>
+
+          <div className="p-3 rounded-xl bg-muted/40 border border-border/60 space-y-0.5">
+            <span className="text-3xs uppercase tracking-wider font-semibold text-muted-foreground">Latest Model Fit (R²)</span>
+            <div className="flex items-center gap-1.5">
+              <span className="font-bold text-xs sm:text-sm text-foreground font-numeral tabular-nums">
+                {latestRun?.r_squared != null ? `R² = ${latestRun.r_squared.toFixed(4)}` : '—'}
+              </span>
+              {latestRun?.r_squared != null && (
+                <span className={`text-3xs px-1.5 py-0.2 rounded-md font-semibold ${
+                  latestRun.r_squared > 0.90 ? 'bg-accent-soft text-accent' :
+                  latestRun.r_squared > 0.75 ? 'bg-info-soft text-info' : 'bg-warn-soft text-warn'
+                }`}>
+                  {latestRun.r_squared > 0.90 ? 'Excellent' : latestRun.r_squared > 0.75 ? 'Good' : 'Moderate'}
+                </span>
+              )}
+            </div>
+            <span className="text-3xs text-muted-foreground/80">Linear goodness of fit</span>
+          </div>
+
+          <div className="p-3 rounded-xl bg-muted/40 border border-border/60 space-y-0.5">
+            <span className="text-3xs uppercase tracking-wider font-semibold text-muted-foreground">Scope &amp; Scope Facility</span>
+            <div className="flex items-center gap-1.5">
+              <span className="font-bold text-xs sm:text-sm text-foreground truncate">
+                {plantId === 'all' ? 'All Plants' : plants.find(p => p.id === plantId)?.name ?? plantId}
+              </span>
+            </div>
+            <span className="text-3xs text-muted-foreground/80 font-mono">
+              {entityId === 'all' ? 'Entire Subsystem' : `Entity: ${entityId.slice(0, 8)}…`}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* ── 2. QUICK SOURCE TABLES SELECTOR ── */}
+      <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+        {Object.entries(TABLE_LABELS).map(([k, label]) => {
+          const isActive = sourceTable === k;
+          return (
+            <button
+              key={k}
+              type="button"
+              onClick={() => handleTableChange(k)}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 border flex items-center gap-1.5 shadow-2xs ${
+                isActive
+                  ? 'bg-primary text-primary-foreground border-primary shadow-xs'
+                  : 'bg-card text-muted-foreground hover:text-foreground hover:bg-muted border-border/70'
+              }`}
+            >
+              <span>{label}</span>
+              {isActive && (
+                <span className="h-1.5 w-1.5 rounded-full bg-white animate-pulse" />
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* ── 3. FILTER CONSOLE TOOLBAR ── */}
+      <Card className="rounded-2xl border border-border/80 shadow-2xs overflow-hidden">
+        <CardContent className="p-4 space-y-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-3 items-end">
+            
+            {/* Column Target */}
+            <div className="space-y-1 lg:col-span-3">
+              <Label htmlFor="dataanalysis-column" className="text-2xs uppercase tracking-wider font-semibold text-muted-foreground">
+                Target Telemetry Metric
+              </Label>
               <Select value={column} onValueChange={setColumn}>
-                <SelectTrigger className="h-8 text-xs" id="dataanalysis-column">
+                <SelectTrigger className="h-9 text-xs rounded-xl font-mono bg-muted/30" id="dataanalysis-column">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -372,11 +503,13 @@ export default function DataAnalysis() {
               </Select>
             </div>
 
-            {/* Plant — mirrors the universal plant selection from the top bar */}
-            <div className="space-y-1">
-              <Label htmlFor="dataanalysis-plant" className="text-xs">Plant</Label>
+            {/* Plant Facility */}
+            <div className="space-y-1 lg:col-span-2">
+              <Label htmlFor="dataanalysis-plant" className="text-2xs uppercase tracking-wider font-semibold text-muted-foreground">
+                Plant Facility
+              </Label>
               <Select value={plantId} onValueChange={handlePlantChange}>
-                <SelectTrigger className="h-8 text-xs" id="dataanalysis-plant">
+                <SelectTrigger className="h-9 text-xs rounded-xl bg-muted/30" id="dataanalysis-plant">
                   <SelectValue placeholder="All plants" />
                 </SelectTrigger>
                 <SelectContent>
@@ -388,14 +521,14 @@ export default function DataAnalysis() {
               </Select>
             </div>
 
-            {/* Entity drill-down — for tables with sub-entities (wells, locators, trains, meters) */}
+            {/* Entity drill-down */}
             {entityCfgMain && (
-              <div className="space-y-1">
-                <Label htmlFor="dataanalysis-field-2" className="text-xs flex items-center gap-1">
-                  {entityCfgMain.filterLabel}
+              <div className="space-y-1 lg:col-span-3">
+                <Label htmlFor="dataanalysis-field-2" className="text-2xs uppercase tracking-wider font-semibold text-muted-foreground flex items-center justify-between">
+                  <span>{entityCfgMain.filterLabel}</span>
                   {entityOptions.length > 0 && (
-                    <span className="ml-1 rounded-full bg-muted px-1.5 py-0 text-2xs text-muted-foreground font-normal">
-                      {entityOptions.length}
+                    <span className="text-3xs font-mono font-normal">
+                      {entityOptions.length} available
                     </span>
                   )}
                 </Label>
@@ -404,7 +537,7 @@ export default function DataAnalysis() {
                   onValueChange={setEntityId}
                   disabled={entityFetching && entityOptions.length === 0}
                 >
-                  <SelectTrigger className="h-8 text-xs" id="dataanalysis-field-2">
+                  <SelectTrigger className="h-9 text-xs rounded-xl bg-muted/30" id="dataanalysis-field-2">
                     <SelectValue
                       placeholder={
                         entityFetching
@@ -415,17 +548,8 @@ export default function DataAnalysis() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all" className="text-xs text-muted-foreground">
-                      All {entityCfgMain.filterLabel}s
-                      {entityOptions.length > 0 && (
-                        <span className="ml-1.5 text-2xs opacity-60">({entityOptions.length})</span>
-                      )}
+                      All {entityCfgMain.filterLabel}s ({entityOptions.length})
                     </SelectItem>
-                    {entityOptions.length === 0 && !entityFetching && (
-                      <div className="px-3 py-2 text-xs text-muted-foreground italic">
-                        No {entityCfgMain.filterLabel.toLowerCase()}s found
-                        {plantId !== 'all' ? ' for this plant' : ''}
-                      </div>
-                    )}
                     {entityOptions.map(opt => (
                       <SelectItem key={opt.id} value={opt.id} className="text-xs">
                         {opt.label}
@@ -436,13 +560,14 @@ export default function DataAnalysis() {
               </div>
             )}
 
-            {/* Power Source filter — only for Grid & Solar Readings (plant-level, no sub-entity FK) */}
+            {/* Power Source filter */}
             {sourceTable === 'power_readings' && (
-              <div className="space-y-1">
-                <Label htmlFor="dataanalysis-source" className="text-xs">Source</Label>
+              <div className="space-y-1 lg:col-span-3">
+                <Label htmlFor="dataanalysis-source" className="text-2xs uppercase tracking-wider font-semibold text-muted-foreground">
+                  Power Stream
+                </Label>
                 <Select value={powerSource} onValueChange={v => {
                   setPowerSource(v);
-                  // Auto-select the first matching column when filtering by source
                   const opt = POWER_SOURCE_OPTIONS.find(o => o.value === v);
                   if (opt && 'columns' in opt && opt.columns.length > 0) {
                     setColumn(opt.columns[0]);
@@ -450,7 +575,7 @@ export default function DataAnalysis() {
                     setColumn(SOURCE_TABLES['power_readings'][0]);
                   }
                 }}>
-                  <SelectTrigger className="h-8 text-xs" id="dataanalysis-source">
+                  <SelectTrigger className="h-9 text-xs rounded-xl bg-muted/30" id="dataanalysis-source">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -464,30 +589,55 @@ export default function DataAnalysis() {
               </div>
             )}
 
-            {/* Date from */}
-            <div className="space-y-1">
-              <Label htmlFor="dataanalysis-from" className="text-xs">From</Label>
-              <Input type="date" className="h-8 text-xs" value={dateFrom}
+            {/* Date Range: From / To */}
+            <div className="space-y-1 lg:col-span-2">
+              <Label htmlFor="dataanalysis-from" className="text-2xs uppercase tracking-wider font-semibold text-muted-foreground">
+                Date From
+              </Label>
+              <Input type="date" className="h-9 text-xs rounded-xl bg-muted/30" value={dateFrom}
                 onChange={e => setDateFrom(e.target.value)} id="dataanalysis-from"/>
             </div>
 
-            {/* Date to */}
-            <div className="space-y-1">
-              <Label htmlFor="dataanalysis-to" className="text-xs">To</Label>
-              <Input type="date" className="h-8 text-xs" value={dateTo}
+            <div className="space-y-1 lg:col-span-2">
+              <Label htmlFor="dataanalysis-to" className="text-2xs uppercase tracking-wider font-semibold text-muted-foreground">
+                Date To
+              </Label>
+              <Input type="date" className="h-9 text-xs rounded-xl bg-muted/30" value={dateTo}
                 onChange={e => setDateTo(e.target.value)} id="dataanalysis-to"/>
             </div>
+          </div>
 
-            {/* Run button */}
-            {canEdit && (
-              <Button onClick={handleRunRegression} disabled={running} className="h-8 text-xs mt-auto">
-                {running ? (
-                  <><RefreshCw className="h-3.5 w-3.5 mr-1.5 animate-spin" />Running…</>
-                ) : (
-                  <><Play className="h-3.5 w-3.5 mr-1.5" />Run Regression</>
-                )}
-              </Button>
-            )}
+          {/* Quick Date Presets Bar */}
+          <div className="flex items-center gap-1.5 pt-2 border-t border-border/50 text-2xs">
+            <span className="text-muted-foreground font-semibold mr-1">Date Presets:</span>
+            <button
+              type="button"
+              onClick={() => applyPreset(7)}
+              className="px-2 py-0.5 rounded-lg bg-muted/50 hover:bg-muted border border-border/50 text-muted-foreground hover:text-foreground font-medium transition-colors"
+            >
+              Last 7d
+            </button>
+            <button
+              type="button"
+              onClick={() => applyPreset(30)}
+              className="px-2 py-0.5 rounded-lg bg-muted/50 hover:bg-muted border border-border/50 text-muted-foreground hover:text-foreground font-medium transition-colors"
+            >
+              Last 30d
+            </button>
+            <button
+              type="button"
+              onClick={() => applyPreset(90)}
+              className="px-2 py-0.5 rounded-lg bg-muted/50 hover:bg-muted border border-border/50 text-muted-foreground hover:text-foreground font-medium transition-colors"
+            >
+              Last 90d
+            </button>
+            <button
+              type="button"
+              onClick={() => applyPreset(null)}
+              className="px-2 py-0.5 rounded-lg bg-muted/50 hover:bg-muted border border-border/50 text-muted-foreground hover:text-foreground font-medium transition-colors"
+            >
+              All Time
+            </button>
           </div>
         </CardContent>
       </Card>
