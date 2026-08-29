@@ -9,7 +9,7 @@ import {
   GitBranch, Check, CheckCheck,
   Search, BarChart2, ChevronLeft, Info,
   Crown, Briefcase, Cog, UserCircle,
-  RefreshCw, ZoomIn,
+  RefreshCw, ZoomIn, LayoutGrid, List, Layers, Sparkles, Filter,
 } from 'lucide-react';
 import { BookReader } from '@/components/manual/BookReader';
 import { BOOK_PARTS } from '@/components/manual/bookChapters';
@@ -479,55 +479,102 @@ function DetailDrawer({ member, roles, plants, allStaff, onChat, onClose, isSelf
 }
 
 // ---------------------------------------------------------------------------
-// Staff Tile — compact circular design
+// Staff Card — Modern horizontal executive design
 // ---------------------------------------------------------------------------
 
-function StaffTile({ member, roles, isSelf, onlineIds, onChat, onDetail }: {
-  member: StaffMember; roles: any[]; isSelf: boolean; onlineIds: Set<string>; onChat: () => void; onDetail: () => void;
+function StaffCard({ member, roles, plants, isSelf, onlineIds, onChat, onDetail }: {
+  member: StaffMember; roles: any[]; plants: any[]; isSelf: boolean; onlineIds: Set<string>; onChat: () => void; onDetail: () => void;
 }) {
   const presence = getPresence(member.updated_at, member.status, onlineIds.has(member.id));
   const pc = presenceConfig[presence];
-  const memberRole = (roles as any[]).find((r) => r.user_id === member.id)?.role ?? '—';
+  const memberRole = (roles as any[]).find((r) => r.user_id === member.id)?.role ?? 'Operator';
   const rc = getRoleConfig(memberRole);
+
+  const assignedPlantNames = (member.plant_assignments ?? [])
+    .map((pid) => plants.find((p) => p.id === pid)?.name)
+    .filter(Boolean);
 
   return (
     <div
-      className="relative bg-card rounded-xl border p-3 flex flex-col items-center gap-1.5 hover:shadow-md transition-all cursor-pointer group hover:border-info/90"
+      className="bg-card hover:bg-card/90 rounded-xl border border-border/70 p-3.5 flex flex-col justify-between gap-3 shadow-2xs hover:shadow-md hover:border-primary/50 transition-all cursor-pointer group"
       onClick={onDetail}
     >
-      {/* Avatar circle */}
-      <div className="relative">
-        <div className={cn('h-11 w-11 rounded-full flex items-center justify-center text-sm font-bold text-white', avatarColor(member.id))}>
-          {initials(member)}
+      {/* Top row: Avatar + Identity + Presence pill */}
+      <div className="flex items-start justify-between gap-2.5">
+        <div className="flex items-center gap-3 min-w-0 flex-1">
+          {/* Avatar with live presence ring */}
+          <div className="relative shrink-0">
+            <div className={cn('h-10 w-10 rounded-xl flex items-center justify-center text-xs font-bold text-white shadow-xs', avatarColor(member.id))}>
+              {initials(member)}
+            </div>
+            <span className={cn('absolute -bottom-1 -right-1 h-3 w-3 rounded-full border-2 border-card', pc.dot)} />
+          </div>
+
+          {/* Name & Role */}
+          <div className="min-w-0 flex-1">
+            <div className="font-bold text-xs leading-snug truncate flex items-center gap-1.5">
+              <span className="truncate">{fullName(member)}</span>
+              {isSelf && (
+                <span className="text-[10px] font-semibold px-1 rounded bg-primary-soft text-primary">you</span>
+              )}
+            </div>
+            <div className="flex items-center gap-1 mt-0.5">
+              <span className={cn('inline-flex items-center gap-1 text-3xs font-semibold px-1.5 py-0.2 rounded-md border', rc.bg, rc.color)}>
+                {rc.icon}
+                <span>{memberRole}</span>
+              </span>
+              {member.username && (
+                <span className="text-3xs text-muted-foreground truncate font-mono">@{member.username}</span>
+              )}
+            </div>
+          </div>
         </div>
-        <span className={cn('absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-background', pc.dot)} />
+
+        {/* Presence Badge */}
+        <span className={cn('text-3xs px-2 py-0.5 rounded-full border font-semibold shrink-0', pc.badge)}>
+          {pc.label}
+        </span>
       </div>
 
-      {/* Name */}
-      <div className="text-center min-w-0 w-full">
-        <div className="font-medium text-xs leading-tight truncate text-center">
-          {fullName(member)}
-          {isSelf && <span className="ml-1 text-3xs text-muted-foreground">(you)</span>}
+      {/* Plant Assignment & Action row */}
+      <div className="flex items-center justify-between gap-2 pt-2 border-t border-border/40 text-xs">
+        {/* Plant chips */}
+        <div className="flex items-center gap-1 overflow-hidden">
+          <MapPin className="h-3 w-3 text-muted-foreground/60 shrink-0" />
+          {assignedPlantNames.length > 0 ? (
+            <span className="text-3xs text-muted-foreground truncate font-medium">
+              {assignedPlantNames.slice(0, 2).join(', ')}
+              {assignedPlantNames.length > 2 && ` +${assignedPlantNames.length - 2}`}
+            </span>
+          ) : (
+            <span className="text-3xs text-muted-foreground/50 italic">All plants / Float</span>
+          )}
         </div>
-        <div className={cn('inline-flex items-center gap-0.5 mt-0.5 text-3xs font-medium px-1.5 py-0.5 rounded-full border', rc.bg, rc.color)}>
-          {rc.icon}
-          <span>{memberRole}</span>
-        </div>
-      </div>
 
-      {/* Status + Chat */}
-      <div className="flex items-center gap-1.5 w-full justify-center">
-        <span className={cn('text-3xs px-1.5 py-0.5 rounded-full border font-medium', pc.badge)}>{pc.label}</span>
-        {!isSelf && (
-          <button
-            className="h-5 w-5 flex items-center justify-center rounded-full bg-info-soft text-info hover:bg-info-soft transition-colors shrink-0"
-            onClick={(e) => { e.stopPropagation(); onChat(); }}
-            title="Chat"
-            aria-label="Chat"
+        {/* Action buttons */}
+        <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+          {!isSelf && (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-6 w-6 p-0 rounded-lg text-muted-foreground hover:text-primary hover:bg-primary-soft"
+              onClick={onChat}
+              title="Send direct message"
+            >
+              <MessageSquare className="h-3.5 w-3.5" />
+            </Button>
+          )}
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-6 px-1.5 text-3xs gap-0.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted"
+            onClick={onDetail}
+            title="View employee profile"
           >
-            <MessageSquare className="h-3 w-3" />
-          </button>
-        )}
+            <span>Profile</span>
+            <ChevronRight className="h-3 w-3" />
+          </Button>
+        </div>
       </div>
     </div>
   );
@@ -538,7 +585,7 @@ function StaffTile({ member, roles, isSelf, onlineIds, onChat, onDetail }: {
 // ---------------------------------------------------------------------------
 
 function Staff() {
-  const { data: plants } = usePlants();
+  const { data: plants = [] } = usePlants();
   const { isAdmin, user, activeOperator } = useAuth();
   const queryClient = useQueryClient();
 
@@ -546,6 +593,8 @@ function Staff() {
   const [detailMember, setDetailMember] = useState<StaffMember | null>(null);
   const [search, setSearch] = useState('');
   const [filterPlant, setFilterPlant] = useState<string>('all');
+  const [roleFilter, setRoleFilter] = useState<'all' | 'online' | 'leadership' | 'analyst' | 'operator'>('all');
+  const [viewMode, setViewMode] = useState<'grid' | 'table' | 'grouped'>('grid');
 
   useEffect(() => {
     const operatorId = activeOperator?.id ?? user?.id;
@@ -614,67 +663,420 @@ function Staff() {
     },
   });
 
+  // Calculate high-level stats
+  const onlineCount = staff.filter((s) => onlineIds.has(s.id) || getPresence(s.updated_at, s.status, onlineIds.has(s.id)) === 'active').length;
+  const leadershipCount = staff.filter((s) => {
+    const r = (roles as any[]).find((x) => x.user_id === s.id)?.role;
+    return r === 'Admin' || r === 'Manager';
+  }).length;
+  const analystCount = staff.filter((s) => {
+    const r = (roles as any[]).find((x) => x.user_id === s.id)?.role;
+    return r === 'Data Analyst';
+  }).length;
+  const operatorCount = staff.length - leadershipCount - analystCount;
+
   // Filter staff
   const filteredStaff = useMemo(() => {
     const q = search.toLowerCase();
     return staff.filter((s) => {
       const nameMatch = !q || fullName(s).toLowerCase().includes(q) || (s.username ?? '').toLowerCase().includes(q);
       const plantMatch = filterPlant === 'all' || s.plant_assignments?.includes(filterPlant);
-      return nameMatch && plantMatch;
+
+      const r = (roles as any[]).find((x) => x.user_id === s.id)?.role ?? 'Operator';
+      const isOnline = onlineIds.has(s.id) || getPresence(s.updated_at, s.status, onlineIds.has(s.id)) === 'active';
+
+      let roleMatch = true;
+      if (roleFilter === 'online') roleMatch = isOnline;
+      else if (roleFilter === 'leadership') roleMatch = r === 'Admin' || r === 'Manager';
+      else if (roleFilter === 'analyst') roleMatch = r === 'Data Analyst';
+      else if (roleFilter === 'operator') roleMatch = r === 'Operator' || r === 'Technician';
+
+      return nameMatch && plantMatch && roleMatch;
     });
-  }, [staff, search, filterPlant]);
+  }, [staff, search, filterPlant, roleFilter, roles, onlineIds]);
 
   const plantsWithStaff = (plants ?? []).filter((p) => staff.some((s) => s.plant_assignments?.includes(p.id)));
-  const onlineCount = staff.filter((s) => onlineIds.has(s.id) || getPresence(s.updated_at, s.status, onlineIds.has(s.id)) === 'active').length;
+
+  // Groups for grouped view
+  const leadershipGroup = filteredStaff.filter((s) => {
+    const r = (roles as any[]).find((x) => x.user_id === s.id)?.role;
+    return r === 'Admin' || r === 'Manager';
+  });
+  const analystGroup = filteredStaff.filter((s) => {
+    const r = (roles as any[]).find((x) => x.user_id === s.id)?.role;
+    return r === 'Data Analyst';
+  });
+  const operatorGroup = filteredStaff.filter((s) => {
+    const r = (roles as any[]).find((x) => x.user_id === s.id)?.role;
+    return r !== 'Admin' && r !== 'Manager' && r !== 'Data Analyst';
+  });
 
   return (
-    <>
-      {/* Search + Filter bar */}
-      <div className="flex flex-col sm:flex-row gap-2 mb-3">
-        <div className="relative flex-1">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-          <Input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search staff…"
-            className="pl-8 h-8 text-xs"
-          />
+    <div className="space-y-3.5">
+      {/* ── KPI Summary Strip ── */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+        <div className="p-3 rounded-xl border border-border/70 bg-card flex items-center gap-3 shadow-2xs">
+          <div className="h-9 w-9 rounded-lg bg-primary-soft text-primary flex items-center justify-center shrink-0">
+            <Users className="h-4.5 w-4.5" />
+          </div>
+          <div>
+            <p className="text-3xs font-semibold text-muted-foreground uppercase tracking-wider">Total Staff</p>
+            <p className="text-base font-bold text-foreground">{staff.length}</p>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <select
-            value={filterPlant}
-            onChange={(e) => setFilterPlant(e.target.value)}
-            className="h-8 text-xs border rounded-md px-2 bg-background text-foreground"
-          >
-            <option value="all">All plants</option>
-            {plantsWithStaff.map((p) => (
-              <option key={p.id} value={p.id}>{p.name}</option>
-            ))}
-          </select>
-          <span className="text-2xs text-muted-foreground whitespace-nowrap">
-            <span className="text-accent font-semibold">{onlineCount}</span> active · {filteredStaff.length} shown
+
+        <div className="p-3 rounded-xl border border-border/70 bg-card flex items-center gap-3 shadow-2xs">
+          <div className="h-9 w-9 rounded-lg bg-accent-soft text-accent flex items-center justify-center shrink-0">
+            <div className="h-2.5 w-2.5 rounded-full bg-accent animate-pulse" />
+          </div>
+          <div>
+            <p className="text-3xs font-semibold text-muted-foreground uppercase tracking-wider">Live Online</p>
+            <p className="text-base font-bold text-accent">{onlineCount} <span className="text-3xs text-muted-foreground font-normal">active</span></p>
+          </div>
+        </div>
+
+        <div className="p-3 rounded-xl border border-border/70 bg-card flex items-center gap-3 shadow-2xs">
+          <div className="h-9 w-9 rounded-lg bg-info-soft text-info flex items-center justify-center shrink-0">
+            <Crown className="h-4.5 w-4.5" />
+          </div>
+          <div>
+            <p className="text-3xs font-semibold text-muted-foreground uppercase tracking-wider">Leadership</p>
+            <p className="text-base font-bold text-foreground">{leadershipCount}</p>
+          </div>
+        </div>
+
+        <div className="p-3 rounded-xl border border-border/70 bg-card flex items-center gap-3 shadow-2xs">
+          <div className="h-9 w-9 rounded-lg bg-kpi-ro/15 text-kpi-ro flex items-center justify-center shrink-0">
+            <BarChart2 className="h-4.5 w-4.5" />
+          </div>
+          <div>
+            <p className="text-3xs font-semibold text-muted-foreground uppercase tracking-wider">Analysts & Ops</p>
+            <p className="text-base font-bold text-foreground">{analystCount + operatorCount}</p>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Search & Filter Controls ── */}
+      <div className="p-3 rounded-xl border border-border/70 bg-card/80 backdrop-blur-sm space-y-2.5 shadow-2xs">
+        <div className="flex flex-col md:flex-row items-center justify-between gap-2.5">
+          {/* Search */}
+          <div className="relative w-full md:max-w-xs">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search by name, username, plant…"
+              className="pl-8 h-8 text-xs bg-background"
+            />
+          </div>
+
+          {/* Plant selector + View mode toggle */}
+          <div className="flex items-center gap-2 w-full md:w-auto justify-between md:justify-end">
+            <select
+              value={filterPlant}
+              onChange={(e) => setFilterPlant(e.target.value)}
+              className="h-8 text-xs border rounded-lg px-2.5 bg-background text-foreground shrink-0"
+            >
+              <option value="all">All Plant Locations</option>
+              {plantsWithStaff.map((p) => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
+
+            {/* View switcher */}
+            <div className="flex items-center gap-0.5 bg-muted/60 p-0.5 rounded-lg border border-border/50">
+              <button
+                type="button"
+                onClick={() => setViewMode('grid')}
+                className={cn(
+                  'h-7 px-2 text-xs font-semibold rounded-md flex items-center gap-1 transition-all',
+                  viewMode === 'grid'
+                    ? 'bg-card text-primary shadow-xs border border-border/80'
+                    : 'text-muted-foreground hover:text-foreground',
+                )}
+                title="Grid cards"
+              >
+                <LayoutGrid className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Cards</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('table')}
+                className={cn(
+                  'h-7 px-2 text-xs font-semibold rounded-md flex items-center gap-1 transition-all',
+                  viewMode === 'table'
+                    ? 'bg-card text-primary shadow-xs border border-border/80'
+                    : 'text-muted-foreground hover:text-foreground',
+                )}
+                title="Table directory"
+              >
+                <List className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Table</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('grouped')}
+                className={cn(
+                  'h-7 px-2 text-xs font-semibold rounded-md flex items-center gap-1 transition-all',
+                  viewMode === 'grouped'
+                    ? 'bg-card text-primary shadow-xs border border-border/80'
+                    : 'text-muted-foreground hover:text-foreground',
+                )}
+                title="Grouped by department"
+              >
+                <Layers className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Grouped</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Role Quick Filter Chips */}
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 text-xs pt-1 border-t border-border/40">
+          {(
+            [
+              { id: 'all', label: `All Staff (${staff.length})` },
+              { id: 'online', label: `🟢 Online (${onlineCount})` },
+              { id: 'leadership', label: `👑 Leadership (${leadershipCount})` },
+              { id: 'analyst', label: `📊 Analysts (${analystCount})` },
+              { id: 'operator', label: `⚙️ Operators (${operatorCount})` },
+            ] as const
+          ).map((rf) => (
+            <button
+              key={rf.id}
+              type="button"
+              onClick={() => setRoleFilter(rf.id)}
+              className={cn(
+                'px-2.5 py-1 rounded-lg text-2xs font-bold whitespace-nowrap transition-all border',
+                roleFilter === rf.id
+                  ? 'bg-primary text-primary-foreground border-primary shadow-2xs'
+                  : 'bg-muted/40 text-muted-foreground border-border/60 hover:text-foreground hover:bg-muted',
+              )}
+            >
+              {rf.label}
+            </button>
+          ))}
+          <span className="ml-auto text-3xs text-muted-foreground shrink-0 pl-2">
+            Showing {filteredStaff.length} of {staff.length}
           </span>
         </div>
       </div>
 
-      {/* Grid */}
-      <div className="stagger-grid grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2">
-        {filteredStaff.map((s) => (
-          <StaffTile key={s.id} member={s} roles={roles as any[]}
-            isSelf={s.id === (activeOperator?.id ?? user?.id)}
-            onlineIds={onlineIds}
-            onChat={() => setChatPeer(s)}
-            onDetail={() => setDetailMember(s)}
-          />
-        ))}
-        {filteredStaff.length === 0 && (
-          <div className="col-span-full">
-            <Card className="p-6 text-xs text-center text-muted-foreground">
-              {search || filterPlant !== 'all' ? 'No staff match your filters.' : 'No staff found.'}
-            </Card>
+      {/* ── Content View Rendering ── */}
+      {viewMode === 'grid' && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+          {filteredStaff.map((s) => (
+            <StaffCard
+              key={s.id}
+              member={s}
+              roles={roles as any[]}
+              plants={plants as any[]}
+              isSelf={s.id === (activeOperator?.id ?? user?.id)}
+              onlineIds={onlineIds}
+              onChat={() => setChatPeer(s)}
+              onDetail={() => setDetailMember(s)}
+            />
+          ))}
+          {filteredStaff.length === 0 && (
+            <div className="col-span-full">
+              <Card className="p-8 text-xs text-center text-muted-foreground border-dashed">
+                No staff match your current search and role filters.
+              </Card>
+            </div>
+          )}
+        </div>
+      )}
+
+      {viewMode === 'table' && (
+        <Card className="overflow-hidden border border-border/70 shadow-2xs">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="border-b border-border/70 bg-muted/40 text-3xs uppercase tracking-wider text-muted-foreground font-bold">
+                  <th className="py-2.5 px-3">Employee</th>
+                  <th className="py-2.5 px-3">Role</th>
+                  <th className="py-2.5 px-3">Assigned Plants</th>
+                  <th className="py-2.5 px-3">Presence</th>
+                  <th className="py-2.5 px-3 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border/40">
+                {filteredStaff.map((s) => {
+                  const presence = getPresence(s.updated_at, s.status, onlineIds.has(s.id));
+                  const pc = presenceConfig[presence];
+                  const memberRole = (roles as any[]).find((r) => r.user_id === s.id)?.role ?? 'Operator';
+                  const rc = getRoleConfig(memberRole);
+                  const isSelf = s.id === (activeOperator?.id ?? user?.id);
+                  const assignedPlantNames = (s.plant_assignments ?? [])
+                    .map((pid) => plants.find((p) => p.id === pid)?.name)
+                    .filter(Boolean);
+
+                  return (
+                    <tr
+                      key={s.id}
+                      onClick={() => setDetailMember(s)}
+                      className="hover:bg-muted/30 transition-colors cursor-pointer"
+                    >
+                      <td className="py-2 px-3">
+                        <div className="flex items-center gap-2.5">
+                          <div className={cn('h-8 w-8 rounded-lg flex items-center justify-center text-2xs font-bold text-white shrink-0', avatarColor(s.id))}>
+                            {initials(s)}
+                          </div>
+                          <div>
+                            <div className="font-bold text-foreground flex items-center gap-1.5">
+                              <span>{fullName(s)}</span>
+                              {isSelf && (
+                                <span className="text-[10px] font-semibold px-1 rounded bg-primary-soft text-primary">you</span>
+                              )}
+                            </div>
+                            {s.username && (
+                              <div className="text-3xs text-muted-foreground font-mono">@{s.username}</div>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+
+                      <td className="py-2 px-3">
+                        <span className={cn('inline-flex items-center gap-1 text-3xs font-semibold px-2 py-0.5 rounded-md border', rc.bg, rc.color)}>
+                          {rc.icon}
+                          <span>{memberRole}</span>
+                        </span>
+                      </td>
+
+                      <td className="py-2 px-3">
+                        {assignedPlantNames.length > 0 ? (
+                          <div className="flex flex-wrap gap-1">
+                            {assignedPlantNames.map((name, i) => (
+                              <span key={i} className="text-3xs px-1.5 py-0.2 rounded bg-muted font-medium text-foreground border border-border/60">
+                                {name}
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <span className="text-3xs text-muted-foreground/50 italic">All plants / Float</span>
+                        )}
+                      </td>
+
+                      <td className="py-2 px-3">
+                        <span className={cn('inline-flex items-center gap-1 text-3xs px-2 py-0.5 rounded-full border font-semibold', pc.badge)}>
+                          <span className={cn('h-1.5 w-1.5 rounded-full', pc.dot)} />
+                          {pc.label}
+                        </span>
+                      </td>
+
+                      <td className="py-2 px-3 text-right" onClick={(e) => e.stopPropagation()}>
+                        <div className="inline-flex items-center gap-1">
+                          {!isSelf && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 w-7 p-0 rounded-lg text-muted-foreground hover:text-primary hover:bg-primary-soft"
+                              onClick={() => setChatPeer(s)}
+                              title="Direct Message"
+                            >
+                              <MessageSquare className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 px-2 text-3xs font-medium rounded-lg"
+                            onClick={() => setDetailMember(s)}
+                          >
+                            Profile
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
-        )}
-      </div>
+        </Card>
+      )}
+
+      {viewMode === 'grouped' && (
+        <div className="space-y-4">
+          {/* Leadership */}
+          {leadershipGroup.length > 0 && (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 px-1">
+                <Crown className="h-4 w-4 text-danger" />
+                <h4 className="text-xs font-bold text-foreground uppercase tracking-wider">
+                  Leadership & Administration ({leadershipGroup.length})
+                </h4>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                {leadershipGroup.map((s) => (
+                  <StaffCard
+                    key={s.id}
+                    member={s}
+                    roles={roles as any[]}
+                    plants={plants as any[]}
+                    isSelf={s.id === (activeOperator?.id ?? user?.id)}
+                    onlineIds={onlineIds}
+                    onChat={() => setChatPeer(s)}
+                    onDetail={() => setDetailMember(s)}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Data Analysts */}
+          {analystGroup.length > 0 && (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 px-1">
+                <BarChart2 className="h-4 w-4 text-kpi-ro" />
+                <h4 className="text-xs font-bold text-foreground uppercase tracking-wider">
+                  Data & Compliance Analytics ({analystGroup.length})
+                </h4>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                {analystGroup.map((s) => (
+                  <StaffCard
+                    key={s.id}
+                    member={s}
+                    roles={roles as any[]}
+                    plants={plants as any[]}
+                    isSelf={s.id === (activeOperator?.id ?? user?.id)}
+                    onlineIds={onlineIds}
+                    onChat={() => setChatPeer(s)}
+                    onDetail={() => setDetailMember(s)}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Operators & Technicians */}
+          {operatorGroup.length > 0 && (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 px-1">
+                <UserCircle className="h-4 w-4 text-primary" />
+                <h4 className="text-xs font-bold text-foreground uppercase tracking-wider">
+                  Plant Operations & Field Technical Team ({operatorGroup.length})
+                </h4>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                {operatorGroup.map((s) => (
+                  <StaffCard
+                    key={s.id}
+                    member={s}
+                    roles={roles as any[]}
+                    plants={plants as any[]}
+                    isSelf={s.id === (activeOperator?.id ?? user?.id)}
+                    onlineIds={onlineIds}
+                    onChat={() => setChatPeer(s)}
+                    onDetail={() => setDetailMember(s)}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {detailMember && (
         <DetailDrawer
@@ -694,7 +1096,7 @@ function Staff() {
           onClose={() => setChatPeer(null)}
         />
       )}
-    </>
+    </div>
   );
 }
 
