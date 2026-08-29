@@ -6,7 +6,7 @@ import { PageHeader } from '@/components/PageHeader';
 import {
   ShieldCheck, ShieldAlert, AlertCircle, Loader2, RefreshCw,
   Save, Settings2, TrendingUp, TrendingDown, Minus, ChevronDown, ChevronRight,
-  Eye, Zap,
+  Eye, Zap, FileDown, Building2, Droplets, Gauge, Beaker, CheckCircle2, Layers,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { friendlyError } from '@/lib/supabaseErrors';
@@ -20,6 +20,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
+import { StatCard } from '@/components/dashboard/StatCard';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
@@ -692,15 +693,82 @@ async function persistThresholds(scope: string, thresholds: Thresholds): Promise
 }
 
 // -----------------------------------------------------------------------
+// Multi-Plant Fleet Compliance Hook
+// -----------------------------------------------------------------------
+
+export type PlantComplianceSummary = {
+  plantId: string;
+  plantName: string;
+  score: number;
+  violations: Violation[];
+  metrics: Record<string, number | undefined>;
+  chemSupply: ChemSupply[];
+  latestDate: string | null;
+  dataDaysStale: number | null;
+};
+
+function useFleetCompliance(plants: Array<{ id: string; name: string }> | undefined, days: number) {
+  return useQuery({
+    queryKey: ['fleet-compliance-summary', (plants ?? []).map((p) => p.id).join(','), days],
+    queryFn: async (): Promise<PlantComplianceSummary[]> => {
+      if (!plants || plants.length === 0) return [];
+      const summaries = await Promise.all(
+        plants.map(async (plant) => {
+          try {
+            const [{ metrics, rows }, chemSupply, thresholds] = await Promise.all([
+              fetchPlantMetrics(plant.id, days),
+              fetchChemDaysOfSupply(plant.id),
+              loadThresholds(plant.id),
+            ]);
+            const violations = computeViolations(metrics, thresholds, chemSupply);
+            const score = computeComplianceScore(violations);
+            const latestDate = rows.length ? rows[0].summary_date : null;
+            let dataDaysStale: number | null = null;
+            if (latestDate) {
+              const today = new Date(); today.setHours(0, 0, 0, 0);
+              const [y, m, day] = latestDate.split('-').map(Number);
+              dataDaysStale = Math.round((today.getTime() - new Date(y, m - 1, day).getTime()) / 86400000);
+            }
+            return {
+              plantId: plant.id,
+              plantName: plant.name,
+              score,
+              violations,
+              metrics,
+              chemSupply,
+              latestDate,
+              dataDaysStale,
+            };
+          } catch {
+            return {
+              plantId: plant.id,
+              plantName: plant.name,
+              score: 100,
+              violations: [],
+              metrics: {},
+              chemSupply: [],
+              latestDate: null,
+              dataDaysStale: null,
+            };
+          }
+        }),
+      );
+      return summaries.sort((a, b) => b.score - a.score);
+    },
+    staleTime: 60_000,
+  });
+}
+
+// -----------------------------------------------------------------------
 // Page
 // -----------------------------------------------------------------------
 
 export default function Compliance() {
   const { data: plants }    = usePlants();
-  const { selectedPlantId } = useAppStore();
-  const [plantId, setPlantId]   = useState<string>(selectedPlantId ?? 'global');
+  const { selectedPlantId, setSelectedPlantId } = useAppStore();
+  const [plantId, setPlantId]   = useState<string>(selectedPlantId ?? (plants?.[0]?.id ?? 'global'));
   const [days, setDays]         = useState<number>(7);
-  const [scope, setScope]       = useState<'global' | 'plant'>(selectedPlantId ? 'plant' : 'global');
+  const [scope, setScope]       = useState<'global' | 'plant'>(selectedPlantId ? 'plant' : 'plant');
   const [editing, setEditing]   = useState(false);
   const canEditThresholds = usePermission('compliance', 'edit');
   const [local, setLocal]       = useState<Thresholds | null>(null);
@@ -708,11 +776,11 @@ export default function Compliance() {
   const [evaluating, setEvaluating] = useState(false);
   const [result, setResult]     = useState<EvalResult | null>(null);
   const [overrideMetrics, setOverrideMetrics] = useState<Record<string, string>>({});
-  const [complianceTab, setComplianceTab] = useTabPersist<'status' | 'thresholds' | 'whatif'>(
+  const [complianceTab, setComplianceTab] = useTabPersist<'status' | 'fleet' | 'thresholds' | 'whatif'>(
     'tab:compliance', 'status',
   );
 
-  // NEW state
+  // Daily rows & previous metrics state
   const [dailyRows, setDailyRows]           = useState<DailyRow[]>([]);
   const [prevMetrics, setPrevMetrics]       = useState<Record<string, number | undefined>>({});
   const [expandedViolation, setExpandedViolation] = useState<string | null>(null);
@@ -721,9 +789,18 @@ export default function Compliance() {
   const [whatIfViolations, setWhatIfViolations] = useState<Violation[] | null>(null);
   const [chemSupply, setChemSupply]         = useState<ChemSupply[]>([]);
 
+  // Fleet wide queries
+  const { data: fleetSummaries = [], isLoading: fleetLoading, refetch: refetchFleet } = useFleetCompliance(plants, days);
+
   useEffect(() => {
-    if (selectedPlantId) { setPlantId(selectedPlantId); setScope('plant'); }
-  }, [selectedPlantId]);
+    if (selectedPlantId) {
+      setPlantId(selectedPlantId);
+      setScope('plant');
+    } else if (plants && plants.length > 0 && (!plantId || plantId === 'global')) {
+      setPlantId(plants[0].id);
+      setScope('plant');
+    }
+  }, [selectedPlantId, plants]);
 
   const thresholdScope = scope === 'plant' ? plantId : 'global';
 
@@ -740,7 +817,7 @@ export default function Compliance() {
     if (thData?.thresholds && !editing) setLocal(thData.thresholds);
   }, [thData, editing]);
 
-  // ---- NEW: auto-preview when plant + window change ----
+  // Auto-preview metrics
   const previewAbortRef = useRef<AbortController | null>(null);
   useEffect(() => {
     if (scope !== 'plant' || !plantId || plantId === 'global') {
@@ -771,7 +848,7 @@ export default function Compliance() {
     return () => controller.abort();
   }, [scope, plantId, days]);
 
-  // ---- NEW: what-if real-time violations from override tab ----
+  // Real-time what-if simulations
   useEffect(() => {
     if (!local) return;
     const hasAnyOverride = Object.values(overrideMetrics).some((v) => v !== '');
@@ -785,39 +862,33 @@ export default function Compliance() {
     setWhatIfViolations(computeViolations(merged, local, chemSupply));
   }, [overrideMetrics, previewMetrics, local, chemSupply]);
 
-  // ---- Evaluate ----
+  // Evaluate single / current plant
   const runEvaluate = useCallback(async () => {
+    if (!plantId || plantId === 'global') return;
     setEvaluating(true);
-    setResult(null);
     try {
       const scope_label =
         scope === 'plant'
           ? (plants ?? []).find((p) => p.id === plantId)?.name
           : 'All plants';
 
-      let metrics: Record<string, number | undefined> = {};
-      let rows: DailyRow[] = [];
-      let chem: ChemSupply[] = [];
+      const [fetched, chemFetched] = await Promise.all([
+        fetchPlantMetrics(plantId, days),
+        fetchChemDaysOfSupply(plantId),
+      ]);
+      const metrics = { ...fetched.metrics };
+      const rows    = fetched.rows;
+      const chem    = chemFetched;
 
-      if (scope === 'plant' && plantId && plantId !== 'global') {
-        const [fetched, chemFetched] = await Promise.all([
-          fetchPlantMetrics(plantId, days),
-          fetchChemDaysOfSupply(plantId),
-        ]);
-        metrics = fetched.metrics;
-        rows    = fetched.rows;
-        chem    = chemFetched;
-
-        // Also fetch previous period for trend indicators
-        const prev = await fetchPreviousPeriodMetrics(plantId, days);
-        setPrevMetrics(prev);
-      }
+      // Also fetch previous period for trend indicators
+      const prev = await fetchPreviousPeriodMetrics(plantId, days);
+      setPrevMetrics(prev);
 
       setDailyRows(rows);
       setPreviewMetrics(metrics);
       setChemSupply(chem);
 
-      // Apply manual overrides
+      // Apply manual overrides if any
       for (const [k, v] of Object.entries(overrideMetrics)) {
         const n = parseFloat(v);
         if (!Number.isNaN(n)) metrics[k] = n;
@@ -843,31 +914,33 @@ export default function Compliance() {
     }
   }, [plantId, scope, days, plants, overrideMetrics, thresholdScope]);
 
-  // ---- Save thresholds ----
+  // Auto-run evaluate on mount and whenever plantId or days change
+  useEffect(() => {
+    if (plantId && plantId !== 'global') {
+      runEvaluate();
+    }
+  }, [plantId, days, scope, runEvaluate]);
+
+  // Save thresholds
   const saveThresholds = useCallback(async () => {
     if (!local) return;
     setSaving(true);
     try {
       await persistThresholds(thresholdScope, local);
-      toast.success('Thresholds saved');
+      toast.success('Thresholds saved successfully.');
       setEditing(false);
       refetchThresholds();
+      runEvaluate();
     } catch (e) {
       toast.error(friendlyError(e));
     } finally {
       setSaving(false);
     }
-  }, [local, thresholdScope, refetchThresholds]);
+  }, [local, thresholdScope, refetchThresholds, runEvaluate]);
 
   const summary = result ? buildSummary(result.violations) : null;
-
-  // NEW: compliance score
   const complianceScore = result ? computeComplianceScore(result.violations) : null;
 
-  // NEW: freshness of the underlying data — distinct from "evaluated at".
-  // The nightly job populates daily_plant_summary for *yesterday*, so one
-  // day of lag is normal; more than that usually means a missed run, and a
-  // clean-looking score computed just now could be based on stale data.
   const latestDataDate = dailyRows.length ? dailyRows[0].summary_date : null;
   let dataDaysStale: number | null = null;
   if (latestDataDate) {
@@ -876,35 +949,149 @@ export default function Compliance() {
     dataDaysStale = Math.round((today.getTime() - new Date(y, m - 1, day).getTime()) / 86400000);
   }
 
-  // -----------------------------------------------------------------------
+  // Fleet wide aggregation metrics
+  const avgFleetScore = fleetSummaries.length
+    ? Math.round(fleetSummaries.reduce((sum, p) => sum + p.score, 0) / fleetSummaries.length)
+    : null;
+  const totalCriticalViolations = fleetSummaries.reduce(
+    (sum, p) => sum + p.violations.filter((v) => v.severity === 'high').length, 0,
+  );
+  const totalChemWarnings = fleetSummaries.reduce(
+    (sum, p) => sum + p.violations.filter((v) => v.code === 'CHEM_LOW').length, 0,
+  );
+
+  // CSV Audit Exporter
+  const exportComplianceCsv = () => {
+    const headers = [
+      'Facility Name',
+      'Compliance Score %',
+      'Rating Tier',
+      'Total Violations',
+      'Critical (High)',
+      'Medium Violations',
+      'Low Violations',
+      'NRW %',
+      'Permeate TDS (ppm)',
+      'Permeate pH',
+      'Raw Turbidity (NTU)',
+      'Differential Pressure (psi)',
+      'Recovery %',
+      'Downtime (hrs/day)',
+      'Chemical Supply Alert',
+      'Audit Date',
+    ];
+
+    const rowsData = fleetSummaries.map((p) => {
+      const highCount = p.violations.filter((v) => v.severity === 'high').length;
+      const medCount = p.violations.filter((v) => v.severity === 'medium').length;
+      const lowCount = p.violations.filter((v) => v.severity === 'low').length;
+      const chemLow = p.violations.filter((v) => v.code === 'CHEM_LOW').map((v) => `${v.metric} (${v.value}d)`).join('; ') || 'Normal';
+
+      return [
+        `"${p.plantName}"`,
+        `"${p.score}%"`,
+        `"${scoreLabel(p.score)}"`,
+        `"${p.violations.length}"`,
+        `"${highCount}"`,
+        `"${medCount}"`,
+        `"${lowCount}"`,
+        `"${p.metrics.nrw_pct !== undefined ? p.metrics.nrw_pct.toFixed(1) + '%' : '—'}"`,
+        `"${p.metrics.permeate_tds !== undefined ? p.metrics.permeate_tds.toFixed(1) : '—'}"`,
+        `"${p.metrics.permeate_ph !== undefined ? p.metrics.permeate_ph.toFixed(2) : '—'}"`,
+        `"${p.metrics.raw_turbidity !== undefined ? p.metrics.raw_turbidity.toFixed(2) : '—'}"`,
+        `"${p.metrics.dp_psi !== undefined ? p.metrics.dp_psi.toFixed(1) : '—'}"`,
+        `"${p.metrics.recovery_pct !== undefined ? p.metrics.recovery_pct.toFixed(1) + '%' : '—'}"`,
+        `"${p.metrics.downtime_hrs !== undefined ? p.metrics.downtime_hrs.toFixed(1) : '—'}"`,
+        `"${chemLow}"`,
+        `"${new Date().toISOString().slice(0, 10)}"`,
+      ];
+    });
+
+    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rowsData.map((r) => r.join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `compliance_audit_matrix_${days}d_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast.success('Compliance audit matrix exported successfully.');
+  };
+
+  const handleSelectPlant = (id: string) => {
+    setPlantId(id);
+    setScope('plant');
+    setSelectedPlantId(id);
+    setComplianceTab('status');
+  };
+
   return (
     <div className="space-y-4 animate-fade-in">
       {/* Header */}
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <PageHeader
-          title="Compliance"
+          title="Compliance & Regulatory Radar"
           titleIcon={<ShieldCheck className="h-5 w-5 text-accent" />}
-          subtitle="Threshold-based alerts for NRW, downtime, water quality & chemicals."
+          subtitle="Real-time threshold surveillance for water quality parameters, plant hydraulic efficiency, NRW, downtime, and chemical autonomy."
+        />
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8 px-2.5 text-2xs gap-1.5 font-semibold bg-background"
+            onClick={exportComplianceCsv}
+            title="Download complete compliance evaluation audit across all plants"
+          >
+            <FileDown className="h-3.5 w-3.5 text-primary" />
+            <span>Export Compliance Audit (.csv)</span>
+          </Button>
+        </div>
+      </div>
+
+      {/* ── Executive Compliance Strip ── */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <StatCard
+          icon={ShieldCheck}
+          label="Fleet Compliance Index"
+          value={avgFleetScore !== null ? `${avgFleetScore}% · ${scoreLabel(avgFleetScore)}` : '—'}
+          tone={avgFleetScore !== null && avgFleetScore < 75 ? 'danger' : avgFleetScore !== null && avgFleetScore < 85 ? 'warn' : 'accent'}
+        />
+        <StatCard
+          icon={ShieldAlert}
+          label="Critical Violations Active"
+          value={totalCriticalViolations.toLocaleString()}
+          tone={totalCriticalViolations > 0 ? 'danger' : undefined}
+        />
+        <StatCard
+          icon={Beaker}
+          label="Chemical Supply Alerts"
+          value={totalChemWarnings.toLocaleString()}
+          tone={totalChemWarnings > 0 ? 'warn' : undefined}
+        />
+        <StatCard
+          icon={Building2}
+          label="Monitored Facilities"
+          value={`${plants?.length ?? 0} Plants`}
         />
       </div>
 
-      {/* Controls */}
-      <Card className="p-3">
-        <div className="grid gap-2 md:grid-cols-[140px_1fr_140px_auto] items-end">
+      {/* Controls Card */}
+      <Card className="p-3 bg-muted/20 border-border/70">
+        <div className="grid gap-2.5 md:grid-cols-[140px_1fr_140px_auto] items-end">
           <div>
-            <Label htmlFor="compliance-scope" className="text-xs">Scope</Label>
+            <Label htmlFor="compliance-scope" className="text-xs font-semibold">Surveillance Scope</Label>
             <Select value={scope} onValueChange={(v) => setScope(v as 'global' | 'plant')}>
-              <SelectTrigger className="mt-1" id="compliance-scope"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="mt-1 bg-background" id="compliance-scope"><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="global">Global</SelectItem>
-                <SelectItem value="plant">Specific plant</SelectItem>
+                <SelectItem value="plant">Facility Specific</SelectItem>
+                <SelectItem value="global">Global Standard</SelectItem>
               </SelectContent>
             </Select>
           </div>
           <div>
-            <Label htmlFor="compliance-plant" className="text-xs">Plant</Label>
-            <Select value={plantId} onValueChange={setPlantId} disabled={scope === 'global'}>
-              <SelectTrigger className="mt-1" id="compliance-plant"><SelectValue placeholder="Pick plant…" /></SelectTrigger>
+            <Label htmlFor="compliance-plant" className="text-xs font-semibold">Active Facility</Label>
+            <Select value={plantId} onValueChange={(v) => { setPlantId(v); setSelectedPlantId(v); }} disabled={scope === 'global'}>
+              <SelectTrigger className="mt-1 bg-background" id="compliance-plant"><SelectValue placeholder="Pick plant…" /></SelectTrigger>
               <SelectContent>
                 {(plants ?? []).map((p) => (
                   <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
@@ -913,126 +1100,134 @@ export default function Compliance() {
             </Select>
           </div>
           <div>
-            <Label htmlFor="compliance-window-days" className="text-xs">Window (days)</Label>
+            <Label htmlFor="compliance-window-days" className="text-xs font-semibold">Audit Window</Label>
             <Select value={String(days)} onValueChange={(v) => setDays(Number(v))}>
-              <SelectTrigger className="mt-1" id="compliance-window-days"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="mt-1 bg-background" id="compliance-window-days"><SelectValue /></SelectTrigger>
               <SelectContent>
-                {[1, 7, 14, 30].map((d) => (
-                  <SelectItem key={d} value={String(d)}>{d}d</SelectItem>
+                {[1, 7, 14, 30, 90].map((d) => (
+                  <SelectItem key={d} value={String(d)}>{d === 90 ? '90d (Quarterly)' : `${d}d`}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" disabled={evaluating} onClick={runEvaluate}>
+            <Button variant="outline" size="sm" className="h-9 font-semibold bg-background" disabled={evaluating} onClick={runEvaluate}>
               {evaluating
                 ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />
                 : <RefreshCw className="h-3.5 w-3.5 mr-1" />}
-              Evaluate
+              Re-Evaluate
             </Button>
           </div>
         </div>
       </Card>
 
-      {/* NEW: Inline metric preview (shown before evaluation when plant is selected) */}
-      {scope === 'plant' && plantId && plantId !== 'global' && !result && (
-        <MetricPreview metrics={previewMetrics} loading={previewLoading} />
-      )}
-
+      {/* Tabs */}
       <Tabs value={complianceTab} onValueChange={(v) => setComplianceTab(v as typeof complianceTab)}>
-        <TabsList>
-          <TabsTrigger value="status">Status</TabsTrigger>
-          <TabsTrigger value="thresholds">
-            <Settings2 className="h-3.5 w-3.5 mr-1" />Thresholds
+        <TabsList className="grid grid-cols-2 sm:grid-cols-4 gap-1 h-auto sm:h-10 w-full">
+          <TabsTrigger value="status" className="gap-1.5 text-xs">
+            <ShieldCheck className="h-3.5 w-3.5" />
+            Facility Radar &amp; Drill-down
           </TabsTrigger>
-          <TabsTrigger value="whatif">
-            <Zap className="h-3.5 w-3.5 mr-1" />
-            What-if
+          <TabsTrigger value="fleet" className="gap-1.5 text-xs">
+            <Layers className="h-3.5 w-3.5" />
+            Fleet Comparative Matrix
+            {totalCriticalViolations > 0 && (
+              <Badge className="ml-1 h-4 min-w-4 px-1 text-2xs bg-destructive text-destructive-foreground">
+                {totalCriticalViolations}
+              </Badge>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="thresholds" className="gap-1.5 text-xs">
+            <Settings2 className="h-3.5 w-3.5" />
+            Threshold Limits
+          </TabsTrigger>
+          <TabsTrigger value="whatif" className="gap-1.5 text-xs">
+            <Zap className="h-3.5 w-3.5" />
+            What-If Simulator
             {whatIfViolations !== null && (
-              <Badge className="ml-1.5 text-2xs h-4 px-1 bg-warn">
+              <Badge className="ml-1 text-2xs h-4 px-1 bg-warn">
                 {whatIfViolations.length}
               </Badge>
             )}
           </TabsTrigger>
         </TabsList>
 
-        {/* -------- Status -------- */}
-        <TabsContent value="status" className="mt-3 space-y-3">
+        {/* ── Tab 1: Facility Radar & Drill-down ── */}
+        <TabsContent value="status" className="mt-4 space-y-4">
           {!result ? (
             <DataState
-              isEmpty
-              emptyTitle="Run an evaluation to see status"
-              emptyDescription='Pick a scope and click "Evaluate" above.'
+              loading={evaluating}
+              isEmpty={!evaluating}
+              emptyTitle="Evaluating facility compliance..."
+              emptyDescription="Please wait while live telemetry and chemical stocks are evaluated against thresholds."
             />
           ) : (
             <>
               {/* Status banner + compliance score */}
-              <div className="flex gap-3 items-stretch">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-3 items-stretch">
                 <Card className={cn(
-                  'p-3 border-l-2 flex-1',
+                  'p-4 border-l-4 md:col-span-3 flex items-start gap-3.5',
                   result.violations.length === 0
-                    ? 'border-accent bg-accent-soft/50'
+                    ? 'border-accent bg-accent-soft/40'
                     : result.violations.some((v) => v.severity === 'high')
-                      ? 'border-danger bg-danger-soft/50'
-                      : 'border-warn bg-warn-soft/50',
+                      ? 'border-danger bg-danger-soft/40'
+                      : 'border-warn bg-warn-soft/40',
                 )}>
-                  <div className="flex items-start gap-3">
-                    {result.violations.length === 0
-                      ? <ShieldCheck className="h-6 w-6 text-accent shrink-0" />
-                      : <ShieldAlert className="h-6 w-6 text-danger shrink-0" />}
-                    <div className="flex-1">
-                      <div className="text-sm font-semibold">{summary?.headline}</div>
-                      <div className="text-xs text-muted-foreground mt-0.5">
-                        {result.scope_label ?? result.scope} · evaluated{' '}
-                        {new Date(result.evaluated_at).toLocaleTimeString()}
-                      </div>
-                      {latestDataDate && (
-                        <div className={cn(
-                          'text-xs mt-0.5 flex items-center gap-1',
-                          dataDaysStale !== null && dataDaysStale > 1
-                            ? 'text-warn font-medium'
-                            : 'text-muted-foreground',
-                        )}>
-                          {dataDaysStale !== null && dataDaysStale > 1 && (
-                            <AlertCircle className="h-3 w-3 shrink-0" />
-                          )}
-                          Data as of {fmtSummaryDate(latestDataDate)}
-                          {dataDaysStale !== null && dataDaysStale > 1 &&
-                            ` — ${dataDaysStale} days old, check the nightly summary job`}
-                        </div>
-                      )}
-                      {summary && summary.details.length > 0 && (
-                        <ul className="mt-2 space-y-1">
-                          {summary.details.map((d, i) => (
-                            <li key={i} className="flex items-start gap-1.5 text-xs text-muted-foreground">
-                              <AlertCircle className="h-3 w-3 mt-0.5 shrink-0 text-warn" />
-                              {d}
-                            </li>
-                          ))}
-                        </ul>
-                      )}
+                  {result.violations.length === 0
+                    ? <ShieldCheck className="h-7 w-7 text-accent shrink-0 mt-0.5" />
+                    : <ShieldAlert className="h-7 w-7 text-danger shrink-0 mt-0.5" />}
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-bold text-foreground">{summary?.headline}</div>
+                    <div className="text-xs text-muted-foreground mt-0.5">
+                      {result.scope_label ?? result.scope} · Evaluated {new Date(result.evaluated_at).toLocaleTimeString()}
                     </div>
+                    {latestDataDate && (
+                      <div className={cn(
+                        'text-xs mt-1 flex items-center gap-1 font-medium',
+                        dataDaysStale !== null && dataDaysStale > 1
+                          ? 'text-warn'
+                          : 'text-muted-foreground',
+                      )}>
+                        {dataDaysStale !== null && dataDaysStale > 1 && (
+                          <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                        )}
+                        Data as of {fmtSummaryDate(latestDataDate)}
+                        {dataDaysStale !== null && dataDaysStale > 1 &&
+                          ` — (${dataDaysStale} days lag, verify daily aggregation cron)`}
+                      </div>
+                    )}
+                    {summary && summary.details.length > 0 && (
+                      <ul className="mt-2.5 space-y-1.5">
+                        {summary.details.map((d, i) => (
+                          <li key={i} className="flex items-start gap-1.5 text-xs text-foreground/90 font-medium">
+                            <AlertCircle className="h-3.5 w-3.5 mt-0.5 shrink-0 text-warn" />
+                            {d}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                   </div>
                 </Card>
 
-                {/* NEW: Compliance Score gauge */}
+                {/* Score Gauge Card */}
                 {complianceScore !== null && (
-                  <Card className={cn('p-3 flex flex-col items-center justify-center border', scoreBgColor(complianceScore))}>
-                    <div className="text-2xs text-muted-foreground mb-1 font-medium uppercase tracking-wide">
-                      Score
+                  <Card className={cn('p-4 flex flex-col items-center justify-center border', scoreBgColor(complianceScore))}>
+                    <div className="text-2xs text-muted-foreground mb-1 font-bold uppercase tracking-wider">
+                      Compliance Rating
                     </div>
                     <ScoreGauge score={complianceScore} />
                   </Card>
                 )}
               </div>
 
-              {/* NEW: Metric values with trend indicators (post-eval) */}
+              {/* Period Averages with Trend indicators */}
               {previewMetrics && Object.keys(previewMetrics).length > 0 && (
-                <Card className="p-3">
-                  <div className="text-xs font-medium text-muted-foreground mb-2">
-                    Period Averages — with trend vs previous {days}d
+                <Card className="p-3.5">
+                  <div className="text-xs font-bold text-foreground mb-2 flex items-center justify-between">
+                    <span>Monitored Parameter Averages ({days}d Rolling)</span>
+                    <span className="text-2xs font-normal text-muted-foreground">Arrow indicates trend direction vs previous period</span>
                   </div>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                     {Object.entries(previewMetrics).map(([k, v]) => {
                       const prev = prevMetrics[k];
                       const trend: Trend = (v !== undefined && prev !== undefined)
@@ -1040,18 +1235,18 @@ export default function Compliance() {
                         : 'flat';
                       const improving = METRIC_IMPROVING_DIRECTION[k] ?? true;
                       return (
-                        <div key={k} className="rounded px-2 py-1.5 bg-muted/30">
-                          <div className="text-2xs text-muted-foreground truncate">{labelize(k)}</div>
-                          <div className="flex items-center gap-1">
-                            <span className="text-sm font-mono font-medium">
+                        <div key={k} className="rounded-lg p-2.5 bg-muted/40 border border-border/60">
+                          <div className="text-2xs font-semibold text-muted-foreground truncate">{labelize(k)}</div>
+                          <div className="flex items-center gap-1.5 mt-1">
+                            <span className="text-sm font-mono font-bold text-foreground">
                               {v !== undefined && !Number.isNaN(v as any)
                                 ? Math.round((v as number) * 100) / 100
                                 : '—'}
                             </span>
                             <TrendIndicator trend={trend} improving={improving} />
                             {prev !== undefined && (
-                              <span className="text-2xs text-muted-foreground">
-                                ({prev >= 0 ? '' : ''}{Math.round((prev as number) * 100) / 100} prev)
+                              <span className="text-3xs text-muted-foreground font-mono">
+                                (prev: {Math.round((prev as number) * 100) / 100})
                               </span>
                             )}
                           </div>
@@ -1062,23 +1257,65 @@ export default function Compliance() {
                 </Card>
               )}
 
-              {/* NEW: Violations table with drill-down rows */}
-              {result.violations.length > 0 && (
-                <Card className="p-0 overflow-hidden">
-                  {/* overflow-x-auto on this inner wrapper, not the Card's
-                      own overflow-hidden (kept for the rounded-corner
-                      clipping trick) — same fix as DataCorrections.tsx and
-                      ManagerScorecard.tsx's tables. */}
+              {/* Chemical Stock Autonomy Warnings */}
+              {chemSupply.length > 0 && (
+                <Card className="p-3.5 border-border/70">
+                  <div className="text-xs font-bold text-foreground mb-2 flex items-center gap-1.5">
+                    <Beaker className="h-4 w-4 text-primary" />
+                    <span>Chemical Autonomy &amp; Projected Run-Out</span>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    {chemSupply.map((chem) => {
+                      const isLow = chem.days < (result?.thresholds.chem_low_stock_days_min ?? 7);
+                      const isCritical = chem.days < (result?.thresholds.chem_low_stock_days_min ?? 7) / 2;
+                      return (
+                        <div
+                          key={chem.name}
+                          className={cn(
+                            'p-2.5 rounded-lg border font-medium text-xs',
+                            isCritical
+                              ? 'bg-rose-500/15 border-rose-500/40 text-rose-800 dark:text-rose-200'
+                              : isLow
+                                ? 'bg-amber-500/15 border-amber-500/40 text-amber-800 dark:text-amber-200'
+                                : 'bg-muted/30 border-border/60 text-foreground',
+                          )}
+                        >
+                          <div className="text-2xs text-muted-foreground font-semibold">{chem.name}</div>
+                          <div className="flex items-baseline gap-1 mt-0.5">
+                            <span className="text-sm font-bold font-mono">{chem.days.toFixed(1)}</span>
+                            <span className="text-3xs text-muted-foreground">days of supply</span>
+                          </div>
+                          {isLow && (
+                            <div className="text-3xs font-bold text-destructive mt-1 flex items-center gap-0.5">
+                              <AlertTriangle className="h-2.5 w-2.5" /> Reorder required
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </Card>
+              )}
+
+              {/* Violations table with drill-down rows */}
+              {result.violations.length > 0 ? (
+                <Card className="p-0 overflow-hidden border border-border/70 shadow-2xs">
+                  <div className="p-3 border-b bg-muted/20 flex items-center justify-between">
+                    <div className="text-xs font-bold text-foreground">
+                      Active Parameter Violations ({result.violations.length})
+                    </div>
+                    <span className="text-2xs text-muted-foreground">Click row to expand historical 14-day sparkline</span>
+                  </div>
                   <div className="overflow-x-auto">
                     <table className="w-full min-w-[560px] text-sm">
                       <thead className="bg-muted/50 text-xs text-muted-foreground">
                         <tr>
                           <th className="px-3 py-2 text-left w-6"></th>
                           <th className="px-3 py-2 text-left whitespace-nowrap">Severity</th>
-                          <th className="px-3 py-2 text-left whitespace-nowrap">Metric</th>
-                          <th className="px-3 py-2 text-right whitespace-nowrap">Value</th>
-                          <th className="px-3 py-2 text-right whitespace-nowrap">Limit</th>
-                          <th className="px-3 py-2 text-left">Message</th>
+                          <th className="px-3 py-2 text-left whitespace-nowrap">Metric / Chemical</th>
+                          <th className="px-3 py-2 text-right whitespace-nowrap">Measured Value</th>
+                          <th className="px-3 py-2 text-right whitespace-nowrap">Threshold Limit</th>
+                          <th className="px-3 py-2 text-left">Recommended Action</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1086,7 +1323,7 @@ export default function Compliance() {
                           const rowKey = v.code + v.metric;
                           const isExpanded = expandedViolation === rowKey;
                           const rowData = dailyRows.filter(
-                            (r) => r[v.metric] !== undefined && r[v.metric] !== null
+                            (r) => r[v.metric] !== undefined && r[v.metric] !== null,
                           );
                           return (
                             <Fragment key={rowKey}>
@@ -1096,26 +1333,26 @@ export default function Compliance() {
                               >
                                 <td className="px-3 py-2 text-muted-foreground">
                                   {isExpanded
-                                    ? <ChevronDown className="h-3.5 w-3.5" />
+                                    ? <ChevronDown className="h-3.5 w-3.5 text-foreground" />
                                     : <ChevronRight className="h-3.5 w-3.5" />}
                                 </td>
                                 <td className="px-3 py-2"><SeverityBadge sev={v.severity} /></td>
-                                <td className="px-3 py-2 font-mono text-xs whitespace-nowrap">{v.metric}</td>
-                                <td className="px-3 py-2 text-right font-mono text-xs whitespace-nowrap">{v.value ?? '—'}</td>
-                                <td className="px-3 py-2 text-right font-mono text-xs whitespace-nowrap">
+                                <td className="px-3 py-2 font-mono text-xs font-bold whitespace-nowrap text-foreground">{v.metric}</td>
+                                <td className="px-3 py-2 text-right font-mono text-xs font-bold whitespace-nowrap text-destructive">{v.value ?? '—'}</td>
+                                <td className="px-3 py-2 text-right font-mono text-xs whitespace-nowrap text-muted-foreground">
                                   {v.threshold}{' '}
-                                  <span className="text-muted-foreground">{v.comparator}</span>
+                                  <span className="text-foreground font-semibold">{v.comparator}</span>
                                 </td>
-                                <td className="px-3 py-2 text-xs">{v.message}</td>
+                                <td className="px-3 py-2 text-xs font-medium text-foreground/90">{v.message}</td>
                               </tr>
-                              {/* NEW: Drill-down sparkline row */}
+                              {/* Drill-down sparkline row */}
                               {isExpanded && (
                                 <tr className="bg-muted/20 border-t border-dashed">
                                   <td colSpan={6} className="px-5 py-3">
                                     <div className="text-xs font-medium text-muted-foreground mb-1">
-                                      Daily breakdown — <span className="font-mono">{v.metric}</span>
-                                      <span className="ml-2 text-danger">
-                                        Red dots = threshold breached
+                                      Daily telemetry history — <span className="font-mono font-bold text-foreground">{v.metric}</span>
+                                      <span className="ml-2 text-danger font-semibold">
+                                        (Red markers indicate threshold breach)
                                       </span>
                                     </div>
                                     {rowData.length > 0 ? (
@@ -1127,7 +1364,7 @@ export default function Compliance() {
                                       />
                                     ) : (
                                       <p className="text-xs text-muted-foreground italic">
-                                        No daily data available for this metric.
+                                        No daily rows available for this parameter.
                                       </p>
                                     )}
                                   </td>
@@ -1140,33 +1377,165 @@ export default function Compliance() {
                     </table>
                   </div>
                 </Card>
+              ) : (
+                <Card className="p-6 text-center space-y-1 bg-emerald-500/10 border-emerald-500/30">
+                  <CheckCircle2 className="h-8 w-8 text-emerald-600 mx-auto" />
+                  <div className="font-bold text-foreground">100% Parameter Compliance</div>
+                  <p className="text-xs text-muted-foreground">All tracked water quality, hydraulic, NRW, and chemical parameters are strictly within normal regulatory limits.</p>
+                </Card>
               )}
             </>
           )}
         </TabsContent>
 
-        {/* -------- Thresholds editor -------- */}
-        <TabsContent value="thresholds" className="mt-3">
-          <Card className="p-4">
-            <div className="flex items-center justify-between mb-3">
+        {/* ── Tab 2: Fleet Comparative Matrix ── */}
+        <TabsContent value="fleet" className="mt-4">
+          <Card className="p-0 overflow-hidden border border-border/70 shadow-2xs">
+            <div className="p-3 border-b bg-muted/20 flex items-center justify-between">
               <div>
-                <div className="text-sm font-medium">
-                  Editing:{' '}
+                <h3 className="text-xs font-bold text-foreground">Fleet-Wide Compliance Matrix</h3>
+                <p className="text-2xs text-muted-foreground">Comparative overview of regulatory compliance across all plants in the selected {days}d window.</p>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={fleetLoading}
+                className="h-7 px-2 text-2xs gap-1"
+                onClick={() => refetchFleet()}
+              >
+                {fleetLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                Refresh Fleet
+              </Button>
+            </div>
+
+            <DataState
+              loading={fleetLoading}
+              isEmpty={fleetSummaries.length === 0}
+              emptyTitle="No plant facilities configured."
+              onRetry={() => refetchFleet()}
+            >
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[760px] text-xs">
+                  <thead className="bg-muted/50 border-b">
+                    <tr>
+                      <th className="text-left px-3 py-2.5 font-bold text-xs">Plant Facility</th>
+                      <th className="text-center px-3 py-2.5 font-bold text-xs">Compliance Score</th>
+                      <th className="text-center px-3 py-2.5 font-bold text-xs">Status</th>
+                      <th className="text-center px-3 py-2.5 font-bold text-xs">Violations</th>
+                      <th className="text-right px-3 py-2.5 font-bold text-xs">NRW %</th>
+                      <th className="text-right px-3 py-2.5 font-bold text-xs">Perm TDS</th>
+                      <th className="text-right px-3 py-2.5 font-bold text-xs">Perm pH</th>
+                      <th className="text-right px-3 py-2.5 font-bold text-xs">Recovery %</th>
+                      <th className="text-center px-3 py-2.5 font-bold text-xs">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {fleetSummaries.map((p) => {
+                      const highViolations = p.violations.filter((v) => v.severity === 'high').length;
+                      const medViolations = p.violations.filter((v) => v.severity === 'medium').length;
+
+                      return (
+                        <tr key={p.plantId} className="border-b hover:bg-muted/20 transition-colors">
+                          <td className="px-3 py-2.5 font-bold text-foreground whitespace-nowrap">
+                            <div className="flex items-center gap-1.5">
+                              <Building2 className="h-3.5 w-3.5 text-primary shrink-0" />
+                              <span>{p.plantName}</span>
+                            </div>
+                          </td>
+
+                          <td className="px-3 py-2.5 text-center whitespace-nowrap">
+                            <span className={cn('font-mono font-extrabold text-xs', scoreColor(p.score))}>
+                              {p.score}%
+                            </span>
+                          </td>
+
+                          <td className="px-3 py-2.5 text-center whitespace-nowrap">
+                            <Badge variant="outline" className={cn('text-3xs font-bold px-2 py-0.5', scoreBgColor(p.score), scoreColor(p.score))}>
+                              {scoreLabel(p.score)}
+                            </Badge>
+                          </td>
+
+                          <td className="px-3 py-2.5 text-center whitespace-nowrap">
+                            {p.violations.length === 0 ? (
+                              <span className="text-emerald-600 font-bold text-2xs">0 issues</span>
+                            ) : (
+                              <div className="flex items-center justify-center gap-1">
+                                {highViolations > 0 && (
+                                  <Badge className="h-4 px-1 text-3xs bg-destructive text-destructive-foreground">
+                                    {highViolations} High
+                                  </Badge>
+                                )}
+                                {medViolations > 0 && (
+                                  <Badge className="h-4 px-1 text-3xs bg-warn text-warn-foreground">
+                                    {medViolations} Med
+                                  </Badge>
+                                )}
+                              </div>
+                            )}
+                          </td>
+
+                          <td className="px-3 py-2.5 text-right font-mono whitespace-nowrap">
+                            {p.metrics.nrw_pct !== undefined ? `${p.metrics.nrw_pct.toFixed(1)}%` : '—'}
+                          </td>
+
+                          <td className="px-3 py-2.5 text-right font-mono whitespace-nowrap">
+                            {p.metrics.permeate_tds !== undefined ? p.metrics.permeate_tds.toFixed(1) : '—'}
+                          </td>
+
+                          <td className="px-3 py-2.5 text-right font-mono whitespace-nowrap">
+                            {p.metrics.permeate_ph !== undefined ? p.metrics.permeate_ph.toFixed(2) : '—'}
+                          </td>
+
+                          <td className="px-3 py-2.5 text-right font-mono whitespace-nowrap">
+                            {p.metrics.recovery_pct !== undefined ? `${p.metrics.recovery_pct.toFixed(1)}%` : '—'}
+                          </td>
+
+                          <td className="px-3 py-2.5 text-center whitespace-nowrap">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 px-2 text-2xs font-semibold hover:bg-primary hover:text-white"
+                              onClick={() => handleSelectPlant(p.plantId)}
+                            >
+                              Inspect Radar &rarr;
+                            </Button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </DataState>
+          </Card>
+        </TabsContent>
+
+        {/* ── Tab 3: Thresholds Editor ── */}
+        <TabsContent value="thresholds" className="mt-4">
+          <Card className="p-4 space-y-4">
+            <div className="flex items-center justify-between border-b pb-3">
+              <div>
+                <div className="text-sm font-bold text-foreground">
+                  Surveillance Limits:{' '}
                   {thresholdScope === 'global'
-                    ? 'Global defaults'
+                    ? 'Global Fleet Standard'
                     : (plants ?? []).find((p) => p.id === plantId)?.name ?? thresholdScope}
                 </div>
                 <div className="text-xs text-muted-foreground">
-                  Plant-scoped thresholds override global when a plant is selected.
+                  Plant-specific thresholds override global defaults for this facility.
                 </div>
               </div>
               <div className="flex gap-2">
                 {!canEditThresholds ? null : !editing ? (
-                  <Button variant="outline" size="sm" onClick={() => setEditing(true)}>Edit</Button>
+                  <Button variant="outline" size="sm" onClick={() => setEditing(true)}>
+                    <Settings2 className="h-3.5 w-3.5 mr-1" />
+                    Configure Thresholds
+                  </Button>
                 ) : (
                   <>
                     <Button
-                      variant="outline" size="sm"
+                      variant="outline"
+                      size="sm"
                       onClick={() => { setEditing(false); if (thData) setLocal(thData.thresholds); }}
                     >
                       Cancel
@@ -1175,48 +1544,176 @@ export default function Compliance() {
                       {saving
                         ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />
                         : <Save className="h-3.5 w-3.5 mr-1" />}
-                      Save
+                      Save Thresholds
                     </Button>
                   </>
                 )}
               </div>
             </div>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {(local ? Object.entries(local) : []).map(([k, v]) => (
-                <div key={k}>
-                  <Label htmlFor="compliance-field" className="text-xs">{labelize(k)}</Label>
-                  <Input
-                    type="number"
-                    value={String(v)}
-                    disabled={!editing}
-                    onChange={(e) =>
-                      setLocal((l) =>
-                        l ? ({ ...l, [k]: parseFloat(e.target.value) || 0 }) as Thresholds : l,
-                      )
-                    }
-                    className="mt-1 font-mono text-xs"
-                  id="compliance-field"/>
+
+            {/* Categorized Parameter Groups */}
+            <div className="space-y-4">
+              {/* Group 1: Water Quality */}
+              <div className="p-3 rounded-xl bg-muted/30 border border-border/60">
+                <div className="flex items-center gap-1.5 mb-2.5 text-xs font-bold text-foreground">
+                  <Droplets className="h-4 w-4 text-sky-500" />
+                  <span>Water Quality &amp; Permeate Regulatory Limits</span>
                 </div>
-              ))}
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  <div>
+                    <Label htmlFor="permeate_tds_max" className="text-2xs font-semibold text-muted-foreground">Permeate TDS Max (ppm)</Label>
+                    <Input
+                      id="permeate_tds_max"
+                      type="number"
+                      value={local?.permeate_tds_max ?? ''}
+                      disabled={!editing}
+                      onChange={(e) => setLocal((l) => l ? ({ ...l, permeate_tds_max: parseFloat(e.target.value) || 0 }) : l)}
+                      className="mt-1 font-mono text-xs"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="permeate_ph_min" className="text-2xs font-semibold text-muted-foreground">Permeate pH Min</Label>
+                    <Input
+                      id="permeate_ph_min"
+                      type="number"
+                      step="0.1"
+                      value={local?.permeate_ph_min ?? ''}
+                      disabled={!editing}
+                      onChange={(e) => setLocal((l) => l ? ({ ...l, permeate_ph_min: parseFloat(e.target.value) || 0 }) : l)}
+                      className="mt-1 font-mono text-xs"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="permeate_ph_max" className="text-2xs font-semibold text-muted-foreground">Permeate pH Max</Label>
+                    <Input
+                      id="permeate_ph_max"
+                      type="number"
+                      step="0.1"
+                      value={local?.permeate_ph_max ?? ''}
+                      disabled={!editing}
+                      onChange={(e) => setLocal((l) => l ? ({ ...l, permeate_ph_max: parseFloat(e.target.value) || 0 }) : l)}
+                      className="mt-1 font-mono text-xs"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="raw_turbidity_max" className="text-2xs font-semibold text-muted-foreground">Raw Turbidity Max (NTU)</Label>
+                    <Input
+                      id="raw_turbidity_max"
+                      type="number"
+                      step="0.1"
+                      value={local?.raw_turbidity_max ?? ''}
+                      disabled={!editing}
+                      onChange={(e) => setLocal((l) => l ? ({ ...l, raw_turbidity_max: parseFloat(e.target.value) || 0 }) : l)}
+                      className="mt-1 font-mono text-xs"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Group 2: Hydraulic & Operations */}
+              <div className="p-3 rounded-xl bg-muted/30 border border-border/60">
+                <div className="flex items-center gap-1.5 mb-2.5 text-xs font-bold text-foreground">
+                  <Gauge className="h-4 w-4 text-emerald-500" />
+                  <span>Hydraulic &amp; Plant Efficiency Limits</span>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                  <div>
+                    <Label htmlFor="nrw_pct_max" className="text-2xs font-semibold text-muted-foreground">NRW % Max</Label>
+                    <Input
+                      id="nrw_pct_max"
+                      type="number"
+                      value={local?.nrw_pct_max ?? ''}
+                      disabled={!editing}
+                      onChange={(e) => setLocal((l) => l ? ({ ...l, nrw_pct_max: parseFloat(e.target.value) || 0 }) : l)}
+                      className="mt-1 font-mono text-xs"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="recovery_pct_min" className="text-2xs font-semibold text-muted-foreground">Recovery % Min</Label>
+                    <Input
+                      id="recovery_pct_min"
+                      type="number"
+                      value={local?.recovery_pct_min ?? ''}
+                      disabled={!editing}
+                      onChange={(e) => setLocal((l) => l ? ({ ...l, recovery_pct_min: parseFloat(e.target.value) || 0 }) : l)}
+                      className="mt-1 font-mono text-xs"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="downtime_hrs_per_day_max" className="text-2xs font-semibold text-muted-foreground">Downtime Max (hrs/day)</Label>
+                    <Input
+                      id="downtime_hrs_per_day_max"
+                      type="number"
+                      step="0.5"
+                      value={local?.downtime_hrs_per_day_max ?? ''}
+                      disabled={!editing}
+                      onChange={(e) => setLocal((l) => l ? ({ ...l, downtime_hrs_per_day_max: parseFloat(e.target.value) || 0 }) : l)}
+                      className="mt-1 font-mono text-xs"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="dp_psi_max" className="text-2xs font-semibold text-muted-foreground">Differential Pressure Max (psi)</Label>
+                    <Input
+                      id="dp_psi_max"
+                      type="number"
+                      value={local?.dp_psi_max ?? ''}
+                      disabled={!editing}
+                      onChange={(e) => setLocal((l) => l ? ({ ...l, dp_psi_max: parseFloat(e.target.value) || 0 }) : l)}
+                      className="mt-1 font-mono text-xs"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="pv_ratio_max" className="text-2xs font-semibold text-muted-foreground">PV Ratio Max</Label>
+                    <Input
+                      id="pv_ratio_max"
+                      type="number"
+                      step="0.1"
+                      value={local?.pv_ratio_max ?? ''}
+                      disabled={!editing}
+                      onChange={(e) => setLocal((l) => l ? ({ ...l, pv_ratio_max: parseFloat(e.target.value) || 0 }) : l)}
+                      className="mt-1 font-mono text-xs"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Group 3: Chemical Autonomy */}
+              <div className="p-3 rounded-xl bg-muted/30 border border-border/60">
+                <div className="flex items-center gap-1.5 mb-2.5 text-xs font-bold text-foreground">
+                  <Beaker className="h-4 w-4 text-amber-500" />
+                  <span>Chemical Autonomy &amp; Inventory Alarm Limit</span>
+                </div>
+                <div className="max-w-xs">
+                  <Label htmlFor="chem_low_stock_days_min" className="text-2xs font-semibold text-muted-foreground">Chemical Low-Stock Warning (Days of Supply)</Label>
+                  <Input
+                    id="chem_low_stock_days_min"
+                    type="number"
+                    value={local?.chem_low_stock_days_min ?? ''}
+                    disabled={!editing}
+                    onChange={(e) => setLocal((l) => l ? ({ ...l, chem_low_stock_days_min: parseFloat(e.target.value) || 0 }) : l)}
+                    className="mt-1 font-mono text-xs"
+                  />
+                  <p className="text-3xs text-muted-foreground mt-1">Raises warning alert if projected run-out is under this duration.</p>
+                </div>
+              </div>
             </div>
           </Card>
         </TabsContent>
 
-        {/* -------- What-if / Manual metric override -------- */}
-        <TabsContent value="whatif" className="mt-3 space-y-3">
+        {/* ── Tab 4: What-if Simulation ── */}
+        <TabsContent value="whatif" className="mt-4 space-y-4">
           <Card className="p-4">
             <div className="flex items-center gap-2 mb-1">
               <Zap className="h-4 w-4 text-warn" />
-              <span className="text-sm font-medium">What-if Mode</span>
-              <Badge variant="outline" className="text-2xs ml-auto border-warn text-warn bg-warn-soft">
-                Live preview
+              <span className="text-sm font-bold text-foreground">Real-Time What-If Simulation Sandbox</span>
+              <Badge variant="outline" className="text-2xs ml-auto border-warn text-warn bg-warn-soft font-bold">
+                Live Sandbox
               </Badge>
             </div>
             <div className="text-xs text-muted-foreground mb-3">
-              Tweak metric values below and watch violations update in real time — without
-              committing to an evaluation. Leave a field blank to use the fetched value.
+              Tweak values below to stress-test your compliance score and preview alerts without altering production readings.
             </div>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               {[
                 'nrw_pct', 'downtime_hrs', 'permeate_tds', 'permeate_ph',
                 'raw_turbidity', 'dp_psi', 'recovery_pct', 'pv_ratio',
@@ -1224,32 +1721,33 @@ export default function Compliance() {
                 const fetched = previewMetrics?.[k];
                 return (
                   <div key={k}>
-                    <Label htmlFor="compliance-field-2" className="text-xs">{labelize(k)}</Label>
+                    <Label htmlFor={`whatif-${k}`} className="text-xs font-semibold">{labelize(k)}</Label>
                     {fetched !== undefined && overrideMetrics[k] === undefined && (
-                      <div className="text-2xs text-muted-foreground">
-                        Fetched: {Math.round((fetched as number) * 100) / 100}
+                      <div className="text-2xs text-muted-foreground font-mono">
+                        Live value: {Math.round((fetched as number) * 100) / 100}
                       </div>
                     )}
                     <Input
-                      type="number" step="0.01"
+                      id={`whatif-${k}`}
+                      type="number"
+                      step="0.01"
                       placeholder={fetched !== undefined ? String(Math.round((fetched as number) * 100) / 100) : '—'}
                       className="mt-1 font-mono text-xs"
                       value={overrideMetrics[k] ?? ''}
-                      onChange={(e) =>
-                        setOverrideMetrics((m) => ({ ...m, [k]: e.target.value }))
-                      }
-                    id="compliance-field-2"/>
+                      onChange={(e) => setOverrideMetrics((m) => ({ ...m, [k]: e.target.value }))}
+                    />
                   </div>
                 );
               })}
             </div>
             <div className="mt-3 flex gap-2">
               <Button
-                variant="ghost" size="sm"
+                variant="ghost"
+                size="sm"
                 className="text-xs"
                 onClick={() => { setOverrideMetrics({}); setWhatIfViolations(null); }}
               >
-                Clear all overrides
+                Clear Sandbox Overrides
               </Button>
             </div>
           </Card>
@@ -1257,7 +1755,7 @@ export default function Compliance() {
           {/* What-if violations live preview */}
           {whatIfViolations !== null && (
             <Card className={cn(
-              'p-3 border-l-2',
+              'p-3 border-l-4',
               whatIfViolations.length === 0
                 ? 'border-accent bg-accent-soft/50'
                 : whatIfViolations.some((v) => v.severity === 'high')
@@ -1266,20 +1764,20 @@ export default function Compliance() {
             )}>
               <div className="flex items-center gap-2 mb-2">
                 <Zap className="h-4 w-4 text-warn" />
-                <span className="text-xs font-semibold">
-                  What-if Result — Score: {computeComplianceScore(whatIfViolations)}/100
+                <span className="text-xs font-bold text-foreground">
+                  Simulated Compliance Score: {computeComplianceScore(whatIfViolations)}/100 ({scoreLabel(computeComplianceScore(whatIfViolations))})
                 </span>
                 {whatIfViolations.length === 0
                   ? <Badge className="text-2xs bg-accent ml-auto">No violations</Badge>
                   : <Badge className="text-2xs bg-danger ml-auto">{whatIfViolations.length} violation{whatIfViolations.length > 1 ? 's' : ''}</Badge>}
               </div>
               {whatIfViolations.length > 0 && (
-                <div className="space-y-1">
+                <div className="space-y-1 mt-2">
                   {whatIfViolations.map((v) => (
                     <div key={v.code} className="flex items-center gap-2 text-xs">
                       <SeverityBadge sev={v.severity} />
-                      <span className="font-mono text-muted-foreground">{v.metric}</span>
-                      <span className="font-semibold">{v.value}</span>
+                      <span className="font-mono font-bold text-foreground">{v.metric}</span>
+                      <span className="font-bold text-destructive">{v.value}</span>
                       <span className="text-muted-foreground">
                         {v.comparator} {v.threshold}
                       </span>
@@ -1301,12 +1799,12 @@ export default function Compliance() {
 
 function SeverityBadge({ sev }: { sev: string }) {
   const m: Record<string, string> = {
-    high:   'bg-danger-soft text-danger border-danger',
-    medium: 'bg-warn-soft text-warn border-warn',
-    low:    'bg-info-soft text-info border-info',
+    high:   'bg-danger-soft text-danger border-danger font-bold',
+    medium: 'bg-warn-soft text-warn border-warn font-semibold',
+    low:    'bg-info-soft text-info border-info font-normal',
   };
   return (
-    <Badge variant="outline" className={cn('capitalize font-normal', m[sev] ?? '')}>
+    <Badge variant="outline" className={cn('capitalize text-3xs', m[sev] ?? '')}>
       {sev}
     </Badge>
   );
@@ -1315,3 +1813,4 @@ function SeverityBadge({ sev }: { sev: string }) {
 function labelize(k: string): string {
   return k.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }
+
