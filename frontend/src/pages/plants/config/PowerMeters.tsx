@@ -179,13 +179,12 @@ export function GridMeterListRows({
   };
 
   return (
-    <div className="rounded-xl border border-info/70 overflow-hidden shadow-sm">
+    <div className="rounded-lg border border-border overflow-hidden shadow-xs">
       {/* Table header */}
-      <div className="grid grid-cols-[1fr_100px_auto] items-center bg-info-soft/70 border-b border-info/70 px-3 py-2 gap-2">
-        <span className="text-2xs font-semibold text-muted-foreground uppercase tracking-wide">Meter Name</span>
-        <span className="text-2xs font-semibold text-muted-foreground uppercase tracking-wide text-center">
-          Multiplier
-          <span className="normal-case font-normal ml-0.5 opacity-70">(CT ratio)</span>
+      <div className="grid grid-cols-[1fr_110px_auto] items-center bg-muted/50 border-b border-border px-3 py-2 gap-2">
+        <span className="text-2xs font-mono font-medium text-muted-foreground uppercase tracking-wider">Meter Name</span>
+        <span className="text-2xs font-mono font-medium text-muted-foreground uppercase tracking-wider text-center">
+          Multiplier <span className="normal-case font-normal text-3xs opacity-80">(CT ratio)</span>
         </span>
         <span className="w-10" />
       </div>
@@ -196,10 +195,10 @@ export function GridMeterListRows({
         const mult = multipliers[i] ?? 1;
 
         if (confirmDeleteIdx === i) return (
-          <div key={i} className="grid grid-cols-[1fr_100px_auto] items-center gap-2 px-3 py-2.5 bg-destructive/5 border-b border-info last:border-b-0">
+          <div key={i} className="grid grid-cols-[1fr_110px_auto] items-center gap-2 px-3 py-2 bg-destructive/5 border-b border-border last:border-b-0">
             <span className="text-xs text-destructive font-medium truncate col-span-2">Remove "{name}"?</span>
             <div className="flex items-center gap-1 w-10 justify-end">
-              <button onClick={() => confirmDelete(i)} className="text-xs font-semibold text-destructive hover:underline">Yes</button>
+              <button onClick={() => confirmDelete(i)} className="text-xs font-medium text-destructive hover:underline">Yes</button>
               <span className="text-muted-foreground/40">/</span>
               <button onClick={() => setConfirmDeleteIdx(-1)} className="text-xs text-muted-foreground hover:underline">No</button>
             </div>
@@ -207,14 +206,13 @@ export function GridMeterListRows({
         );
 
         if (editingIdx === i) return (
-          <div key={i} className="grid grid-cols-[1fr_100px_auto] items-center gap-2 px-3 py-2 border-b border-info last:border-b-0 bg-background">
+          <div key={i} className="grid grid-cols-[1fr_110px_auto] items-center gap-2 px-3 py-2 border-b border-border last:border-b-0 bg-background">
             <input autoFocus value={editVal} onChange={e => setEditVal(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter') commitEdit(); if (e.key === 'Escape') cancelEdit(); }}
-              className="text-sm bg-transparent border-b border-info focus:outline-none focus:ring-1 focus:ring-info rounded-t w-full" />
-            {/* Keep multiplier visible while editing name — styled like the readout below */}
-            <div className="digital-readout justify-self-center">
-              <span className="text-xs digital-readout-dim font-mono">×</span>
-              <span className="text-xs font-mono font-semibold text-info" style={{ textShadow: '0 0 8px currentColor' }}>{mult}</span>
+              className="text-xs bg-transparent border-b border-primary focus:outline-none focus:ring-1 focus:ring-primary rounded-t w-full px-1" />
+            <div className="inline-flex items-center justify-center gap-0.5 px-2 py-0.5 rounded bg-muted/60 border border-border text-foreground font-mono text-xs font-semibold justify-self-center">
+              <span className="text-3xs text-muted-foreground font-mono">×</span>
+              <span>{mult}</span>
             </div>
             <div className="flex items-center gap-1 w-10 justify-end">
               <button onClick={commitEdit} className="inline-flex items-center justify-center h-6 w-6 rounded-full text-accent hover:bg-accent-soft transition-colors" aria-label="Save name">
@@ -228,13 +226,13 @@ export function GridMeterListRows({
         );
 
         return (
-          <div key={i} className="group grid grid-cols-[1fr_100px_auto] items-center gap-2 px-3 py-2 border-b border-info last:border-b-0 bg-background hover:bg-info-soft/30 transition-colors">
+          <div key={i} className="group grid grid-cols-[1fr_110px_auto] items-center gap-2 px-3 py-2 border-b border-border/60 last:border-b-0 bg-card hover:bg-muted/30 transition-colors">
             {/* Meter name */}
-            <span className="text-sm truncate font-medium" title={name}>{name}</span>
+            <span className="text-xs truncate font-medium text-foreground" title={name}>{name}</span>
 
-            {/* Multiplier cell — styled like a meter's own digital readout. Uses local state so typing is not interrupted */}
-            <div className="digital-readout justify-self-center">
-              <span className="text-xs digital-readout-dim font-mono shrink-0">×</span>
+            {/* Multiplier cell */}
+            <div className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded bg-muted/60 border border-border/80 text-foreground font-mono text-xs font-semibold justify-self-center">
+              <span className="text-3xs text-muted-foreground font-mono">×</span>
               <input
                 type="number" step="any" min="0.001"
                 value={multInputs[i] ?? String(mult)}
@@ -251,8 +249,7 @@ export function GridMeterListRows({
                     (e.target as HTMLInputElement).blur();
                   }
                 }}
-                style={{ textShadow: '0 0 8px currentColor' }}
-                className="w-[52px] text-xs text-right font-mono font-semibold text-info bg-transparent focus:outline-none focus:ring-2 focus:ring-info rounded"
+                className="w-[46px] text-xs text-right font-mono font-bold text-foreground bg-transparent focus:outline-none focus:ring-1 focus:ring-primary rounded px-0.5"
                 title={`CT multiplier for "${name}". Consumption = (Current − Previous) × ${mult}. Press Enter or click away to save.`}
               />
             </div>
@@ -261,19 +258,19 @@ export function GridMeterListRows({
             <div className="flex items-center gap-0.5 w-10 justify-end">
               <button
                 onClick={() => startEdit(i)}
-                className="inline-flex items-center justify-center h-6 w-6 rounded-full text-muted-foreground hover:text-accent/90 hover:bg-accent-soft opacity-0 group-hover:opacity-100 focus:opacity-100 transition"
+                className="inline-flex items-center justify-center h-6 w-6 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted opacity-0 group-hover:opacity-100 focus:opacity-100 transition"
                 title={`Rename "${name}"`}
                 aria-label={`Rename "${name}"`}
               >
-                <Pencil className="h-3.5 w-3.5" />
+                <Pencil className="h-3 w-3" />
               </button>
               <button
                 onClick={() => askDelete(i)}
-                className="inline-flex items-center justify-center h-6 w-6 rounded-full text-muted-foreground hover:text-danger/90 hover:bg-danger-soft opacity-0 group-hover:opacity-100 focus:opacity-100 transition"
+                className="inline-flex items-center justify-center h-6 w-6 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 opacity-0 group-hover:opacity-100 focus:opacity-100 transition"
                 title={`Remove "${name}"`}
                 aria-label={`Remove "${name}"`}
               >
-                <X className="h-3.5 w-3.5" />
+                <X className="h-3 w-3" />
               </button>
             </div>
           </div>
@@ -1271,29 +1268,31 @@ export function PowerMetersCard({ plant }: { plant: any }) {
     <div className="space-y-3">
 
       {/* ── Meter Configuration ── */}
-      <Card className="p-5 space-y-4 rounded-2xl border border-border/80 shadow-2xs">
+      <Card className="p-4 sm:p-5 space-y-4 rounded-lg border border-border shadow-xs">
         {/* Header */}
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-2.5">
-            <div className="h-8 w-8 rounded-lg bg-primary-soft text-primary flex items-center justify-center shrink-0">
+            <div className="h-7 w-7 rounded-md bg-primary-soft text-primary flex items-center justify-center shrink-0">
               <Gauge className="h-4 w-4" />
             </div>
             <div>
-              <h3 className="font-bold text-sm text-foreground">Power Meter Configuration</h3>
+              <h3 className="font-semibold text-sm text-foreground">Power Meter Configuration</h3>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Configure meters per source. Names appear in <strong className="text-foreground">Operations → Power</strong>.
+                Configure meters per source. Names appear in <strong className="text-foreground font-medium">Operations → Power</strong>.
               </p>
             </div>
           </div>
           <div className="flex items-center gap-1.5 shrink-0">
             {hasSolar && (
-              <span className="inline-flex items-center gap-1 text-2xs font-bold px-2.5 py-1 rounded-full bg-warn-soft text-warn border border-warn/40">
-                <Sun className="h-3 w-3" /> Solar
+              <span className="inline-flex items-center gap-1 text-2xs font-medium px-2.5 py-0.5 rounded-full bg-warn-soft text-warn border border-warn/30">
+                <Sun className="h-3 w-3" />
+                <span>Solar</span>
               </span>
             )}
             {hasGrid && (
-              <span className="inline-flex items-center gap-1 text-2xs font-bold px-2.5 py-1 rounded-full bg-info-soft text-info border border-info/40">
-                <GridPylonIcon className="h-3 w-3" /> Grid
+              <span className="inline-flex items-center gap-1 text-2xs font-medium px-2.5 py-0.5 rounded-full bg-info-soft text-info border border-info/30">
+                <GridPylonIcon className="h-3 w-3" />
+                <span>Grid</span>
               </span>
             )}
           </div>
@@ -1304,30 +1303,30 @@ export function PowerMetersCard({ plant }: { plant: any }) {
 
           {/* Solar meters panel */}
           {hasSolar && (
-            <div className="rounded-xl border border-warn/60 bg-warn-soft/30 p-3.5 space-y-3 flex flex-col justify-between">
+            <div className="rounded-lg border border-border/80 bg-muted/20 p-3.5 space-y-3 flex flex-col justify-between">
               <div className="space-y-3">
                 <div className="flex items-center justify-between gap-2 flex-wrap">
                   <div className="flex items-center gap-2">
-                    <div className="h-7 w-7 rounded-lg bg-warn-soft text-warn flex items-center justify-center shrink-0">
-                      <Sun className="h-4 w-4" />
+                    <div className="h-6 w-6 rounded-md bg-warn-soft text-warn flex items-center justify-center shrink-0">
+                      <Sun className="h-3.5 w-3.5" />
                     </div>
-                    <span className="text-sm font-bold text-foreground">Solar meters</span>
+                    <span className="text-xs font-semibold text-foreground">Solar meters</span>
                   </div>
                   {/* Count stepper */}
                   <div className="flex items-center gap-1.5">
-                    <span className="text-3xs text-warn uppercase tracking-wider font-bold">Count</span>
-                    <div className="flex items-center gap-0.5 bg-background rounded-full border border-warn/70 p-0.5 shadow-2xs">
+                    <span className="text-3xs text-muted-foreground uppercase font-mono font-medium tracking-wider">Count</span>
+                    <div className="flex items-center gap-0.5 bg-card rounded-md border border-border p-0.5 shadow-xs">
                       <button
                         onClick={() => canEdit && setSolarCount(c => Math.max(1, c - 1))}
                         disabled={!canEdit || solarCount <= 1}
-                        className="h-6 w-6 rounded-full flex items-center justify-center hover:bg-warn-soft disabled:opacity-40 transition-colors"
+                        className="h-5 w-5 rounded flex items-center justify-center hover:bg-muted disabled:opacity-40 transition-colors"
                         aria-label="Decrease solar meter count"
                       ><Minus className="h-3 w-3" /></button>
-                      <span className="w-5 text-center text-xs font-mono font-bold">{solarCount}</span>
+                      <span className="w-5 text-center text-xs font-mono font-semibold">{solarCount}</span>
                       <button
                         onClick={() => canEdit && setSolarCount(c => Math.min(20, c + 1))}
                         disabled={!canEdit || solarCount >= 20}
-                        className="h-6 w-6 rounded-full flex items-center justify-center hover:bg-warn-soft disabled:opacity-40 transition-colors"
+                        className="h-5 w-5 rounded flex items-center justify-center hover:bg-muted disabled:opacity-40 transition-colors"
                         aria-label="Increase solar meter count"
                       ><Plus className="h-3 w-3" /></button>
                     </div>
@@ -1337,7 +1336,7 @@ export function PowerMetersCard({ plant }: { plant: any }) {
                 {/* Meter name rows */}
                 {canEdit && (
                   <div className="space-y-1">
-                    <p className="text-3xs text-muted-foreground font-bold uppercase tracking-wider">Meter Names</p>
+                    <p className="text-3xs text-muted-foreground font-mono uppercase tracking-wider">Meter Names</p>
                     <MeterNameListRows count={solarCount} names={solarNames} accentColor="yellow" defaultPrefix="Solar Meter"
                       onSave={names => { isDirty.current = true; setShowDirty(true); setSolarNames(names); }}
                       onRemoveLast={() => setSolarCount(c => Math.max(1, c - 1))} />
@@ -1348,30 +1347,30 @@ export function PowerMetersCard({ plant }: { plant: any }) {
           )}
 
           {/* Grid meters panel */}
-          <div className="rounded-xl border border-info/60 bg-info-soft/30 p-3.5 space-y-3 flex flex-col justify-between">
+          <div className="rounded-lg border border-border/80 bg-muted/20 p-3.5 space-y-3 flex flex-col justify-between">
             <div className="space-y-3">
               <div className="flex items-center justify-between gap-2 flex-wrap">
                 <div className="flex items-center gap-2">
-                  <div className="h-7 w-7 rounded-lg bg-info-soft text-info flex items-center justify-center shrink-0">
-                    <GridPylonIcon className="h-4 w-4" />
+                  <div className="h-6 w-6 rounded-md bg-info-soft text-info flex items-center justify-center shrink-0">
+                    <GridPylonIcon className="h-3.5 w-3.5" />
                   </div>
-                  <span className="text-sm font-bold text-foreground">Grid meters</span>
+                  <span className="text-xs font-semibold text-foreground">Grid meters</span>
                 </div>
                 {/* Count stepper */}
                 <div className="flex items-center gap-1.5">
-                  <span className="text-3xs text-info uppercase tracking-wider font-bold">Count</span>
-                  <div className="flex items-center gap-0.5 bg-background rounded-full border border-info/70 p-0.5 shadow-2xs">
+                  <span className="text-3xs text-muted-foreground uppercase font-mono font-medium tracking-wider">Count</span>
+                  <div className="flex items-center gap-0.5 bg-card rounded-md border border-border p-0.5 shadow-xs">
                     <button
                       onClick={() => canEdit && setGridCount(c => Math.max(1, c - 1))}
                       disabled={!canEdit || gridCount <= 1}
-                      className="h-6 w-6 rounded-full flex items-center justify-center hover:bg-info-soft disabled:opacity-40 transition-colors"
+                      className="h-5 w-5 rounded flex items-center justify-center hover:bg-muted disabled:opacity-40 transition-colors"
                       aria-label="Decrease grid meter count"
                     ><Minus className="h-3 w-3" /></button>
-                    <span className="w-5 text-center text-xs font-mono font-bold">{gridCount}</span>
+                    <span className="w-5 text-center text-xs font-mono font-semibold">{gridCount}</span>
                     <button
                       onClick={() => canEdit && setGridCount(c => Math.min(20, c + 1))}
                       disabled={!canEdit || gridCount >= 20}
-                      className="h-6 w-6 rounded-full flex items-center justify-center hover:bg-info-soft disabled:opacity-40 transition-colors"
+                      className="h-5 w-5 rounded flex items-center justify-center hover:bg-muted disabled:opacity-40 transition-colors"
                       aria-label="Increase grid meter count"
                     ><Plus className="h-3 w-3" /></button>
                   </div>
@@ -1381,7 +1380,7 @@ export function PowerMetersCard({ plant }: { plant: any }) {
               {/* Meter name + multiplier rows */}
               {canEdit && (
                 <div className="space-y-1">
-                  <p className="text-3xs text-muted-foreground font-bold uppercase tracking-wider">Meter Names &amp; CT Multipliers</p>
+                  <p className="text-3xs text-muted-foreground font-mono uppercase tracking-wider">Meter Names &amp; CT Multipliers</p>
                   <GridMeterListRows
                     count={gridCount}
                     names={gridNames}
@@ -1396,14 +1395,14 @@ export function PowerMetersCard({ plant }: { plant: any }) {
 
             {/* Change Meter — manager/admin only */}
             {canEdit && (
-              <div className="pt-2 border-t border-info/40">
+              <div className="pt-2 border-t border-border/60">
                 <Button
                   size="sm"
                   variant="outline"
                   onClick={() => setChangeMeterOpen(true)}
-                  className="w-full gap-1.5 h-8 text-xs font-semibold rounded-lg border-info/70 text-info hover:bg-info-soft hover:border-info"
+                  className="w-full gap-1.5 h-8 text-xs font-medium"
                 >
-                  <ChangeMeterIcon className="h-3.5 w-3.5" />
+                  <ChangeMeterIcon className="h-3.5 w-3.5 text-primary" />
                   <span>Change Meter / Update CT Ratio</span>
                 </Button>
               </div>

@@ -1067,43 +1067,47 @@ function PlantDetail({ plantId }: { plantId: string }) {
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
             
             {/* Design Capacity Tile */}
-            <div className="p-3.5 rounded-xl bg-white/5 border border-white/10 backdrop-blur-sm space-y-1">
-              <div className="text-[10px] uppercase font-bold tracking-wider text-slate-400 flex items-center gap-1">
-                <Droplet className="h-3 w-3 text-sky-400" />
+            <div className="p-3.5 rounded-lg bg-muted/40 border border-border/80 space-y-1">
+              <div className="text-2xs uppercase font-mono font-medium tracking-wider text-muted-foreground flex items-center gap-1.5">
+                <Droplet className="h-3 w-3 text-primary" />
                 <span>Design Capacity</span>
               </div>
               <div className="flex items-baseline gap-1.5">
-                <span className="font-mono text-2xl font-extrabold text-white">
-                  {fmtNum(plant.design_capacity_m3 ?? 0)}
+                <span className="font-mono text-xl sm:text-2xl font-bold text-foreground tabular-nums">
+                  {plant.design_capacity_m3 ? fmtNum(plant.design_capacity_m3) : '—'}
                 </span>
-                <span className="text-xs font-semibold text-teal-300">MLD</span>
+                {plant.design_capacity_m3 ? (
+                  <span className="text-xs font-semibold text-primary font-mono">MLD</span>
+                ) : (
+                  <span className="text-2xs text-muted-foreground italic">Unassigned</span>
+                )}
               </div>
-              <div className="text-[10px] text-slate-400">Peak extraction throughput</div>
+              <div className="text-3xs text-muted-foreground">Peak extraction throughput</div>
             </div>
 
             {/* RO Trains Status Tile */}
-            <div className="p-3.5 rounded-xl bg-white/5 border border-white/10 backdrop-blur-sm space-y-1">
-              <div className="text-[10px] uppercase font-bold tracking-wider text-slate-400 flex items-center gap-1">
-                <ROTrainIcon className="h-3 w-3 text-violet-400" />
+            <div className="p-3.5 rounded-lg bg-muted/40 border border-border/80 space-y-1">
+              <div className="text-2xs uppercase font-mono font-medium tracking-wider text-muted-foreground flex items-center gap-1.5">
+                <ROTrainIcon className="h-3 w-3 text-chart-4" />
                 <span>RO Trains Fleet</span>
               </div>
-              <div className="font-mono text-2xl font-extrabold text-white">
+              <div className="font-mono text-xl sm:text-2xl font-bold text-foreground tabular-nums">
                 {trainCounts ? (
                   <>
                     <span className={
                       trainCounts.active === trainCounts.total && trainCounts.total > 0
-                        ? 'text-emerald-400'
+                        ? 'text-accent'
                         : trainCounts.active === 0 && trainCounts.total > 0
-                          ? 'text-rose-400'
-                          : 'text-sky-400'
+                          ? 'text-danger'
+                          : 'text-primary'
                     }>{trainCounts.active}</span>
-                    <span className="text-slate-400 font-normal text-lg">/{trainCounts.total}</span>
+                    <span className="text-muted-foreground font-normal text-base">/{trainCounts.total}</span>
                   </>
                 ) : (
                   <span>{plant.num_ro_trains ?? '—'}</span>
                 )}
               </div>
-              <div className="text-[10px] text-slate-400">
+              <div className="text-3xs text-muted-foreground">
                 {trainCounts && trainCounts.total > 0 
                   ? `${Math.round((trainCounts.active / trainCounts.total) * 100)}% fleet operational`
                   : 'Active train telemetry'}
@@ -1111,21 +1115,21 @@ function PlantDetail({ plantId }: { plantId: string }) {
             </div>
 
             {/* Product Distribution Meters Tile */}
-            <div className="p-3.5 rounded-xl bg-white/5 border border-white/10 backdrop-blur-sm space-y-1">
-              <div className="text-[10px] uppercase font-bold tracking-wider text-slate-400 flex items-center gap-1">
-                <Gauge className="h-3 w-3 text-teal-400" />
+            <div className="p-3.5 rounded-lg bg-muted/40 border border-border/80 space-y-1">
+              <div className="text-2xs uppercase font-mono font-medium tracking-wider text-muted-foreground flex items-center gap-1.5">
+                <Gauge className="h-3 w-3 text-info" />
                 <span>Product Distribution</span>
               </div>
-              <div className="font-mono text-2xl font-extrabold text-white">
+              <div className="font-mono text-xl sm:text-2xl font-bold text-foreground tabular-nums">
                 <ProductMetersStat plantId={plant.id} />
               </div>
-              <div className="text-[10px] text-slate-400">Offtake & bulk consumption</div>
+              <div className="text-3xs text-muted-foreground">Offtake &amp; bulk consumption</div>
             </div>
 
           </div>
 
           {/* Energy Sources Strip */}
-          <div className="pt-3 border-t border-white/10">
+          <div className="pt-3 border-t border-border/60">
             <EnergySourceInline plant={plant} />
           </div>
 

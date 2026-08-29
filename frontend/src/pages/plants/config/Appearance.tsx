@@ -131,25 +131,26 @@ export function EnergySourceInline({ plant }: { plant: any; isManager?: boolean;
   const hasSolar = !!plant.has_solar;
   const hasGrid  = plant.has_grid !== false;
   return (
-    <div className="flex items-center gap-2 flex-wrap">
-      <span className="text-xs font-semibold opacity-70 uppercase tracking-wide flex items-center gap-1">
-        <Zap className="h-3 w-3" /> Energy
-      </span>
-      <div className="flex items-center gap-2 flex-wrap text-xs">
+    <div className="flex items-center justify-between gap-2 flex-wrap text-xs">
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-2xs font-mono font-medium uppercase tracking-wider text-muted-foreground flex items-center gap-1">
+          <Zap className="h-3 w-3 text-primary" /> Energy Sources:
+        </span>
         {hasSolar && (
-          <span className="inline-flex items-center gap-1 opacity-90">
-            <Sun className="h-3 w-3 text-warn" />
-            Solar{plant.solar_capacity_kw ? ` · ${plant.solar_capacity_kw} kW` : ''}
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-2xs font-medium bg-warn-soft text-warn border border-warn/30">
+            <Sun className="h-3 w-3" />
+            <span>Solar{plant.solar_capacity_kw ? ` · ${plant.solar_capacity_kw} kW` : ''}</span>
           </span>
         )}
         {hasGrid && (
-          <span className="inline-flex items-center gap-1 opacity-90">
-            <GridPylonIcon className="h-3 w-3" /> Grid
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-2xs font-medium bg-info-soft text-info border border-info/30">
+            <GridPylonIcon className="h-3 w-3" />
+            <span>Grid Connected</span>
           </span>
         )}
-        {!hasSolar && !hasGrid && <span className="opacity-50 italic text-xs">No source</span>}
-        <span className="opacity-40 text-2xs ml-1">(configure in Power tab)</span>
+        {!hasSolar && !hasGrid && <span className="text-muted-foreground italic text-2xs">No source assigned</span>}
       </div>
+      <span className="text-3xs text-muted-foreground font-mono">(configure in Power tab)</span>
     </div>
   );
 }
