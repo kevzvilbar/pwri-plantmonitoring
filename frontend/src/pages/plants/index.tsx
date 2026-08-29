@@ -53,6 +53,52 @@ import { ProductMetersCard, ProductMetersStat }      from './config/ProductMeter
 import { PowerMetersCard }                           from './config/PowerMeters';
 import { BackwashModeCard, EnergySourceCard, EnergySourceInline } from './config/Appearance';
 
+function FadingAddressText({ address }: { address: string }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const textRef = useRef<HTMLSpanElement>(null);
+  const [overflows, setOverflows] = useState(false);
+  const [offset, setOffset] = useState(0);
+
+  useEffect(() => {
+    if (containerRef.current && textRef.current) {
+      const isOver = textRef.current.scrollWidth > containerRef.current.clientWidth;
+      setOverflows(isOver);
+      if (isOver) {
+        setOffset(textRef.current.scrollWidth - containerRef.current.clientWidth + 6);
+      }
+    }
+  }, [address]);
+
+  return (
+    <div
+      ref={containerRef}
+      className={`relative w-full overflow-hidden text-xs text-muted-foreground flex items-center gap-1 ${
+        overflows
+          ? '[mask-image:linear-gradient(to_right,black_80%,transparent_100%)] group-hover:[mask-image:linear-gradient(to_right,transparent_0%,black_6%,black_92%,transparent_100%)]'
+          : ''
+      }`}
+      title={address}
+    >
+      <MapPin className="h-3 w-3 shrink-0 opacity-70" />
+      <span
+        ref={textRef}
+        className="whitespace-nowrap inline-block"
+      >
+        <span
+          className={
+            overflows
+              ? 'inline-block transition-transform duration-[4000ms] ease-in-out group-hover:-translate-x-[var(--scroll-offset)]'
+              : ''
+          }
+          style={{ ['--scroll-offset' as any]: `${offset}px` }}
+        >
+          {address || 'Unassigned'}
+        </span>
+      </span>
+    </div>
+  );
+}
+
 export default function Plants() {
   const { id } = useParams();
   const { selectedPlantId } = useAppStore();
@@ -630,15 +676,12 @@ export default function Plants() {
                   </svg>
                 </div>
 
-                {/* Facility Name & Status info */}
-                <div className="min-w-[170px] max-w-[210px] space-y-1">
+                {/* Facility Name & Status info — FIXED width to guarantee perfect vertical alignment across all cards */}
+                <div className="w-[185px] shrink-0 space-y-1">
                   <h2 className="font-bold text-base leading-tight truncate group-hover:text-primary transition-colors">
                     {p.name}
                   </h2>
-                  <p className="text-xs text-muted-foreground flex items-center gap-1">
-                    <MapPin className="h-3 w-3 shrink-0 opacity-70" />
-                    <span className="truncate">{p.address || 'Unassigned'}</span>
-                  </p>
+                  <FadingAddressText address={p.address || 'Unassigned'} />
                   <div>
                     {incidentFlag ? (
                       <span className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
@@ -726,12 +769,9 @@ export default function Plants() {
               {/* ── MOBILE layout (< md) ── */}
               <div className="md:hidden flex-1 min-w-0 p-3.5 space-y-3">
                 <div className="flex items-start justify-between gap-2">
-                  <div>
+                  <div className="min-w-0 flex-1">
                     <h2 className="font-semibold text-base leading-tight">{p.name}</h2>
-                    <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
-                      <MapPin className="h-3 w-3 shrink-0" />
-                      <span className="truncate">{p.address}</span>
-                    </p>
+                    <FadingAddressText address={p.address || 'Unassigned'} />
                   </div>
                   <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
                     <Button
