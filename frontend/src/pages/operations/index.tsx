@@ -17,6 +17,7 @@ import { WellReadingForm }    from './wells/WellSection';
 import { BlendingForm }       from './blending/BlendingSection';
 import { ProductForm }        from './product/ProductSection';
 import { PowerForm }          from './power/PowerSection';
+import { PageHeader }         from '@/components/PageHeader';
 import { cn } from '@/lib/utils';
 
 const TAB_ALIASES: Record<string, string> = {
@@ -109,57 +110,49 @@ export default function Operations() {
   });
 
   const TAB_CONFIG = [
-    { key: 'locator',  label: 'Locator Meters', count: locatorCount, icon: MapPin },
-    { key: 'well',     label: 'Deep Wells',     count: wellCount,    icon: Droplet },
-    { key: 'product',  label: 'Product Meters', count: productMeterCount, icon: FlaskConical },
-    { key: 'blending', label: 'Blending Feeds', count: null,         icon: Waves },
-    { key: 'power',    label: 'Power Feeds',    count: null,         icon: Zap },
+    { key: 'locator',  label: 'Locators', count: locatorCount, icon: MapPin },
+    { key: 'well',     label: 'Wells',    count: wellCount,    icon: Droplet },
+    { key: 'product',  label: 'Product',  count: productMeterCount, icon: FlaskConical },
+    { key: 'blending', label: 'Blending', count: null,         icon: Waves },
+    { key: 'power',    label: 'Power',    count: null,         icon: Zap },
   ] as const;
 
   return (
-    <div className="space-y-4 animate-fade-in">
-      {/* ── Page Header & Action Controls ── */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="flex items-center gap-2.5">
-          <div className="p-2 rounded-xl bg-primary/10 text-primary">
-            <Activity className="h-5 w-5" />
-          </div>
-          <div>
-            <h1 className="text-xl font-bold tracking-tight text-foreground">Plant Operations Control</h1>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              Daily telemetry, field odometer entries, flow rates, and active bypass management.
-            </p>
-          </div>
-        </div>
+    <div className="space-y-4 animate-fade-in max-w-[1600px] mx-auto pb-10">
+      <PageHeader
+        title="Operations Control"
+        titleIcon={<Activity className="h-5 w-5 text-primary" />}
+        subtitle="Daily telemetry logs, flow rates, and active bypass management"
+        actions={
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-muted border text-xs font-medium">
+              <Clock className="h-3.5 w-3.5 text-primary" />
+              <span>{shiftInfo.label}</span>
+              <span className="text-muted-foreground text-3xs font-mono">({shiftInfo.time})</span>
+            </div>
 
-        <div className="flex items-center gap-2 flex-wrap">
-          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-muted/60 border border-border/60 text-xs font-semibold">
-            <Clock className="h-3.5 w-3.5 text-primary" />
-            <span className="text-foreground">{shiftInfo.label}</span>
-            <span className="text-muted-foreground text-3xs font-mono">({shiftInfo.time})</span>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 px-2.5 text-xs gap-1.5 font-medium"
+              onClick={() => navigate('/import')}
+            >
+              <Upload className="h-3.5 w-3.5 text-primary" />
+              <span>Import</span>
+            </Button>
+
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 px-2.5 text-xs gap-1.5 font-medium"
+              onClick={() => navigate('/exports')}
+            >
+              <Download className="h-3.5 w-3.5 text-accent" />
+              <span>Export</span>
+            </Button>
           </div>
-
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-8 px-2.5 text-2xs gap-1.5 font-semibold bg-background"
-            onClick={() => navigate('/import')}
-          >
-            <Upload className="h-3.5 w-3.5 text-primary" />
-            <span>Smart Import</span>
-          </Button>
-
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-8 px-2.5 text-2xs gap-1.5 font-semibold bg-background"
-            onClick={() => navigate('/exports')}
-          >
-            <Download className="h-3.5 w-3.5 text-accent" />
-            <span>Export CSV</span>
-          </Button>
-        </div>
-      </div>
+        }
+      />
 
       {/* ── Executive Operational KPI Strip ── */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">

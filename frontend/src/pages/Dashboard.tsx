@@ -263,14 +263,14 @@ export default function Dashboard() {
                 </button>
               )}
             </div>
-            <p className="text-xs text-slate-300 flex items-center gap-1.5">
+            <p className="text-xs text-muted-foreground flex items-center gap-1.5">
               <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-accent opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-accent"></span>
               </span>
               <span>Fleet Telemetry Online</span>
-              <span className="text-slate-500">&bull;</span>
-              <span>Updated <strong className="text-white font-mono">{secondsAgo}s</strong> ago</span>
+              <span className="text-muted-foreground/60">&bull;</span>
+              <span>Updated <strong className="text-foreground font-mono">{secondsAgo}s</strong> ago</span>
             </p>
           </div>
 
@@ -280,9 +280,9 @@ export default function Dashboard() {
               size="sm"
               variant="outline"
               onClick={() => setSummaryOpen(true)}
-              className="h-8 text-xs gap-1.5 bg-white/10 hover:bg-white/20 text-white border-white/20 hover:border-white/40 shadow-sm"
+              className="h-8 text-xs gap-1.5 font-medium"
             >
-              <FileSpreadsheet className="h-3.5 w-3.5 text-teal-300" />
+              <FileSpreadsheet className="h-3.5 w-3.5 text-primary" />
               <span className="hidden sm:inline">Data Summary</span>
             </Button>
 
@@ -290,9 +290,9 @@ export default function Dashboard() {
               size="sm"
               variant="outline"
               onClick={() => setDowntimeOpen(true)}
-              className="h-8 text-xs gap-1.5 bg-white/10 hover:bg-white/20 text-white border-white/20 hover:border-white/40 shadow-sm"
+              className="h-8 text-xs gap-1.5 font-medium"
             >
-              <History className="h-3.5 w-3.5 text-sky-300" />
+              <History className="h-3.5 w-3.5 text-info" />
               <span className="hidden sm:inline">Downtime Log</span>
             </Button>
 
@@ -301,12 +301,12 @@ export default function Dashboard() {
               type="single"
               value={viewMode}
               onValueChange={(v) => v && persistViewMode(v as DashboardViewMode)}
-              className="h-8 bg-slate-900/80 border border-white/20 rounded-lg p-0.5"
+              className="h-8 bg-muted/60 border border-border rounded-md p-0.5"
               data-testid="dashboard-view-mode"
             >
               <ToggleGroupItem
                 value="inline"
-                className="h-7 px-2 text-xs gap-1 text-slate-300 data-[state=on]:bg-teal-500/20 data-[state=on]:text-teal-300"
+                className="h-7 px-2 text-xs gap-1 text-muted-foreground data-[state=on]:bg-card data-[state=on]:text-primary data-[state=on]:shadow-xs rounded-sm"
                 title="Inline — all trend graphs visible directly on the dashboard"
                 aria-label="Inline view"
               >
@@ -315,7 +315,7 @@ export default function Dashboard() {
               </ToggleGroupItem>
               <ToggleGroupItem
                 value="sections"
-                className="h-7 px-2 text-xs gap-1 text-slate-300 data-[state=on]:bg-teal-500/20 data-[state=on]:text-teal-300"
+                className="h-7 px-2 text-xs gap-1 text-muted-foreground data-[state=on]:bg-card data-[state=on]:text-primary data-[state=on]:shadow-xs rounded-sm"
                 title="Sections — click any KPI card to fold/unfold its trend chart inline"
                 aria-label="Sections view"
               >
@@ -324,7 +324,7 @@ export default function Dashboard() {
               </ToggleGroupItem>
               <ToggleGroupItem
                 value="popup"
-                className="h-7 px-2 text-xs gap-1 text-slate-300 data-[state=on]:bg-teal-500/20 data-[state=on]:text-teal-300"
+                className="h-7 px-2 text-xs gap-1 text-muted-foreground data-[state=on]:bg-card data-[state=on]:text-primary data-[state=on]:shadow-xs rounded-sm"
                 title="Dialog — click a KPI card to open its trend chart in a dialog"
                 aria-label="Dialog view"
               >

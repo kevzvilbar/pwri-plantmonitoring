@@ -351,19 +351,31 @@ export function TrainsList({ plantId }: { plantId: string }) {
                 key={s}
                 onClick={() => setStatusFilter(s)}
                 className={[
-                  'h-7 px-2.5 text-2xs font-bold rounded-lg transition-all border shrink-0',
+                  'h-7 px-2.5 text-2xs font-medium rounded-md transition-all border shrink-0 flex items-center gap-1.5',
                   statusFilter === s
-                    ? 'bg-primary text-primary-foreground border-primary shadow-2xs'
-                    : 'bg-muted/40 text-muted-foreground border-border/60 hover:text-foreground hover:bg-muted',
+                    ? 'bg-primary text-primary-foreground border-primary shadow-xs'
+                    : 'bg-muted/40 text-muted-foreground border-border hover:text-foreground hover:bg-muted',
                 ].join(' ')}
               >
-                {s === 'all'
-                  ? `All (${trains?.length ?? 0})`
-                  : s === 'Running'
-                  ? `🟢 Online (${runningCount})`
-                  : s === 'Maintenance'
-                  ? `⚠️ Maintenance (${maintenanceCount})`
-                  : `⚪ Offline (${offlineCount})`}
+                {s === 'all' && <span>All ({trains?.length ?? 0})</span>}
+                {s === 'Running' && (
+                  <>
+                    <span className="h-1.5 w-1.5 rounded-full bg-accent" />
+                    <span>Online ({runningCount})</span>
+                  </>
+                )}
+                {s === 'Maintenance' && (
+                  <>
+                    <span className="h-1.5 w-1.5 rounded-full bg-warn" />
+                    <span>Maintenance ({maintenanceCount})</span>
+                  </>
+                )}
+                {s === 'Offline' && (
+                  <>
+                    <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground" />
+                    <span>Offline ({offlineCount})</span>
+                  </>
+                )}
               </button>
             ))}
           </div>
@@ -385,27 +397,27 @@ export function TrainsList({ plantId }: { plantId: string }) {
         const numCtrl  = t.num_controllers    ?? 0;
 
         return (
-          <Card key={t.id} className="overflow-hidden border border-border/80 rounded-2xl shadow-2xs transition-all hover:border-primary/40" data-testid={`train-card-${t.id}`}>
+          <Card key={t.id} className="overflow-hidden border border-border rounded-lg shadow-xs transition-all hover:border-primary/40" data-testid={`train-card-${t.id}`}>
             {/* ── Train Header ── */}
-            <div className="p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-gradient-to-r from-card via-card to-muted/30 border-b border-border/60">
-              <div className="min-w-0 flex-1 space-y-1.5">
+            <div className="p-3.5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-card border-b border-border/60">
+              <div className="min-w-0 flex-1 space-y-1">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <div className="h-8 w-8 rounded-lg bg-primary-soft text-primary flex items-center justify-center shrink-0">
+                  <div className="h-7 w-7 rounded-md bg-primary-soft text-primary flex items-center justify-center shrink-0">
                     <ROTrainIcon className="h-4 w-4" />
                   </div>
-                  <h3 className="font-bold text-sm sm:text-base text-foreground tracking-tight flex items-center gap-2">
+                  <h3 className="font-semibold text-sm sm:text-base text-foreground tracking-tight flex items-center gap-2">
                     <span>{trainLabel}</span>
                   </h3>
-                  <span className="inline-flex items-center text-3xs font-bold px-2 py-0.5 rounded-full bg-primary-soft text-primary border border-primary/30">
+                  <span className="inline-flex items-center text-3xs font-medium px-2 py-0.5 rounded-full bg-primary-soft text-primary border border-primary/30">
                     {mt} Media
                   </span>
-                  <span className="inline-flex items-center text-3xs font-bold px-2 py-0.5 rounded-full bg-info-soft text-info border border-info/30">
+                  <span className="inline-flex items-center text-3xs font-medium px-2 py-0.5 rounded-full bg-info-soft text-info border border-info/30">
                     {ft}
                   </span>
                 </div>
 
                 {/* Configuration summary */}
-                <div className="text-xs text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-0.5 font-mono pl-10">
+                <div className="text-xs text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-0.5 font-mono pl-9">
                   <span>{numAfm} AFM</span>
                   <span>·</span>
                   <span>{numBp} Booster</span>
@@ -428,16 +440,16 @@ export function TrainsList({ plantId }: { plantId: string }) {
                   type="button"
                   onClick={() => toggleTrainStatus(t)}
                   title={isManager ? `Click to cycle status (currently ${effectiveStatus})` : effectiveStatus}
-                  className={`inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1 rounded-full border transition-all shadow-2xs ${
+                  className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full border transition-all ${
                     effectiveStatus === 'Running'
                       ? 'text-accent bg-accent-soft border-accent/40 hover:bg-accent-soft/80'
                       : effectiveStatus === 'Maintenance'
                       ? 'text-warn bg-warn-soft border-warn/40 hover:bg-warn-soft/80'
-                      : 'text-muted-foreground bg-muted border-border/80 hover:bg-muted/80'
+                      : 'text-muted-foreground bg-muted border-border hover:bg-muted/80'
                   } ${isManager ? 'cursor-pointer' : 'cursor-default'}`}
                 >
-                  <span className={`h-2 w-2 rounded-full ${
-                    effectiveStatus === 'Running' ? 'bg-accent animate-pulse'
+                  <span className={`h-1.5 w-1.5 rounded-full ${
+                    effectiveStatus === 'Running' ? 'bg-accent'
                     : effectiveStatus === 'Maintenance' ? 'bg-warn'
                     : 'bg-muted-foreground'
                   }`} />
