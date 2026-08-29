@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   buildStatusTimeline, nonRunningSegmentsInRange, mergeSegmentsForDisplay, formatSegmentDuration,
-  capOngoingSegments,
+  reconcileOngoingSegmentWithReadings,
 } from './trainStatusTimeline';
 
 describe('buildStatusTimeline', () => {
@@ -103,59 +103,6 @@ describe('mergeSegmentsForDisplay', () => {
   });
 });
 
-describe('capOngoingSegments', () => {
-  it('caps an ongoing segment at the earliest reading logged after it started', () => {
-    const segments = buildStatusTimeline([
-      { status: 'Offline', confirmed_at: '2026-08-28T02:50:00Z', reason: 'Auto-flagged: no reading for 2.1h' },
-    ]);
-    // A CSV import backfilled readings well after the segment started —
-    // out of order on purpose, to prove the earliest one wins, not the last.
-    const readingTimestamps = [
-      '2026-08-29T07:33:00Z',
-      '2026-08-28T23:45:00Z',
-      '2026-08-29T06:46:00Z',
-    ];
-    const [result] = capOngoingSegments(segments, readingTimestamps);
-    expect(result.endAt).toBe('2026-08-28T23:45:00.000Z');
-    expect(result.impliedClose).toBe(true);
-  });
-
-  it('leaves a genuinely ongoing segment alone when no reading exists after it started', () => {
-    const segments = buildStatusTimeline([
-      { status: 'Offline', confirmed_at: '2026-08-28T02:50:00Z', reason: null },
-    ]);
-    const [result] = capOngoingSegments(segments, ['2026-08-28T01:00:00Z']); // before the gap, doesn't count
-    expect(result.endAt).toBeNull();
-    expect(result.impliedClose).toBeUndefined();
-  });
-
-  it('never touches a segment that already has a real endAt from a status_log row', () => {
-    const segments = buildStatusTimeline([
-      { status: 'Offline', confirmed_at: '2026-08-26T05:10:00Z', reason: 'Operator Shutdown' },
-      { status: 'Running', confirmed_at: '2026-08-26T08:42:00Z', reason: null },
-    ]);
-    const result = capOngoingSegments(segments, ['2026-08-26T06:00:00Z']);
-    expect(result[0].endAt).toBe('2026-08-26T08:42:00Z');
-    expect(result[0].impliedClose).toBeUndefined();
-  });
-
-  it('is a no-op when there are no readings at all', () => {
-    const segments = buildStatusTimeline([
-      { status: 'Offline', confirmed_at: '2026-08-28T02:50:00Z', reason: null },
-    ]);
-    expect(capOngoingSegments(segments, [])).toEqual(segments);
-    expect(capOngoingSegments(segments, [null, undefined])).toEqual(segments);
-  });
-
-  it('ignores readings that fall before or exactly at the segment start', () => {
-    const segments = buildStatusTimeline([
-      { status: 'Offline', confirmed_at: '2026-08-28T02:50:00Z', reason: null },
-    ]);
-    const [result] = capOngoingSegments(segments, ['2026-08-28T02:50:00Z', '2026-08-28T01:00:00Z']);
-    expect(result.endAt).toBeNull();
-  });
-});
-
 describe('formatSegmentDuration', () => {
   it('formats hours and minutes together', () => {
     expect(formatSegmentDuration('2026-08-26T05:10:00Z', '2026-08-26T08:42:00Z')).toBe('3h 32m');
@@ -165,5 +112,55 @@ describe('formatSegmentDuration', () => {
   });
   it('omits hours when under one', () => {
     expect(formatSegmentDuration('2026-08-26T05:00:00Z', '2026-08-26T05:45:00Z')).toBe('45m');
+  });
+});
+
+describe('reconcileOngoingSegmentWithReadings', () => {
+  it('clips an ongoing Offline segment to a later reading, marking it inferred', () => {
+    const segments = buildStatusTimeline([
+      { status: 'Offline', confirmed_at: '2026-08-28T02:50:00Z', reason: 'Auto-flagged: no reading for 2.1h' },
+    ]);
+    const result = reconcileOngoingSegmentWithReadings(segments, '2026-08-29T07:33:00Z');
+    expect(result).toEqual([
+      { status: 'Offline', startAt: '2026-08-28T02:50:00Z', endAt: '2026-08-29T07:33:00Z', reason: 'Auto-flagged: no reading for 2.1h', inferredEnd: true },
+    ]);
+  });
+
+  it('leaves an already-closed segment alone — only the ongoing one is ever a candidate', () => {
+    const segments = buildStatusTimeline([
+      { status: 'Offline', confirmed_at: '2026-08-26T05:10:00Z', reason: 'Operator Shutdown' },
+      { status: 'Running', confirmed_at: '2026-08-26T08:42:00Z', reason: null },
+    ]);
+    const result = reconcileOngoingSegmentWithReadings(segments, '2026-08-27T00:00:00Z');
+    expect(result).toEqual(segments);
+  });
+
+  it('leaves an ongoing Running segment alone — nothing to reconcile', () => {
+    const segments = buildStatusTimeline([
+      { status: 'Running', confirmed_at: '2026-08-26T05:10:00Z', reason: null },
+    ]);
+    const result = reconcileOngoingSegmentWithReadings(segments, '2026-08-27T00:00:00Z');
+    expect(result).toEqual(segments);
+  });
+
+  it('does not clip when the latest reading is before the segment even started', () => {
+    const segments = buildStatusTimeline([
+      { status: 'Offline', confirmed_at: '2026-08-28T02:50:00Z', reason: null },
+    ]);
+    const result = reconcileOngoingSegmentWithReadings(segments, '2026-08-28T01:00:00Z');
+    expect(result[0].endAt).toBeNull();
+    expect(result[0].inferredEnd).toBeUndefined();
+  });
+
+  it('is a no-op with no readings at all', () => {
+    const segments = buildStatusTimeline([
+      { status: 'Offline', confirmed_at: '2026-08-28T02:50:00Z', reason: null },
+    ]);
+    const result = reconcileOngoingSegmentWithReadings(segments, null);
+    expect(result).toEqual(segments);
+  });
+
+  it('is a no-op on an empty timeline', () => {
+    expect(reconcileOngoingSegmentWithReadings([], '2026-08-28T02:50:00Z')).toEqual([]);
   });
 });

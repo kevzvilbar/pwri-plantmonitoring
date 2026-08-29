@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -412,9 +412,6 @@ export function PretreatmentAndROLog() {
       setTrainOnline(true); setOfflineStart(''); setOfflineEnd('');
       setOfflineReason(''); setOfflineReasonOther('');
     }
-    // New train selection → any confirmation given for the previous train
-    // doesn't carry over. Re-derived from this train's own DB status below.
-    setConfirmBackOnline(false);
 
     setRoValues({
       feed_pressure_psi: '', reject_pressure_psi: '',
@@ -429,6 +426,38 @@ export function PretreatmentAndROLog() {
       power_meter_curr: '',
     });
   }, [trainId]);
+
+  // ── Sync trainOnline to the train's real DB status, once per fresh load ──
+  // trainOnline used to hardcode `true` for every train switch regardless of
+  // what ro_trains.status actually said (see the reset above). That meant an
+  // auto-flagged-Offline train (useTrainAutoOffline.ts) — or one a manager
+  // set Offline/Maintenance from the roster page — showed "Online" checked
+  // here until the operator happened to notice otherwise. Submitting a
+  // normal reading in that state silently closed the offline period via
+  // handleSave's "coming online" branch below, with no deliberate
+  // confirmation behind it — exactly the kind of implicit, unintended
+  // status change train_status_log is supposed to rule out.
+  //
+  // Guarded by a ref rather than running on every `train` change: this
+  // should only fire once per genuinely fresh train load, not on every
+  // background refetch of the *same* train's data (window focus, polling,
+  // a save's own invalidateQueries) — otherwise a refetch mid-edit could
+  // silently overwrite an operator's in-progress offline declaration.
+  const statusSyncedForRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!train || train.id !== trainId) return; // still loading this train, or stale from the previous one
+    if (statusSyncedForRef.current === train.id) return; // already synced this load
+    statusSyncedForRef.current = train.id;
+
+    // An in-progress sessionStorage-restored offline declaration (see the
+    // reset effect above) takes precedence — don't stomp fields the
+    // operator hasn't finished filling in yet.
+    let hasRestoredOffline = false;
+    try { hasRestoredOffline = !!sessionStorage.getItem(`pretreat:offline:${trainId}`); } catch { /* ignore */ }
+    if (hasRestoredOffline) return;
+
+    setTrainOnline(train.status !== 'Offline');
+  }, [train, trainId]);
 
   // ── Persist offline state to sessionStorage so it survives train-switching ──
   // Written any time the operator is in offline mode with a start date / reason.

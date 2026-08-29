@@ -33,11 +33,12 @@ export interface StatusSegment {
   endAt: string | null;
   reason: string | null;
   /**
-   * True when endAt was inferred by capOngoingSegments from a later reading
-   * rather than a real train_status_log row. Lets callers render "closed
-   * because data resumed" differently from an operator-confirmed closure.
+   * True when endAt was inferred from a later reading rather than a real
+   * train_status_log row — see reconcileOngoingSegmentWithReadings below.
+   * Absent (undefined) for every segment buildStatusTimeline produces
+   * directly; only the reconcile step ever sets this.
    */
-  impliedClose?: boolean;
+  inferredEnd?: boolean;
 }
 
 /**
@@ -80,52 +81,42 @@ export function nonRunningSegmentsInRange(
 }
 
 /**
- * Caps still-"ongoing" (endAt === null) non-Running segments at the
- * timestamp of the earliest reading logged after the segment started, when
- * one exists.
+ * If the timeline's ongoing segment (endAt=null, i.e. no train_status_log
+ * row has closed it yet) is non-Running, but a reading exists after it
+ * started, that reading is real evidence the train wasn't actually offline
+ * the whole time — a "still Offline" banner sitting next to hours of full
+ * readings is actively misleading, not just incomplete.
  *
- * CSV imports (ImportROReadingsDialog / ImportPretreatReadingsDialog, via
- * submitROReadings.ts / submitPretreatReadings.ts) write straight to the
- * readings tables and never touch train_status_log — that path was never
- * wired into the status timeline. So a train that's still marked Offline in
- * ro_trains, but has since had real readings imported to backfill the gap,
- * would otherwise show its banner as "ongoing" forever, floating above rows
- * that already cover the period (see TrainLogModal's mergeSegmentsForDisplay,
- * which sorts an ongoing segment as if it ended "now").
+ * The most common cause: CSV-imported historical readings
+ * (ImportROReadingsDialog / submitROReadings.ts) never touch
+ * train_status_log at all — by design, that path only ever writes
+ * ro_train_readings/ro_pretreatment_readings rows — so an auto-flagged or
+ * manually-declared Offline period a backfill happens to cover never gets
+ * a closing row. It can equally happen if the operator toggle simply never
+ * got a "Back Online At" submission for some other reason.
  *
- * This is display-only. It does not write to train_status_log or
- * ro_trains.status — the train can still read Offline everywhere else
- * (train list, dashboard, the Online/Running check-in on
- * PretreatmentAndROLog) until someone formally closes it with a real
- * "Back Online At" submission. It only stops *this* view from claiming
- * there's no data after the gap started when there plainly is. Segments
- * this touches come back with impliedClose: true so the caller can say so.
+ * Only ever touches the *last* segment: buildStatusTimeline only ever
+ * leaves the last row's segment open-ended (every earlier row is already
+ * closed by the one after it), so there's at most one ongoing segment to
+ * reconcile, and it's always the most recent one.
  *
- * Only ever shortens an ongoing segment, never a segment that already has a
- * real endAt from a status_log row — a confirmed closure is authoritative
- * and isn't second-guessed by a reading's timestamp.
+ * Deliberately just clips the display end rather than fabricating a real
+ * closing event — inferredEnd:true marks it so the caller can render it
+ * distinctly (e.g. "~08:42 (last reading)") instead of implying a
+ * train_status_log row actually exists.
  */
-export function capOngoingSegments(
+export function reconcileOngoingSegmentWithReadings(
   segments: StatusSegment[],
-  readingTimestamps: (string | null | undefined)[],
+  latestReadingAt: string | null,
 ): StatusSegment[] {
-  const sortedReadingMs = readingTimestamps
-    .filter((t): t is string => !!t)
-    .map((t) => new Date(t).getTime())
-    .filter((ms) => !Number.isNaN(ms))
-    .sort((a, b) => a - b);
-  if (!sortedReadingMs.length) return segments;
-
-  return segments.map((s) => {
-    if (s.status === 'Running' || s.endAt !== null) return s;
-    const startMs = new Date(s.startAt).getTime();
-    // Earliest reading strictly after the segment started — that's the
-    // moment real data resumes, i.e. when the train stopped being offline
-    // in practice, whatever the status log does or doesn't say.
-    const closesAtMs = sortedReadingMs.find((ms) => ms > startMs);
-    if (closesAtMs == null) return s;
-    return { ...s, endAt: new Date(closesAtMs).toISOString(), impliedClose: true };
-  });
+  if (!segments.length || !latestReadingAt) return segments;
+  const last = segments[segments.length - 1];
+  if (last.endAt !== null || last.status === 'Running') return segments;
+  if (new Date(latestReadingAt).getTime() <= new Date(last.startAt).getTime()) return segments;
+  return [
+    ...segments.slice(0, -1),
+    { ...last, endAt: latestReadingAt, inferredEnd: true },
+  ];
 }
 
 export type DisplayItem<T> =
