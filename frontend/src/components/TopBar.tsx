@@ -1,6 +1,6 @@
 import { Bell, ClipboardCheck, ShieldAlert, Wrench, Zap, Info, AlertTriangle, AlertCircle, Clock, BellOff } from 'lucide-react';
 
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -169,6 +169,7 @@ export function TopBar() {
   const criticalAlerts = useMemo(() => sortedAlerts.filter(a => sevTier(a.severity) === 'critical'), [sortedAlerts]);
   const warningAlerts  = useMemo(() => sortedAlerts.filter(a => sevTier(a.severity) === 'warning'), [sortedAlerts]);
   const infoAlerts     = useMemo(() => sortedAlerts.filter(a => sevTier(a.severity) === 'info'), [sortedAlerts]);
+  const hasCritical    = criticalAlerts.length > 0;
 
   const displayedAlerts = useMemo(() => {
     if (activeTab === 'critical') return criticalAlerts;
