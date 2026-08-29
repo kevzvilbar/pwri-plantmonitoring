@@ -95,12 +95,12 @@ export function MeterNameList({
           </div>
         );
         return (
-          <div key={i} className={`flex items-center gap-0.5 rounded border ${chip} px-1.5 py-0.5 text-xs`}>
+          <div key={i} className={`flex items-center gap-1.5 rounded-full border ${chip} px-2.5 py-0.5 text-xs font-medium shadow-2xs`}>
             <span>{name}</span>
-            <button onClick={() => startEdit(i)} className="ml-0.5 opacity-60 hover:opacity-100" title={`Rename "${name}"`} aria-label={`Rename "${name}"`}>
+            <button onClick={() => startEdit(i)} className="h-3.5 w-3.5 rounded-full hover:bg-black/10 dark:hover:bg-white/10 flex items-center justify-center opacity-70 hover:opacity-100 transition-opacity" title={`Rename "${name}"`} aria-label={`Rename "${name}"`}>
               <Pencil className="h-2.5 w-2.5" />
             </button>
-            <button onClick={() => askDelete(i)} className="opacity-60 hover:opacity-100 hover:text-destructive" title={`Remove "${name}"`} aria-label={`Remove "${name}"`}>
+            <button onClick={() => askDelete(i)} className="h-3.5 w-3.5 rounded-full hover:bg-destructive/20 flex items-center justify-center opacity-70 hover:opacity-100 hover:text-destructive transition-colors -mr-1" title={`Remove "${name}"`} aria-label={`Remove "${name}"`}>
               <X className="h-2.5 w-2.5" />
             </button>
           </div>

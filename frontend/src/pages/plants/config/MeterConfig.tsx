@@ -270,6 +270,7 @@ export function MeterGroupChips({
   entityLabel,
   onMembersChange,
   onGroupNameChange,
+  onDeleteGroup,
   canEdit,
 }: {
   label: string;
@@ -279,32 +280,52 @@ export function MeterGroupChips({
   entityLabel: string;
   onMembersChange: (ids: string[]) => void;
   onGroupNameChange: (name: string) => void;
+  onDeleteGroup?: () => void;
   canEdit: boolean;
 }) {
   const available = allEntities.filter(e => !members.includes(e.id));
   return (
-    <div className="rounded-md border bg-muted/20 p-2.5 space-y-2">
-      {canEdit ? (
-        <Input
-          value={groupName}
-          onChange={e => onGroupNameChange(e.target.value)}
-          placeholder="Group name (e.g. Main Pump House)"
-          className="h-7 text-xs"
-        />
-      ) : (
-        <p className="text-xs font-medium text-foreground">{groupName || label}</p>
-      )}
-      <div className="flex flex-wrap gap-1.5">
+    <div className="rounded-xl border border-border/70 bg-card p-3 space-y-2.5 shadow-xs">
+      <div className="flex items-center justify-between gap-2">
+        {canEdit ? (
+          <Input
+            value={groupName}
+            onChange={e => onGroupNameChange(e.target.value)}
+            placeholder="Group name (e.g. Main Pump House)"
+            className="h-8 text-xs font-semibold max-w-sm"
+          />
+        ) : (
+          <p className="text-xs font-bold text-foreground">{groupName || label}</p>
+        )}
+        {canEdit && onDeleteGroup && (
+          <button
+            type="button"
+            onClick={onDeleteGroup}
+            className="h-7 w-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors shrink-0"
+            aria-label="Remove group"
+            title="Delete group"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        )}
+      </div>
+
+      <div className="flex flex-wrap gap-1.5 items-center">
         {members.map(id => {
           const e = allEntities.find(x => x.id === id);
           return (
-            <span key={id} className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-primary-soft text-primary border border-primary">
-              {e?.name ?? id}
+            <span
+              key={id}
+              className="inline-flex items-center gap-1.5 text-xs px-2.5 py-0.5 rounded-full bg-primary-soft text-primary border border-primary/40 font-medium transition-all shadow-2xs"
+            >
+              <span>{e?.name ?? id}</span>
               {canEdit && (
                 <button
+                  type="button"
                   onClick={() => onMembersChange(members.filter(m => m !== id))}
-                  className="ml-0.5 opacity-60 hover:opacity-100"
+                  className="h-3.5 w-3.5 rounded-full hover:bg-primary/20 flex items-center justify-center text-primary/70 hover:text-primary transition-colors -mr-1"
                   aria-label={`Remove ${e?.name}`}
+                  title="Remove"
                 >
                   <X className="h-2.5 w-2.5" />
                 </button>
@@ -314,8 +335,8 @@ export function MeterGroupChips({
         })}
         {canEdit && available.length > 0 && (
           <Select onValueChange={id => onMembersChange([...members, id])}>
-            <SelectTrigger className="h-6 w-auto text-xs px-2 py-0 rounded-full border-dashed">
-              <Plus className="h-2.5 w-2.5 mr-1" />Add {entityLabel}
+            <SelectTrigger className="h-6 w-auto text-xs px-2.5 py-0 rounded-full border-dashed border-border/80 bg-muted/30 hover:bg-muted font-medium">
+              <Plus className="h-3 w-3 mr-1 text-primary" />Add {entityLabel}
             </SelectTrigger>
             <SelectContent>
               {available.map(e => (
@@ -835,10 +856,10 @@ export function PlantMeterConfigCard({ plant }: { plant: any }) {
 
             {/* Shared electric groups */}
             {cfg.wells_shared_electric_groups.length > 0 && (
-              <div className="space-y-2 mb-2">
+              <div className="space-y-2.5 mb-2">
                 <p className="text-xs font-medium text-muted-foreground">Shared meter groups</p>
                 {cfg.wells_shared_electric_groups.map((grp, gi) => (
-                  <div key={grp.id} className="relative">
+                  <div key={grp.id}>
                     <MeterGroupChips
                       label={grp.name}
                       groupName={grp.name}
@@ -856,22 +877,14 @@ export function PlantMeterConfigCard({ plant }: { plant: any }) {
                         next[gi] = { ...grp, members };
                         update({ wells_shared_electric_groups: next });
                       }}
+                      onDeleteGroup={() => update({ wells_shared_electric_groups: cfg.wells_shared_electric_groups.filter((_, i) => i !== gi) })}
                     />
-                    {canEdit && (
-                      <button
-                        onClick={() => update({ wells_shared_electric_groups: cfg.wells_shared_electric_groups.filter((_, i) => i !== gi) })}
-                        className="absolute top-2 right-2 text-destructive hover:text-destructive/80"
-                        aria-label="Remove group"
-                      >
-                        <X className="h-3.5 w-3.5" />
-                      </button>
-                    )}
                   </div>
                 ))}
                 {canEdit && (
-                  <Button size="sm" variant="outline" className="h-7 text-xs gap-1"
+                  <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5 rounded-lg border-border/80 font-semibold"
                     onClick={() => update({ wells_shared_electric_groups: [...cfg.wells_shared_electric_groups, { id: crypto.randomUUID(), name: `Group ${cfg.wells_shared_electric_groups.length + 1}`, members: [] }] })}>
-                    <Plus className="h-3 w-3" />Add group
+                    <Plus className="h-3 w-3 text-primary" />Add group
                   </Button>
                 )}
               </div>
@@ -879,16 +892,22 @@ export function PlantMeterConfigCard({ plant }: { plant: any }) {
 
             {/* Dedicated electric wells */}
             {cfg.wells_dedicated_electric_ids.length > 0 && (
-              <div className="space-y-1 mb-2">
+              <div className="space-y-1.5 mb-2">
                 <p className="text-xs font-medium text-muted-foreground">Wells with dedicated meter</p>
-                <div className="flex flex-wrap gap-1.5">
+                <div className="flex flex-wrap gap-1.5 items-center">
                   {cfg.wells_dedicated_electric_ids.map(id => {
                     const w = wells.find(x => x.id === id);
                     return (
-                      <span key={id} className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-warn-soft text-warn border border-warn">
-                        {w?.name ?? id}
+                      <span key={id} className="inline-flex items-center gap-1.5 text-xs px-2.5 py-0.5 rounded-full bg-warn-soft text-warn border border-warn/40 font-medium shadow-2xs">
+                        <span>{w?.name ?? id}</span>
                         {canEdit && (
-                          <button onClick={() => update({ wells_dedicated_electric_ids: cfg.wells_dedicated_electric_ids.filter(x => x !== id) })} aria-label={`Remove ${w?.name ?? id}`} className="ml-0.5 opacity-60 hover:opacity-100">
+                          <button
+                            type="button"
+                            onClick={() => update({ wells_dedicated_electric_ids: cfg.wells_dedicated_electric_ids.filter(x => x !== id) })}
+                            aria-label={`Remove ${w?.name ?? id}`}
+                            title="Remove"
+                            className="h-3.5 w-3.5 rounded-full hover:bg-warn/20 flex items-center justify-center text-warn/80 hover:text-warn transition-colors -mr-1"
+                          >
                             <X className="h-2.5 w-2.5" />
                           </button>
                         )}
@@ -897,8 +916,8 @@ export function PlantMeterConfigCard({ plant }: { plant: any }) {
                   })}
                   {canEdit && wells.filter(w => !cfg.wells_dedicated_electric_ids.includes(w.id)).length > 0 && (
                     <Select onValueChange={id => update({ wells_dedicated_electric_ids: [...cfg.wells_dedicated_electric_ids, id] })}>
-                      <SelectTrigger className="h-6 w-auto text-xs px-2 py-0 rounded-full border-dashed">
-                        <Plus className="h-2.5 w-2.5 mr-1" />Add well
+                      <SelectTrigger className="h-6 w-auto text-xs px-2.5 py-0 rounded-full border-dashed border-border/80 bg-muted/30 hover:bg-muted font-medium">
+                        <Plus className="h-3 w-3 mr-1 text-primary" />Add well
                       </SelectTrigger>
                       <SelectContent>
                         {wells.filter(w => !cfg.wells_dedicated_electric_ids.includes(w.id)).map(w => (
@@ -953,16 +972,22 @@ export function PlantMeterConfigCard({ plant }: { plant: any }) {
 
             {/* Dedicated bulk locators */}
             {cfg.locators_dedicated_bulk_ids.length > 0 && (
-              <div className="space-y-1 mb-2">
+              <div className="space-y-1.5 mb-2">
                 <p className="text-xs font-medium text-muted-foreground">Locators with dedicated bulk meter</p>
-                <div className="flex flex-wrap gap-1.5">
+                <div className="flex flex-wrap gap-1.5 items-center">
                   {cfg.locators_dedicated_bulk_ids.map(id => {
                     const l = locators.find(x => x.id === id);
                     return (
-                      <span key={id} className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-primary-soft text-primary border border-primary">
-                        {l?.name ?? id}
+                      <span key={id} className="inline-flex items-center gap-1.5 text-xs px-2.5 py-0.5 rounded-full bg-primary-soft text-primary border border-primary/40 font-medium shadow-2xs">
+                        <span>{l?.name ?? id}</span>
                         {canEdit && (
-                          <button onClick={() => update({ locators_dedicated_bulk_ids: cfg.locators_dedicated_bulk_ids.filter(x => x !== id) })} aria-label={`Remove ${l?.name ?? id}`} className="ml-0.5 opacity-60 hover:opacity-100">
+                          <button
+                            type="button"
+                            onClick={() => update({ locators_dedicated_bulk_ids: cfg.locators_dedicated_bulk_ids.filter(x => x !== id) })}
+                            aria-label={`Remove ${l?.name ?? id}`}
+                            title="Remove"
+                            className="h-3.5 w-3.5 rounded-full hover:bg-primary/20 flex items-center justify-center text-primary/70 hover:text-primary transition-colors -mr-1"
+                          >
                             <X className="h-2.5 w-2.5" />
                           </button>
                         )}
@@ -971,8 +996,8 @@ export function PlantMeterConfigCard({ plant }: { plant: any }) {
                   })}
                   {canEdit && locators.filter(l => !cfg.locators_dedicated_bulk_ids.includes(l.id)).length > 0 && (
                     <Select onValueChange={id => update({ locators_dedicated_bulk_ids: [...cfg.locators_dedicated_bulk_ids, id] })}>
-                      <SelectTrigger className="h-6 w-auto text-xs px-2 py-0 rounded-full border-dashed">
-                        <Plus className="h-2.5 w-2.5 mr-1" />Add locator
+                      <SelectTrigger className="h-6 w-auto text-xs px-2.5 py-0 rounded-full border-dashed border-border/80 bg-muted/30 hover:bg-muted font-medium">
+                        <Plus className="h-3 w-3 mr-1 text-primary" />Add locator
                       </SelectTrigger>
                       <SelectContent>
                         {locators.filter(l => !cfg.locators_dedicated_bulk_ids.includes(l.id)).map(l => (
@@ -987,12 +1012,12 @@ export function PlantMeterConfigCard({ plant }: { plant: any }) {
 
             {/* Shared bulk locator groups */}
             {cfg.locators_shared_bulk_groups.length > 0 && (
-              <div className="space-y-2 mb-2">
+              <div className="space-y-2.5 mb-2">
                 <p className="text-xs font-medium text-muted-foreground">
                   Shared bulk meter groups <span className="font-normal opacity-70">(for reference / reporting only — each locator still logs separately. This list is independent from the real "Assign Locators" assignment on the Product tab, which drives NRW/derived-meter calculations. Use "Compare to Assign Locators" below to check for drift.)</span>
                 </p>
                 {cfg.locators_shared_bulk_groups.map((grp, gi) => (
-                  <div key={grp.id} className="relative">
+                  <div key={grp.id} className="space-y-1.5">
                     <MeterGroupChips
                       label={grp.name}
                       groupName={grp.name}
@@ -1010,6 +1035,7 @@ export function PlantMeterConfigCard({ plant }: { plant: any }) {
                         next[gi] = { ...grp, members };
                         update({ locators_shared_bulk_groups: next });
                       }}
+                      onDeleteGroup={() => update({ locators_shared_bulk_groups: cfg.locators_shared_bulk_groups.filter((_, i) => i !== gi) })}
                     />
                     <LocatorGroupRealitySync
                       productMeters={configProductMeters}
@@ -1022,21 +1048,12 @@ export function PlantMeterConfigCard({ plant }: { plant: any }) {
                         update({ locators_shared_bulk_groups: next });
                       }}
                     />
-                    {canEdit && (
-                      <button
-                        onClick={() => update({ locators_shared_bulk_groups: cfg.locators_shared_bulk_groups.filter((_, i) => i !== gi) })}
-                        className="absolute top-2 right-2 text-destructive hover:text-destructive/80"
-                        aria-label="Remove group"
-                      >
-                        <X className="h-3.5 w-3.5" />
-                      </button>
-                    )}
                   </div>
                 ))}
                 {canEdit && (
-                  <Button size="sm" variant="outline" className="h-7 text-xs gap-1"
+                  <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5 rounded-lg border-border/80 font-semibold"
                     onClick={() => update({ locators_shared_bulk_groups: [...cfg.locators_shared_bulk_groups, { id: crypto.randomUUID(), name: `Cluster ${cfg.locators_shared_bulk_groups.length + 1}`, members: [] }] })}>
-                    <Plus className="h-3 w-3" />Add group
+                    <Plus className="h-3 w-3 text-primary" />Add group
                   </Button>
                 )}
               </div>
