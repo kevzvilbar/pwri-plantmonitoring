@@ -18,7 +18,6 @@ import {
   Clock,
   ChevronDown,
   X,
-  Sparkles,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -501,7 +500,7 @@ export function DateTimePicker({
                 className="h-5 px-1.5 text-3xs font-semibold gap-1"
                 onClick={setNow}
               >
-                <Sparkles className="h-2.5 w-2.5" /> Now
+                <Clock className="h-2.5 w-2.5 text-primary" /> Now
               </Button>
             </div>
 

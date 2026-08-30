@@ -11,7 +11,7 @@ import { cn } from '@/lib/utils';
 import { deriveTrainStatus, TrainCard } from '../ro-trains';
 import { loadThresholds, DEFAULT_THRESHOLDS } from '@/pages/Compliance';
 import { useTrainHourlyGaps, type TrainHourlyGap } from '@/hooks/useTrainHourlyGaps';
-import { Activity, Search, Droplet, X, ShieldAlert, Sparkles } from 'lucide-react';
+import { Activity, Search, Droplet, X, ShieldAlert } from 'lucide-react';
 import { ROTrainIcon, MembranePerformanceIcon, PermeateIcon } from '@/components/icons/water-icons';
 import { PlantPicker } from './shared/PlantPicker';
 
