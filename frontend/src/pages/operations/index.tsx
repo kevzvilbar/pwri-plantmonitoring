@@ -27,17 +27,7 @@ const TAB_ALIASES: Record<string, string> = {
 };
 const VALID_TABS = new Set(['locator', 'well', 'product', 'blending', 'power']);
 
-// ─── Shift Calculator Helper ────────────────────────────────────────────────
-function getCurrentShift(): { label: string; time: string; tone: 'accent' | 'warn' | undefined } {
-  const hour = new Date().getHours();
-  if (hour >= 6 && hour < 14) {
-    return { label: 'Shift A (Morning)', time: '06:00 – 14:00', tone: 'accent' };
-  } else if (hour >= 14 && hour < 22) {
-    return { label: 'Shift B (Afternoon)', time: '14:00 – 22:00', tone: 'accent' };
-  } else {
-    return { label: 'Shift C (Graveyard)', time: '22:00 – 06:00', tone: 'warn' };
-  }
-}
+import { getCurrentShift } from '@/lib/shifts';
 
 export default function Operations() {
   const navigate = useNavigate();
@@ -125,8 +115,8 @@ export default function Operations() {
           <div className="flex items-center gap-2 flex-wrap">
             <div className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-muted border text-xs font-medium">
               <Clock className="h-3.5 w-3.5 text-primary" />
-              <span>{shiftInfo.label}</span>
-              <span className="text-muted-foreground text-3xs font-mono">({shiftInfo.time})</span>
+              <span>{shiftInfo.name}</span>
+              <span className="text-muted-foreground text-3xs font-mono">({shiftInfo.timeRange})</span>
             </div>
 
             <Button

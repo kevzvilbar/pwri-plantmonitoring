@@ -9,6 +9,7 @@ import { useScrollRestore } from '@/hooks/useScrollRestore';
 import { useBackgroundSync } from '@/hooks/useBackgroundSync';
 import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 import { PullToRefreshIndicator } from './PullToRefresh';
+import { ShiftHandoverModal } from './ShiftHandoverModal';
 import { useQueryClient } from '@tanstack/react-query';
 
 /**
@@ -90,6 +91,10 @@ export function AppShell() {
 
       {/* Mounts the sync interval; renders nothing itself */}
       <BackgroundSyncMount />
+
+      {/* Global Operator Shift Monitoring & Handover Verification */}
+      <ShiftHandoverModal />
+
       <div className="min-h-screen flex w-full bg-background">
         {/* Sidebar — hidden below md */}
         <div className="hidden md:block">
