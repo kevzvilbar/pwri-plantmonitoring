@@ -5,14 +5,12 @@ import { supabase } from '@/integrations/supabase/client';
 import { type Database } from '@/integrations/supabase/types';
 import { useAppStore } from '@/store/appStore';
 import { Card } from '@/components/ui/card';
-import { Label } from '@/components/ui/label';
 import { fmtNum } from '@/lib/calculations';
 import { cn } from '@/lib/utils';
 import { deriveTrainStatus, TrainCard } from '../ro-trains';
 import { loadThresholds, DEFAULT_THRESHOLDS } from '@/pages/Compliance';
 import { useTrainHourlyGaps, type TrainHourlyGap } from '@/hooks/useTrainHourlyGaps';
-import { Activity, Search, Droplet, X, ShieldAlert } from 'lucide-react';
-import { ROTrainIcon, MembranePerformanceIcon, PermeateIcon } from '@/components/icons/water-icons';
+import { Search, X, ShieldAlert } from 'lucide-react';
 import { PlantPicker } from './shared/PlantPicker';
 
 // ─── Overview Dashboard ───────────────────────────────────────────────────────
@@ -100,23 +98,12 @@ export function Overview() {
     refetchInterval: 180_000,
   });
 
-  const allReadings  = Object.values(lastReadings ?? {});
   const trainHourlyGaps = useTrainHourlyGaps(plantId ? [plantId] : []);
   const hourlyGapsByTrain = useMemo(() => {
     const m: Record<string, TrainHourlyGap[]> = {};
     trainHourlyGaps.forEach((g) => { (m[g.train_id] ??= []).push(g); });
     return m;
   }, [trainHourlyGaps]);
-
-  const onlineCount  = (trains ?? []).filter((t: any) => deriveTrainStatus(t, lastReadings?.[t.id]) === 'Running').length;
-  const maintCount   = (trains ?? []).filter((t: any) => deriveTrainStatus(t, lastReadings?.[t.id]) === 'Maintenance').length;
-  const offlineCount = (trains ?? []).filter((t: any) => deriveTrainStatus(t, lastReadings?.[t.id]) === 'Offline').length;
-  const avgRecovery  = allReadings.filter(r => r.recovery_pct != null).length
-    ? (allReadings.reduce((s, r) => s + (r.recovery_pct ?? 0), 0) / allReadings.filter(r => r.recovery_pct != null).length).toFixed(1) : null;
-  const avgPermTDS   = allReadings.filter(r => r.permeate_tds != null).length
-    ? (allReadings.reduce((s, r) => s + (r.permeate_tds ?? 0), 0) / allReadings.filter(r => r.permeate_tds != null).length).toFixed(0) : null;
-  const totalTrains  = (trains ?? []).length;
-  const healthScore  = totalTrains ? Math.round((onlineCount / totalTrains) * 100) : null;
 
   const PERM_TDS_LIMIT = thresholds?.permeate_tds_max ?? DEFAULT_THRESHOLDS.permeate_tds_max;
   const highTDSTrains  = (trains ?? []).filter((t: any) => {
@@ -205,129 +192,6 @@ export function Overview() {
           )}
         </div>
       </div>
-
-      {/* ── KPI Stat Cards ── */}
-      {plantId && (
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-          {/* Card 1: Plant Health */}
-          <Card className="p-3 rounded-xl border border-border/50 bg-card space-y-1.5 shadow-none">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-1.5 text-3xs font-semibold uppercase tracking-wider text-muted-foreground">
-                <Activity className="h-3 w-3 text-primary" />
-                <span>Plant Health</span>
-              </div>
-              <span className={cn(
-                'text-3xs font-bold uppercase px-1.5 py-0.2 rounded border',
-                healthScore != null && healthScore >= 80 ? 'bg-accent-soft text-accent border-accent/30' :
-                healthScore != null && healthScore >= 50 ? 'bg-warn-soft text-warn border-warn/30' :
-                'bg-danger-soft text-danger border-danger/30'
-              )}>
-                {healthScore != null && healthScore >= 80 ? 'Optimal' : healthScore != null && healthScore >= 50 ? 'Degraded' : 'Critical'}
-              </span>
-            </div>
-
-            <div className="flex items-baseline gap-2">
-              <span className={cn(
-                'text-xl font-bold font-mono-num tracking-tight',
-                healthScore != null && healthScore >= 80 ? 'text-accent' :
-                healthScore != null && healthScore >= 50 ? 'text-warn' : 'text-danger'
-              )}>
-                {healthScore != null ? `${healthScore}%` : '—'}
-              </span>
-            </div>
-
-            {/* Segmented health gauge bar */}
-            {totalTrains > 0 && (
-              <div className="flex h-1 w-full rounded-full overflow-hidden bg-muted gap-0.5">
-                <div style={{ width: `${(onlineCount / totalTrains) * 100}%` }} className="bg-accent transition-all duration-300" />
-                <div style={{ width: `${(maintCount / totalTrains) * 100}%` }} className="bg-warn transition-all duration-300" />
-                <div style={{ width: `${(offlineCount / totalTrains) * 100}%` }} className="bg-danger transition-all duration-300" />
-              </div>
-            )}
-
-            <div className="flex items-center gap-2.5 text-3xs text-muted-foreground font-mono-num">
-              <span className="flex items-center gap-1 text-accent font-medium">
-                <span className="h-1.5 w-1.5 rounded-full bg-accent" /> {onlineCount} Online
-              </span>
-              <span className="flex items-center gap-1 text-warn font-medium">
-                <span className="h-1.5 w-1.5 rounded-full bg-warn" /> {maintCount} Maint.
-              </span>
-              <span className="flex items-center gap-1 text-danger font-medium">
-                <span className="h-1.5 w-1.5 rounded-full bg-danger" /> {offlineCount} Offline
-              </span>
-            </div>
-          </Card>
-
-          {/* Card 2: Avg Recovery */}
-          <Card className="p-3 rounded-xl border border-border/50 bg-card space-y-1.5 shadow-none">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-1.5 text-3xs font-semibold uppercase tracking-wider text-muted-foreground">
-                <MembranePerformanceIcon className="h-3 w-3 text-primary" />
-                <span>Avg Recovery</span>
-              </div>
-              <span className="text-3xs font-medium text-muted-foreground">
-                Target 70%
-              </span>
-            </div>
-
-            <div className="flex items-baseline gap-1">
-              <span className="text-xl font-bold font-mono-num tracking-tight text-foreground">
-                {avgRecovery != null ? `${avgRecovery}%` : '—'}
-              </span>
-            </div>
-
-            <div className="h-1 w-full rounded-full bg-muted overflow-hidden">
-              <div
-                style={{ width: `${Math.min(100, Math.max(0, +(avgRecovery ?? 0)))}%` }}
-                className="h-full bg-primary transition-all duration-300 rounded-full"
-              />
-            </div>
-
-            <p className="text-3xs text-muted-foreground">
-              {onlineCount} of {totalTrains} trains producing
-            </p>
-          </Card>
-
-          {/* Card 3: Avg Perm TDS */}
-          <Card className="p-3 rounded-xl border border-border/50 bg-card space-y-1.5 shadow-none">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-1.5 text-3xs font-semibold uppercase tracking-wider text-muted-foreground">
-                <PermeateIcon className="h-3 w-3 text-primary" />
-                <span>Avg Perm TDS</span>
-              </div>
-              <span className={cn(
-                'text-3xs font-semibold px-1.5 py-0.2 rounded border',
-                avgPermTDS != null && +avgPermTDS <= PERM_TDS_LIMIT
-                  ? 'bg-accent-soft text-accent border-accent/30'
-                  : 'bg-danger-soft text-danger border-danger/30'
-              )}>
-                {avgPermTDS != null && +avgPermTDS <= PERM_TDS_LIMIT ? 'In Spec' : 'Exceeds'}
-              </span>
-            </div>
-
-            <div className="flex items-baseline gap-1">
-              <span className="text-xl font-bold font-mono-num tracking-tight text-foreground">
-                {avgPermTDS != null ? avgPermTDS : '—'}
-              </span>
-              <span className="text-3xs font-semibold text-muted-foreground">ppm</span>
-            </div>
-
-            <div className="h-1 w-full rounded-full bg-muted overflow-hidden">
-              <div
-                style={{ width: `${Math.min(100, Math.max(0, ((+(avgPermTDS ?? 0)) / PERM_TDS_LIMIT) * 100))}%` }}
-                className={cn(
-                  'h-full transition-all duration-300 rounded-full',
-                  avgPermTDS != null && +avgPermTDS <= PERM_TDS_LIMIT ? 'bg-accent' : 'bg-danger'
-                )}
-              />
-            </div>
-
-            <p className="text-3xs text-muted-foreground">
-              Benchmark limit: &le; {PERM_TDS_LIMIT} ppm
-            </p>
-          </Card>
-        </div>
-      )}
 
       {/* ── Train Grid ── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
