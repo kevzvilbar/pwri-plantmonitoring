@@ -20,8 +20,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card } from '@/components/ui/card';
 import { PageHeader } from '@/components/PageHeader';
 import { DataState } from '@/components/DataState';
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { DeleteEntityMenu } from '@/components/DeleteEntityMenu';
 import { fmtIsoDate } from '@/lib/format';
 import { cn } from '@/lib/utils';
@@ -92,12 +92,15 @@ const presenceConfig: Record<PresenceState, { label: string; dot: string; badge:
 };
 
 // ---------------------------------------------------------------------------
-// Per-user deterministic colour accent
-// ---------------------------------------------------------------------------
-
 const AVATAR_COLORS = [
-  'bg-info', 'bg-kpi-ro', 'bg-primary', 'bg-danger',
-  'bg-warn', 'bg-kpi-ro', 'bg-accent', 'bg-danger',
+  'bg-primary',
+  'bg-accent',
+  'bg-info',
+  'bg-highlight',
+  'bg-warn',
+  'bg-kpi-ro',
+  'bg-kpi-wells',
+  'bg-kpi-power',
 ];
 
 const PLANT_COLUMN_ACCENTS = [
@@ -513,26 +516,26 @@ function StaffCard({ member, roles, plants, isSelf, onlineIds, onChat, onDetail 
 
           {/* Name & Role */}
           <div className="min-w-0 flex-1">
-            <div className="font-bold text-xs leading-snug truncate flex items-center gap-1.5">
+            <div className="font-bold text-sm leading-snug truncate flex items-center gap-1.5">
               <span className="truncate">{fullName(member)}</span>
               {isSelf && (
-                <span className="text-[10px] font-semibold px-1 rounded bg-primary-soft text-primary">you</span>
+                <span className="text-2xs font-semibold px-1 rounded bg-primary-soft text-primary">you</span>
               )}
             </div>
-            <div className="flex items-center gap-1 mt-0.5">
-              <span className={cn('inline-flex items-center gap-1 text-3xs font-semibold px-1.5 py-0.2 rounded-md border', rc.bg, rc.color)}>
+            <div className="flex items-center gap-1.5 mt-0.5">
+              <span className={cn('inline-flex items-center gap-1 text-2xs font-semibold px-1.5 py-0.5 rounded-md border', rc.bg, rc.color)}>
                 {rc.icon}
                 <span>{memberRole}</span>
               </span>
               {member.username && (
-                <span className="text-3xs text-muted-foreground truncate font-mono">@{member.username}</span>
+                <span className="text-2xs text-muted-foreground truncate font-mono">@{member.username}</span>
               )}
             </div>
           </div>
         </div>
 
         {/* Presence Badge */}
-        <span className={cn('text-3xs px-2 py-0.5 rounded-full border font-semibold shrink-0', pc.badge)}>
+        <span className={cn('text-2xs px-2 py-0.5 rounded-full border font-semibold shrink-0', pc.badge)}>
           {pc.label}
         </span>
       </div>
@@ -540,25 +543,25 @@ function StaffCard({ member, roles, plants, isSelf, onlineIds, onChat, onDetail 
       {/* Plant Assignment & Action row */}
       <div className="flex items-center justify-between gap-2 pt-2 border-t border-border/40 text-xs">
         {/* Plant chips */}
-        <div className="flex items-center gap-1 overflow-hidden">
-          <MapPin className="h-3 w-3 text-muted-foreground/60 shrink-0" />
+        <div className="flex items-center gap-1.5 overflow-hidden">
+          <MapPin className="h-3.5 w-3.5 text-muted-foreground/70 shrink-0" />
           {assignedPlantNames.length > 0 ? (
-            <span className="text-3xs text-muted-foreground truncate font-medium">
+            <span className="text-xs text-muted-foreground truncate font-medium">
               {assignedPlantNames.slice(0, 2).join(', ')}
               {assignedPlantNames.length > 2 && ` +${assignedPlantNames.length - 2}`}
             </span>
           ) : (
-            <span className="text-3xs text-muted-foreground/50 italic">All plants / Float</span>
+            <span className="text-xs text-muted-foreground/60 italic">All plants / Float</span>
           )}
         </div>
 
         {/* Action buttons */}
-        <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
           {!isSelf && (
             <Button
               size="sm"
               variant="ghost"
-              className="h-6 w-6 p-0 rounded-lg text-muted-foreground hover:text-primary hover:bg-primary-soft"
+              className="h-7 w-7 p-0 rounded-lg text-muted-foreground hover:text-primary hover:bg-primary-soft"
               onClick={onChat}
               title="Send direct message"
             >
@@ -568,7 +571,7 @@ function StaffCard({ member, roles, plants, isSelf, onlineIds, onChat, onDetail 
           <Button
             size="sm"
             variant="ghost"
-            className="h-6 px-1.5 text-3xs gap-0.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted"
+            className="h-7 px-2 text-2xs gap-0.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted font-medium"
             onClick={onDetail}
             title="View employee profile"
           >
@@ -773,16 +776,17 @@ function Staff() {
 
           {/* Plant selector + View mode toggle */}
           <div className="flex items-center gap-2 w-full md:w-auto justify-between md:justify-end">
-            <select
-              value={filterPlant}
-              onChange={(e) => setFilterPlant(e.target.value)}
-              className="h-8 text-xs border rounded-lg px-2.5 bg-background text-foreground shrink-0"
-            >
-              <option value="all">All Plant Locations</option>
-              {plantsWithStaff.map((p) => (
-                <option key={p.id} value={p.id}>{p.name}</option>
-              ))}
-            </select>
+            <Select value={filterPlant} onValueChange={setFilterPlant}>
+              <SelectTrigger className="h-8 text-xs w-[180px] bg-background border-border/80 font-sans">
+                <SelectValue placeholder="All Plant Locations" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Plant Locations</SelectItem>
+                {plantsWithStaff.map((p) => (
+                  <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
 
             {/* View switcher */}
             <div className="flex items-center gap-0.5 bg-muted/60 p-0.5 rounded-lg border border-border/50">
@@ -833,32 +837,37 @@ function Staff() {
         </div>
 
         {/* Role Quick Filter Chips */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 text-xs pt-1 border-t border-border/40">
-          {(
-            [
-              { id: 'all', label: `All Staff (${staff.length})` },
-              { id: 'online', label: `🟢 Online (${onlineCount})` },
-              { id: 'leadership', label: `👑 Leadership (${leadershipCount})` },
-              { id: 'analyst', label: `📊 Analysts (${analystCount})` },
-              { id: 'operator', label: `⚙️ Operators (${operatorCount})` },
-            ] as const
-          ).map((rf) => (
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 text-xs pt-1 border-t border-border/40 font-sans">
+          {[
+            { id: 'all', label: 'All Staff', count: staff.length, icon: null },
+            { id: 'online', label: 'Online', count: onlineCount, icon: <span className="h-2 w-2 rounded-full bg-accent" /> },
+            { id: 'leadership', label: 'Leadership', count: leadershipCount, icon: <Crown className="h-3 w-3 text-info" /> },
+            { id: 'analyst', label: 'Analysts', count: analystCount, icon: <BarChart2 className="h-3 w-3 text-primary" /> },
+            { id: 'operator', label: 'Operators', count: operatorCount, icon: <Cog className="h-3 w-3 text-muted-foreground" /> },
+          ].map((rf) => (
             <button
               key={rf.id}
               type="button"
-              onClick={() => setRoleFilter(rf.id)}
+              onClick={() => setRoleFilter(rf.id as any)}
               className={cn(
-                'px-2.5 py-1 rounded-lg text-2xs font-bold whitespace-nowrap transition-all border',
+                'px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-all border flex items-center gap-1.5',
                 roleFilter === rf.id
                   ? 'bg-primary text-primary-foreground border-primary shadow-2xs'
                   : 'bg-muted/40 text-muted-foreground border-border/60 hover:text-foreground hover:bg-muted',
               )}
             >
-              {rf.label}
+              {rf.icon}
+              <span>{rf.label}</span>
+              <span className={cn(
+                'font-mono-num text-3xs px-1 rounded-full',
+                roleFilter === rf.id ? 'bg-primary-foreground/20 text-white' : 'bg-muted text-muted-foreground'
+              )}>
+                {rf.count}
+              </span>
             </button>
           ))}
           <span className="ml-auto text-3xs text-muted-foreground shrink-0 pl-2">
-            Showing {filteredStaff.length} of {staff.length}
+            Showing <strong className="text-foreground font-mono-num font-bold">{filteredStaff.length}</strong> of <span className="font-mono-num">{staff.length}</span>
           </span>
         </div>
       </div>
@@ -1486,22 +1495,25 @@ function MiniHeatmap({ scores, days, label, todayStr, onHover }: {
     );
   }
 
-  const sqSize = days.length <= 7 ? 13 : days.length <= 14 ? 9 : 6;
+  const sqSize = days.length <= 7 ? 14 : days.length <= 14 ? 10 : 8;
 
   return (
-    <div className="flex items-center gap-px px-1.5 py-1.5">
+    <div className="flex items-center gap-0.5 px-1.5 py-1.5">
       {days.map((day) => {
         const raw = scores[day];
         const score: DayScore2 = raw === undefined ? 0 : raw;
         const isToday = day === todayStr;
         const status = scoreStatus(score, isToday);
         const pct = score === null ? null : Math.round((score as number) * 100);
+        const tooltipText = `${label} — ${day}\n${status === 'na' ? 'N/A' : status === 'pending' ? 'Pending — day in progress' : pct + '% complete'}`;
         return (
           <div
             key={day}
             style={{ width: sqSize, height: sqSize, background: scoreColor(score, isToday), borderRadius: 2, flexShrink: 0, opacity: status === 'na' ? 0.25 : 0.88 }}
-            onMouseEnter={(e) => onHover(`${label} — ${day}\n${status === 'na' ? 'N/A' : status === 'pending' ? 'Pending — day in progress' : pct + '% complete'}`, e)}
+            onMouseEnter={(e) => onHover(tooltipText, e)}
             onMouseLeave={() => onHover(null)}
+            onClick={(e) => onHover(tooltipText, e)}
+            className="cursor-pointer transition-transform hover:scale-125"
           />
         );
       })}
@@ -2752,41 +2764,34 @@ export default function Employees() {
   return (
     <div className="space-y-3 animate-fade-in">
       {/* ── People & Staff Management Strip ── */}
-      <div className="rounded-lg border border-border bg-card text-foreground p-4 sm:p-5 shadow-xs">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+      <div className="rounded-xl border border-border/80 bg-card p-4 sm:p-5 shadow-xs">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           {/* Title */}
           <div className="space-y-1">
             <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-lg sm:text-xl font-semibold tracking-tight text-foreground">
+              <h1 className="text-lg sm:text-xl font-bold tracking-tight text-foreground">
                 People &amp; Staff Management
               </h1>
-              <span className="px-2 py-0.5 rounded-full text-2xs font-medium bg-primary-soft text-primary border border-primary/30">
+              <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-primary-soft text-primary border border-primary/30">
                 Staff Registry
               </span>
             </div>
-            <p className="text-xs text-slate-300 flex items-center gap-1.5">
+            <p className="text-xs text-muted-foreground flex items-center gap-2">
               <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-accent opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-accent"></span>
               </span>
               <span>Staff Directory · KPI Heatmap · Org Chart · Operations Manual</span>
             </p>
           </div>
 
-          {/* Quick KPI tiles */}
-          <div className="grid grid-cols-4 gap-2 shrink-0">
-            {[
-              { label: 'Total Staff',  value: staff.length,     sub: `${activeCount} active`,  color: 'text-white' },
-              { label: 'Online Now',   value: onlineCount,      sub: 'active / idle',            color: 'text-emerald-300' },
-              { label: 'Leadership',   value: leadershipCount,  sub: 'admin + mgr',              color: 'text-sky-300' },
-              { label: 'Operators',    value: operatorCount,    sub: 'field + tech',             color: 'text-indigo-300' },
-            ].map((stat) => (
-              <div key={stat.label} className="bg-white/[0.08] rounded-xl px-3 py-2 border border-white/10 text-center min-w-[64px]">
-                <div className={`text-lg font-bold tabular-nums font-numeral leading-none ${stat.color}`}>{stat.value}</div>
-                <div className="text-[10px] text-slate-400 mt-0.5 leading-tight">{stat.label}</div>
-                <div className="text-[9px] text-slate-500 mt-0.5">{stat.sub}</div>
-              </div>
-            ))}
+          {/* Quick status summary chip */}
+          <div className="flex items-center gap-2 shrink-0 font-sans">
+            <div className="px-3 py-1.5 rounded-lg border border-border/60 bg-muted/30 text-xs font-medium text-muted-foreground flex items-center gap-2">
+              <span className="text-foreground font-bold font-mono-num">{staff.length}</span> total staff
+              <span className="text-border">·</span>
+              <span className="text-accent font-bold font-mono-num">{onlineCount}</span> online
+            </div>
           </div>
         </div>
       </div>
