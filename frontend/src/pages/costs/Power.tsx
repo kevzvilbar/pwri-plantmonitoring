@@ -11,7 +11,7 @@ import { ComputedInput } from '@/components/ComputedInput';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ResponsiveAlertDialog } from '@/components/ui/responsive-dialog';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, Zap, UploadCloud } from 'lucide-react';
 import { ExportButton } from '@/components/ExportButton';
 import { PlantPicker } from '@/components/costs/PlantPicker';
 import { fmtNum } from '@/lib/calculations';
@@ -238,12 +238,12 @@ export function Power() {
   }, [bills]);
 
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const [pendingMult, setPendingMult] = useState('');
+  const [pendingMultiplier, setPendingMultiplier] = useState<string | null>(null);
 
   const handleMultiplierChange = (val: string) => {
     const prev = bills?.[0]?.multiplier;
     if (prev != null && +val !== +prev && val !== '') {
-      setPendingMult(val);
+      setPendingMultiplier(val);
       setConfirmOpen(true);
     } else {
       setV({ ...v, multiplier: val });

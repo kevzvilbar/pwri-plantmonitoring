@@ -11,8 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { Skeleton } from '@/components/ui/skeleton';
-import { Loader2, Pencil, Trash2, Check, X } from 'lucide-react';
+import { Loader2, Pencil, Trash2, Check, X, FlaskConical, Layers, Zap, Plus } from 'lucide-react';
 import { ExportButton } from '@/components/ExportButton';
 import { PlantPicker } from '@/components/costs/PlantPicker';
 import { FILTER_ITEMS, FILTER_UNITS, isFilterPriceEntry } from '@/lib/filterReplacements';
@@ -404,7 +403,7 @@ export function ChemicalPrices() {
                   <Button
                     size="sm"
                     className="h-7 text-xs gap-1 bg-primary hover:bg-primary/90 text-primary-foreground"
-                    onClick={saveEdit}
+                    onClick={() => saveEdit(p.id)}
                     disabled={saving}
                   >
                     {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}

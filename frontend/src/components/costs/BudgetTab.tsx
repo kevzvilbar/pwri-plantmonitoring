@@ -14,17 +14,15 @@ import { PlantPicker } from '@/components/costs/PlantPicker';
 import { fmtNum } from '@/lib/calculations';
 import { toast } from 'sonner';
 import { friendlyError } from '@/lib/supabaseErrors';
-import { Pencil, Check, X, Loader2, Sun } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { useMonthlyOpex, opexVarianceTone, saveOpexBudget, type MonthlyOpex } from '@/hooks/useOpexBudget';
+import { StatCard } from '@/components/dashboard/StatCard';
+import { Calculator, Banknote, Scale, TrendingUp, Sun, Pencil, Check, X, Loader2 } from 'lucide-react';
 
 type Metric = 'total' | 'power' | 'chem';
 
 const toneTextClass = (tone: ReturnType<typeof opexVarianceTone>) =>
   tone === 'danger' ? 'text-danger' : tone === 'warn' ? 'text-warn-foreground' : tone === 'accent' ? 'text-accent' : '';
-
-import { StatCard } from '@/components/dashboard/StatCard';
-import { Calculator, Banknote, Scale, TrendingUp, Sun, Pencil, Check, X, Loader2 } from 'lucide-react';
 
 export function BudgetTab() {
   const { user } = useAuth();
