@@ -48,7 +48,7 @@ export function TrendChartToolbar({
               onClick={() => onRangeChange(r)}
               data-testid={`trend-range-${metric}-${r}`}
               className={[
-                'h-5 px-2 text-[10px] font-bold rounded-md transition-all',
+                'h-7 px-2.5 text-2xs font-semibold rounded-md transition-all cursor-pointer',
                 range === r
                   ? 'bg-card text-primary shadow-xs border border-border/80'
                   : 'text-muted-foreground hover:text-foreground',
@@ -61,7 +61,7 @@ export function TrendChartToolbar({
             onClick={() => onRangeChange('CUSTOM')}
             data-testid={`trend-range-${metric}-CUSTOM`}
             className={[
-              'h-5 px-2 text-[10px] font-bold rounded-md transition-all',
+              'h-7 px-2.5 text-2xs font-semibold rounded-md transition-all cursor-pointer',
               range === 'CUSTOM'
                 ? 'bg-card text-primary shadow-xs border border-border/80'
                 : 'text-muted-foreground hover:text-foreground',
@@ -80,7 +80,7 @@ export function TrendChartToolbar({
               if (t) onToChange(t);
             }}
             size="sm"
-            className="h-6 w-[200px] text-2xs px-2"
+            className="h-7 w-[200px] text-2xs px-2"
           />
         )}
 
@@ -97,11 +97,11 @@ export function TrendChartToolbar({
         <button
           type="button"
           onClick={onOpenSummary}
-          className="h-5 px-2 text-2xs font-semibold rounded-md border border-border/80 bg-card text-foreground hover:bg-muted/80 hover:text-primary transition-all flex items-center gap-1 shadow-2xs cursor-pointer"
+          className="h-7 px-2.5 text-2xs font-semibold rounded-md border border-border/80 bg-card text-foreground hover:bg-muted/80 hover:text-primary transition-all flex items-center gap-1.5 shadow-2xs cursor-pointer"
           title={`Open ${title || metric} Data Summary`}
           data-testid={`trend-data-summary-${metric}`}
         >
-          <TableProperties className="h-3 w-3 text-primary shrink-0" />
+          <TableProperties className="h-3.5 w-3.5 text-primary shrink-0" />
           <span>Data Summary</span>
         </button>
       </div>

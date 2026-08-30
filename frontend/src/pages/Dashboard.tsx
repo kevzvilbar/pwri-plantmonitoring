@@ -60,6 +60,7 @@ import { PMDueSoonCard }       from '@/components/dashboard/PMDueSoonCard';
 import { PendingReviewCard }   from '@/components/dashboard/PendingReviewCard';
 import { DataCompletenessRadarCard } from '@/components/dashboard/DataCompletenessRadarCard';
 import { CostSunburst }        from '@/components/dashboard/CostSunburst';
+import { DashboardSectionNav } from '@/components/dashboard/DashboardSectionNav';
 import { useDashboardQueries } from './useDashboardQueries';
 import { useDashboardAggregates } from './useDashboardAggregates';
 import { useDashboardAlerts } from './useDashboardAlerts';
@@ -257,176 +258,248 @@ export default function Dashboard() {
         onSelectPlant={(pid) => navigate(`/plants/${pid}`)}
       />
 
+      {/* ─── Sticky Cluster Quick-Jump Section Navigation ─── */}
+      <DashboardSectionNav />
+
       {/* ─── Cluster 1: Overview ─── */}
-      {/* Order (updated): Production Volume · Locators Consumption · NRW
-          · Raw Water · Blending. Production Cost has been moved to the
-          Production Cost (Power + Chemical) cluster where it sits alongside
-          Power Cost, Chemical Cost, and PV Ratio. Production Volume is now
-          surfaced here so operators can see today's output at a glance. */}
-      <ClusterHeader icon={Droplet} title="Overview" accent="text-primary" />
-      <div className="stagger-grid grid gap-2 grid-cols-2 sm:[grid-template-columns:repeat(auto-fit,minmax(150px,1fr))]">
-        <StatCard icon={Droplet} accent="text-primary" label="Production Volume"
-          value={fmtNum(production)} unit="m³" trend={dProduction}
-          onClick={handleMetricClick('production', 'Production vs Consumption')} />
-        <StatCard icon={Receipt} accent="text-highlight" label="Locators Consumption" value={fmtNum(consumption)} unit="m³"
-          trend={dConsumption}
-          onClick={handleMetricClick('production', 'Production vs Consumption')} />
-        {/* ③ NRW — full-width on mobile so the gauge has room; auto-fits on sm+ */}
-        <div className="col-span-2 sm:col-span-1">
+      <section id="overview-cluster" className="scroll-mt-28 space-y-2.5">
+        <ClusterHeader icon={Droplet} title="Overview" accent="text-primary" />
+        
+        {/* Tier 1: 2-Column Hero Bento Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+          {/* Hero Bento Tile 1: Production Volume */}
+          <div
+            onClick={handleMetricClick('production', 'Production vs Consumption')}
+            className="p-4 rounded-xl bg-card border border-border/80 border-l-4 border-l-primary hover:border-primary/60 transition-all cursor-pointer shadow-xs group"
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-lg bg-primary/10 text-primary group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
+                  <Droplet className="h-4 w-4" />
+                </div>
+                <div>
+                  <div className="text-2xs uppercase font-mono font-semibold tracking-wider text-muted-foreground">
+                    Headline Production
+                  </div>
+                  <div className="text-sm font-bold text-foreground">
+                    Treated Water Output
+                  </div>
+                </div>
+              </div>
+              {dProduction != null && (
+                <div className={`px-2 py-0.5 rounded-full text-2xs font-mono font-semibold ${
+                  dProduction >= 0 ? 'bg-accent/15 text-accent' : 'bg-danger/15 text-danger'
+                }`}>
+                  {dProduction >= 0 ? `+${fmtNum(dProduction)}` : fmtNum(dProduction)} m³ vs yest
+                </div>
+              )}
+            </div>
+            <div className="mt-3 flex items-baseline gap-2">
+              <span className="readout-num readout-glow text-3xl sm:text-4xl font-bold font-mono-num text-foreground">
+                {fmtNum(production)}
+              </span>
+              <span className="text-sm font-mono text-muted-foreground font-semibold">m³</span>
+            </div>
+            <div className="mt-1.5 text-3xs text-muted-foreground flex items-center justify-between">
+              <span>Total aggregate plant volume produced today</span>
+              <span className="text-primary font-medium group-hover:underline">Click for trend &rarr;</span>
+            </div>
+          </div>
+
+          {/* Hero Bento Tile 2: Locators Consumption */}
+          <div
+            onClick={handleMetricClick('production', 'Production vs Consumption')}
+            className="p-4 rounded-xl bg-card border border-border/80 border-l-4 border-l-highlight hover:border-highlight/60 transition-all cursor-pointer shadow-xs group"
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-lg bg-highlight/10 text-highlight group-hover:bg-highlight group-hover:text-white transition-colors">
+                  <Receipt className="h-4 w-4" />
+                </div>
+                <div>
+                  <div className="text-2xs uppercase font-mono font-semibold tracking-wider text-muted-foreground">
+                    Offtake Demand
+                  </div>
+                  <div className="text-sm font-bold text-foreground">
+                    Locators Consumption
+                  </div>
+                </div>
+              </div>
+              {dConsumption != null && (
+                <div className={`px-2 py-0.5 rounded-full text-2xs font-mono font-semibold ${
+                  dConsumption >= 0 ? 'bg-highlight/15 text-highlight' : 'bg-muted text-muted-foreground'
+                }`}>
+                  {dConsumption >= 0 ? `+${fmtNum(dConsumption)}` : fmtNum(dConsumption)} m³ vs yest
+                </div>
+              )}
+            </div>
+            <div className="mt-3 flex items-baseline gap-2">
+              <span className="readout-num text-3xl sm:text-4xl font-bold font-mono-num text-foreground">
+                {fmtNum(consumption)}
+              </span>
+              <span className="text-sm font-mono text-muted-foreground font-semibold">m³</span>
+            </div>
+            <div className="mt-1.5 text-3xs text-muted-foreground flex items-center justify-between">
+              <span>Billed and bulk offtake across all active locators</span>
+              <span className="text-highlight font-medium group-hover:underline">Click for trend &rarr;</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Tier 2: Supporting Metrics Row */}
+        <div className="grid gap-2 grid-cols-1 sm:grid-cols-3">
           <NRWGaugeCard
             nrw={nrw}
             yNrw={yNrw}
             onClick={handleMetricClick('nrw', 'NRW Trend')}
           />
+          <StatCard icon={RawWaterIcon} accent="text-info" label="Raw Water"
+            value={fmtNum(rawWaterVol)} unit="m³" trend={dRawWater}
+            onClick={handleMetricClick('rawwater', 'Raw Water (m³)')} />
+          <StatCard icon={Waves} accent="text-kpi-ro" label="Blending"
+            value={fmtNum(blending)} unit="m³" />
         </div>
-        <StatCard icon={RawWaterIcon} accent="text-info" label="Raw Water"
-          value={fmtNum(rawWaterVol)} unit="m³" trend={dRawWater}
-          onClick={handleMetricClick('rawwater', 'Raw Water (m³)')} />
-        <StatCard icon={Waves} accent="text-kpi-ro" label="Blending"
-          value={fmtNum(blending)} unit="m³" />
-      </div>
-      <ClusterCharts metrics={OVERVIEW_CHART_METRICS} viewMode={viewMode} expandedMetric={expandedMetric} plantIds={plantIds} clusterId="overview" />
-      {/* Bridges the five Overview tiles above (Raw Water, Production, Consumption,
-          Blending, NRW) into one connected waterfall instead of five separate
-          numbers — same shared date range, same underlying reading computation. */}
-      <WaterBalanceBridgeCard plantIds={plantIds} />
+
+        <ClusterCharts metrics={OVERVIEW_CHART_METRICS} viewMode={viewMode} expandedMetric={expandedMetric} plantIds={plantIds} clusterId="overview" />
+        <WaterBalanceBridgeCard plantIds={plantIds} />
+      </section>
 
       {/* ─── Cluster 2: Quality ─── */}
-      {/* Spec order: Feed TDS · Product TDS · Raw TDS (per well source) ·
-          Raw NTU (per well source). The Raw TDS / NTU tiles surface the
-          aggregate headline plus a small breakdown labelled "per well
-          source" — see PerWellSourceCard for the schema caveat (these
-          are physically measured at the RO feed manifold which BLENDS
-          multiple well sources, so each row represents one source line). */}
-      <ClusterHeader icon={FlaskConical} title="Quality" accent="text-accent" subtitle="RO output" />
-      <div className="stagger-grid grid gap-2 grid-cols-2 sm:[grid-template-columns:repeat(auto-fit,minmax(150px,1fr))]">
-        {/* Feed TDS — expandable per-train breakdown (chevron, hidden by default) */}
-        <StatCard
-          icon={Gauge}
-          label="Feed TDS"
-          value={avgFeedTds ?? '—'}
-          unit="ppm"
-          expandRows={roByTrain.map((r) => ({
-            label: r.train_name ?? (r.train_number != null ? `Train ${r.train_number}` : '?'),
-            value: r.feed_tds != null ? Math.round(r.feed_tds) : null,
-          }))}
-          expandUnit="ppm"
-        />
-        {/* Product TDS — expandable per-train breakdown (chevron, hidden by default) */}
-        <StatCard
-          icon={FlaskConical}
-          accent="text-accent"
-          label="Product TDS"
-          value={avgPermTds ?? '—'}
-          unit="ppm"
-          onClick={handleMetricClick('tds', 'Permeate TDS Trend')}
-          expandRows={roByTrain.map((r) => ({
-            label: r.train_name ?? (r.train_number != null ? `Train ${r.train_number}` : '?'),
-            value: r.permeate_tds != null ? Math.round(r.permeate_tds) : null,
-          }))}
-          expandUnit="ppm"
-        />
-        {/* Raw TDS — per-well breakdown from well_readings.tds_ppm (Operations data) */}
-        <PerWellSourceCard
-          icon={Gauge}
-          label="Raw TDS"
-          unit="ppm"
-          aggregate={avgRawTds}
-          rows={wellsByQuality}
-          field="tds_ppm"
-          plantCodeById={plantCodeById}
-          multiPlant={plantIds.length > 1}
-          testId="raw-tds-per-well-source"
-        />
-        {/* Raw NTU — per-well breakdown from well_readings.turbidity_ntu (Operations data) */}
-        <PerWellSourceCard
-          icon={Cloud}
-          label="Raw NTU"
-          unit="NTU"
-          aggregate={avgRawTurb}
-          rows={wellsByQuality}
-          field="turbidity_ntu"
-          plantCodeById={plantCodeById}
-          multiPlant={plantIds.length > 1}
-          testId="raw-ntu-per-well-source"
-          decimals={2}
-        />
-        <StatCard icon={Percent} label="Recovery" value={avgRecovery ?? '—'} unit="%"
-          onClick={handleMetricClick('recovery', 'Recovery Trendline')} />
-      </div>
-      <ClusterCharts metrics={QUALITY_CHART_METRICS} viewMode={viewMode} expandedMetric={expandedMetric} plantIds={plantIds} clusterId="quality" />
+      <section id="quality-cluster" className="scroll-mt-28 space-y-2.5">
+        <ClusterHeader icon={FlaskConical} title="Quality" accent="text-accent" subtitle="RO output" />
+        <div className="stagger-grid grid gap-2 grid-cols-2 sm:[grid-template-columns:repeat(auto-fit,minmax(150px,1fr))]">
+          {/* Feed TDS — expandable per-train breakdown (chevron, hidden by default) */}
+          <StatCard
+            icon={Gauge}
+            label="Feed TDS"
+            value={avgFeedTds ?? '—'}
+            unit="ppm"
+            expandRows={roByTrain.map((r) => ({
+              label: r.train_name ?? (r.train_number != null ? `Train ${r.train_number}` : '?'),
+              value: r.feed_tds != null ? Math.round(r.feed_tds) : null,
+            }))}
+            expandUnit="ppm"
+          />
+          {/* Product TDS — expandable per-train breakdown (chevron, hidden by default) */}
+          <StatCard
+            icon={FlaskConical}
+            accent="text-accent"
+            label="Product TDS"
+            value={avgPermTds ?? '—'}
+            unit="ppm"
+            onClick={handleMetricClick('tds', 'Permeate TDS Trend')}
+            expandRows={roByTrain.map((r) => ({
+              label: r.train_name ?? (r.train_number != null ? `Train ${r.train_number}` : '?'),
+              value: r.permeate_tds != null ? Math.round(r.permeate_tds) : null,
+            }))}
+            expandUnit="ppm"
+          />
+          {/* Raw TDS — per-well breakdown from well_readings.tds_ppm (Operations data) */}
+          <PerWellSourceCard
+            icon={Gauge}
+            label="Raw TDS"
+            unit="ppm"
+            aggregate={avgRawTds}
+            rows={wellsByQuality}
+            field="tds_ppm"
+            plantCodeById={plantCodeById}
+            multiPlant={plantIds.length > 1}
+            testId="raw-tds-per-well-source"
+          />
+          {/* Raw NTU — per-well breakdown from well_readings.turbidity_ntu (Operations data) */}
+          <PerWellSourceCard
+            icon={Cloud}
+            label="Raw NTU"
+            unit="NTU"
+            aggregate={avgRawTurb}
+            rows={wellsByQuality}
+            field="turbidity_ntu"
+            plantCodeById={plantCodeById}
+            multiPlant={plantIds.length > 1}
+            testId="raw-ntu-per-well-source"
+            decimals={2}
+          />
+          <StatCard icon={Percent} label="Recovery" value={avgRecovery ?? '—'} unit="%"
+            onClick={handleMetricClick('recovery', 'Recovery Trendline')} />
+        </div>
+        <ClusterCharts metrics={QUALITY_CHART_METRICS} viewMode={viewMode} expandedMetric={expandedMetric} plantIds={plantIds} clusterId="quality" />
+      </section>
 
       {/* ─── Cluster 3: Production Cost (Power + Chemical) ─── */}
-      {/* Spec order: Power Cost · Chemical Cost · Power kWh · PV Ratio.
-          The header subtitle shows "Today" normally or "as of MMM d" when
-          cost data was pulled from the most-recent fallback (no today entry). */}
-      <ClusterHeader
-        icon={Zap}
-        title="Production Cost (Power + Chemical)"
-        accent="text-chart-6"
-        subtitle={
-          costIsStale && costDataDate
-            ? `as of ${format(new Date(costDataDate + 'T00:00:00'), 'MMM d')}`
-            : 'Today'
-        }
-      />
-      <div className="stagger-grid grid gap-2 grid-cols-2 sm:[grid-template-columns:repeat(auto-fit,minmax(150px,1fr))]">
-        <StatCard icon={Banknote} accent="text-accent" label="Total Production Cost"
-          calc
-          calcTooltip={
+      <section id="cost-cluster" className="scroll-mt-28 space-y-2.5">
+        <ClusterHeader
+          icon={Zap}
+          title="Production Cost (Power + Chemical)"
+          accent="text-chart-6"
+          subtitle={
             costIsStale && costDataDate
-              ? `Production Cost = (kWh × tariff rate) + Chemical Cost (latest data: ${format(new Date(costDataDate + 'T00:00:00'), 'MMM d, yyyy')})`
-              : 'Production Cost = Power Cost (kWh × ₱/kWh) + Chemical Cost (today)'
+              ? `as of ${format(new Date(costDataDate + 'T00:00:00'), 'MMM d')}`
+              : 'Today'
           }
-          value={productionCost == null ? '—' : `₱${fmtNum(productionCost, 0)}`}
-          onClick={handleMetricClick('productionCost', 'Production Cost (Power + Chemical)')} />
-        <StatCard icon={Zap} accent="text-chart-6" label="Power Cost"
-          calc
-          calcTooltip="Power Cost = Power kWh × tariff rate (₱/kWh) from power_tariffs — same formula as chart"
-          value={powerCost == null ? '—' : `₱${fmtNum(powerCost, 0)}`}
-          onClick={handleMetricClick('productionCost', 'Production Cost (Power + Chemical)')} />
-        <StatCard icon={FlaskConical} accent="text-highlight" label="Chemical Cost"
-          value={chemCost == null ? '—' : `₱${fmtNum(chemCost, 0)}`}
-          onClick={handleMetricClick('productionCost', 'Production Cost (Power + Chemical)')} />
-        <StatCard icon={Zap} accent="text-chart-6" label="Power kWh"
-          value={powerIsStale || kwh > 0 ? fmtNum(kwh) : '—'}
-          unit={kwh > 0 ? 'kWh' : undefined}
-          trend={dKwh}
-          onClick={handleMetricClick('kwh', 'Power Consumption & Energy Mix')} />
-        <StatCard icon={Zap} accent="text-chart-6" label="PV Ratio" value={pv == null ? '—' : pv} unit="kWh/m³"
-          calc threshold="1.2"
-          calcTooltip="PV Ratio = Power kWh ÷ Production m³ (lower is more efficient)"
-          onClick={handleMetricClick('pv', 'PV Ratio Trend')} />
-      </div>
-      <ClusterCharts
-        metrics={[
-          ...COST_CHART_METRICS.filter((m: ChartMetric) => m.metric !== 'kwh'),
-          { metric: 'kwh', title: 'Power Consumption & Energy Mix' },
-        ] as ChartMetric[]}
-        viewMode={viewMode}
-        expandedMetric={expandedMetric}
-        plantIds={plantIds}
-        clusterId="cost"
-      />
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-        <DataCompletenessRadarCard plantIds={plantIds} />
-        <CostSunburst plantIds={plantIds} />
-      </div>
+        />
+        <div className="stagger-grid grid gap-2 grid-cols-2 sm:[grid-template-columns:repeat(auto-fit,minmax(150px,1fr))]">
+          <StatCard icon={Banknote} accent="text-accent" label="Total Production Cost"
+            calc
+            calcTooltip={
+              costIsStale && costDataDate
+                ? `Production Cost = (kWh × tariff rate) + Chemical Cost (latest data: ${format(new Date(costDataDate + 'T00:00:00'), 'MMM d, yyyy')})`
+                : 'Production Cost = Power Cost (kWh × ₱/kWh) + Chemical Cost (today)'
+            }
+            value={productionCost == null ? '—' : `₱${fmtNum(productionCost, 0)}`}
+            onClick={handleMetricClick('productionCost', 'Production Cost (Power + Chemical)')} />
+          <StatCard icon={Zap} accent="text-chart-6" label="Power Cost"
+            calc
+            calcTooltip="Power Cost = Power kWh × tariff rate (₱/kWh) from power_tariffs — same formula as chart"
+            value={powerCost == null ? '—' : `₱${fmtNum(powerCost, 0)}`}
+            onClick={handleMetricClick('productionCost', 'Production Cost (Power + Chemical)')} />
+          <StatCard icon={FlaskConical} accent="text-highlight" label="Chemical Cost"
+            value={chemCost == null ? '—' : `₱${fmtNum(chemCost, 0)}`}
+            onClick={handleMetricClick('productionCost', 'Production Cost (Power + Chemical)')} />
+          <StatCard icon={Zap} accent="text-chart-6" label="Power kWh"
+            value={powerIsStale || kwh > 0 ? fmtNum(kwh) : '—'}
+            unit={kwh > 0 ? 'kWh' : undefined}
+            trend={dKwh}
+            onClick={handleMetricClick('kwh', 'Power Consumption & Energy Mix')} />
+          <StatCard icon={Zap} accent="text-chart-6" label="PV Ratio" value={pv == null ? '—' : pv} unit="kWh/m³"
+            calc threshold="1.2"
+            calcTooltip="PV Ratio = Power kWh ÷ Production m³ (lower is more efficient)"
+            onClick={handleMetricClick('pv', 'PV Ratio Trend')} />
+        </div>
+        <ClusterCharts
+          metrics={[
+            ...COST_CHART_METRICS.filter((m: ChartMetric) => m.metric !== 'kwh'),
+            { metric: 'kwh', title: 'Power Consumption & Energy Mix' },
+          ] as ChartMetric[]}
+          viewMode={viewMode}
+          expandedMetric={expandedMetric}
+          plantIds={plantIds}
+          clusterId="cost"
+        />
+      </section>
 
-      {/* ─── Cluster 4: Plant Health + Blending Volume ───────────────────── */}
-      <ClusterHeader icon={Activity} title="Plant Health Trend" accent="text-accent" subtitle="RO trains" />
-      <InlineTrendChart metric="plantHealth" title="Plant Health Trend" plantIds={plantIds} compact={viewMode === 'inline'} />
+      {/* ─── Cluster 4: Audits & Multi-Facility Analytics ─── */}
+      <section id="audits-cluster" className="scroll-mt-28 space-y-2.5">
+        <ClusterHeader icon={ShieldAlert} title="Audits & Multi-Facility Analytics" accent="text-highlight" />
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+          <DataCompletenessRadarCard plantIds={plantIds} />
+          <CostSunburst plantIds={plantIds} />
+        </div>
+      </section>
 
-      {/* Blending Volume sits immediately below the trend chart in the same cluster.
-          Alerts have moved to the TopBar notification bell (see useEffect above). */}
-      {/* ④ Reading coverage  +  ⑤ PM due soon  +  ⑥ Pending review — side-by-side on sm+ */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        <ReadingCoverageCard plantIds={plantIds} />
-        <PMDueSoonCard       plantIds={plantIds} />
-        <PendingReviewCard   plantIds={plantIds} />
-      </div>
+      {/* ─── Cluster 5: Operations & Plant Health ─── */}
+      <section id="health-cluster" className="scroll-mt-28 space-y-2.5">
+        <ClusterHeader icon={Activity} title="Plant Health Trend" accent="text-accent" subtitle="RO trains" />
+        <InlineTrendChart metric="plantHealth" title="Plant Health Trend" plantIds={plantIds} compact={viewMode === 'inline'} />
 
-      <BlendingVolumeCard plantIds={plantIds} />
+        {/* Coverage, PM due, and review cards */}
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <ReadingCoverageCard plantIds={plantIds} />
+          <PMDueSoonCard       plantIds={plantIds} />
+          <PendingReviewCard   plantIds={plantIds} />
+        </div>
+
+        <BlendingVolumeCard plantIds={plantIds} />
+      </section>
 
       <TrendModal open={!!modal} onClose={() => setModal(null)} metric={modal?.metric ?? ''} title={modal?.title ?? ''} plantIds={plantIds} />
       <DowntimeEventsModal

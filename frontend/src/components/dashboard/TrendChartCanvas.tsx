@@ -235,6 +235,14 @@ export function TrendChartCanvas(props: Record<string, any>) {
                 stackId={stackMode === 'stacked' ? 'nrw' : undefined}
                 shape={makeDrillableBarShape(handleDrillBarActivate, (p) => `Drill into ${p.date as string}`)}
               />
+              <ReferenceLine
+                yAxisId="pct"
+                y={15}
+                stroke="#ef4444"
+                strokeDasharray="4 4"
+                strokeWidth={1.5}
+                label={{ value: 'Limit: 15%', fill: '#ef4444', fontSize: 10, position: 'top' }}
+              />
               <Line yAxisId="pct" type="monotone" dataKey="nrw" stroke={C_NRW} strokeWidth={2.5} dot={{ r: 3.5, fill: C_NRW, strokeWidth: 0 }} name="NRW %" />
             </ComposedChart>
           ) : metric === 'chemCost' ? (
@@ -358,6 +366,13 @@ export function TrendChartCanvas(props: Record<string, any>) {
                 tickFormatter={(v) => +v.toFixed(2) === 0 ? '0' : v.toFixed(v < 1 ? 2 : 1)}
               />
               <Tooltip content={<PvTooltip />} />
+              <ReferenceLine
+                y={1.2}
+                stroke="#f59e0b"
+                strokeDasharray="4 4"
+                strokeWidth={1.5}
+                label={{ value: 'Target: 1.2', fill: '#f59e0b', fontSize: 10, position: 'top' }}
+              />
               <Line
                 type="monotone"
                 dataKey={(d: any) => d.production > 0 ? +(d.kwh / d.production).toFixed(2) : null}
@@ -775,7 +790,23 @@ export function TrendChartCanvas(props: Record<string, any>) {
                 <Area type="monotone" dataKey="production" stroke={C_PRODUCTION} strokeWidth={2.5} fill="url(#productionFill)" dot={false} name="Production (m³)" />
               </>)}
               {metric === 'recovery' && roDrillMode === 'default' && (
-                <Area type="monotone" dataKey="recovery" stroke={C_RECOVERY} strokeWidth={2.5} fill="url(#recoveryFill)" dot={false} name="Recovery (%)" />
+                <>
+                  <ReferenceLine
+                    y={65}
+                    stroke="#10b981"
+                    strokeDasharray="3 3"
+                    strokeWidth={1}
+                    label={{ value: 'Min: 65%', fill: '#10b981', fontSize: 9, position: 'insideBottomLeft' }}
+                  />
+                  <ReferenceLine
+                    y={75}
+                    stroke="#10b981"
+                    strokeDasharray="3 3"
+                    strokeWidth={1}
+                    label={{ value: 'Max: 75%', fill: '#10b981', fontSize: 9, position: 'insideTopLeft' }}
+                  />
+                  <Area type="monotone" dataKey="recovery" stroke={C_RECOVERY} strokeWidth={2.5} fill="url(#recoveryFill)" dot={false} name="Recovery (%)" />
+                </>
               )}
               {metric === 'tds' && roDrillMode === 'default' && (
                 <Area type="monotone" dataKey="tds" stroke={C_TDS} strokeWidth={2.5} fill="url(#tdsFill)" dot={false} name="Permeate TDS (ppm)" />
