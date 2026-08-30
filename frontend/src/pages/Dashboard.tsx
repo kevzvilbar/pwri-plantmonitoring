@@ -236,100 +236,19 @@ export default function Dashboard() {
   return (
     <div className="space-y-3 animate-fade-in">
       
-      {/* ── Top Telemetry Command Strip ── */}
-      <div className="rounded-lg border border-border bg-card text-foreground p-4 sm:p-5 shadow-xs">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-          
-          {/* Title & Live Status */}
-          <div className="space-y-1">
-            <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-lg sm:text-xl font-semibold tracking-tight text-foreground">
-                PWRI Operations Telemetry
-              </h1>
-              <span className="px-2 py-0.5 rounded-full text-2xs font-medium bg-primary-soft text-primary border border-primary/30">
-                {selectedPlantName}
-              </span>
-              {openIncidentCount > 0 && (
-                <button
-                  onClick={() => navigate('/incidents')}
-                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-danger-soft text-danger border border-danger/30 text-2xs font-semibold hover:bg-danger/20 transition-colors"
-                  title={`${openIncidentCount} open incident${openIncidentCount > 1 ? 's' : ''} — click to view`}
-                >
-                  <ShieldAlert className="h-3 w-3" aria-hidden />
-                  <span>{openIncidentCount} open incidents</span>
-                </button>
-              )}
-            </div>
-            <p className="text-xs text-muted-foreground flex items-center gap-1.5">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-accent opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-accent"></span>
-              </span>
-              <span>Fleet Telemetry Online</span>
-              <span className="text-muted-foreground/60">&bull;</span>
-              <span>Updated <strong className="text-foreground font-mono">{secondsAgo}s</strong> ago</span>
-            </p>
-          </div>
-
-          {/* Quick Metrics & Action Controls */}
-          <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setDowntimeOpen(true)}
-              className="h-8 text-xs gap-1.5 font-medium"
-            >
-              <History className="h-3.5 w-3.5 text-info" />
-              <span className="hidden sm:inline">Downtime Log</span>
-            </Button>
-
-            {/* View-mode toggle */}
-            <ToggleGroup
-              type="single"
-              value={viewMode}
-              onValueChange={(v) => v && persistViewMode(v as DashboardViewMode)}
-              className="h-8 bg-muted/60 border border-border rounded-md p-0.5"
-              data-testid="dashboard-view-mode"
-            >
-              <ToggleGroupItem
-                value="inline"
-                className="h-7 px-2 text-xs gap-1 text-muted-foreground data-[state=on]:bg-card data-[state=on]:text-primary data-[state=on]:shadow-xs rounded-sm"
-                title="Inline — all trend graphs visible directly on the dashboard"
-                aria-label="Inline view"
-              >
-                <LayoutGrid className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                <span className="hidden md:inline">Inline</span>
-              </ToggleGroupItem>
-              <ToggleGroupItem
-                value="sections"
-                className="h-7 px-2 text-xs gap-1 text-muted-foreground data-[state=on]:bg-card data-[state=on]:text-primary data-[state=on]:shadow-xs rounded-sm"
-                title="Sections — click any KPI card to fold/unfold its trend chart inline"
-                aria-label="Sections view"
-              >
-                <ListCollapse className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                <span className="hidden md:inline">Sections</span>
-              </ToggleGroupItem>
-              <ToggleGroupItem
-                value="popup"
-                className="h-7 px-2 text-xs gap-1 text-muted-foreground data-[state=on]:bg-card data-[state=on]:text-primary data-[state=on]:shadow-xs rounded-sm"
-                title="Dialog — click a KPI card to open its trend chart in a dialog"
-                aria-label="Dialog view"
-              >
-                <ExternalLink className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                <span className="hidden md:inline">Dialog</span>
-              </ToggleGroupItem>
-            </ToggleGroup>
-          </div>
-
-        </div>
-      </div>
-
-      {/* ─── Hero Surface: Live Plant Pulse & Realtime Telemetry ─── */}
+      {/* ─── Unified Hero: Live Plant Pulse & Operations Command ─── */}
       <PlantPulseHero
         plantIds={plantIds}
+        selectedPlantName={selectedPlantName}
+        openIncidentCount={openIncidentCount}
+        secondsAgo={secondsAgo}
         production={production}
         dProduction={dProduction}
+        viewMode={viewMode}
+        onViewModeChange={persistViewMode}
+        onOpenDowntime={() => setDowntimeOpen(true)}
         onSelectPlant={(pid) => navigate(`/plants/${pid}`)}
+        onViewIncidents={() => navigate('/incidents')}
       />
 
       {/* ① Plant health strip — per-plant status dots + last reading time */}
