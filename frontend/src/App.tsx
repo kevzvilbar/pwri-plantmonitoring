@@ -28,12 +28,12 @@ const Exports = lazy(() => import("./pages/Exports"));
 const Admin = lazy(() => import("./pages/Admin"));
 const Profile = lazy(() => import("./pages/Profile"));
 const NotFound = lazy(() => import("./pages/NotFound"));
-// ── NEW ──────────────────────────────────────────────────────────────────────
 const PlantTopology = lazy(() => import("./pages/PlantTopology"));
 const DataAnalysis  = lazy(() => import("./pages/DataAnalysis"));
 const DataCorrections = lazy(() => import("./pages/DataCorrections"));
 const ManagerScorecard = lazy(() => import("./pages/ManagerScorecard"));
 const Chemicals = lazy(() => import("./pages/Chemicals"));
+const Alerts = lazy(() => import("./pages/Alerts"));
 
 const RouteFallback = () => (
   <div className="flex h-[60vh] w-full items-center justify-center text-sm text-muted-foreground">
@@ -135,6 +135,7 @@ const App = () => (
                 <Route path="/import" element={<Import />} />
                 <Route path="/exports" element={<Exports />} />
                 <Route path="/compliance" element={<Compliance />} />
+                <Route path="/alerts" element={<Alerts />} />
                 <Route path="/admin" element={<Admin />} />
                 <Route path="/profile" element={<Profile />} />
                 {/* Legacy redirect shim — Chemical Dosing moved to RO Trains */}
