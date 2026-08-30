@@ -19,3 +19,4 @@ export { TrainCard }                    from './TrainCard';
 export { TrainLogModal }                from './TrainLogModal';
 export { EditRoReadingDialog }          from './EditRoReadingDialog';
 export { EditPretreatReadingDialog }    from './EditPretreatReadingDialog';
+export { ROTrainHero }                  from '@/components/dashboard/ROTrainHero';

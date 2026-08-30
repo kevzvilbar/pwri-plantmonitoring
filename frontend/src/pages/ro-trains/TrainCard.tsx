@@ -2,9 +2,9 @@ import { useState, useEffect } from 'react';
 import { format } from 'date-fns';
 import { Clock, ArrowRight, AlertTriangle, PowerOff } from 'lucide-react';
 import { Card } from '@/components/ui/card';
-import { fmtNum } from '@/lib/calculations';
+import { fmtNum, RECOVERY_BAND } from '@/lib/calculations';
 import { cn } from '@/lib/utils';
-import { Sparkline, deriveTrainStatus } from './helpers';
+import { TelemetryGauge, deriveTrainStatus } from './helpers';
 import type { TrainHourlyGap } from '@/hooks/useTrainHourlyGaps';
 import { TrainLogModal } from './TrainLogModal';
 
@@ -12,6 +12,7 @@ interface TrainCardProps {
   train: any;
   last: any;
   spark: any[];
+  permTdsLimit?: number;
   /** This train's currently-unresolved hourly gaps (already excludes anything logged), from useTrainHourlyGaps via Overview.tsx. */
   hourlyGaps?: TrainHourlyGap[];
   /** Deep-link from a Dashboard alert — auto-opens the log modal for this card. */
@@ -26,6 +27,7 @@ export function TrainCard({
   train,
   last,
   spark,
+  permTdsLimit = 500,
   hourlyGaps,
   autoOpenLog,
   autoOpenTab,
@@ -53,11 +55,20 @@ export function TrainCard({
   const permTDS   = last?.permeate_tds  != null ? `${fmtNum(last.permeate_tds, 0)} ppm` : '—';
   const lastTime  = last?.reading_datetime ? format(new Date(last.reading_datetime), 'hh:mm:ss aa') : '—';
 
-  const recoveryVals = spark.map((r: any) => r.recovery_pct).filter((v: any) => v != null).reverse();
-  const tdsVals      = spark.map((r: any) => r.permeate_tds).filter((v: any) => v != null).reverse();
+  const recoveryPoints = spark
+    .map((r: any) => r.recovery_pct)
+    .filter((v: any) => v != null)
+    .reverse()
+    .map((v: number, i: number) => ({ i, v }));
 
-  const recWarn = last?.recovery_pct != null && (last.recovery_pct < 65 || last.recovery_pct > 75);
-  const tdsWarn = last?.permeate_tds != null && last.permeate_tds > 600;
+  const tdsPoints = spark
+    .map((r: any) => r.permeate_tds)
+    .filter((v: any) => v != null)
+    .reverse()
+    .map((v: number, i: number) => ({ i, v }));
+
+  const recWarn = last?.recovery_pct != null && (last.recovery_pct < RECOVERY_BAND.min || last.recovery_pct > RECOVERY_BAND.max);
+  const tdsWarn = last?.permeate_tds != null && last.permeate_tds > permTdsLimit;
 
   const isOnline = status === 'Running';
 
@@ -119,33 +130,47 @@ export function TrainCard({
         );
       })()}
 
-      {/* Telemetry Metrics */}
+      {/* Telemetry Metrics with Micro-Gauges */}
       {isOnline ? (
         <div className="grid grid-cols-2 gap-1.5">
           {/* Recovery Metric Card */}
           <div className="p-2 rounded-lg bg-muted/30 border border-border/40 space-y-1">
             <div className="flex items-center justify-between text-3xs font-medium text-muted-foreground uppercase tracking-wider">
               <span>Recovery</span>
-              <Sparkline values={recoveryVals} color={recWarn ? 'hsl(var(--warn))' : 'hsl(var(--accent))'} width={44} height={14} />
+              <span className="text-3xs font-mono opacity-70">65-75%</span>
             </div>
             <div className="flex items-baseline">
               <span className={cn('text-sm font-bold font-mono-num', recWarn ? 'text-warn' : 'text-foreground')}>
                 {recovery}
               </span>
             </div>
+            <TelemetryGauge
+              label="Recovery"
+              data={recoveryPoints}
+              status={recWarn ? 'warn' : 'ok'}
+              band={RECOVERY_BAND}
+              height={28}
+            />
           </div>
 
           {/* Permeate TDS Metric Card */}
           <div className="p-2 rounded-lg bg-muted/30 border border-border/40 space-y-1">
             <div className="flex items-center justify-between text-3xs font-medium text-muted-foreground uppercase tracking-wider">
               <span>Perm TDS</span>
-              <Sparkline values={tdsVals} color={tdsWarn ? 'hsl(var(--danger))' : 'hsl(var(--primary))'} width={44} height={14} />
+              <span className="text-3xs font-mono opacity-70">≤{permTdsLimit}</span>
             </div>
             <div className="flex items-baseline">
               <span className={cn('text-sm font-bold font-mono-num', tdsWarn ? 'text-danger' : 'text-foreground')}>
                 {permTDS}
               </span>
             </div>
+            <TelemetryGauge
+              label="TDS"
+              data={tdsPoints}
+              status={tdsWarn ? 'danger' : 'ok'}
+              thresholdMax={permTdsLimit}
+              height={28}
+            />
           </div>
         </div>
       ) : (

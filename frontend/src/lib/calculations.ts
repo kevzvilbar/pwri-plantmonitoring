@@ -50,13 +50,15 @@ export const calc = {
     +(qty * unitPrice).toFixed(2),
 };
 
+export const RECOVERY_BAND = { min: 65, max: 75 };
+
 export const ALERTS = {
   dp_max: 40,
   permeate_tds_max: 600,
   permeate_ph_min: 6.5,
   permeate_ph_max: 8.5,
-  recovery_min: 65,
-  recovery_max: 75,
+  recovery_min: RECOVERY_BAND.min,
+  recovery_max: RECOVERY_BAND.max,
   // Well/locator readings do NOT use a constant here — they import
   // SPIKE_MULTIPLIER from lib/readingGuards.ts instead, because
   // fn_locator_reading_integrity (the DB trigger that's the actual source of

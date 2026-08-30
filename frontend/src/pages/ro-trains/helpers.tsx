@@ -7,60 +7,98 @@
 import React from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { deltaCache } from '@/lib/deltaCache';
+import { ResponsiveContainer, AreaChart, Area, ReferenceLine, ReferenceArea, YAxis } from 'recharts';
 
-// ─── Sparkline SVG ────────────────────────────────────────────────────────────
+// ─── Telemetry Gauge Micro-Chart ──────────────────────────────────────────────
 
-export function Sparkline({
-  values,
-  color = 'currentColor',
-  width = 60,
-  height = 20,
-}: {
-  values: number[];
-  color?: string;
-  width?: number;
+export interface TelemetryGaugeProps {
+  label: string;
+  data: { i: number; v: number }[];
+  currentValue?: string;
+  unit?: string;
+  status?: 'ok' | 'warn' | 'danger';
+  band?: { min: number; max: number };
+  thresholdMax?: number;
   height?: number;
-}) {
-  if (values.length < 2)
-    return <span className="text-3xs text-muted-foreground/40 font-mono">—</span>;
+}
 
-  const pad = 2;
-  const w = width;
-  const h = height;
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const range = max - min || 1;
+export function TelemetryGauge({
+  label,
+  data,
+  status = 'ok',
+  band,
+  thresholdMax,
+  height = 36,
+}: TelemetryGaugeProps) {
+  const strokeColor =
+    status === 'danger'
+      ? 'hsl(var(--danger))'
+      : status === 'warn'
+      ? 'hsl(var(--warn))'
+      : 'hsl(var(--accent))';
 
-  const points = values.map((v, i) => {
-    const x = pad + (i / (values.length - 1)) * (w - pad * 2);
-    const y = pad + (1 - (v - min) / range) * (h - pad * 2);
-    return { x, y };
-  });
+  const gradId = `telemetry-gauge-${label.replace(/[^a-zA-Z0-9]/g, '')}-${status}`;
 
-  const pathD = points.reduce((acc, pt, i) => `${acc} ${i === 0 ? 'M' : 'L'} ${pt.x.toFixed(1)} ${pt.y.toFixed(1)}`, '');
-  const areaD = `${pathD} L ${points[points.length - 1].x.toFixed(1)} ${h} L ${points[0].x.toFixed(1)} ${h} Z`;
-  const lastPoint = points[points.length - 1];
-  const gradId = `spark-grad-${Math.abs(points[0].x + points[0].y).toFixed(0)}-${color.replace(/[^a-zA-Z0-9]/g, '')}`;
+  if (!data || data.length < 2) {
+    return (
+      <div className="h-7 flex items-center justify-end text-3xs text-muted-foreground/40 font-mono">
+        <span>—</span>
+      </div>
+    );
+  }
+
+  const values = data.map((d) => d.v);
+  const minVal = Math.min(...values);
+  const maxVal = Math.max(...values);
+  const yDomain: [number, number] = [
+    band ? Math.min(minVal, band.min - 2) : minVal * 0.95,
+    thresholdMax
+      ? Math.max(maxVal, thresholdMax * 1.05)
+      : band
+      ? Math.max(maxVal, band.max + 2)
+      : maxVal * 1.05,
+  ];
 
   return (
-    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} className="inline-block overflow-visible shrink-0">
-      <defs>
-        <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={color} stopOpacity="0.25" />
-          <stop offset="100%" stopColor={color} stopOpacity="0.0" />
-        </linearGradient>
-      </defs>
-      <path d={areaD} fill={`url(#${gradId})`} />
-      <path
-        d={pathD}
-        fill="none"
-        stroke={color}
-        strokeWidth="1.75"
-        strokeLinejoin="round"
-        strokeLinecap="round"
-      />
-      <circle cx={lastPoint.x} cy={lastPoint.y} r="2.25" fill={color} className="animate-pulse" />
-    </svg>
+    <div className="w-full relative shrink-0" style={{ height }}>
+      <ResponsiveContainer width="100%" height="100%">
+        <AreaChart data={data} margin={{ top: 2, right: 1, left: 1, bottom: 1 }}>
+          <defs>
+            <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={strokeColor} stopOpacity={0.35} />
+              <stop offset="100%" stopColor={strokeColor} stopOpacity={0.0} />
+            </linearGradient>
+          </defs>
+          <YAxis domain={yDomain} hide />
+          {band && (
+            <ReferenceArea
+              y1={band.min}
+              y2={band.max}
+              fill="hsl(var(--accent))"
+              fillOpacity={0.12}
+              stroke="none"
+            />
+          )}
+          {thresholdMax != null && (
+            <ReferenceLine
+              y={thresholdMax}
+              stroke="hsl(var(--danger))"
+              strokeDasharray="2 2"
+              strokeOpacity={0.6}
+            />
+          )}
+          <Area
+            type="monotone"
+            dataKey="v"
+            stroke={strokeColor}
+            strokeWidth={1.5}
+            fill={`url(#${gradId})`}
+            dot={false}
+            isAnimationActive={false}
+          />
+        </AreaChart>
+      </ResponsiveContainer>
+    </div>
   );
 }
 

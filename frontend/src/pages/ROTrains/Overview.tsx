@@ -88,11 +88,11 @@ export function Overview() {
       const { data } = await supabase.from('ro_train_readings')
         .select('train_id, recovery_pct, permeate_tds, reading_datetime')
         .in('train_id', trainIds).order('reading_datetime', { ascending: false })
-        .limit(trainIds.length * 6);
+        .limit(trainIds.length * 14);
       const map: Record<string, any[]> = {};
       for (const r of data ?? []) {
         if (!map[r.train_id]) map[r.train_id] = [];
-        if (map[r.train_id].length < 5) map[r.train_id].push(r);
+        if (map[r.train_id].length < 12) map[r.train_id].push(r);
       }
       return map;
     },
@@ -337,6 +337,7 @@ export function Overview() {
             train={t}
             last={lastReadings?.[t.id] ?? null}
             spark={sparkData?.[t.id] ?? []}
+            permTdsLimit={PERM_TDS_LIMIT}
             hourlyGaps={hourlyGapsByTrain[t.id] ?? []}
             autoOpenLog={deepLog && deepTrain === t.id}
             autoOpenTab={deepLogTab}
