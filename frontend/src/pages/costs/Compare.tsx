@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { StatusPill } from '@/components/StatusPill';
 import { PlantPicker } from '@/components/costs/PlantPicker';
+import { DateRangePicker } from '@/components/ui/date-picker';
 import { fmtNum } from '@/lib/calculations';
 import { format, parseISO } from 'date-fns';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend, BarChart, Bar } from 'recharts';
@@ -138,11 +139,16 @@ export function Compare() {
                   ].join(' ')}>{label}</button>
               ))}
               {viewMode === 'custom' && (
-                <>
-                  <Input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} className="h-6 w-[110px] text-xs px-1.5" id="costs-plant"/>
-                  <span className="text-xs text-muted-foreground">→</span>
-                  <Input type="date" value={customTo}   onChange={(e) => setCustomTo(e.target.value)}   className="h-6 w-[110px] text-xs px-1.5" />
-                </>
+                <DateRangePicker
+                  from={customFrom}
+                  to={customTo}
+                  onChange={({ from: f, to: t }) => {
+                    setCustomFrom(f);
+                    setCustomTo(t);
+                  }}
+                  size="sm"
+                  className="h-6 w-[200px] text-xs px-2"
+                />
               )}
               <div className="ml-2 flex items-center gap-1">
                 <button onClick={() => setChartType('line')}

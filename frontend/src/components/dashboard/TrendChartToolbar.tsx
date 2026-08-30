@@ -1,6 +1,5 @@
 import type { ReactNode } from 'react';
-import { Input } from '@/components/ui/input';
-import { FileSpreadsheet } from 'lucide-react';
+import { DateRangePicker } from '@/components/ui/date-picker';
 import { RangeKey } from './types';
 
 interface TrendChartToolbarProps {
@@ -72,23 +71,16 @@ export function TrendChartToolbar({
         </div>
 
         {range === 'CUSTOM' && (
-          <div className="flex items-center gap-1">
-            <Input
-              type="date"
-              value={from}
-              onChange={(e) => onFromChange(e.target.value)}
-              className="h-6 w-[110px] text-2xs px-1.5"
-              data-testid={`trend-from-${metric}`}
-            />
-            <span className="text-2xs text-muted-foreground shrink-0">→</span>
-            <Input
-              type="date"
-              value={to}
-              onChange={(e) => onToChange(e.target.value)}
-              className="h-6 w-[110px] text-2xs px-1.5"
-              data-testid={`trend-to-${metric}`}
-            />
-          </div>
+          <DateRangePicker
+            from={from}
+            to={to}
+            onChange={({ from: f, to: t }) => {
+              if (f) onFromChange(f);
+              if (t) onToChange(t);
+            }}
+            size="sm"
+            className="h-6 w-[200px] text-2xs px-2"
+          />
         )}
 
         {isFetching && (
@@ -97,16 +89,6 @@ export function TrendChartToolbar({
       </div>
 
       <div className="flex items-center gap-1.5">
-        {/* Data Summary button */}
-        <button
-          onClick={onOpenSummary}
-          className="h-6 px-2.5 rounded-lg text-2xs font-semibold inline-flex items-center gap-1.5 bg-muted/60 hover:bg-muted text-muted-foreground hover:text-foreground border border-border/60 transition-all shadow-xs"
-          title="Open data summary table"
-        >
-          <FileSpreadsheet className="h-3 w-3 text-primary" />
-          <span>Data Summary</span>
-        </button>
-
         {/* Mobile ⋮ overflow + desktop inline controls */}
         {trailingControls}
       </div>

@@ -11,6 +11,7 @@ import { PageHeader } from '@/components/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { DateRangePicker } from '@/components/ui/date-picker';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { supabase } from '@/integrations/supabase/client';
 import { downloadCSV } from '@/lib/csv';
@@ -571,27 +572,18 @@ export default function Exports() {
             </Select>
           </div>
 
-          {/* From */}
+          {/* Date Range */}
           <div className="space-y-1">
-            <Label htmlFor="exports-from" className="text-xs font-semibold">From Date</Label>
-            <Input
-              type="date"
-              value={from}
-              onChange={handleDateChange(setFrom)}
-              className="h-8 text-xs w-[135px]"
-              id="exports-from"
-            />
-          </div>
-
-          {/* To */}
-          <div className="space-y-1">
-            <Label htmlFor="exports-to" className="text-xs font-semibold">To Date</Label>
-            <Input
-              type="date"
-              value={to}
-              onChange={handleDateChange(setTo)}
-              className="h-8 text-xs w-[135px]"
-              id="exports-to"
+            <Label htmlFor="exports-from" className="text-xs font-semibold">Date Range</Label>
+            <DateRangePicker
+              from={from}
+              to={to}
+              onChange={({ from: f, to: t }) => {
+                if (f) setFrom(f);
+                if (t) setTo(t);
+              }}
+              size="sm"
+              className="h-8 text-xs min-w-[220px]"
             />
           </div>
 

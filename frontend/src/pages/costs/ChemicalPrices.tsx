@@ -15,6 +15,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Loader2, Pencil, Trash2, Check, X, FlaskConical, Layers, Zap, Plus } from 'lucide-react';
 import { ExportButton } from '@/components/ExportButton';
 import { PlantPicker } from '@/components/costs/PlantPicker';
+import { DatePicker } from '@/components/ui/date-picker';
 import { FILTER_ITEMS, FILTER_UNITS, isFilterPriceEntry } from '@/lib/filterReplacements';
 import { toast } from 'sonner';
 import { friendlyError } from '@/lib/supabaseErrors';
@@ -306,7 +307,12 @@ export function ChemicalPrices() {
             <Label htmlFor="costs-effective-date" className="text-3xs uppercase tracking-wider font-semibold text-muted-foreground">
               Effective Date
             </Label>
-            <Input type="date" className="h-8.5 text-xs" value={v.effective_date} onChange={(e) => setV({ ...v, effective_date: e.target.value })} id="costs-effective-date"/>
+            <DatePicker
+              id="costs-effective-date"
+              value={v.effective_date}
+              onChange={(d) => setV({ ...v, effective_date: d })}
+              className="h-8.5 text-xs w-full"
+            />
           </div>
         </div>
 
@@ -384,11 +390,11 @@ export function ChemicalPrices() {
                     onChange={(e) => setEditV({ ...editV, unit_price: e.target.value })}
                     placeholder="Price"
                   />
-                  <Input
-                    className="h-7 text-xs"
-                    type="date"
+                  <DatePicker
                     value={editV.effective_date}
-                    onChange={(e) => setEditV({ ...editV, effective_date: e.target.value })}
+                    onChange={(d) => setEditV({ ...editV, effective_date: d })}
+                    size="sm"
+                    className="h-7 text-xs"
                   />
                 </div>
                 <div className="flex gap-1.5 justify-end">

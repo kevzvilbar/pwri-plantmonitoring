@@ -16,6 +16,7 @@ import { toast } from 'sonner';
 import { friendlyError } from '@/lib/supabaseErrors';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
+import { DateRangePicker } from '@/components/ui/date-picker';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -710,13 +711,18 @@ export function TrainLogModal({ trainId, trainLabel, plantId, onClose, initialTa
                 {p}d
               </button>
             ))}
-            <input type="date" value={dateFrom} max={dateTo || todayStr}
-              onChange={e => { setDateFrom(e.target.value); setRangePreset('custom'); setPage(0); }}
-              className="h-6 text-xs px-2 rounded-md border bg-background focus:outline-none focus:ring-1 focus:ring-ring" />
-            <span className="text-muted-foreground text-xs">→</span>
-            <input type="date" value={dateTo} min={dateFrom} max={todayStr}
-              onChange={e => { setDateTo(e.target.value); setRangePreset('custom'); setPage(0); }}
-              className="h-6 text-xs px-2 rounded-md border bg-background focus:outline-none focus:ring-1 focus:ring-ring" />
+            <DateRangePicker
+              from={dateFrom}
+              to={dateTo}
+              onChange={({ from: f, to: t }) => {
+                setDateFrom(f);
+                setDateTo(t);
+                setRangePreset('custom');
+                setPage(0);
+              }}
+              size="sm"
+              className="h-6 w-[200px] text-xs px-2"
+            />
             {!isLoading && !preLoading && (
               <span className="text-xs text-muted-foreground ml-auto">
                 <span className="font-semibold text-foreground">{activeTotal}</span> entries

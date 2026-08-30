@@ -11,6 +11,7 @@ import { PageHeader } from '@/components/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { DatePicker } from '@/components/ui/date-picker';
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -243,7 +244,12 @@ function AddTemplate() {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <Label htmlFor="maintenance-schedule-start-date" className="text-xs font-semibold">Schedule Baseline Start Date</Label>
-            <Input type="date" value={v.schedule_start_date} onChange={e => setV({ ...v, schedule_start_date: e.target.value })} id="maintenance-schedule-start-date"/>
+            <DatePicker
+              id="maintenance-schedule-start-date"
+              value={v.schedule_start_date}
+              onChange={(d) => setV({ ...v, schedule_start_date: d })}
+              className="mt-1 w-full"
+            />
           </div>
         </div>
         <div>

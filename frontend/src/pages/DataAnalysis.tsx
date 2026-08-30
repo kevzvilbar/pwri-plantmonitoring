@@ -14,6 +14,7 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { DateRangePicker } from '@/components/ui/date-picker';
 import { toast } from 'sonner';
 import { friendlyError } from '@/lib/supabaseErrors';
 import { FlaskConical, Play, ShieldAlert, TrendingUp, Database, AlertCircle, RefreshCw, Clock, Eye } from 'lucide-react';
@@ -507,21 +508,20 @@ export default function DataAnalysis() {
               </div>
             )}
 
-            {/* Date Range: From / To */}
-            <div className="space-y-1 lg:col-span-2">
+            {/* Date Range */}
+            <div className="space-y-1 lg:col-span-4">
               <Label htmlFor="dataanalysis-from" className="text-2xs uppercase tracking-wider font-semibold text-muted-foreground">
-                Date From
+                Date Range
               </Label>
-              <Input type="date" className="h-9 text-xs rounded-xl bg-muted/30" value={dateFrom}
-                onChange={e => setDateFrom(e.target.value)} id="dataanalysis-from"/>
-            </div>
-
-            <div className="space-y-1 lg:col-span-2">
-              <Label htmlFor="dataanalysis-to" className="text-2xs uppercase tracking-wider font-semibold text-muted-foreground">
-                Date To
-              </Label>
-              <Input type="date" className="h-9 text-xs rounded-xl bg-muted/30" value={dateTo}
-                onChange={e => setDateTo(e.target.value)} id="dataanalysis-to"/>
+              <DateRangePicker
+                from={dateFrom}
+                to={dateTo}
+                onChange={({ from: f, to: t }) => {
+                  if (f) setDateFrom(f);
+                  if (t) setDateTo(t);
+                }}
+                className="h-9 text-xs rounded-xl w-full"
+              />
             </div>
           </div>
 

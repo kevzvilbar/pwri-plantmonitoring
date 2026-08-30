@@ -30,6 +30,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { DateTimePicker } from '@/components/ui/date-picker';
 import { CorrectionReasonField } from '@/components/CorrectionReasonField';
 import { resolveReason, isReasonComplete } from '@/lib/correctionReasons';
 import { supabase } from '@/integrations/supabase/client';
@@ -213,7 +214,12 @@ export function EditPretreatReadingDialog({ row, trainId, onClose, onSaved }: Pr
         <div className="space-y-5">
           <div>
             <Label htmlFor="editpretreatreadingdialog-date-time" className="text-xs">Date / Time</Label>
-            <Input type="datetime-local" value={dt} onChange={(e) => setDt(e.target.value)} className="h-9" id="editpretreatreadingdialog-date-time"/>
+            <DateTimePicker
+              id="editpretreatreadingdialog-date-time"
+              value={dt}
+              onChange={(d) => setDt(d)}
+              className="h-9 w-full mt-1"
+            />
           </div>
 
           <div className="grid grid-cols-2 gap-3">

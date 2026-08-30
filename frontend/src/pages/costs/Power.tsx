@@ -14,6 +14,7 @@ import { ResponsiveAlertDialog } from '@/components/ui/responsive-dialog';
 import { AlertTriangle, Zap, UploadCloud } from 'lucide-react';
 import { ExportButton } from '@/components/ExportButton';
 import { PlantPicker } from '@/components/costs/PlantPicker';
+import { DatePicker } from '@/components/ui/date-picker';
 import { fmtNum } from '@/lib/calculations';
 import { toast } from 'sonner';
 import { friendlyError } from '@/lib/supabaseErrors';
@@ -371,11 +372,21 @@ export function Power() {
                 </div>
                 <div>
                   <Label htmlFor="costs-period-from" className="text-3xs uppercase tracking-wider text-muted-foreground">Period From</Label>
-                  <Input type="date" className="h-8.5 text-xs" value={v.period_start} onChange={(e) => setV({ ...v, period_start: e.target.value })} id="costs-period-from"/>
+                  <DatePicker
+                    id="costs-period-from"
+                    value={v.period_start}
+                    onChange={(d) => setV({ ...v, period_start: d })}
+                    className="h-8.5 text-xs w-full"
+                  />
                 </div>
                 <div>
                   <Label htmlFor="costs-period-to" className="text-3xs uppercase tracking-wider text-muted-foreground">Period To</Label>
-                  <Input type="date" className="h-8.5 text-xs" value={v.period_end} onChange={(e) => setV({ ...v, period_end: e.target.value })} id="costs-period-to"/>
+                  <DatePicker
+                    id="costs-period-to"
+                    value={v.period_end}
+                    onChange={(d) => setV({ ...v, period_end: d })}
+                    className="h-8.5 text-xs w-full"
+                  />
                 </div>
               </div>
             </div>

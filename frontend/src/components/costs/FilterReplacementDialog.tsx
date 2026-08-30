@@ -15,6 +15,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Plus } from "lucide-react";
+import { DatePicker } from "@/components/ui/date-picker";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import {
@@ -205,12 +206,11 @@ export function FilterReplacementDialog({
           <div className="grid grid-cols-2 gap-4">
             <div>
               <Label htmlFor="replacement-date">Date</Label>
-              <Input
+              <DatePicker
                 id="replacement-date"
-                type="date"
                 value={replacementDate}
-                onChange={(e) => setReplacementDate(e.target.value)}
-                data-testid="filter-replacement-date"
+                onChange={(d) => setReplacementDate(d)}
+                className="w-full mt-1.5"
               />
             </div>
             <div>

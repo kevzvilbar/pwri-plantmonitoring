@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
+import { DateTimePicker } from '@/components/ui/date-picker';
 import { toast } from 'sonner';
 import { friendlyError } from '@/lib/supabaseErrors';
 import { format } from 'date-fns';
@@ -165,7 +166,12 @@ export function ChemDosingForm() {
               </div>
               <div>
                 <Label htmlFor="chemdosingform-date-time" className="text-xs text-muted-foreground">Date & time</Label>
-                <Input type="datetime-local" value={dt} onChange={e => setDt(e.target.value)} id="chemdosingform-date-time"/>
+                <DateTimePicker
+                  id="chemdosingform-date-time"
+                  value={dt}
+                  onChange={(d) => setDt(d)}
+                  className="h-8.5 text-xs w-full mt-1"
+                />
               </div>
             </div>
             {/* Show a notice when some chemicals are hidden for this plant */}

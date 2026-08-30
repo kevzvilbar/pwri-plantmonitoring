@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
+import { DatePicker } from '@/components/ui/date-picker';
 import { toast } from 'sonner';
 import { friendlyError } from '@/lib/supabaseErrors';
 import { format } from 'date-fns';
@@ -93,7 +94,15 @@ export function AddStockDialog() {
           </div>
           <div className="grid grid-cols-2 gap-2">
             <div><Label htmlFor="addstockdialog-supplier" className="text-xs">Supplier</Label><Input value={supplier} onChange={(e) => setSupplier(e.target.value)} id="addstockdialog-supplier"/></div>
-            <div><Label htmlFor="addstockdialog-delivery-date" className="text-xs">Delivery date</Label><Input type="date" value={date} onChange={(e) => setDate(e.target.value)} id="addstockdialog-delivery-date"/></div>
+            <div>
+              <Label htmlFor="addstockdialog-delivery-date" className="text-xs">Delivery date</Label>
+              <DatePicker
+                id="addstockdialog-delivery-date"
+                value={date}
+                onChange={(d) => setDate(d)}
+                className="w-full mt-1.5"
+              />
+            </div>
           </div>
           <div><Label htmlFor="addstockdialog-remarks" className="text-xs">Remarks</Label><Input value={remarks} onChange={(e) => setRemarks(e.target.value)} id="addstockdialog-remarks"/></div>
         </div>

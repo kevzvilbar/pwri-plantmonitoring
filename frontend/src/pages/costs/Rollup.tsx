@@ -13,6 +13,7 @@ import { StatusPill } from '@/components/StatusPill';
 import { StatCard } from '@/components/dashboard/StatCard';
 import { ExportButton } from '@/components/ExportButton';
 import { PlantPicker } from '@/components/costs/PlantPicker';
+import { DateRangePicker } from '@/components/ui/date-picker';
 import { useMonthlyOpex, opexVarianceTone } from '@/hooks/useOpexBudget';
 import { fmtNum } from '@/lib/calculations';
 import { format, startOfMonth, endOfMonth, subMonths, parseISO, subDays } from 'date-fns';
@@ -112,14 +113,17 @@ export function Rollup() {
               <PlantPicker value={plantId} onChange={setPlantId} id="costs-plant-2" />
             </div>
             
-            <div className="sm:col-span-3 space-y-1">
-              <Label htmlFor="costs-from" className="text-2xs uppercase tracking-wider font-semibold text-muted-foreground">From</Label>
-              <Input type="date" className="h-9 rounded-xl text-xs bg-muted/30" value={from} onChange={(e) => setFrom(e.target.value)} id="costs-from"/>
-            </div>
-
-            <div className="sm:col-span-3 space-y-1">
-              <Label htmlFor="costs-to" className="text-2xs uppercase tracking-wider font-semibold text-muted-foreground">To</Label>
-              <Input type="date" className="h-9 rounded-xl text-xs bg-muted/30" value={to} onChange={(e) => setTo(e.target.value)} id="costs-to"/>
+            <div className="sm:col-span-6 space-y-1">
+              <Label htmlFor="costs-from" className="text-2xs uppercase tracking-wider font-semibold text-muted-foreground">Date Range</Label>
+              <DateRangePicker
+                from={from}
+                to={to}
+                onChange={({ from: f, to: t }) => {
+                  if (f) setFrom(f);
+                  if (t) setTo(t);
+                }}
+                className="h-9 rounded-xl text-xs w-full"
+              />
             </div>
 
             <div className="sm:col-span-1 flex justify-end">
