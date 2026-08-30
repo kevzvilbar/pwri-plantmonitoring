@@ -39,25 +39,44 @@ export default function ROTrains() {
   return (
     <div className="space-y-4 animate-fade-in">
       <PageHeader title="RO Trains & Pre-Treatment" />
-      <Tabs value={tab} onValueChange={handleTabChange}>
-        <TabsList className="grid grid-cols-4 w-full">
-          <TabsTrigger value="overview" className="data-[state=active]:bg-accent data-[state=active]:text-accent-foreground data-[state=active]:shadow-none text-xs sm:text-sm gap-1.5">
-            <LayoutGrid className="hidden sm:inline-block h-3.5 w-3.5 shrink-0" aria-hidden />Overview
+      <Tabs value={tab} onValueChange={handleTabChange} className="space-y-3">
+        <TabsList className="grid grid-cols-2 sm:grid-cols-4 w-full h-auto p-1.5 rounded-2xl bg-card/80 backdrop-blur-md border border-border/70 shadow-2xs gap-1">
+          <TabsTrigger
+            value="overview"
+            className="min-h-[44px] rounded-xl py-2 px-3 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm text-xs sm:text-sm font-semibold gap-2 transition-all"
+          >
+            <LayoutGrid className="h-4 w-4 shrink-0" aria-hidden />
+            <span>Overview</span>
           </TabsTrigger>
-          <TabsTrigger value="pretreat-ro" className="data-[state=active]:bg-accent data-[state=active]:text-accent-foreground data-[state=active]:shadow-none text-2xs sm:text-sm leading-tight gap-1.5">
-            <ROTrainIcon className="hidden sm:inline-block h-3.5 w-3.5 shrink-0" aria-hidden />Pre-Treatment & RO
+
+          <TabsTrigger
+            value="pretreat-ro"
+            className="min-h-[44px] rounded-xl py-2 px-3 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm text-xs sm:text-sm font-semibold gap-2 transition-all leading-tight"
+          >
+            <ROTrainIcon className="h-4 w-4 shrink-0" aria-hidden />
+            <span>Pre-Treatment & RO</span>
           </TabsTrigger>
-          <TabsTrigger value="cip" className="data-[state=active]:bg-accent data-[state=active]:text-accent-foreground data-[state=active]:shadow-none text-xs sm:text-sm gap-1.5">
-            <Recycle className="hidden sm:inline-block h-3.5 w-3.5 shrink-0" aria-hidden />CIP
+
+          <TabsTrigger
+            value="cip"
+            className="min-h-[44px] rounded-xl py-2 px-3 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm text-xs sm:text-sm font-semibold gap-2 transition-all"
+          >
+            <Recycle className="h-4 w-4 shrink-0" aria-hidden />
+            <span>CIP</span>
           </TabsTrigger>
-          <TabsTrigger value="chemical-dosing" className="data-[state=active]:bg-accent data-[state=active]:text-accent-foreground data-[state=active]:shadow-none text-2xs sm:text-sm leading-tight gap-1.5">
-            <ChemicalsIcon className="hidden sm:inline-block h-3.5 w-3.5 shrink-0" aria-hidden />Chemical Dosing
+
+          <TabsTrigger
+            value="chemical-dosing"
+            className="min-h-[44px] rounded-xl py-2 px-3 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm text-xs sm:text-sm font-semibold gap-2 transition-all leading-tight"
+          >
+            <ChemicalsIcon className="h-4 w-4 shrink-0" aria-hidden />
+            <span>Chemical Dosing</span>
           </TabsTrigger>
         </TabsList>
-        <TabsContent value="overview" className="mt-3"><Overview /></TabsContent>
-        <TabsContent value="pretreat-ro" className="mt-3"><PretreatmentAndROLog /></TabsContent>
-        <TabsContent value="cip" className="mt-3"><CIPLog /></TabsContent>
-        <TabsContent value="chemical-dosing" className="mt-3"><ChemicalDosing /></TabsContent>
+        <TabsContent value="overview" className="mt-2"><Overview /></TabsContent>
+        <TabsContent value="pretreat-ro" className="mt-2"><PretreatmentAndROLog /></TabsContent>
+        <TabsContent value="cip" className="mt-2"><CIPLog /></TabsContent>
+        <TabsContent value="chemical-dosing" className="mt-2"><ChemicalDosing /></TabsContent>
       </Tabs>
     </div>
   );

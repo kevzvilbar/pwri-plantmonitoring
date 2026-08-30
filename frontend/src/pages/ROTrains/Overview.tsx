@@ -6,18 +6,16 @@ import { type Database } from '@/integrations/supabase/types';
 import { useAppStore } from '@/store/appStore';
 import { Card } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
-import { Select } from '@/components/ui/select';
 import { fmtNum } from '@/lib/calculations';
 import { cn } from '@/lib/utils';
 import { deriveTrainStatus, TrainCard } from '../ro-trains';
 import { loadThresholds, DEFAULT_THRESHOLDS } from '@/pages/Compliance';
 import { useTrainHourlyGaps, type TrainHourlyGap } from '@/hooks/useTrainHourlyGaps';
-
+import { Activity, Search, Droplet, X, ShieldAlert, Sparkles } from 'lucide-react';
+import { ROTrainIcon, MembranePerformanceIcon, PermeateIcon } from '@/components/icons/water-icons';
 import { PlantPicker } from './shared/PlantPicker';
 
 // ─── Overview Dashboard ───────────────────────────────────────────────────────
-// Renders the per-plant train grid.  TrainCard and all helpers are imported
-// from ./ro-trains (§4 item 2 decomposition).
 export function Overview() {
   const [plantId, setPlantId] = useState('');
   const [statusFilter, setStatusFilter] = useState<'All' | 'Running' | 'Maintenance' | 'Offline'>('All');
@@ -28,9 +26,6 @@ export function Overview() {
   useEffect(() => { if (selectedPlantId && !plantId) setPlantId(selectedPlantId); }, [selectedPlantId]);
 
   // ── Deep-link from an alert: /ro-trains?tab=overview&plant=<id>&train=<id>&log=1&logTab=ro|pretreat&highlight=<readingId> ──
-  // Takes priority over both the plant seeded above and whatever was
-  // previously selected here — clicking an alert for a specific train should
-  // land on that train's log, not wherever this tab was last left.
   const [searchParams, setSearchParams] = useSearchParams();
   const deepPlant     = searchParams.get('plant');
   const deepTrain     = searchParams.get('train');
@@ -44,9 +39,7 @@ export function Overview() {
     setSearch('');
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [deepTrain]);
-  // Cleared once TrainCard has actually opened the modal for deepTrain (see
-  // onAutoOpenConsumed below) — until then the ?train=/&log=1/&highlight=
-  // params stay in the URL so they survive the plant query re-fetching.
+
   const clearDeepLinkParams = () => {
     const sp = new URLSearchParams(searchParams);
     sp.delete('plant'); sp.delete('train'); sp.delete('log'); sp.delete('logTab'); sp.delete('highlight');
@@ -61,13 +54,6 @@ export function Overview() {
     enabled: !!plantId,
   });
 
-  // Same scope resolution Compliance.tsx itself uses (plant-specific row if
-  // one's been saved for this plant, else the 'global' scope's defaults) —
-  // this used to be a hardcoded PERM_TDS_LIMIT = 600 here, disconnected from
-  // whatever an Admin/Data Analyst actually configured on the Compliance
-  // page (whose own DEFAULT_THRESHOLDS.permeate_tds_max is 500, not 600 —
-  // this alert threshold silently didn't match the app's own default even
-  // before anyone customized anything).
   const { data: thresholds } = useQuery({
     queryKey: ['thresholds', plantId || 'global'],
     queryFn: () => loadThresholds(plantId || 'global'),
@@ -82,45 +68,6 @@ export function Overview() {
     queryKey: ['ro-last-all', trainIdsKey],
     queryFn: async () => {
       if (!trainIds.length) return {};
-      // FIX (egress): this used to select('*') over the entire unbounded
-      // ro_train_readings history, ordered desc, just to keep the first row
-      // per train_id client-side — a payload that grew every day forever.
-      // ro_train_readings_latest is a DISTINCT ON (train_id) view (see
-      // supabase/migrations/20260725000000_ro_train_readings_latest_view.sql)
-      // so the server does the "one row per train" reduction and the wire
-      // payload stays O(number of trains) regardless of history size.
-      //
-      // .returns<>() below: postgrest-js's relationship-inference for views
-      // combined with select('*') can't resolve one and falls back to a
-      // SelectQueryError sentinel type — a known postgrest-js quirk for
-      // views, not a real runtime problem. Safe to override with the base
-      // table's Row type since the view is a plain `select *` over it.
-      //
-      // BUGFIX (2026-07-25) — CI failure (TS2589 "Type instantiation is
-      // excessively deep", TS2769 "No overload matches this call"): the
-      // .returns<>() override above only fixes the SelectQueryError on the
-      // final result — it doesn't help .from() itself. `ro_train_readings_latest`
-      // is a DB view (20260725000000_ro_train_readings_latest_view.sql) that
-      // isn't in the generated Database type's table/view union at all, so
-      // .from('ro_train_readings_latest') has no matching overload and TS
-      // tries — and fails — to reconcile it against every other table's
-      // overload. `as any` on just the string argument (not the whole call)
-      // is enough: it satisfies both from() overloads without collapsing the
-      // rest of the chain to `any`, so .select()/.in()/.returns<>() below
-      // still type-check normally — casting the whole chain instead breaks
-      // .returns<>()'s explicit type argument (TS2347: "Untyped function
-      // calls may not accept type arguments").
-      //
-      // REFINEMENT (2026-07-25): swapped `as any` for `as unknown as
-      // 'ro_train_readings'` — same effect on tsc (from() resolves against
-      // the real ro_train_readings table's overload, which has the identical
-      // Row shape since the view is a plain `select *` over it), but doesn't
-      // trip @typescript-eslint/no-explicit-any, which was pushing the repo
-      // over its `--max-warnings` CI ceiling by 1. Runtime is unaffected —
-      // the actual string sent to PostgREST is still 'ro_train_readings_latest';
-      // only the compile-time type of the literal is being asserted.
-      // Regenerate src/integrations/supabase/types.ts and this cast can be
-      // simplified back to a plain .from('ro_train_readings_latest').
       type RoTrainReadingRow = Database['public']['Tables']['ro_train_readings']['Row'];
       const { data } = await supabase.from('ro_train_readings_latest' as unknown as 'ro_train_readings')
         .select('*')
@@ -131,11 +78,6 @@ export function Overview() {
       return map;
     },
     enabled: trainIds.length > 0,
-    // FIX (egress): readings here are manually entered by operators, not
-    // streamed telemetry — the underlying data realistically changes on the
-    // order of minutes, not seconds. 60s -> 3min cuts this query's request
-    // volume 3x with no real loss of "is this train okay right now"
-    // freshness. Revisit if trains ever get live sensor feeds.
     refetchInterval: 180_000,
   });
 
@@ -155,24 +97,16 @@ export function Overview() {
       return map;
     },
     enabled: trainIds.length > 0,
-    // FIX (egress): same staleness reasoning as ro-last-all above — bumped
-    // in lockstep so both queries land on the same poll cadence.
     refetchInterval: 180_000,
   });
 
   const allReadings  = Object.values(lastReadings ?? {});
-
-  // Superseded the daily "no reading today" reading_gap_reasons badge —
-  // see TrainCard.tsx's header comment for why. useTrainHourlyGaps already
-  // excludes spans someone has logged a reason for, so anything it returns
-  // here is genuinely still unresolved.
   const trainHourlyGaps = useTrainHourlyGaps(plantId ? [plantId] : []);
   const hourlyGapsByTrain = useMemo(() => {
     const m: Record<string, TrainHourlyGap[]> = {};
     trainHourlyGaps.forEach((g) => { (m[g.train_id] ??= []).push(g); });
     return m;
   }, [trainHourlyGaps]);
-
 
   const onlineCount  = (trains ?? []).filter((t: any) => deriveTrainStatus(t, lastReadings?.[t.id]) === 'Running').length;
   const maintCount   = (trains ?? []).filter((t: any) => deriveTrainStatus(t, lastReadings?.[t.id]) === 'Maintenance').length;
@@ -212,82 +146,219 @@ export function Overview() {
     return matchStatus && matchSearch;
   });
 
-  const STATUS_FILTERS = ['All', 'Running', 'Maintenance', 'Offline'] as const;
-  const statusColor = (s: string) =>
-    s === 'Running' ? 'text-accent' : s === 'Maintenance' ? 'text-warn' : s === 'Offline' ? 'text-danger' : 'text-foreground';
+  const STATUS_FILTERS = [
+    { key: 'All', label: 'All', dot: null },
+    { key: 'Running', label: 'Running', dot: 'bg-accent' },
+    { key: 'Maintenance', label: 'Maintenance', dot: 'bg-warn' },
+    { key: 'Offline', label: 'Offline', dot: 'bg-danger' },
+  ] as const;
 
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap gap-2 items-end">
-        <div className="min-w-[160px] flex-1">
-          <Label htmlFor="overview-plant" className="text-xs text-muted-foreground">Plant</Label>
-          <PlantPicker value={plantId} onChange={setPlantId} />
+    <div className="space-y-4">
+      {/* ── Control & Filter Toolbar ── */}
+      <div className="p-2 sm:p-2.5 rounded-2xl border border-border/70 bg-card/70 backdrop-blur-md shadow-2xs flex flex-wrap gap-2.5 items-center justify-between">
+        <div className="flex items-center gap-2 flex-1 min-w-[200px] max-w-sm">
+          <div className="flex-1">
+            <PlantPicker value={plantId} onChange={setPlantId} />
+          </div>
         </div>
-        <div className="flex items-center gap-1 flex-wrap">
-          <span className="text-xs text-muted-foreground mr-1">Show:</span>
-          {STATUS_FILTERS.map(s => (
-            <button key={s} onClick={() => setStatusFilter(s)}
-              className={cn('px-2.5 py-1 rounded-full text-xs font-medium border transition-colors',
-                statusFilter === s ? 'bg-primary text-primary-foreground border-primary'
-                  : cn('border-border bg-muted/50 hover:bg-muted', statusColor(s)))}>
-              {s}
+
+        {/* Status Filter Segmented Controls */}
+        <div className="flex items-center gap-1 bg-muted/60 p-1 rounded-xl border border-border/50">
+          {STATUS_FILTERS.map(({ key, label, dot }) => {
+            const isActive = statusFilter === key;
+            return (
+              <button
+                key={key}
+                onClick={() => setStatusFilter(key)}
+                className={cn(
+                  'inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all',
+                  isActive
+                    ? 'bg-card text-foreground shadow-2xs border border-border/60'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                )}
+              >
+                {dot && <span className={cn('h-1.5 w-1.5 rounded-full', dot)} />}
+                <span>{label}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Search train */}
+        <div className="relative min-w-[160px] sm:min-w-[200px]">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground h-3.5 w-3.5" />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search train…"
+            className="w-full h-9 pl-8 pr-7 rounded-xl border border-border/70 bg-background text-xs font-medium focus:outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground/50 transition-colors shadow-2xs"
+            id="overview-plant"
+          />
+          {search && (
+            <button
+              onClick={() => setSearch('')}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground p-0.5"
+            >
+              <X className="h-3 w-3" />
             </button>
-          ))}
-        </div>
-        <div className="relative min-w-[160px]">
-          <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground text-xs">🔍</span>
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search train…"
-            className="w-full h-9 pl-7 pr-3 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-1 focus:ring-ring" id="overview-plant"/>
+          )}
         </div>
       </div>
 
+      {/* ── KPI Stat Cards ── */}
       {plantId && (
-        <div className="grid grid-cols-3 gap-2">
-          <Card className="p-3 space-y-1">
-            <p className="text-2xs font-semibold uppercase tracking-wider text-muted-foreground">Plant Health</p>
-            <div className="flex items-end gap-2">
-              <span className={cn('text-2xl font-bold font-mono-num', healthScore != null && healthScore >= 80 ? 'text-accent' : healthScore != null && healthScore >= 50 ? 'text-warn' : 'text-danger')}>
-                {healthScore != null ? `${healthScore}%` : '—'}
-              </span>
-              <span className={cn('text-xs font-medium pb-0.5', healthScore != null && healthScore >= 80 ? 'text-accent' : 'text-warn')}>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {/* Card 1: Plant Health */}
+          <Card className="relative overflow-hidden p-4 rounded-2xl border border-border/70 bg-card/90 backdrop-blur-sm shadow-2xs space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5 text-3xs font-bold uppercase tracking-wider text-muted-foreground">
+                <Activity className="h-3.5 w-3.5 text-primary" />
+                <span>Plant Health</span>
+              </div>
+              <span className={cn(
+                'text-3xs font-bold uppercase px-2 py-0.5 rounded-full border',
+                healthScore != null && healthScore >= 80 ? 'bg-accent-soft text-accent border-accent/30' :
+                healthScore != null && healthScore >= 50 ? 'bg-warn-soft text-warn border-warn/30' :
+                'bg-danger-soft text-danger border-danger/30'
+              )}>
                 {healthScore != null && healthScore >= 80 ? 'Optimal' : healthScore != null && healthScore >= 50 ? 'Degraded' : 'Critical'}
               </span>
             </div>
-            <div className="flex gap-2 text-2xs text-muted-foreground flex-wrap">
-              <span className="text-accent font-medium">● {onlineCount} Online</span>
-              <span className="text-warn font-medium">● {maintCount} Maint.</span>
-              <span className="text-danger font-medium">● {offlineCount} Offline</span>
+
+            <div className="flex items-baseline gap-2">
+              <span className={cn(
+                'text-3xl font-extrabold font-mono-num tracking-tight',
+                healthScore != null && healthScore >= 80 ? 'text-accent' :
+                healthScore != null && healthScore >= 50 ? 'text-warn' : 'text-danger'
+              )}>
+                {healthScore != null ? `${healthScore}%` : '—'}
+              </span>
+            </div>
+
+            {/* Segmented health gauge bar */}
+            {totalTrains > 0 && (
+              <div className="flex h-1.5 w-full rounded-full overflow-hidden bg-muted gap-0.5">
+                <div style={{ width: `${(onlineCount / totalTrains) * 100}%` }} className="bg-accent transition-all duration-500" />
+                <div style={{ width: `${(maintCount / totalTrains) * 100}%` }} className="bg-warn transition-all duration-500" />
+                <div style={{ width: `${(offlineCount / totalTrains) * 100}%` }} className="bg-danger transition-all duration-500" />
+              </div>
+            )}
+
+            <div className="flex items-center gap-3 text-2xs text-muted-foreground font-mono-num pt-0.5">
+              <span className="flex items-center gap-1 text-accent font-semibold">
+                <span className="h-1.5 w-1.5 rounded-full bg-accent" /> {onlineCount} Online
+              </span>
+              <span className="flex items-center gap-1 text-warn font-semibold">
+                <span className="h-1.5 w-1.5 rounded-full bg-warn" /> {maintCount} Maint.
+              </span>
+              <span className="flex items-center gap-1 text-danger font-semibold">
+                <span className="h-1.5 w-1.5 rounded-full bg-danger" /> {offlineCount} Offline
+              </span>
             </div>
           </Card>
-          <Card className="p-3 space-y-1">
-            <p className="text-2xs font-semibold uppercase tracking-wider text-muted-foreground">Avg Recovery</p>
-            <div className="flex items-end gap-2">
-              <span className="text-2xl font-bold font-mono-num text-foreground">{avgRecovery != null ? `${avgRecovery}%` : '—'}</span>
+
+          {/* Card 2: Avg Recovery */}
+          <Card className="relative overflow-hidden p-4 rounded-2xl border border-border/70 bg-card/90 backdrop-blur-sm shadow-2xs space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5 text-3xs font-bold uppercase tracking-wider text-muted-foreground">
+                <MembranePerformanceIcon className="h-3.5 w-3.5 text-primary" />
+                <span>Avg Recovery</span>
+              </div>
+              <span className="text-3xs font-semibold text-muted-foreground bg-muted/80 px-2 py-0.5 rounded-full">
+                Target 70.0%
+              </span>
             </div>
-            <p className="text-2xs text-muted-foreground">{totalTrains} trains total · {onlineCount} active</p>
+
+            <div className="flex items-baseline gap-2">
+              <span className="text-3xl font-extrabold font-mono-num tracking-tight text-foreground">
+                {avgRecovery != null ? `${avgRecovery}%` : '—'}
+              </span>
+            </div>
+
+            <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+              <div
+                style={{ width: `${Math.min(100, Math.max(0, +(avgRecovery ?? 0)))}%` }}
+                className="h-full bg-primary transition-all duration-500 rounded-full"
+              />
+            </div>
+
+            <p className="text-2xs text-muted-foreground font-medium">
+              {onlineCount} of {totalTrains} trains currently producing
+            </p>
           </Card>
-          <Card className="p-3 space-y-1">
-            <p className="text-2xs font-semibold uppercase tracking-wider text-muted-foreground">Avg Perm TDS</p>
-            <div className="flex items-end gap-2">
-              <span className="text-2xl font-bold font-mono-num text-foreground">{avgPermTDS != null ? `${avgPermTDS} ppm` : '—'}</span>
+
+          {/* Card 3: Avg Perm TDS */}
+          <Card className="relative overflow-hidden p-4 rounded-2xl border border-border/70 bg-card/90 backdrop-blur-sm shadow-2xs space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5 text-3xs font-bold uppercase tracking-wider text-muted-foreground">
+                <PermeateIcon className="h-3.5 w-3.5 text-primary" />
+                <span>Avg Perm TDS</span>
+              </div>
+              <span className={cn(
+                'text-3xs font-bold px-2 py-0.5 rounded-full border',
+                avgPermTDS != null && +avgPermTDS <= PERM_TDS_LIMIT
+                  ? 'bg-accent-soft text-accent border-accent/30'
+                  : 'bg-danger-soft text-danger border-danger/30'
+              )}>
+                {avgPermTDS != null && +avgPermTDS <= PERM_TDS_LIMIT ? 'Within Spec' : 'Exceeds Limit'}
+              </span>
             </div>
-            <p className="text-2xs text-muted-foreground">Last readings · all trains</p>
+
+            <div className="flex items-baseline gap-1.5">
+              <span className="text-3xl font-extrabold font-mono-num tracking-tight text-foreground">
+                {avgPermTDS != null ? avgPermTDS : '—'}
+              </span>
+              <span className="text-xs font-semibold text-muted-foreground">ppm</span>
+            </div>
+
+            <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+              <div
+                style={{ width: `${Math.min(100, Math.max(0, ((+(avgPermTDS ?? 0)) / PERM_TDS_LIMIT) * 100))}%` }}
+                className={cn(
+                  'h-full transition-all duration-500 rounded-full',
+                  avgPermTDS != null && +avgPermTDS <= PERM_TDS_LIMIT ? 'bg-accent' : 'bg-danger'
+                )}
+              />
+            </div>
+
+            <p className="text-2xs text-muted-foreground font-medium">
+              Permeate purity benchmark: &le; {PERM_TDS_LIMIT} ppm
+            </p>
           </Card>
         </div>
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+      {/* ── Train Grid ── */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {filtered.map((t: any) => (
-          <TrainCard key={t.id} train={t} last={lastReadings?.[t.id] ?? null} spark={sparkData?.[t.id] ?? []}
+          <TrainCard
+            key={t.id}
+            train={t}
+            last={lastReadings?.[t.id] ?? null}
+            spark={sparkData?.[t.id] ?? []}
             hourlyGaps={hourlyGapsByTrain[t.id] ?? []}
             autoOpenLog={deepLog && deepTrain === t.id}
             autoOpenTab={deepLogTab}
             autoOpenHighlightId={deepHighlight}
-            onAutoOpenConsumed={clearDeepLinkParams} />
+            onAutoOpenConsumed={clearDeepLinkParams}
+          />
         ))}
       </div>
-      {plantId && !filtered.length && <Card className="p-4 text-xs text-center text-muted-foreground">No trains match your filter</Card>}
-      {!plantId && <Card className="p-4 text-xs text-center text-muted-foreground">Select a plant to view trains</Card>}
+
+      {plantId && !filtered.length && (
+        <Card className="p-8 text-center space-y-2 rounded-2xl border border-dashed">
+          <p className="text-sm font-semibold text-foreground">No trains match your filter</p>
+          <p className="text-xs text-muted-foreground">Try resetting the status filter or searching for another train number.</p>
+        </Card>
+      )}
+
+      {!plantId && (
+        <Card className="p-8 text-center space-y-2 rounded-2xl border border-dashed">
+          <p className="text-sm font-semibold text-foreground">Select a plant</p>
+          <p className="text-xs text-muted-foreground">Choose a facility from the picker above to load its RO train topology.</p>
+        </Card>
+      )}
     </div>
   );
 }

@@ -1,32 +1,12 @@
-/**
- * ro-trains/TrainCard.tsx
- *
- * Mini card shown in the RO Trains Overview grid — one card per train.
- * Extracted from ROTrains.tsx (§4 item 2 decomposition).
- *
- * The "no reading today" badge this card used to render (reading_gap_reasons,
- * entity_type='ro_train', daily grain) was retired 2026-08 in favor of
- * useTrainHourlyGaps — the hourly-cadence version built for TrainLogModal's
- * own gap badges. Daily grain couldn't answer "which hour", so clicking it
- * only ever opened a standalone ReasonDialog floating on the card with no
- * connection to the actual missing span. The hourly badge below instead
- * deep-links straight into TrainLogModal's own gap badge (same
- * ReasonDialog, same ro_train_data_gaps row, just anchored to the specific
- * hour it's about) — see GapBadgeRow in TrainLogModal.tsx.
- */
 import { useState, useEffect } from 'react';
 import { format } from 'date-fns';
-import { MessageCircleOff } from 'lucide-react';
+import { Clock, ArrowRight, AlertTriangle } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { fmtNum } from '@/lib/calculations';
 import { cn } from '@/lib/utils';
 import { Sparkline, deriveTrainStatus } from './helpers';
+import { ROTrainIcon } from '@/components/icons/water-icons';
 import type { TrainHourlyGap } from '@/hooks/useTrainHourlyGaps';
-
-// TrainLogModal is imported lazily to avoid a circular module reference —
-// TrainCard → TrainLogModal → (various) → TrainCard would be a cycle.
-// The `logOpen` flag triggers a dynamic import via React.lazy or direct import
-// since this component only mounts TrainLogModal conditionally.
 import { TrainLogModal } from './TrainLogModal';
 
 interface TrainCardProps {
@@ -54,10 +34,6 @@ export function TrainCard({
   onAutoOpenConsumed,
 }: TrainCardProps) {
   const [logOpen, setLogOpen] = useState(false);
-  // Set when the hourly-gap badge below is clicked (a click originating on
-  // this card, not a Dashboard-alert deep-link) — takes priority over the
-  // autoOpen* props while set, so the modal opens on the right tab, right
-  // at the gap that was clicked.
   const [localOpenTarget, setLocalOpenTarget] = useState<{ tab: 'ro' | 'pretreat'; highlightId: string } | null>(null);
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -69,9 +45,9 @@ export function TrainCard({
   const status: string = deriveTrainStatus(train, last);
 
   const statusBadge = {
-    Running:     { label: 'Online',      dot: 'bg-accent', text: 'text-accent', border: 'border-accent' },
-    Maintenance: { label: 'Maintenance', dot: 'bg-warn',   text: 'text-warn',     border: 'border-warn'   },
-    Offline:     { label: 'Offline',     dot: 'bg-danger',     text: 'text-danger',         border: 'border-danger'       },
+    Running:     { label: 'Online',      dot: 'bg-accent', text: 'text-accent', border: 'border-accent/40' },
+    Maintenance: { label: 'Maintenance', dot: 'bg-warn',   text: 'text-warn',     border: 'border-warn/40'   },
+    Offline:     { label: 'Offline',     dot: 'bg-danger', text: 'text-danger',   border: 'border-danger/40' },
   }[status] ?? { label: status, dot: 'bg-muted-foreground', text: 'text-muted-foreground', border: 'border-border' };
 
   const recovery  = last?.recovery_pct  != null ? `${fmtNum(last.recovery_pct, 1)}%`    : '—';
@@ -85,22 +61,52 @@ export function TrainCard({
   const tdsWarn = last?.permeate_tds != null && last.permeate_tds > 600;
 
   return (
-    <Card className={cn('p-3 space-y-1.5 border', statusBadge.border)}>
-      {/* Header */}
-      <div className="flex items-center justify-between gap-1">
-        <div className="flex items-center gap-1.5">
-          <span className="text-base">🌊</span>
-          <span className="text-sm font-semibold">Train {train.train_number}</span>
+    <Card className={cn(
+      'group relative p-3.5 space-y-2.5 rounded-xl border bg-card/90 backdrop-blur-sm transition-all duration-200 shadow-2xs hover:shadow-md',
+      status === 'Running' ? 'border-accent/30 hover:border-accent/60' :
+      status === 'Offline' ? 'border-danger/30 hover:border-danger/60' :
+      'border-warn/30 hover:border-warn/60'
+    )}>
+      {/* Header: Identity + Status pill */}
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 min-w-0">
+          <div className="h-8 w-8 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center text-primary shrink-0 group-hover:scale-105 transition-transform">
+            <ROTrainIcon className="h-4 w-4" />
+          </div>
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5">
+              <span className="text-sm font-bold text-foreground tracking-tight truncate">
+                Train {train.train_number}
+              </span>
+              {train.name && (
+                <span className="text-3xs font-medium text-muted-foreground truncate">
+                  ({train.name})
+                </span>
+              )}
+            </div>
+          </div>
         </div>
-        <div className={cn('flex items-center gap-1 text-xs font-medium', statusBadge.text)}>
-          <span className={cn('h-1.5 w-1.5 rounded-full', statusBadge.dot)} />
-          {statusBadge.label}
+
+        {/* Status Pill with Pulsing Indicator */}
+        <div className={cn(
+          'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold font-mono-num shrink-0 border shadow-2xs',
+          status === 'Running' ? 'bg-accent-soft text-accent border-accent/40' :
+          status === 'Offline' ? 'bg-danger-soft text-danger border-danger/40' :
+          'bg-warn-soft text-warn border-warn/40'
+        )}>
+          {status === 'Running' ? (
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-accent opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-accent"></span>
+            </span>
+          ) : (
+            <span className={cn('h-2 w-2 rounded-full', status === 'Offline' ? 'bg-danger' : 'bg-warn')} />
+          )}
+          <span>{statusBadge.label}</span>
         </div>
       </div>
 
-      {/* Hourly gap badge — most recently-ended unresolved span, if any. See
-          this file's header comment for why this replaced the old daily
-          "no reading today" badge. */}
+      {/* Hourly gap badge (if any missing readings) */}
       {hourlyGaps && hourlyGaps.length > 0 && (() => {
         const sorted = [...hourlyGaps].sort((a, b) => new Date(b.gap.gapEndAt).getTime() - new Date(a.gap.gapEndAt).getTime());
         const primary = sorted[0];
@@ -117,37 +123,74 @@ export function TrainCard({
               setLogOpen(true);
             }}
             title={`${totalMissed} hr${totalMissed === 1 ? '' : 's'} missing${extraSpans > 0 ? ` across ${hourlyGaps.length} spans` : ''} — click to log why`}
-            className="inline-flex items-center gap-1 text-2xs font-medium text-warn bg-warn-soft border border-warn px-1.5 py-0.5 rounded-full hover:bg-warn-soft transition-colors w-fit"
+            className="w-full flex items-center justify-between gap-2 text-2xs font-semibold text-warn bg-warn-soft/80 hover:bg-warn-soft border border-warn/50 px-2.5 py-1 rounded-lg transition-all shadow-2xs"
           >
-            <MessageCircleOff className="h-2.5 w-2.5" />
-            {totalMissed} hr{totalMissed === 1 ? '' : 's'} missing{extraSpans > 0 ? ` (+${extraSpans})` : ''} — log why
+            <div className="flex items-center gap-1.5 truncate">
+              <AlertTriangle className="h-3 w-3 shrink-0 text-warn animate-pulse" />
+              <span className="truncate">
+                {totalMissed} hr{totalMissed === 1 ? '' : 's'} missing{extraSpans > 0 ? ` (+${extraSpans} spans)` : ''}
+              </span>
+            </div>
+            <span className="shrink-0 font-bold underline text-3xs">Log Reason →</span>
           </button>
         );
       })()}
 
-      {/* Stats row */}
-      <div className="flex items-center gap-3 text-xs text-muted-foreground">
-        <span>Recovery:</span>
-        <span className={cn('font-mono-num font-semibold', recWarn ? 'text-warn' : 'text-foreground')}>
-          {recovery}
-        </span>
-        <Sparkline values={recoveryVals} color={recWarn ? 'hsl(var(--warn))' : 'hsl(var(--muted-foreground))'} />
-        <span className="ml-1">·</span>
-        <span>Perm TDS:</span>
-        <span className={cn('font-mono-num font-semibold', tdsWarn ? 'text-danger' : 'text-foreground')}>
-          {permTDS}
-        </span>
-        <Sparkline values={tdsVals} color={tdsWarn ? 'hsl(var(--danger))' : 'hsl(var(--muted-foreground))'} />
+      {/* Dual Telemetry Metric Cards */}
+      <div className="grid grid-cols-2 gap-2">
+        {/* Recovery Metric Card */}
+        <div className="p-2 rounded-lg bg-muted/40 border border-border/50 space-y-1">
+          <div className="flex items-center justify-between text-3xs font-semibold text-muted-foreground uppercase tracking-wider">
+            <span>Recovery</span>
+            <Sparkline values={recoveryVals} color={recWarn ? 'hsl(var(--warn))' : 'hsl(var(--accent))'} />
+          </div>
+          <div className="flex items-baseline gap-1">
+            <span className={cn('text-base font-bold font-mono-num', recWarn ? 'text-warn' : 'text-foreground')}>
+              {recovery}
+            </span>
+          </div>
+        </div>
+
+        {/* Permeate TDS Metric Card */}
+        <div className="p-2 rounded-lg bg-muted/40 border border-border/50 space-y-1">
+          <div className="flex items-center justify-between text-3xs font-semibold text-muted-foreground uppercase tracking-wider">
+            <span>Perm TDS</span>
+            <Sparkline values={tdsVals} color={tdsWarn ? 'hsl(var(--danger))' : 'hsl(var(--primary))'} />
+          </div>
+          <div className="flex items-baseline gap-1">
+            <span className={cn('text-base font-bold font-mono-num', tdsWarn ? 'text-danger' : 'text-foreground')}>
+              {permTDS}
+            </span>
+          </div>
+        </div>
       </div>
 
-      {/* Footer */}
-      <div className="flex items-center justify-between text-2xs text-muted-foreground pt-0.5 border-t border-border/50">
-        <span>Last reading: {lastTime}</span>
-        <div className="flex items-center gap-3">
-          {train.num_afm > 0 && <span className="font-medium">AFM×{train.num_afm}</span>}
-          {train.num_booster_pumps > 0 && <span className="font-medium">BP×{train.num_booster_pumps}</span>}
-          <button onClick={() => setLogOpen(true)} className="text-primary hover:underline font-medium">
-            Open log →
+      {/* Card Footer: Metadata + Sub-systems + Interactive Action */}
+      <div className="flex items-center justify-between text-2xs text-muted-foreground pt-1 border-t border-border/40">
+        <div className="flex items-center gap-1.5 truncate">
+          <Clock className="h-3 w-3 shrink-0 opacity-60" />
+          <span className="truncate">{lastTime !== '—' ? `Last log: ${lastTime}` : 'No logs yet'}</span>
+        </div>
+
+        <div className="flex items-center gap-2 shrink-0">
+          <div className="hidden sm:flex items-center gap-1">
+            {train.num_afm > 0 && (
+              <span className="text-3xs font-bold px-1.5 py-0.5 rounded bg-muted text-muted-foreground border border-border/40">
+                AFM×{train.num_afm}
+              </span>
+            )}
+            {train.num_booster_pumps > 0 && (
+              <span className="text-3xs font-bold px-1.5 py-0.5 rounded bg-muted text-muted-foreground border border-border/40">
+                BP×{train.num_booster_pumps}
+              </span>
+            )}
+          </div>
+
+          <button
+            onClick={() => setLogOpen(true)}
+            className="inline-flex items-center gap-1 text-xs font-bold text-primary hover:text-primary/80 transition-colors py-0.5"
+          >
+            Open log <ArrowRight className="h-3 w-3 transition-transform group-hover:translate-x-0.5" />
           </button>
         </div>
       </div>
