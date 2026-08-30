@@ -964,7 +964,8 @@ h1[id], h2[id], h3[id], section[id], [data-scroll-target], .scroll-mt-header {
   cursor: grabbing !important;
   transform: scale(1.02);
   box-shadow: 0 12px 28px -4px hsl(215 30% 10% / 0.18);
-  ring: 2px solid hsl(var(--primary) / 0.4);
+  outline: 2px solid hsl(var(--primary) / 0.4);
+  outline-offset: 2px;
   transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
 
