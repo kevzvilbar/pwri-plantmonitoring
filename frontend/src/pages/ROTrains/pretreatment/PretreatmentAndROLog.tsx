@@ -1168,6 +1168,8 @@ export function PretreatmentAndROLog() {
     qc.invalidateQueries({ queryKey: ['ro-last-all'] });
     qc.invalidateQueries({ queryKey: ['ro-spark'] });
     qc.invalidateQueries({ queryKey: ['ro-prev'] });
+    qc.invalidateQueries({ queryKey: ['train-hourly-gaps'] });
+    qc.invalidateQueries({ queryKey: ['trains'] });
     // Dashboard stat-cards
     qc.invalidateQueries({ queryKey: ['dash-ro-recent'] });
     qc.invalidateQueries({ queryKey: ['dash-ro-permeate-today'] });
