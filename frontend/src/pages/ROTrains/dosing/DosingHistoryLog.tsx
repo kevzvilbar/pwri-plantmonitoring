@@ -8,6 +8,7 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { DateTimePicker } from '@/components/ui/date-picker';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { fmtNum } from '@/lib/calculations';
 import { toast } from 'sonner';
@@ -340,11 +341,12 @@ export function DosingHistoryLog() {
                   <div className="space-y-0.5">
                     {/* Date & plant */}
                     {isEditing ? (
-                      <Input
-                        type="datetime-local"
+                      <DateTimePicker
                         value={editV.log_datetime}
-                        onChange={e => setEditV({ ...editV, log_datetime: e.target.value })}
-                        className="h-7 text-xs w-48"
+                        onChange={(val) => setEditV({ ...editV, log_datetime: val })}
+                        placeholder="Select log datetime..."
+                        size="sm"
+                        className="h-8 text-xs w-56 font-mono-num"
                       />
                     ) : (
                       <p className="text-xs font-semibold text-foreground font-mono-num">

@@ -23,8 +23,9 @@ import { toast } from 'sonner';
 import { friendlyError } from '@/lib/supabaseErrors';
 import { format } from 'date-fns';
 import { ComputedInput } from '@/components/ComputedInput';
+import { DateTimePicker } from '@/components/ui/date-picker';
 import { ExportButton } from '@/components/ExportButton';
-import { Upload, AlertCircle, AlertTriangle, Loader2 } from 'lucide-react';
+import { Upload, AlertCircle, AlertTriangle, Loader2, Building2, Gauge, Power, ShieldAlert, Lock, CheckCircle2, Clock } from 'lucide-react';
 import { RawWaterIcon, PermeateIcon, RejectIcon } from '@/components/icons/water-icons';
 import { cn } from '@/lib/utils';
 import { ImportROReadingsDialog } from '../../ro-trains';
@@ -1270,111 +1271,192 @@ export function PretreatmentAndROLog() {
         )}
       </div>
 
-      <Card className="p-3 space-y-3">
-        {/* Plant + Train row — with online/offline toggle */}
-        <div className="grid grid-cols-2 gap-2 max-w-md">
-          <div>
-            <Label htmlFor="pretreat-plant">Plant</Label>
+      <Card className="p-4 space-y-4 border-border/80 shadow-xs">
+        {/* Plant + Train Row */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          <div className="space-y-1.5">
+            <Label htmlFor="pretreat-plant" className="text-xs font-semibold flex items-center gap-1.5 text-foreground">
+              <Building2 className="h-3.5 w-3.5 text-primary" /> Plant
+            </Label>
             <Select value={plantId} onValueChange={(v) => { setPlantId(v); setTrainId(''); }}>
-              <SelectTrigger className="h-9" id="pretreat-plant"><SelectValue placeholder="Select Plant" /></SelectTrigger>
-              <SelectContent>{plants?.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent>
+              <SelectTrigger className="h-9 font-medium" id="pretreat-plant">
+                <SelectValue placeholder="Select Plant" />
+              </SelectTrigger>
+              <SelectContent>
+                {plants?.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+              </SelectContent>
             </Select>
           </div>
-          <div>
-            <Label htmlFor="pretreat-train">Train</Label>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="pretreat-train" className="text-xs font-semibold flex items-center gap-1.5 text-foreground">
+              <Gauge className="h-3.5 w-3.5 text-primary" /> Train
+            </Label>
             <Select value={trainId} onValueChange={setTrainId} disabled={!plantId}>
-              <SelectTrigger className="h-9" id="pretreat-train"><SelectValue placeholder="Select Train" /></SelectTrigger>
-              <SelectContent>{trains?.map((t: any) => (
-                <SelectItem key={t.id} value={t.id}>{t.name ?? `Train ${t.train_number}`}</SelectItem>
-              ))}</SelectContent>
+              <SelectTrigger className="h-9 font-medium" id="pretreat-train">
+                <SelectValue placeholder="Select Train" />
+              </SelectTrigger>
+              <SelectContent>
+                {trains?.map((t: any) => (
+                  <SelectItem key={t.id} value={t.id}>{t.name ?? `Train ${t.train_number}`}</SelectItem>
+                ))}
+              </SelectContent>
             </Select>
+          </div>
+
+          <div className="space-y-1.5 sm:col-span-2 lg:col-span-1">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="pretreat-reading-date-amp-time" className="text-xs font-semibold flex items-center gap-1.5 text-foreground">
+                <Clock className="h-3.5 w-3.5 text-primary" /> Reading Timestamp
+              </Label>
+              {isManager ? (
+                <span className="text-3xs font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/20">
+                  Manager Edit
+                </span>
+              ) : (
+                <span className="text-3xs font-medium text-muted-foreground">
+                  Current Hour
+                </span>
+              )}
+            </div>
+            <DateTimePicker
+              value={dt}
+              onChange={isManager ? (val) => setDt(val) : undefined}
+              disabled={!isManager}
+              placeholder="Select reading timestamp..."
+              size="md"
+              className={cn(
+                "w-full font-mono-num",
+                !isManager && "cursor-not-allowed opacity-80 bg-muted/30"
+              )}
+              id="pretreat-reading-date-amp-time"
+            />
           </div>
         </div>
 
-        {/* Online / Offline toggle — shown once a train is picked */}
+        {/* Online / Offline Status Segmented Bar — shown once a train is picked */}
         {train && (
-          <div className={cn(
-            'rounded-md border px-3 py-2.5 flex items-center gap-3 transition-colors',
-            trainOnline
-              ? 'border-accent bg-accent-soft'
-              : 'border-danger bg-danger-soft'
-          )}>
-            <Checkbox
-              id="train-online"
-              checked={trainOnline}
-              onCheckedChange={(c) => {
-                if (!!c && !trainOnline) {
-                  // Going from Offline → Online: end date is mandatory
-                  if (!offlineEnd) {
-                    toast.error('Please enter a "Back Online At" time before marking the train as Online.');
-                    return;
+          <div className="pt-2 border-t border-border/50">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  if (!trainOnline) {
+                    if (!offlineEnd) {
+                      toast.error('Please enter a "Back Online At" time before marking the train as Online.');
+                      return;
+                    }
+                    setConfirmBackOnline(true);
                   }
-                  // This toggle IS the deliberate action — a Back Online At
-                  // time was just required and entered, so no separate
-                  // confirmation checkbox is needed on top of it.
-                  setConfirmBackOnline(true);
-                }
-                setTrainOnline(!!c);
-                if (c) { setOfflineStart(''); setOfflineEnd(''); setOfflineReason(''); setOfflineReasonOther(''); }
-              }}
-              className={cn('shrink-0 h-4 w-4', trainOnline ? 'data-[state=checked]:bg-accent data-[state=checked]:border-accent' : '')}
-            />
-            <div className="flex-1 min-w-0">
-              <label htmlFor="train-online" className={cn(
-                'text-sm font-semibold cursor-pointer select-none',
-                trainOnline ? 'text-accent' : 'text-danger'
-              )}>
-                {trainOnline ? '● Online / Running' : '○ Offline / Not Running'}
-              </label>
-              {!trainOnline && (
-                <p className="text-2xs text-danger mt-0.5">
-                  RO parameters locked until offline period is resolved or train comes back online
-                </p>
-              )}
+                  setTrainOnline(true);
+                  setOfflineStart('');
+                  setOfflineEnd('');
+                  setOfflineReason('');
+                  setOfflineReasonOther('');
+                }}
+                className={cn(
+                  'flex items-center gap-3 p-3 rounded-lg border text-left transition-all',
+                  trainOnline
+                    ? 'border-accent bg-accent-soft/70 shadow-xs ring-1 ring-accent/30'
+                    : 'border-border/60 bg-muted/20 hover:bg-muted/40 opacity-70'
+                )}
+              >
+                <div className={cn(
+                  'h-8 w-8 rounded-full flex items-center justify-center shrink-0 transition-all',
+                  trainOnline ? 'bg-accent text-accent-foreground shadow-sm' : 'bg-muted text-muted-foreground'
+                )}>
+                  <Power className="h-4 w-4" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className={cn('text-xs font-bold uppercase tracking-wider', trainOnline ? 'text-accent' : 'text-muted-foreground')}>
+                      Operational / Running
+                    </span>
+                    {trainOnline && <span className="inline-block h-2 w-2 rounded-full bg-accent animate-pulse" />}
+                  </div>
+                  <p className="text-2xs text-muted-foreground truncate">
+                    Ready to log RO pressures, TDS, flows & backwash
+                  </p>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setTrainOnline(false);
+                }}
+                className={cn(
+                  'flex items-center gap-3 p-3 rounded-lg border text-left transition-all',
+                  !trainOnline
+                    ? 'border-danger bg-danger-soft/80 shadow-xs ring-1 ring-danger/30'
+                    : 'border-border/60 bg-muted/20 hover:bg-muted/40 opacity-70'
+                )}
+              >
+                <div className={cn(
+                  'h-8 w-8 rounded-full flex items-center justify-center shrink-0 transition-all',
+                  !trainOnline ? 'bg-danger text-danger-foreground shadow-sm' : 'bg-muted text-muted-foreground'
+                )}>
+                  <ShieldAlert className="h-4 w-4" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className={cn('text-xs font-bold uppercase tracking-wider', !trainOnline ? 'text-danger font-semibold' : 'text-muted-foreground')}>
+                      Offline / Not Running
+                    </span>
+                    {!trainOnline && <span className="inline-block h-2 w-2 rounded-full bg-danger animate-pulse" />}
+                  </div>
+                  <p className="text-2xs text-muted-foreground truncate">
+                    Log downtime event, maintenance, trip or outage
+                  </p>
+                </div>
+              </button>
             </div>
           </div>
         )}
 
-        {/* Warning banner: DB says this train is Offline but form is in online mode.
-            Operator must explicitly uncheck Online + fill reason/start to log offline —
-            or, to proceed as Online, tick the confirmation box below. trainOnline
-            being checked here is very likely just this form's default state (see
-            confirmBackOnline's declaration above), not a decision anyone made, so
-            submit() refuses to silently clear the DB's Offline status without it. */}
+        {/* Warning banner: DB says this train is Offline but form is in online mode */}
         {train && trainOnline && train.status === 'Offline' && (
-          <div className="flex items-start gap-2 rounded-md border border-warn bg-warn-soft px-3 py-2">
-            <AlertCircle className="h-4 w-4 text-warn mt-0.5 shrink-0" />
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-semibold text-warn">Train last recorded as Offline</p>
-              <p className="text-xs text-warn mt-0.5">
-                The database shows this train was previously offline. If it is still offline, uncheck "Online / Running" above and fill in the offline details. If it has resumed, confirm below and submit a reading — the offline status will clear automatically.
+          <div className="flex items-start gap-3 rounded-lg border border-warn/70 bg-warn-soft/80 p-3 shadow-xs">
+            <AlertCircle className="h-4.5 w-4.5 text-warn mt-0.5 shrink-0" />
+            <div className="flex-1 min-w-0 space-y-1.5">
+              <p className="text-xs font-bold text-warn uppercase tracking-wider">Train Last Recorded as Offline</p>
+              <p className="text-xs text-warn/90 leading-relaxed">
+                The system database records this train as currently offline. If it has resumed operation, tick the confirmation below and submit a reading — the offline status will clear automatically.
               </p>
-              <div className="mt-2 flex items-center gap-2">
+              <div className="flex items-center gap-2 pt-1">
                 <Checkbox
                   id="confirm-back-online"
                   checked={confirmBackOnline}
                   onCheckedChange={(c) => setConfirmBackOnline(!!c)}
-                  className="shrink-0 h-4 w-4"
+                  className="h-4 w-4 data-[state=checked]:bg-warn data-[state=checked]:border-warn"
                 />
-                <label htmlFor="confirm-back-online" className="text-xs font-medium text-warn cursor-pointer select-none">
-                  This train has actually resumed operation — clear its Offline status when I save.
+                <label htmlFor="confirm-back-online" className="text-xs font-semibold text-warn cursor-pointer select-none">
+                  Confirm train is back online and clear Offline status on save.
                 </label>
               </div>
             </div>
           </div>
         )}
 
-        {/* Offline details — shown when train is marked offline */}
+        {/* Offline Details Panel — shown when train is marked offline */}
         {train && !trainOnline && (
-          <div className="space-y-2.5 rounded-md border border-danger bg-danger-soft/60 p-3">
-            <p className="text-xs font-semibold uppercase tracking-wider text-danger">Offline Details</p>
+          <div className="space-y-3 rounded-lg border border-danger/40 bg-danger-soft/40 p-3.5 shadow-xs backdrop-blur-2xs">
+            <div className="flex items-center justify-between border-b border-danger/20 pb-2">
+              <div className="flex items-center gap-2">
+                <ShieldAlert className="h-4 w-4 text-danger" />
+                <span className="text-xs font-bold uppercase tracking-wider text-danger">Offline Event Details</span>
+              </div>
+              <span className="text-3xs font-medium text-danger/80">Required to register downtime</span>
+            </div>
 
             {/* Reason dropdown */}
-            <div>
-              <Label htmlFor="pretreat-reason-for-offline" className="text-xs text-muted-foreground">Reason for Offline <span className="text-danger">*</span></Label>
+            <div className="space-y-1">
+              <Label htmlFor="pretreat-reason-for-offline" className="text-xs font-medium text-foreground">
+                Reason for Offline <span className="text-danger font-bold">*</span>
+              </Label>
               <Select value={offlineReason} onValueChange={setOfflineReason}>
-                <SelectTrigger className="h-9 mt-0.5 border-danger" id="pretreat-reason-for-offline">
-                  <SelectValue placeholder="Select reason…" />
+                <SelectTrigger className="h-9 bg-background border-danger/40 focus:ring-danger" id="pretreat-reason-for-offline">
+                  <SelectValue placeholder="Select downtime reason…" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="Scheduled Maintenance">Scheduled Maintenance</SelectItem>
@@ -1395,73 +1477,76 @@ export function PretreatmentAndROLog() {
 
             {/* Free-text for Other */}
             {offlineReason === 'Other' && (
-              <div>
-                <Label htmlFor="pretreat-specify-reason" className="text-xs text-muted-foreground">Specify reason <span className="text-danger">*</span></Label>
+              <div className="space-y-1">
+                <Label htmlFor="pretreat-specify-reason" className="text-xs font-medium text-foreground">
+                  Specify Reason <span className="text-danger font-bold">*</span>
+                </Label>
                 <Input
                   value={offlineReasonOther}
                   onChange={e => setOfflineReasonOther(e.target.value)}
-                  placeholder="Describe the reason…"
-                  className="mt-0.5 border-danger"
-                id="pretreat-specify-reason"/>
+                  placeholder="Describe specific downtime reason…"
+                  className="bg-background border-danger/50"
+                  id="pretreat-specify-reason"
+                />
               </div>
             )}
 
-            {/* Offline start / end times */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              <div>
-                <Label htmlFor="pretreat-offline-since" className="text-xs text-muted-foreground">
-                  Offline Since <span className="text-danger">*</span>
+            {/* Offline start / end times with DateTimePicker */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+              <div className="space-y-1">
+                <Label htmlFor="pretreat-offline-since" className="text-xs font-medium text-foreground flex items-center gap-1">
+                  Offline Since <span className="text-danger font-bold">*</span>
                 </Label>
-                <Input
-                  type="datetime-local"
+                <DateTimePicker
                   value={offlineStart}
-                  onChange={e => setOfflineStart(e.target.value)}
-                  className="mt-0.5 w-full min-w-[200px] border-danger"
-                id="pretreat-offline-since"/>
+                  onChange={(val) => setOfflineStart(val)}
+                  placeholder="Select offline start time..."
+                  size="sm"
+                  className="w-full bg-background border-danger/50 font-mono-num"
+                  id="pretreat-offline-since"
+                />
               </div>
-              <div>
-                <Label htmlFor="pretreat-back-online-at-leave-blank-if-still-offline" className="text-xs text-muted-foreground">
-                  Back Online At
-                  <span className="ml-1 text-2xs font-normal text-muted-foreground">(leave blank if still offline)</span>
-                </Label>
-                <Input
-                  type="datetime-local"
+
+              <div className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="pretreat-back-online-at-leave-blank-if-still-offline" className="text-xs font-medium text-foreground">
+                    Back Online At
+                  </Label>
+                  <span className="text-3xs text-muted-foreground">(optional)</span>
+                </div>
+                <DateTimePicker
                   value={offlineEnd}
-                  onChange={e => setOfflineEnd(e.target.value)}
-                  className="mt-0.5 w-full min-w-[200px] border-danger"
-                id="pretreat-back-online-at-leave-blank-if-still-offline"/>
+                  onChange={(val) => setOfflineEnd(val)}
+                  placeholder="Leave blank if still offline..."
+                  size="sm"
+                  className="w-full bg-background border-danger/50 font-mono-num"
+                  id="pretreat-back-online-at-leave-blank-if-still-offline"
+                />
               </div>
             </div>
 
-            {/* Status banner */}
+            {/* Status Live Notification */}
             {!offlineEnd && offlineStart && (
-              <div className="flex items-center gap-2 text-xs text-danger bg-danger-soft rounded px-2.5 py-1.5">
+              <div className="flex items-center gap-2 text-xs text-danger bg-danger-soft/90 border border-danger/30 rounded-md px-3 py-2">
                 <span className="inline-block h-2 w-2 rounded-full bg-danger animate-pulse shrink-0" />
-                Train is currently offline — RO parameters cannot be logged until it comes back online.
+                <span><strong>Train is currently Offline:</strong> RO parameters are locked until the train comes back online.</span>
               </div>
             )}
             {offlineEnd && offlineStart && (
-              <div className="flex items-center gap-2 text-xs text-accent bg-accent-soft rounded px-2.5 py-1.5">
-                <span className="inline-block h-2 w-2 rounded-full bg-accent shrink-0" />
-                Offline period recorded — you may now log RO parameters for the resumed period.
+              <div className="flex items-center gap-2 text-xs text-accent bg-accent-soft/90 border border-accent/30 rounded-md px-3 py-2">
+                <CheckCircle2 className="h-4 w-4 text-accent shrink-0" />
+                <span><strong>Offline duration logged:</strong> You may now log RO parameters for the resumed operational period.</span>
               </div>
             )}
           </div>
         )}
 
-        <div>
-          <Label htmlFor="pretreat-reading-date-amp-time">Reading Date &amp; Time</Label>
-          <Input type="datetime-local" value={dt}
-            onChange={isManager ? (e) => setDt(e.target.value) : undefined}
-            readOnly={!isManager}
-            className={cn(
-              "h-10 w-full sm:max-w-[260px] min-w-[220px]",
-              !isManager && "cursor-not-allowed opacity-60 bg-muted pointer-events-none"
-            )} id="pretreat-reading-date-amp-time"/>
-        </div>
         {plant && (
-          <div className="text-xs text-muted-foreground">
-            Backwash mode: <span className="font-semibold">{isSynchronized ? 'Synchronized (Whole Train at Once)' : 'Independent (Per Unit)'}</span>
+          <div className="flex items-center justify-between text-2xs text-muted-foreground pt-1 border-t border-border/30">
+            <span>Plant Backwash Architecture:</span>
+            <span className="font-semibold text-foreground px-2 py-0.5 rounded bg-muted/40 border border-border/40">
+              {isSynchronized ? 'Synchronized (Whole Train at Once)' : 'Independent (Per Unit)'}
+            </span>
           </div>
         )}
       </Card>
@@ -1470,14 +1555,15 @@ export function PretreatmentAndROLog() {
         <>
           {/* ── Offline gate: lock all parameter inputs when train is offline with no end time ── */}
           {isOfflineBlocked && (
-            <Card className="p-4 border-danger bg-danger-soft">
+            <Card className="p-4 border-danger/70 bg-danger-soft/80 shadow-xs">
               <div className="flex items-start gap-3">
-                <span className="text-2xl leading-none mt-0.5">🔒</span>
-                <div>
-                  <p className="text-sm font-semibold text-danger">Train is currently offline</p>
-                  <p className="text-xs text-danger mt-1">
-                    No RO parameters can be logged while the train is offline and no "Back Online At" time has been entered.
-                    Enter the time the train came back online above, or mark the train as Online to continue logging.
+                <div className="h-9 w-9 rounded-full bg-danger/10 text-danger flex items-center justify-center shrink-0 border border-danger/20">
+                  <Lock className="h-5 w-5" />
+                </div>
+                <div className="space-y-1">
+                  <p className="text-sm font-bold text-danger">RO Train is Currently Offline</p>
+                  <p className="text-xs text-danger/90 leading-relaxed">
+                    Telemetry inputs are locked while the train is down. To record this offline session, click <strong>Save Offline Record</strong> below. If the train has resumed operation, specify the <em>Back Online At</em> timestamp above or toggle to <em>Operational / Running</em>.
                   </p>
                 </div>
               </div>
@@ -1494,14 +1580,28 @@ export function PretreatmentAndROLog() {
               </div>
               {syncBwOn && (
                 <>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    <div>
-                      <Label htmlFor="pretreat-started" className="text-xs text-muted-foreground">Started</Label>
-                      <Input type="datetime-local" value={syncBwStart} onChange={(e) => setSyncBwStart(e.target.value)} className="w-full min-w-[220px]" id="pretreat-started"/>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <Label htmlFor="pretreat-started" className="text-xs font-medium text-muted-foreground">Started</Label>
+                      <DateTimePicker
+                        value={syncBwStart}
+                        onChange={(val) => setSyncBwStart(val)}
+                        placeholder="Select start time..."
+                        size="sm"
+                        className="w-full font-mono-num"
+                        id="pretreat-started"
+                      />
                     </div>
-                    <div>
-                      <Label htmlFor="pretreat-ended" className="text-xs text-muted-foreground">Ended</Label>
-                      <Input type="datetime-local" value={syncBwEnd} onChange={(e) => setSyncBwEnd(e.target.value)} className="w-full min-w-[220px]" id="pretreat-ended"/>
+                    <div className="space-y-1">
+                      <Label htmlFor="pretreat-ended" className="text-xs font-medium text-muted-foreground">Ended</Label>
+                      <DateTimePicker
+                        value={syncBwEnd}
+                        onChange={(val) => setSyncBwEnd(val)}
+                        placeholder="Select end time..."
+                        size="sm"
+                        className="w-full font-mono-num"
+                        id="pretreat-ended"
+                      />
                     </div>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -1552,18 +1652,28 @@ export function PretreatmentAndROLog() {
                         // Backwash ongoing → show meter start/end (+ time for independent mode); pressure hidden
                         <div className="space-y-2 bg-muted/30 rounded p-2">
                           {!isSynchronized && (
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                              <div>
-                                <Label htmlFor="pretreat-started-2" className="text-xs text-muted-foreground">Started</Label>
-                                <Input type="datetime-local" value={row.bwStart}
-                                  onChange={(e) => setAfmmfField(u, { bwStart: e.target.value })}
-                                  className="w-full min-w-[220px]" id="pretreat-started-2"/>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                              <div className="space-y-1">
+                                <Label htmlFor={`pretreat-started-u${u}`} className="text-xs font-medium text-muted-foreground">Started</Label>
+                                <DateTimePicker
+                                  value={row.bwStart}
+                                  onChange={(val) => setAfmmfField(u, { bwStart: val })}
+                                  placeholder="Select start time..."
+                                  size="sm"
+                                  className="w-full font-mono-num"
+                                  id={`pretreat-started-u${u}`}
+                                />
                               </div>
-                              <div>
-                                <Label htmlFor="pretreat-ended-2" className="text-xs text-muted-foreground">Ended</Label>
-                                <Input type="datetime-local" value={row.bwEnd}
-                                  onChange={(e) => setAfmmfField(u, { bwEnd: e.target.value })}
-                                  className="w-full min-w-[220px]" id="pretreat-ended-2"/>
+                              <div className="space-y-1">
+                                <Label htmlFor={`pretreat-ended-u${u}`} className="text-xs font-medium text-muted-foreground">Ended</Label>
+                                <DateTimePicker
+                                  value={row.bwEnd}
+                                  onChange={(val) => setAfmmfField(u, { bwEnd: val })}
+                                  placeholder="Select end time..."
+                                  size="sm"
+                                  className="w-full font-mono-num"
+                                  id={`pretreat-ended-u${u}`}
+                                />
                               </div>
                             </div>
                           )}

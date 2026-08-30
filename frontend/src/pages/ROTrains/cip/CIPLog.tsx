@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { DateTimePicker } from '@/components/ui/date-picker';
 import { fmtNum } from '@/lib/calculations';
 import { toast } from 'sonner';
 import { friendlyError } from '@/lib/supabaseErrors';
@@ -407,18 +408,28 @@ export function CIPLog() {
             </div>
 
             {/* Datetime pickers */}
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <Label htmlFor="ciplog-start-d-t" className="text-xs text-muted-foreground">Start D&T</Label>
-                <Input type="datetime-local" value={v.start}
-                  onChange={e => setV({ ...v, start: e.target.value })}
-                  className="w-full text-xs h-8" id="ciplog-start-d-t"/>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div className="space-y-1">
+                <Label htmlFor="ciplog-start-d-t" className="text-xs text-muted-foreground">Start Date & Time</Label>
+                <DateTimePicker
+                  value={v.start}
+                  onChange={(val) => setV({ ...v, start: val })}
+                  placeholder="Select start time..."
+                  size="sm"
+                  className="w-full font-mono-num"
+                  id="ciplog-start-d-t"
+                />
               </div>
-              <div>
-                <Label htmlFor="ciplog-end-d-t" className="text-xs text-muted-foreground">End D&T</Label>
-                <Input type="datetime-local" value={v.end}
-                  onChange={e => setV({ ...v, end: e.target.value })}
-                  className="w-full text-xs h-8" id="ciplog-end-d-t"/>
+              <div className="space-y-1">
+                <Label htmlFor="ciplog-end-d-t" className="text-xs text-muted-foreground">End Date & Time</Label>
+                <DateTimePicker
+                  value={v.end}
+                  onChange={(val) => setV({ ...v, end: val })}
+                  placeholder="Select end time..."
+                  size="sm"
+                  className="w-full font-mono-num"
+                  id="ciplog-end-d-t"
+                />
               </div>
             </div>
             {formDuration != null && formDuration > 0 && (
@@ -558,16 +569,28 @@ export function CIPLog() {
                 </DialogHeader>
                 <div className="space-y-3 py-1">
                   {/* Start / End datetime */}
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <Label htmlFor="ciplog-start-d-amp-t" className="text-xs text-muted-foreground">Start D&amp;T</Label>
-                      <Input type="datetime-local" value={editStart}
-                        onChange={e => setEditStart(e.target.value)} className="h-8 text-xs" id="ciplog-start-d-amp-t"/>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                      <Label htmlFor="ciplog-start-d-amp-t" className="text-xs text-muted-foreground">Start Date & Time</Label>
+                      <DateTimePicker
+                        value={editStart}
+                        onChange={(val) => setEditStart(val)}
+                        placeholder="Select start time..."
+                        size="sm"
+                        className="w-full font-mono-num"
+                        id="ciplog-start-d-amp-t"
+                      />
                     </div>
-                    <div>
-                      <Label htmlFor="ciplog-end-d-amp-t" className="text-xs text-muted-foreground">End D&amp;T</Label>
-                      <Input type="datetime-local" value={editEnd}
-                        onChange={e => setEditEnd(e.target.value)} className="h-8 text-xs" id="ciplog-end-d-amp-t"/>
+                    <div className="space-y-1">
+                      <Label htmlFor="ciplog-end-d-amp-t" className="text-xs text-muted-foreground">End Date & Time</Label>
+                      <DateTimePicker
+                        value={editEnd}
+                        onChange={(val) => setEditEnd(val)}
+                        placeholder="Select end time..."
+                        size="sm"
+                        className="w-full font-mono-num"
+                        id="ciplog-end-d-amp-t"
+                      />
                     </div>
                   </div>
                   {/* Duration preview */}

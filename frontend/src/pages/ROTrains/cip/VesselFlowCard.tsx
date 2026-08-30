@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { DateTimePicker } from '@/components/ui/date-picker';
 import { cn } from '@/lib/utils';
 
 // ─── Per-vessel flow row ──────────────────────────────────────────────────────
@@ -77,17 +78,27 @@ export function VesselFlowCard({ row, onChange }: { row: VesselFlowRow; onChange
                 onChange={e => onChange({ currMeter: e.target.value })}
                 placeholder="e.g. 108.75" className="h-8 text-xs" id="vesselflowcard-curr-meter-m"/>
             </div>
-            <div>
+            <div className="space-y-1">
               <Label htmlFor="vesselflowcard-prev-date-time" className="text-2xs text-muted-foreground">Prev date & time</Label>
-              <Input type="datetime-local" value={row.prevTime}
-                onChange={e => onChange({ prevTime: e.target.value })}
-                className="h-8 text-2xs" id="vesselflowcard-prev-date-time"/>
+              <DateTimePicker
+                value={row.prevTime}
+                onChange={(val) => onChange({ prevTime: val })}
+                placeholder="Prev time..."
+                size="sm"
+                className="w-full font-mono-num text-2xs"
+                id="vesselflowcard-prev-date-time"
+              />
             </div>
-            <div>
+            <div className="space-y-1">
               <Label htmlFor="vesselflowcard-curr-date-time" className="text-2xs text-muted-foreground">Curr date & time</Label>
-              <Input type="datetime-local" value={row.currTime}
-                onChange={e => onChange({ currTime: e.target.value })}
-                className="h-8 text-2xs" id="vesselflowcard-curr-date-time"/>
+              <DateTimePicker
+                value={row.currTime}
+                onChange={(val) => onChange({ currTime: val })}
+                placeholder="Curr time..."
+                size="sm"
+                className="w-full font-mono-num text-2xs"
+                id="vesselflowcard-curr-date-time"
+              />
             </div>
           </div>
           {/* ΔV + Δt inline chips */}

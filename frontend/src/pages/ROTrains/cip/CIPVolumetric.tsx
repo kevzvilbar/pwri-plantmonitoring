@@ -3,6 +3,7 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { DateTimePicker } from '@/components/ui/date-picker';
 import { X, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -424,14 +425,28 @@ export function CIPVolumetric({ numVessels = 4 }: { numVessels?: number }) {
           {/* Time interval */}
           <div className="space-y-1.5">
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Time Interval</p>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div className="space-y-1">
                 <Label htmlFor="cipvolumetric-previous-date-time" className="text-xs text-muted-foreground">Previous date & time</Label>
-                <Input type="datetime-local" value={qPrevTime} onChange={e => setQPrevTime(e.target.value)} className="h-9 text-xs" id="cipvolumetric-previous-date-time"/>
+                <DateTimePicker
+                  value={qPrevTime}
+                  onChange={(val) => setQPrevTime(val)}
+                  placeholder="Select previous time..."
+                  size="sm"
+                  className="w-full font-mono-num"
+                  id="cipvolumetric-previous-date-time"
+                />
               </div>
-              <div>
+              <div className="space-y-1">
                 <Label htmlFor="cipvolumetric-current-date-time" className="text-xs text-muted-foreground">Current date & time</Label>
-                <Input type="datetime-local" value={qCurrTime} onChange={e => setQCurrTime(e.target.value)} className="h-9 text-xs" id="cipvolumetric-current-date-time"/>
+                <DateTimePicker
+                  value={qCurrTime}
+                  onChange={(val) => setQCurrTime(val)}
+                  placeholder="Select current time..."
+                  size="sm"
+                  className="w-full font-mono-num"
+                  id="cipvolumetric-current-date-time"
+                />
               </div>
             </div>
             {/* Δt result */}

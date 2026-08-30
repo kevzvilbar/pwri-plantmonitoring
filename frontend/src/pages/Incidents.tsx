@@ -13,6 +13,7 @@ import { PageHeader } from '@/components/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { DateTimePicker } from '@/components/ui/date-picker';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
@@ -465,14 +466,15 @@ function Report() {
       </section>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <div>
+        <div className="space-y-1">
           <Label htmlFor="incidents-when" className="text-xs font-semibold">When Did It Occur?</Label>
-          <Input
-            type="datetime-local"
+          <DateTimePicker
             value={v.when_datetime}
-            onChange={e => setV({ ...v, when_datetime: e.target.value })}
+            onChange={(val) => setV({ ...v, when_datetime: val })}
+            placeholder="Select incident date & time..."
+            size="sm"
+            className="w-full font-mono-num"
             id="incidents-when"
-            className="text-xs mt-1"
           />
         </div>
         <div>
