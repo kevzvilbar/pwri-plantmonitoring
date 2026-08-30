@@ -50,3 +50,20 @@ export function getHourBucket(localDt: string): HourBucket {
     label: `${h}:00–${h}:59`,
   };
 }
+
+/**
+ * Checks if a reading record represents an offline placeholder rather than an active operational reading.
+ * Offline entries (e.g. "Offline: off reserve", "Offline: Operator Shutdown") or records with no flow
+ * metrics are exempt from the one-per-hour limit so operators can log offline events and then log
+ * the resumed operational reading when the train comes back online within the same hour.
+ */
+export function isOfflineRORecord(row?: {
+  incomplete_reason?: string | null;
+  feed_flow?: number | null;
+  permeate_flow?: number | null;
+} | null): boolean {
+  if (!row) return false;
+  if (row.incomplete_reason?.trim().toLowerCase().startsWith('offline')) return true;
+  if (row.feed_flow == null && row.permeate_flow == null) return true;
+  return false;
+}

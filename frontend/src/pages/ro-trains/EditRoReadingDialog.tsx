@@ -29,7 +29,7 @@ import { resolveReason, isReasonComplete } from '@/lib/correctionReasons';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { canEditEntry, diffFields, logReadingEdit, recalculateTrainDeltas } from './helpers';
-import { getHourBucket } from '@/lib/hourlyReadingGuard';
+import { getHourBucket, isOfflineRORecord } from '@/lib/hourlyReadingGuard';
 
 const RO_EDIT_NUMERIC_FIELDS: { key: string; label: string; unit?: string; step?: string }[] = [
   { key: 'feed_pressure_psi',    label: 'Feed Pressure',      unit: 'psi' },
@@ -82,24 +82,24 @@ export function EditRoReadingDialog({ row, trainId, onClose, onSaved }: Props) {
     if (!isReasonComplete(reason, customReason)) { toast.error('Describe the reason for this edit'); return; }
     setSaving(true);
 
-    // Hourly cadence guard — same one-reading-per-clock-hour rule the create
-    // form enforces (PretreatmentAndROLog.tsx). Excludes this row's own id so
-    // an edit that leaves the reading in the same hour (or only changes other
-    // fields) never collides with itself.
+    // Hourly cadence guard — one-reading-per-clock-hour rule (exempting offline entries)
     const hourBucket = getHourBucket(dt);
     const { data: existingHour, error: hourError } = await supabase
       .from('ro_train_readings')
-      .select('id')
+      .select('id, incomplete_reason, feed_flow, permeate_flow')
       .eq('train_id', trainId)
       .neq('id', row.id)
       .gte('reading_datetime', hourBucket.startISO)
-      .lt('reading_datetime', hourBucket.endISO)
-      .limit(1);
+      .lt('reading_datetime', hourBucket.endISO);
+
     if (hourError) { setSaving(false); toast.error(friendlyError(hourError)); return; }
-    if (existingHour && existingHour.length > 0) {
+
+    const activeEntries = (existingHour ?? []).filter((r: any) => !isOfflineRORecord(r));
+
+    if (activeEntries.length > 0) {
       setSaving(false);
       toast.error(
-        `This train already has another RO Train reading between ${hourBucket.label}. ` +
+        `This train already has another active RO Train reading between ${hourBucket.label}. ` +
         `Only one reading is allowed per hour — pick a different time.`,
       );
       return;

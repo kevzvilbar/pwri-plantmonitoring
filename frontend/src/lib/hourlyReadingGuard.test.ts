@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getHourBucket } from './hourlyReadingGuard';
+import { getHourBucket, isOfflineRORecord } from './hourlyReadingGuard';
 
 describe('getHourBucket', () => {
   it('labels the bucket after the hour the input time falls in', () => {
@@ -40,5 +40,23 @@ describe('getHourBucket', () => {
     // End boundary should be midnight of the *next* calendar day, not a
     // wrapped-around 0:00 on the same day.
     expect(new Date(b.endISO).getDate()).not.toBe(new Date(b.startISO).getDate());
+  });
+});
+
+describe('isOfflineRORecord', () => {
+  it('recognizes offline records by incomplete_reason', () => {
+    expect(isOfflineRORecord({ incomplete_reason: 'Offline: Operator Shutdown' })).toBe(true);
+    expect(isOfflineRORecord({ incomplete_reason: 'Offline: off reserve' })).toBe(true);
+    expect(isOfflineRORecord({ incomplete_reason: 'Offline' })).toBe(true);
+  });
+
+  it('recognizes offline records when both feed and permeate flows are null', () => {
+    expect(isOfflineRORecord({ feed_flow: null, permeate_flow: null })).toBe(true);
+    expect(isOfflineRORecord({ feed_flow: undefined, permeate_flow: undefined })).toBe(true);
+  });
+
+  it('does not classify active operational records as offline', () => {
+    expect(isOfflineRORecord({ feed_flow: 72, permeate_flow: 62.69 })).toBe(false);
+    expect(isOfflineRORecord({ incomplete_reason: 'Sensor glitch', feed_flow: 72, permeate_flow: null })).toBe(false);
   });
 });

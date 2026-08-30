@@ -132,17 +132,22 @@ export function EditPretreatReadingDialog({ row, trainId, onClose, onSaved }: Pr
     const hourBucket = getHourBucket(dt);
     const { data: existingHour, error: hourError } = await supabase
       .from('ro_pretreatment_readings')
-      .select('id')
+      .select('id, hpp_target_pressure_psi, bag_filters_changed')
       .eq('train_id', trainId)
       .neq('id', row.id)
       .gte('reading_datetime', hourBucket.startISO)
-      .lt('reading_datetime', hourBucket.endISO)
-      .limit(1);
+      .lt('reading_datetime', hourBucket.endISO);
+
     if (hourError) { setSaving(false); toast.error(friendlyError(hourError)); return; }
-    if (existingHour && existingHour.length > 0) {
+
+    const activeEntries = (existingHour ?? []).filter(
+      (r: any) => r.hpp_target_pressure_psi != null || r.bag_filters_changed != null
+    );
+
+    if (activeEntries.length > 0) {
       setSaving(false);
       toast.error(
-        `This train already has another Pre-Treatment reading between ${hourBucket.label}. ` +
+        `This train already has another active Pre-Treatment reading between ${hourBucket.label}. ` +
         `Only one reading is allowed per hour — pick a different time.`,
       );
       return;

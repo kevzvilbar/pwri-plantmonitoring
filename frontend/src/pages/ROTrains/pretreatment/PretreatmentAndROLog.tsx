@@ -16,7 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { calc, ALERTS } from '@/lib/calculations';
 import { evaluateROMeterSpike, computeROAverageFlowRate } from '@/lib/roReadingGuards';
-import { getHourBucket } from '@/lib/hourlyReadingGuard';
+import { getHourBucket, isOfflineRORecord } from '@/lib/hourlyReadingGuard';
 import { AnomalyRemarkBanner } from '@/components/AnomalyRemarkBanner';
 import { submitAnomalyRemark, isAnomalyRemarkValid } from '@/lib/anomalyRemarks';
 import { toast } from 'sonner';
@@ -770,49 +770,58 @@ export function PretreatmentAndROLog() {
 
     // ── Hourly cadence guard ───────────────────────────────────────────────
     // Plant policy: exactly one RO Train reading and one Pre-Treatment
-    // reading per train per calendar hour — one entry somewhere in
-    // 6:00–6:59, another in 7:00–7:59, and so on, regardless of the exact
-    // minute it's keyed in at. (A 1-hour-per-train duplicate rule used to
-    // live here and was later removed to let operators log multiple
-    // readings per hour — this restores the stricter one-per-hour cadence.)
-    // Checked against both tables up front, before either insert runs, since
-    // this form always writes both from the same `dt` — if either table
-    // already has an entry for this hour the whole save is rejected, so the
-    // operator edits the existing entry (via the train's History tab)
-    // instead of ending up with a half-saved, mismatched pair.
-    const hourBucket = getHourBucket(dt);
-    const trainLabel = train?.name ?? `Train ${train?.train_number ?? ''}`;
+    // reading per train per calendar hour.
+    //
+    // EXEMPTION: RO Train offline events or transitions to/from offline
+    // are exempt from this limit so operators can record an offline shutdown
+    // and then record the resumed operational reading within the same hour
+    // (or log startup telemetry without being blocked by earlier offline rows).
+    const isOfflineExempt = !trainOnline || train?.status === 'Offline' || confirmBackOnline || !!offlineStart || !!offlineEnd;
 
-    const { data: existingROHour, error: roHourError } = await supabase
-      .from('ro_train_readings')
-      .select('id')
-      .eq('train_id', trainId)
-      .gte('reading_datetime', hourBucket.startISO)
-      .lt('reading_datetime', hourBucket.endISO)
-      .limit(1);
-    if (roHourError) { toast.error(friendlyError(roHourError)); return; }
-    if (existingROHour && existingROHour.length > 0) {
-      toast.error(
-        `${trainLabel} already has an RO Train reading between ${hourBucket.label}. ` +
-        `Only one reading is allowed per hour — edit the existing entry, or change the reading time.`,
-      );
-      return;
-    }
+    if (!isOfflineExempt) {
+      const hourBucket = getHourBucket(dt);
+      const trainLabel = train?.name ?? `Train ${train?.train_number ?? ''}`;
 
-    const { data: existingPretreatHour, error: pretreatHourError } = await supabase
-      .from('ro_pretreatment_readings')
-      .select('id')
-      .eq('train_id', trainId)
-      .gte('reading_datetime', hourBucket.startISO)
-      .lt('reading_datetime', hourBucket.endISO)
-      .limit(1);
-    if (pretreatHourError) { toast.error(friendlyError(pretreatHourError)); return; }
-    if (existingPretreatHour && existingPretreatHour.length > 0) {
-      toast.error(
-        `${trainLabel} already has a Pre-Treatment reading between ${hourBucket.label}. ` +
-        `Only one reading is allowed per hour — edit the existing entry, or change the reading time.`,
+      const { data: existingROHour, error: roHourError } = await supabase
+        .from('ro_train_readings')
+        .select('id, incomplete_reason, feed_flow, permeate_flow')
+        .eq('train_id', trainId)
+        .gte('reading_datetime', hourBucket.startISO)
+        .lt('reading_datetime', hourBucket.endISO);
+
+      if (roHourError) { toast.error(friendlyError(roHourError)); return; }
+
+      // Filter out offline placeholder rows — only active operational readings block
+      const activeROEntries = (existingROHour ?? []).filter((r: any) => !isOfflineRORecord(r));
+
+      if (activeROEntries.length > 0) {
+        toast.error(
+          `${trainLabel} already has an active RO Train reading between ${hourBucket.label}. ` +
+          `Only one operational reading is allowed per hour — edit the existing entry, or change the reading time.`,
+        );
+        return;
+      }
+
+      const { data: existingPretreatHour, error: pretreatHourError } = await supabase
+        .from('ro_pretreatment_readings')
+        .select('id, hpp_target_pressure_psi, bag_filters_changed')
+        .eq('train_id', trainId)
+        .gte('reading_datetime', hourBucket.startISO)
+        .lt('reading_datetime', hourBucket.endISO);
+
+      if (pretreatHourError) { toast.error(friendlyError(pretreatHourError)); return; }
+
+      const activePretreatEntries = (existingPretreatHour ?? []).filter(
+        (r: any) => r.hpp_target_pressure_psi != null || r.bag_filters_changed != null
       );
-      return;
+
+      if (activePretreatEntries.length > 0) {
+        toast.error(
+          `${trainLabel} already has a Pre-Treatment reading between ${hourBucket.label}. ` +
+          `Only one operational reading is allowed per hour — edit the existing entry, or change the reading time.`,
+        );
+        return;
+      }
     }
 
     // Save RO Train reading.
