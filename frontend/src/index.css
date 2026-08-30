@@ -924,7 +924,51 @@
   border-radius: calc(var(--radius) * 0.5);
 }
 
-/* ── Hover trap avoidance for touch screens ─────────────────────────────── */
+/* ── Interaction & Gesture Mechanics (Touch, Drag, Precision) ───────────── */
+
+/* 1. Typographic Precision: strict tabular alignment for numbers & currency */
+body, table, input[type="number"], .font-mono, .font-numeral, .tabular-nums, .kpi-value, [data-tabular="true"] {
+  font-variant-numeric: tabular-nums lining-nums;
+  font-feature-settings: "tnum" 1, "lnum" 1;
+}
+
+/* 2. Header Offsetting for smooth scroll restoration & anchor jumps */
+h1[id], h2[id], h3[id], section[id], [data-scroll-target], .scroll-mt-header {
+  scroll-margin-top: calc(3.5rem + 1rem);
+}
+
+/* 3. Touch Hit Area Extension (44px Minimum Rule) */
+.touch-target-44 {
+  position: relative;
+}
+.touch-target-44::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  min-width: 44px;
+  min-height: 44px;
+  width: 100%;
+  height: 100%;
+}
+
+/* 4. Drag & Handle UI */
+.drag-handle {
+  touch-action: none;
+  cursor: grab;
+  user-select: none;
+}
+.drag-handle:active,
+.is-dragging {
+  cursor: grabbing !important;
+  transform: scale(1.02);
+  box-shadow: 0 12px 28px -4px hsl(215 30% 10% / 0.18);
+  ring: 2px solid hsl(var(--primary) / 0.4);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+/* ── Hover trap avoidance & Sticky Hover Resolution for touch screens ─────── */
 @media (hover: hover) and (pointer: fine) {
   .hover-lift:hover {
     transform: translateY(-1.5px);
@@ -932,30 +976,32 @@
   }
 }
 
-/* ── Reduced motion ───────────────────────────────────────────────────────── */
-/* Respect the OS-level accessibility setting: keep state changes (hover
-   lift, shimmer, page transitions) instant instead of forcing motion on
-   people who've asked for less of it. Colors/opacity still change — only
-   the movement and duration collapse. */
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-    scroll-behavior: auto !important;
+/* ── Touch screen overrides: eliminate hover dependencies and sticky hover ── */
+@media (hover: none) or (pointer: coarse) {
+  /* Never hide primary actions or table controls behind hover on mobile */
+  .touch-visible,
+  .group:active .group-hover\:opacity-100,
+  .group-hover\:opacity-100 {
+    opacity: 1 !important;
+    visibility: visible !important;
   }
-  .stat-card:hover, .card-interactive:hover {
-    transform: none;
+
+  /* Tactile active feedback for touch instead of sticky hover */
+  button:active,
+  a[role="button"]:active,
+  .card-interactive:active {
+    transform: scale(0.98);
+    transition: transform 0.08s ease;
   }
 }
 
-/* ── Mobile tap targets ───────────────────────────────────────────────────── */
+/* ── Mobile tap targets (44px Hit Target Standards) ───────────────────────── */
 @media (pointer: coarse) and (max-width: 768px) {
   button:not([role="switch"]):not([role="checkbox"]):not([role="tab"]):not(.shrink-0),
   [role="button"]:not([role="switch"]):not([role="checkbox"]):not([role="tab"]),
   a.button,
   .btn {
-    min-height: 38px;
+    min-height: 44px;
   }
 
   button[role="checkbox"], [role="checkbox"] {
@@ -968,20 +1014,31 @@
     min-width: unset !important;
   }
 
-  button[data-size="sm"] { min-height: 34px; }
-  button[data-size="icon"], button[data-size="icon-sm"] { min-width: 34px; min-height: 34px; }
+  button[data-size="sm"] {
+    min-height: 40px;
+    padding-left: 0.875rem;
+    padding-right: 0.875rem;
+  }
+
+  button[data-size="icon"],
+  button[data-size="icon-sm"] {
+    min-width: 44px;
+    min-height: 44px;
+  }
 
   input:not([type="checkbox"]):not([type="radio"]):not(.h-6):not(.h-7):not(.h-8),
   select:not(.h-6):not(.h-7):not(.h-8),
   textarea {
-    min-height: 38px;
+    min-height: 44px;
     font-size: 16px !important; /* prevents iOS auto-zoom */
   }
+
   input[type="datetime-local"],
   input[type="date"],
   input[type="time"] {
     width: 100%;
     min-width: 0 !important;
+    min-height: 44px;
     box-sizing: border-box;
   }
 }

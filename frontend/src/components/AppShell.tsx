@@ -7,6 +7,9 @@ import { OfflineBanner } from './OfflineBanner';
 import { SidebarProvider } from '@/components/ui/sidebar';
 import { useScrollRestore } from '@/hooks/useScrollRestore';
 import { useBackgroundSync } from '@/hooks/useBackgroundSync';
+import { usePullToRefresh } from '@/hooks/usePullToRefresh';
+import { PullToRefreshIndicator } from './PullToRefresh';
+import { useQueryClient } from '@tanstack/react-query';
 
 /**
  * BackgroundSyncMount
@@ -71,9 +74,20 @@ function PageAnimationWrapper({ children }: { children: React.ReactNode }) {
 
 export function AppShell() {
   useScrollRestore();
+  const queryClient = useQueryClient();
+
+  const pullState = usePullToRefresh({
+    onRefresh: async () => {
+      // Invalidate all active queries so live telemetry & readings refresh instantly
+      await queryClient.invalidateQueries();
+    },
+  });
 
   return (
     <SidebarProvider>
+      {/* Pull to refresh indicator for mobile gestures */}
+      <PullToRefreshIndicator {...pullState} />
+
       {/* Mounts the sync interval; renders nothing itself */}
       <BackgroundSyncMount />
       <div className="min-h-screen flex w-full bg-background">
