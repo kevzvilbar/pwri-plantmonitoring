@@ -94,7 +94,7 @@ export function PlantPulseHero({
       const sinceDate = format(new Date(Date.now() - 7 * 86400000), 'yyyy-MM-dd');
       const { data } = await supabase
         .from('daily_plant_summary')
-        .select('summary_date, product_water_m3')
+        .select('summary_date, production_m3')
         .in('plant_id', plantIds)
         .gte('summary_date', sinceDate)
         .order('summary_date', { ascending: true });
@@ -103,7 +103,7 @@ export function PlantPulseHero({
       (data ?? []).forEach((r: any) => {
         const d = r.summary_date;
         if (d) {
-          dayMap[d] = (dayMap[d] ?? 0) + (Number(r.product_water_m3) || 0);
+          dayMap[d] = (dayMap[d] ?? 0) + (Number(r.production_m3) || 0);
         }
       });
       return Object.entries(dayMap).map(([date, val]) => ({ date, val }));
