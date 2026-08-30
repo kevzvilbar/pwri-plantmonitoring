@@ -187,8 +187,7 @@ export function NRWGaugeCard({ nrw, yNrw, onClick }: Props) {
         {/* Value + trend */}
         <div className="flex items-baseline gap-1.5 flex-wrap">
           <span
-            className={cn('text-xl font-semibold leading-none font-numeral', tone ? TONE_ICON[tone] : 'text-muted-foreground')}
-            style={{ fontFeatureSettings: '"tnum"' }}
+            className={cn('text-xl font-bold leading-none font-mono tabular-nums', tone ? TONE_ICON[tone] : 'text-muted-foreground')}
           >
             {nrw == null ? '—' : nrw}
             <span className="text-xs font-sans text-muted-foreground ml-0.5">%</span>

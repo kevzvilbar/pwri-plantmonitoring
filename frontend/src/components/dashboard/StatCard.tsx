@@ -32,14 +32,8 @@ export function TrendBadge({ delta }: { delta: number | null }) {
 // `value` is null when the entity has no reading for this metric.
 export type ExpandRow = { label: string; value: string | number | null };
 
-// Standard KPI tile used across the dashboard clusters. Tone drives
-// the gradient background + the StatusPill. `calc` swaps in a sky
-// gradient + adds a "calc" pill so derived metrics (NRW, PV) read
-// distinctly from raw measurements.
-//
-// When `expandRows` is supplied (≥2 rows with non-null values) the card
-// gains a chevron toggle in the top-right corner. The breakdown list is
-// hidden by default so the tile stays compact — the user opts in by clicking.
+// Standard KPI tile used across the dashboard clusters. Housed panel
+// with 1px hairline border, subtle edge-light, and glowing tabular mono readout.
 export function StatCard({
   icon: Icon, label, value, unit, tone, onClick, accent, calc, threshold,
   size = 'default', trend = null, calcTooltip,
@@ -65,36 +59,35 @@ export function StatCard({
   const rowUnit     = expandUnit ?? unit ?? '';
 
   const lg      = size === 'lg';
-  const toneBg  = tone ? TONE_BG[tone] : 'stat-tone-default';
-  const calcBg  = !tone && calc ? 'stat-tone-info' : '';
-  const baseBg  = '';
+  const toneBg  = tone ? TONE_BG[tone] : '';
+  const calcBg  = !tone && calc ? 'border-l-2 border-l-info' : '';
   const iconCls = tone ? TONE_ICON[tone] : (accent ?? 'text-muted-foreground');
 
   return (
     <Card
-      className={`stat-card min-w-0 hover:border-primary/40 hover:shadow-sm transition-all ${onClick ? 'cursor-pointer' : 'cursor-default'} ${lg ? 'p-3.5' : 'p-3'} ${baseBg} ${toneBg} ${calcBg}`}
+      className={`stat-card min-w-0 hover:border-border/90 hover:shadow-[var(--shadow-card)] transition-all ${onClick ? 'cursor-pointer' : 'cursor-default'} ${lg ? 'p-3.5' : 'p-3'} ${toneBg} ${calcBg}`}
       onClick={onClick}
     >
       {/* ── Header row: icon · LABEL (uppercase) · badges/expand ── */}
       <div className="flex items-center justify-between gap-1 min-w-0">
         <div className="flex items-center gap-1.5 min-w-0 overflow-hidden">
           <Icon className={`shrink-0 ${lg ? 'h-4 w-4' : 'h-3.5 w-3.5'} ${iconCls}`} />
-          <span className={`uppercase tracking-wide font-semibold truncate leading-none ${lg ? 'text-xs' : 'text-2xs'} ${tone ? iconCls : 'text-muted-foreground'}`}>
+          <span className={`uppercase tracking-wide font-semibold truncate leading-none ${lg ? 'text-xs' : 'text-2xs'} text-muted-foreground`}>
             {label}
           </span>
           {threshold && (
-            <span className="text-3xs text-muted-foreground/60 shrink-0">(limit {threshold})</span>
+            <span className="text-3xs text-muted-foreground/60 shrink-0 font-mono">(limit {threshold})</span>
           )}
         </div>
         <div className="flex items-center gap-1 shrink-0">
           {badge}
           {calc && (
             <span
-              className="text-3xs uppercase tracking-wider px-1 py-0.5 rounded bg-info-soft text-info border border-info/30"
+              className="text-3xs uppercase tracking-wider px-1 py-0.5 rounded font-mono bg-info/10 text-info border border-info/20"
               title={calcTooltip ?? 'Calculated / derived metric'}
             >calc</span>
           )}
-          {tone && <StatusPill tone={tone}>•</StatusPill>}
+          {tone && <StatusPill tone={tone} />}
           {showExpand && (
             <button
               onClick={(e) => { e.stopPropagation(); setExpanded((v) => !v); }}
@@ -110,36 +103,35 @@ export function StatCard({
 
       {/* ── Value row ── */}
       <div
-        className={`mt-2 text-foreground leading-none whitespace-nowrap overflow-hidden text-ellipsis font-numeral ${lg ? 'text-2xl sm:text-3xl font-bold' : 'text-2xl font-bold'}`}
-        style={{ fontFeatureSettings: '"tnum"' }}
+        className={`mt-2 text-foreground leading-none whitespace-nowrap overflow-hidden text-ellipsis font-mono tabular-nums ${lg ? 'text-2xl sm:text-3xl font-bold' : 'text-2xl font-bold'}`}
       >
         {value}
-        {unit && <span className={`font-sans font-normal text-muted-foreground ml-1 ${lg ? 'text-sm' : 'text-xs'}`}>{unit}</span>}
+        {unit && <span className={`font-sans font-normal text-muted-foreground ml-1.5 ${lg ? 'text-sm' : 'text-xs'}`}>{unit}</span>}
       </div>
 
       {/* ── Below-value: trend badge (matches Image 1 "↑ 1.4% vs prev day") ── */}
       {trend !== null && trend !== undefined && (
-        <div className="mt-1">
+        <div className="mt-1.5">
           <TrendBadge delta={trend} />
         </div>
       )}
 
       {/* ── Subtext / Metadata footer ── */}
       {subtext && (
-        <div className="mt-1.5 text-2xs text-muted-foreground truncate">
+        <div className="mt-1.5 text-2xs text-muted-foreground truncate font-mono">
           {subtext}
         </div>
       )}
 
       {/* ── Per-train expand rows ── */}
       {showExpand && expanded && (
-        <div className="mt-2 pt-1.5 border-t space-y-0.5 max-h-24 overflow-y-auto">
+        <div className="mt-2 pt-1.5 border-t border-border/50 space-y-0.5 max-h-24 overflow-y-auto">
           {liveRows.map((row) => (
             <div key={row.label} className="flex items-center justify-between text-2xs">
               <span className="text-muted-foreground truncate">{row.label}</span>
-              <span className="text-foreground/90 tabular-nums shrink-0 ml-2 font-numeral">
+              <span className="text-foreground/90 tabular-nums shrink-0 ml-2 font-mono">
                 {row.value}
-                {rowUnit && <span className="text-muted-foreground ml-0.5">{rowUnit}</span>}
+                {rowUnit && <span className="text-muted-foreground ml-0.5 font-sans">{rowUnit}</span>}
               </span>
             </div>
           ))}
@@ -226,21 +218,21 @@ export function PerWellSourceCard({
       </div>
 
       {/* ── Value ── */}
-      <div className="mt-2 text-foreground leading-none whitespace-nowrap text-2xl font-bold font-numeral" style={{ fontFeatureSettings: '"tnum"' }}>
+      <div className="mt-2 text-foreground leading-none whitespace-nowrap text-2xl font-bold font-mono tabular-nums">
         {aggregate ?? '—'}
-        {unit && <span className="font-sans font-normal text-muted-foreground ml-1 text-xs">{unit}</span>}
+        {unit && <span className="font-sans font-normal text-muted-foreground ml-1.5 text-xs">{unit}</span>}
       </div>
 
       {/* ── Expand rows ── */}
       {showBreakdown && expanded && (
-        <div className="mt-2 pt-1.5 border-t space-y-0.5 max-h-24 overflow-y-auto">
+        <div className="mt-2 pt-1.5 border-t border-border/50 space-y-0.5 max-h-24 overflow-y-auto">
           {liveRows.map((r) => (
             <div
               key={`${r.plant_id}-${r.well_id ?? r.train_id ?? r.train_number}`}
               className="flex items-center justify-between text-2xs"
             >
               <span className="text-muted-foreground truncate">{rowLabel(r)}</span>
-              <span className="text-foreground/90 tabular-nums shrink-0 ml-2 font-numeral">
+              <span className="text-foreground/90 tabular-nums shrink-0 ml-2 font-mono">
                 {decimals === 0 ? Math.round(r[field]) : (+r[field]).toFixed(decimals)}
               </span>
             </div>
@@ -252,20 +244,21 @@ export function PerWellSourceCard({
 }
 
 // Section heading shared between the three clusters (Overview /
-// Quality / Production Cost). Kept tiny on purpose — the cluster
-// header is meant to be glance-able, not a focal element.
+// Quality / Production Cost). Cockpit panel section rule.
 export function ClusterHeader({
   icon: Icon, title, subtitle, accent,
 }: {
   icon: any; title: string; subtitle?: string; accent?: string;
 }) {
   return (
-    <div className="flex items-center gap-2 mt-1 mb-2 px-0.5">
-      <div className={`h-3.5 w-[3px] rounded-full shrink-0 ${accent ?? 'bg-muted-foreground/30'}`}
-        style={{ background: accent?.startsWith('#') ? accent : undefined }} />
+    <div className="flex items-center gap-2 mt-4 mb-2.5 px-0.5 pb-1.5 border-b border-border/50">
+      <div
+        className={`h-3 w-[2px] rounded-full shrink-0 ${accent ?? 'bg-primary'}`}
+        style={{ background: accent?.startsWith('#') ? accent : undefined }}
+      />
       <Icon className={`h-3.5 w-3.5 ${accent ?? 'text-muted-foreground'}`} />
-      <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{title}</h2>
-      {subtitle && <span className="text-2xs text-muted-foreground/70">{subtitle}</span>}
+      <h2 className="text-xs font-semibold uppercase tracking-wider text-foreground/90">{title}</h2>
+      {subtitle && <span className="text-2xs text-muted-foreground/70 font-mono">({subtitle})</span>}
     </div>
   );
 }

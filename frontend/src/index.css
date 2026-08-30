@@ -1,24 +1,26 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,400;0,14..32,500;0,14..32,600;0,14..32,700;1,14..32,400&family=JetBrains+Mono:wght@500;600&family=DM+Sans:opsz,wght@9..40,400;9..40,600;9..40,700&family=Cormorant+Garamond:wght@500;600;700&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400;1,600&family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Cormorant+Garamond:wght@500;600;700&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&display=swap');
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 /*
-  PWRI Monitoring & Alert System — Design System v2
-  ────────────────────────────────────────────────────
-  Navy      #0b1e2e   sidebar / topbar chrome
-  Teal      #0d9488   brand primary (buttons, rings, links)
-  Cyan      #06b6d4   sidebar active indicator
-  Sky       #0ea5e9   production / wells data
-  Violet    #8b5cf6   RO train data
-  Emerald   #10b981   NRW / chemicals data
-  Amber     #f59e0b   product meter / blending data
-  Orange    #f97316   solar / alert data
-  Slate     #64748b   grid / neutral data
-
-  One color language shared by the KPI compliance tab and
-  every dashboard metric — no re-learning between pages.
+  PWRI Monitoring — "Instrument Panel" Design System
+  ─────────────────────────────────────────────────────────────
+  Anthracite Canvas    #070B0E   Deep control-room backdrop
+  Instrument Housing   #101820   Housed panel / card surface
+  Elevated Housing     #141E27   Hero / popover / active surface
+  Hairline             rgba(255,255,255,0.07)  Panel dividers
+  Hairline Strong      rgba(255,255,255,0.14)  Active/focus border
+  Panel White          #E7ECEF   Crisp primary text
+  Gauge Grey           #8592A0   Technical secondary text & labels
+  Readout Glow         #CFFAF4   Tabular glowing numeral readout
+  Treated Water Teal   #0D9488   Primary brand & action surface
+  Signal Cyan          #22D3EE   Live active signal & focus rings
+  Run Lamp (Emerald)   #34D399   Good / normal status lamp
+  Caution Lamp (Amber) #FBBF24   Warning / caution status lamp
+  Alarm Lamp (Rose)    #F43F5E   Critical / error status lamp
+  Sky / Violet / Slate Data series mapping
 */
 
 @layer base {
@@ -300,46 +302,60 @@
     --transition-base: 200ms cubic-bezier(0.4, 0, 0.2, 1);
   }
 
-  /* ── Dark mode ───────────────────────────────────────────────── */
+  /* ── Dark mode (Cockpit / Instrument Panel) ────────────────────── */
   .dark {
-    --background:          215 50% 8%;
-    --foreground:          38 35% 94%;
-    --card:                215 45% 12%;
-    --card-foreground:     38 35% 94%;
-    --popover:             215 45% 12%;
-    --popover-foreground:  38 35% 94%;
-    --primary:             175 65% 48%;
-    --primary-foreground:  215 60% 8%;
-    --primary-soft:        175 40% 18%;
-    --secondary:           215 30% 16%;
-    --secondary-foreground:38 35% 94%;
-    --muted:               215 28% 16%;
-    --muted-foreground:    38 12% 62%;
-    --accent:              158 55% 48%;
-    --accent-foreground:   215 60% 8%;
-    --accent-soft:         158 40% 18%;
-    --highlight:           189 90% 52%;
-    --highlight-foreground:215 62% 8%;
-    --highlight-soft:      189 50% 20%;
-    --warn:                38 90% 58%;
-    --warn-foreground:     38 90% 12%;
-    --warn-soft:           38 50% 20%;
-    --danger:              351 64% 56%;
+    --background:          210 33% 4.1%;  /* #070B0E Anthracite Canvas */
+    --foreground:          203 20% 92%;   /* #E7ECEF Panel White */
+    --card:                210 33% 9.4%;  /* #101820 Instrument Housing */
+    --card-foreground:     203 20% 92%;
+    --popover:             210 32% 11.6%; /* #141E27 Elevated Housing */
+    --popover-foreground:  203 20% 92%;
+    --primary:             175 84% 31.6%; /* #0D9488 Treated Water Teal */
+    --primary-foreground:  0 0% 100%;
+    --primary-soft:        175 50% 14%;
+    --secondary:           210 30% 13%;
+    --secondary-foreground:203 20% 92%;
+    --muted:               210 28% 12%;
+    --muted-foreground:    211 13% 57%;   /* #8592A0 Gauge Grey */
+    --accent:              158 64% 51.8%; /* #34D399 Run Lamp Emerald */
+    --accent-foreground:   210 33% 4%;
+    --accent-soft:         158 40% 14%;
+    --highlight:           189 94% 53.3%; /* #22D3EE Signal Cyan */
+    --highlight-foreground:210 33% 4%;
+    --highlight-soft:      189 50% 14%;
+    --warn:                43 96% 56.3%;  /* #FBBF24 Caution Lamp Amber */
+    --warn-foreground:     43 90% 10%;
+    --warn-soft:           43 50% 14%;
+    --danger:              349 89% 60.2%; /* #F43F5E Alarm Lamp Rose */
     --danger-foreground:   0 0% 100%;
-    --danger-soft:         351 50% 20%;
-    --destructive:         351 64% 56%;
+    --danger-soft:         349 50% 14%;
+    --destructive:         349 89% 60.2%;
     --destructive-foreground: 0 0% 100%;
-    --info:                199 80% 60%;
-    --info-soft:           199 50% 20%;
-    --border:              215 28% 22%;
-    --input:               215 28% 22%;
-    --ring:                175 65% 48%;
-    --topbar-muted:        210 20% 52%;
+    --info:                199 95% 60%;   /* #38BDF8 Sky */
+    --info-soft:           199 50% 14%;
+    --border:              210 20% 15%;   /* Hairline rgba(255,255,255,0.07) */
+    --input:               210 20% 18%;
+    --ring:                189 94% 53.3%; /* Signal Cyan */
+    --topbar:              210 33% 5.5%;
+    --topbar-foreground:   203 20% 92%;
+    --topbar-muted:        211 13% 57%;
+    --sidebar-background:  210 33% 6.5%;
+    --sidebar-foreground:  203 20% 92%;
+    --sidebar-border:      210 20% 13%;
+    --sidebar-accent:      210 30% 11%;
+    --sidebar-accent-foreground: 203 20% 92%;
+    --sidebar-primary:     189 94% 53.3%;
+    --sidebar-ring:        189 94% 53.3%;
 
-    /* Digital readout — slightly deeper housing in dark mode, same idea */
-    --display:        215 55% 6%;
-    --display-border: 215 30% 24%;
-    --display-dim:    215 15% 48%;
+    /* Ambient downward shadows tinted to canvas hue */
+    --shadow-card:  0 4px 16px -2px rgba(0, 0, 0, 0.45), 0 1px 3px 0 rgba(0, 0, 0, 0.35);
+    --shadow-elev:  0 8px 24px -4px rgba(0, 0, 0, 0.60), 0 2px 6px -1px rgba(0, 0, 0, 0.40);
+    --shadow-modal: 0 24px 48px -12px rgba(0, 0, 0, 0.75);
+
+    /* Digital readout — glowing physical meter counter */
+    --display:        210 40% 6%;
+    --display-border: 210 25% 20%;
+    --display-dim:    211 13% 45%;
 
     /* CIP chemical identity accents (dark) — desaturated for readability */
     --chem-caustic: 174 50% 52%;
@@ -1189,6 +1205,80 @@ h1[id], h2[id], h3[id], section[id], [data-scroll-target], .scroll-mt-header {
     min-width: 0 !important;
     min-height: 44px;
     box-sizing: border-box;
+  }
+}
+
+/* ─── Instrument Panel Design System Utilities ────────────────────────────── */
+@layer utilities {
+  /* Physical Lamp Indicators (6-8px filled dot with luminous outer glow) */
+  .lamp-dot {
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    border-radius: 9999px;
+    flex-shrink: 0;
+    transition: background-color 150ms ease, box-shadow 150ms ease;
+  }
+  .lamp-emerald {
+    background-color: #34d399;
+    box-shadow: 0 0 6px rgba(52, 211, 153, 0.7);
+  }
+  .lamp-amber {
+    background-color: #fbbf24;
+    box-shadow: 0 0 6px rgba(251, 191, 36, 0.7);
+  }
+  .lamp-rose {
+    background-color: #f43f5e;
+    box-shadow: 0 0 6px rgba(244, 63, 94, 0.7);
+  }
+  .lamp-cyan {
+    background-color: #22d3ee;
+    box-shadow: 0 0 6px rgba(34, 211, 238, 0.7);
+  }
+  .lamp-teal {
+    background-color: #0d9488;
+    box-shadow: 0 0 6px rgba(13, 148, 136, 0.7);
+  }
+  .lamp-muted {
+    background-color: #8592a0;
+    box-shadow: 0 0 4px rgba(133, 146, 160, 0.35);
+  }
+
+  /* Glowing Tabular Numeral Readout */
+  .readout-num {
+    font-family: var(--font-mono, 'JetBrains Mono', 'IBM Plex Mono', monospace);
+    font-feature-settings: 'tnum' 1;
+    font-variant-numeric: tabular-nums;
+  }
+  .readout-glow {
+    color: #cffaf4;
+    text-shadow: 0 0 8px rgba(207, 250, 244, 0.3);
+  }
+
+  /* Instrument Tile Edge-Lights */
+  .edge-light-teal    { border-left: 3px solid #0d9488; }
+  .edge-light-cyan    { border-left: 3px solid #22d3ee; }
+  .edge-light-emerald { border-left: 3px solid #34d399; }
+  .edge-light-amber   { border-left: 3px solid #fbbf24; }
+  .edge-light-rose    { border-left: 3px solid #f43f5e; }
+  .edge-light-sky     { border-left: 3px solid #38bdf8; }
+  .edge-light-violet  { border-left: 3px solid #a78bfa; }
+  .edge-light-slate   { border-left: 3px solid #94a3b8; }
+
+  /* Calm Live Signal Indicator Pulse */
+  .animate-live-pulse {
+    animation: live-signal-pulse 2s ease-in-out infinite;
+  }
+}
+
+@keyframes live-signal-pulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.45;
+    transform: scale(0.92);
   }
 }
 

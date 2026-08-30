@@ -66,7 +66,7 @@ function PageAnimationWrapper({ children }: { children: React.ReactNode }) {
       // inset (added alongside this) or the last bit of scrollable content on
       // notched phones ends up hidden behind the nav bar. md:pb-8 is untouched
       // since BottomNav is md:hidden on desktop.
-      className="page-enter flex-1 max-w-[1280px] w-full mx-auto px-4 sm:px-5 py-5 pb-[calc(5rem+env(safe-area-inset-bottom))] md:pb-8"
+      className="page-enter flex-1 max-w-[1600px] w-full mx-auto px-4 sm:px-6 py-5 pb-[calc(5rem+env(safe-area-inset-bottom))] md:pb-8"
     >
       {children}
     </div>

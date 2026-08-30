@@ -28,19 +28,11 @@ export default {
         '2xs': ['10px', { lineHeight: '13px' }],
       },
       fontFamily: {
-        sans: ['Inter', 'system-ui', 'sans-serif'],
-        mono: ['JetBrains Mono', 'ui-monospace', 'monospace'],
-        // Geometric sans used for large KPI numerals (StatCard, gauges,
-        // sunburst/radar labels) — same low-contrast, circular-bowl look
-        // across every card that shows a headline number.
-        numeral: ['DM Sans', 'ui-sans-serif', 'system-ui', 'sans-serif'],
-        // Reading-optimized serif pairing used only by the full-screen
-        // Manual reader (components/manual/*) — a deliberate departure
-        // from the app's Inter/DM Sans system to signal "this is a book,
-        // sit and read it" the same way a printed manual would, while
-        // every other screen in the product stays on the dashboard type
-        // system above. Chapter titles/heads use book-heading; body copy
-        // uses book-body.
+        sans: ['"IBM Plex Sans"', 'system-ui', 'sans-serif'],
+        mono: ['"JetBrains Mono"', '"IBM Plex Mono"', 'ui-monospace', 'monospace'],
+        // Technical mono numerals with tabular figures for all readings & KPI readouts
+        numeral: ['"JetBrains Mono"', '"IBM Plex Mono"', 'ui-monospace', 'monospace'],
+        // Reading-optimized serif pairing used only by the full-screen Manual reader
         'book-heading': ['Cormorant Garamond', 'Georgia', 'serif'],
         'book-body': ['Libre Baskerville', 'Georgia', 'serif'],
       },
