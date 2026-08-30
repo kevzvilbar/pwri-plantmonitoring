@@ -37,17 +37,23 @@ export function InstrumentBanner({
     <div
       role={role}
       className={cn(
-        'flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl bg-card border border-border/80 text-foreground shadow-[var(--shadow-card)] transition-colors',
-        edgeClass,
+        'rounded-xl bg-white/[0.02] ring-1 ring-white/[0.08] p-0.5 shadow-[var(--shadow-card)] transition-all',
         className,
       )}
     >
-      <Lamp tone={tone} pulse={tone === 'live' || tone === 'danger' || tone === 'warn'} size={7} />
-      {Icon && <Icon className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />}
-      <div className="flex-1 text-xs leading-snug text-foreground/90 font-medium">
-        {children}
+      <div
+        className={cn(
+          'flex items-center gap-2.5 px-3.5 py-2 rounded-[calc(0.75rem-0.125rem)] bg-card border border-border/70 text-foreground transition-colors',
+          edgeClass,
+        )}
+      >
+        <Lamp tone={tone} pulse={tone === 'live' || tone === 'danger' || tone === 'warn'} size={7} />
+        {Icon && <Icon className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />}
+        <div className="flex-1 text-xs leading-snug text-foreground/90 font-medium">
+          {children}
+        </div>
+        {actions && <div className="shrink-0 flex items-center gap-1.5">{actions}</div>}
       </div>
-      {actions && <div className="shrink-0 flex items-center gap-1.5">{actions}</div>}
     </div>
   );
 }

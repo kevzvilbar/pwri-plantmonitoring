@@ -135,100 +135,102 @@ export function PlantPulseHero({
   }, [chartData, fallbackSparkline]);
 
   return (
-    <div className="rounded-xl border border-border/80 bg-gradient-stat text-foreground p-4 sm:p-5 shadow-[var(--shadow-elev)] border-t-2 border-t-primary relative overflow-hidden">
-      {/* ── Top Bar: Live Status · Facility · Live Clock ── */}
-      <div className="flex items-center justify-between gap-2 flex-wrap pb-3 border-b border-border/40">
-        <div className="flex items-center gap-2">
-          <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-background/60 border border-border/60 text-3xs font-mono font-semibold tracking-wider uppercase text-highlight">
-            <Lamp tone="live" pulse size={6} />
-            <span>Live Telemetry</span>
-          </div>
-          <span className="text-xs font-semibold tracking-tight text-foreground flex items-center gap-1.5">
-            <Building2 className="h-3.5 w-3.5 text-muted-foreground" />
-            {plantTitle}
-          </span>
-        </div>
-
-        <div className="text-2xs font-mono font-medium text-muted-foreground/90">
-          {timeStr || '—'}
-        </div>
-      </div>
-
-      {/* ── Main Hero Content ── */}
-      <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-center pt-3.5">
-        {/* Left: Headline Metric */}
-        <div className="md:col-span-5 space-y-1">
-          <div className="flex items-baseline gap-2">
-            <span className="text-3xl sm:text-4xl font-bold font-mono tabular-nums leading-none readout-glow">
-              {fmtNum(production)}
+    <div className="rounded-[1.75rem] bg-white/[0.03] ring-1 ring-white/10 p-1 sm:p-1.5 shadow-[var(--shadow-elev)]">
+      <div className="rounded-[calc(1.75rem-0.375rem)] bg-gradient-stat text-foreground p-4 sm:p-5 shadow-[inset_0_1px_1px_rgba(255,255,255,0.08)] edge-light-teal relative overflow-hidden">
+        {/* ── Top Bar: Live Status · Facility · Live Clock ── */}
+        <div className="flex items-center justify-between gap-2 flex-wrap pb-3 border-b border-border/40">
+          <div className="flex items-center gap-2">
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-background/60 border border-border/60 text-3xs font-mono font-semibold tracking-wider uppercase text-highlight">
+              <Lamp tone="live" pulse size={6} />
+              <span>Live Telemetry</span>
+            </div>
+            <span className="text-xs font-semibold tracking-tight text-foreground flex items-center gap-1.5">
+              <Building2 className="h-3.5 w-3.5 text-muted-foreground" />
+              {plantTitle}
             </span>
-            <span className="text-sm font-sans font-normal text-muted-foreground">m³</span>
           </div>
-          <div className="flex items-center gap-2 pt-0.5">
-            <span className="text-3xs uppercase tracking-wider font-semibold text-muted-foreground">
-              Today's Production
-            </span>
-            {dProduction !== null && <TrendBadge delta={dProduction} />}
+
+          <div className="text-2xs font-mono font-medium text-muted-foreground/90">
+            {timeStr || '—'}
           </div>
         </div>
 
-        {/* Middle: 7-Day Sparkline */}
-        <div className="md:col-span-4 h-12 flex flex-col justify-end">
-          {sparklineData.length >= 2 ? (
-            <div className="h-10 w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={sparklineData} margin={{ top: 2, right: 2, left: 2, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="heroSparklineFill" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor={C_PRODUCTION} stopOpacity={0.4} />
-                      <stop offset="100%" stopColor={C_PRODUCTION} stopOpacity={0.0} />
-                    </linearGradient>
-                  </defs>
-                  <Area
-                    type="monotone"
-                    dataKey="val"
-                    stroke={C_PRODUCTION}
-                    strokeWidth={2}
-                    fill="url(#heroSparklineFill)"
-                    isAnimationActive={false}
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-              <div className="text-right text-3xs font-mono text-muted-foreground/70 -mt-1">
-                7-day production trend
+        {/* ── Main Hero Content ── */}
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-center pt-3.5">
+          {/* Left: Headline Metric */}
+          <div className="md:col-span-5 space-y-1">
+            <div className="flex items-baseline gap-2">
+              <span className="readout-num readout-glow text-4xl sm:text-5xl font-bold leading-none">
+                {fmtNum(production)}
+              </span>
+              <span className="text-base font-sans font-normal text-muted-foreground">m³</span>
+            </div>
+            <div className="flex items-center gap-2 pt-1">
+              <span className="text-3xs uppercase tracking-wider font-semibold text-muted-foreground">
+                Today's Production
+              </span>
+              {dProduction !== null && <TrendBadge delta={dProduction} />}
+            </div>
+          </div>
+
+          {/* Middle: 7-Day Sparkline */}
+          <div className="md:col-span-4 h-12 flex flex-col justify-end">
+            {sparklineData.length >= 2 ? (
+              <div className="h-10 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={sparklineData} margin={{ top: 2, right: 2, left: 2, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="heroSparklineFill" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor={C_PRODUCTION} stopOpacity={0.4} />
+                        <stop offset="100%" stopColor={C_PRODUCTION} stopOpacity={0.0} />
+                      </linearGradient>
+                    </defs>
+                    <Area
+                      type="monotone"
+                      dataKey="val"
+                      stroke={C_PRODUCTION}
+                      strokeWidth={2}
+                      fill="url(#heroSparklineFill)"
+                      isAnimationActive={false}
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+                <div className="text-right text-3xs font-mono text-muted-foreground/70 -mt-1">
+                  7-day production trend
+                </div>
               </div>
-            </div>
-          ) : (
-            <div className="text-3xs font-mono text-muted-foreground/60 flex items-center h-full">
-              Collecting 7-day sparkline telemetry…
-            </div>
-          )}
-        </div>
-
-        {/* Right: Fleet Health Status Lamps */}
-        <div className="md:col-span-3 flex md:flex-col justify-start md:justify-center md:items-end gap-2 text-2xs font-mono">
-          <div className="flex items-center gap-2 bg-background/50 border border-border/60 rounded-lg px-2.5 py-1.5">
-            <span className="flex items-center gap-1.5">
-              <Lamp tone="good" size={6} />
-              <span className="font-semibold text-foreground">{fleetCounts.online}</span>
-              <span className="text-muted-foreground">online</span>
-            </span>
-            <span className="text-border/60">|</span>
-            <span className="flex items-center gap-1.5">
-              <Lamp tone="warn" size={6} />
-              <span className="font-semibold text-foreground">{fleetCounts.stale}</span>
-              <span className="text-muted-foreground">stale</span>
-            </span>
-            {fleetCounts.offline > 0 && (
-              <>
-                <span className="text-border/60">|</span>
-                <span className="flex items-center gap-1.5">
-                  <Lamp tone="muted" size={6} />
-                  <span className="font-semibold text-foreground">{fleetCounts.offline}</span>
-                  <span className="text-muted-foreground">off</span>
-                </span>
-              </>
+            ) : (
+              <div className="text-3xs font-mono text-muted-foreground/60 flex items-center h-full">
+                Collecting 7-day sparkline telemetry…
+              </div>
             )}
+          </div>
+
+          {/* Right: Fleet Health Status Lamps */}
+          <div className="md:col-span-3 flex md:flex-col justify-start md:justify-center md:items-end gap-2 text-2xs font-mono">
+            <div className="flex items-center gap-2 bg-background/50 border border-border/60 rounded-lg px-2.5 py-1.5">
+              <span className="flex items-center gap-1.5">
+                <Lamp tone="good" size={6} />
+                <span className="font-semibold text-foreground">{fleetCounts.online}</span>
+                <span className="text-muted-foreground">online</span>
+              </span>
+              <span className="text-border/60">|</span>
+              <span className="flex items-center gap-1.5">
+                <Lamp tone="warn" size={6} />
+                <span className="font-semibold text-foreground">{fleetCounts.stale}</span>
+                <span className="text-muted-foreground">stale</span>
+              </span>
+              {fleetCounts.offline > 0 && (
+                <>
+                  <span className="text-border/60">|</span>
+                  <span className="flex items-center gap-1.5">
+                    <Lamp tone="muted" size={6} />
+                    <span className="font-semibold text-foreground">{fleetCounts.offline}</span>
+                    <span className="text-muted-foreground">off</span>
+                  </span>
+                </>
+              )}
+            </div>
           </div>
         </div>
       </div>
