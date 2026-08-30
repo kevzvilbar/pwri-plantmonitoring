@@ -507,45 +507,46 @@ export default function Plants() {
     <div className="space-y-4 animate-fade-in">
 
       {/* ── Plants Overview Header ── */}
-      <div className="rounded-lg border border-border bg-card text-foreground p-4 sm:p-5 shadow-xs">
+      <div className="rounded-2xl border border-border/80 bg-card p-4 sm:p-5 shadow-xs">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="space-y-1">
+          <div className="space-y-1.5">
             <div className="flex items-center gap-2">
-              <h1 className="text-lg font-semibold tracking-tight text-foreground">Water Production Facilities</h1>
-              <span className="px-2 py-0.5 rounded-full text-2xs font-medium bg-primary-soft text-primary border border-primary/30">
+              <h1 className="text-lg font-bold tracking-tight text-foreground">Water Production Facilities</h1>
+              <span className="px-2 py-0.5 rounded-full text-2xs font-semibold bg-primary-soft text-primary border border-primary/20">
                 Live Overview
               </span>
             </div>
-            <p className="text-xs text-slate-300 flex items-center gap-1.5">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+            <p className="text-xs text-muted-foreground flex items-center gap-2 font-medium">
+              <span className="relative flex h-2 w-2 shrink-0">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-accent opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-accent"></span>
               </span>
-              <span>{list?.length ?? 0} Facilities Monitored</span>
-              <span className="text-slate-500">&bull;</span>
-              <span>Synced <strong className="text-white font-mono">{secondsAgo}s</strong> ago</span>
+              <span>{list?.length ?? 0} {list?.length === 1 ? 'Facility' : 'Facilities'} Monitored</span>
+              <span className="opacity-40">&bull;</span>
+              <span>Synced <strong className="text-foreground font-semibold font-mono">{secondsAgo}s</strong> ago</span>
             </p>
           </div>
 
           {/* Quick Metrics Bar */}
-          <div className="flex items-center gap-4 sm:gap-6 border-t sm:border-t-0 sm:border-l border-white/10 pt-3 sm:pt-0 sm:pl-6">
+          <div className="flex items-center gap-4 sm:gap-6 border-t sm:border-t-0 sm:border-l border-border/60 pt-3 sm:pt-0 sm:pl-6">
             <div className="text-left sm:text-right">
-              <div className="text-[10px] uppercase font-bold tracking-wider text-slate-400">Total Capacity</div>
-              <div className="text-lg sm:text-xl font-extrabold text-white font-mono">
-                {fmtNum(totalCapacity)} <span className="text-xs text-teal-400">MLD</span>
+              <div className="text-3xs uppercase font-bold tracking-wider text-muted-foreground">Total Capacity</div>
+              <div className="text-lg sm:text-xl font-black text-foreground font-mono">
+                {totalCapacity > 0 ? (totalCapacity >= 1000 ? (totalCapacity / 1000).toFixed(1) : fmtNum(totalCapacity)) : '—'}{' '}
+                <span className="text-2xs font-bold text-primary font-sans">{totalCapacity >= 1000 ? 'MLD' : 'm³/d'}</span>
               </div>
             </div>
-            <div className="h-8 w-px bg-white/10" />
+            <div className="h-8 w-px bg-border/60" />
             <div className="text-left sm:text-right">
-              <div className="text-[10px] uppercase font-bold tracking-wider text-slate-400">RO Utilization</div>
-              <div className="text-lg sm:text-xl font-extrabold text-sky-400 font-mono">
+              <div className="text-3xs uppercase font-bold tracking-wider text-muted-foreground">RO Utilization</div>
+              <div className="text-lg sm:text-xl font-black text-info font-mono">
                 {roUtilPct}%
               </div>
             </div>
-            <div className="h-8 w-px bg-white/10" />
+            <div className="h-8 w-px bg-border/60" />
             <div className="text-left sm:text-right">
-              <div className="text-[10px] uppercase font-bold tracking-wider text-slate-400">Avg Health</div>
-              <div className="text-lg sm:text-xl font-extrabold text-emerald-400 font-mono">
+              <div className="text-3xs uppercase font-bold tracking-wider text-muted-foreground">Avg Health</div>
+              <div className="text-lg sm:text-xl font-black text-accent font-mono">
                 {avgHealth}%
               </div>
             </div>
