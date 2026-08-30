@@ -24,8 +24,6 @@ import { useOnlineStatus } from '@/hooks/useOnlineStatus';
  * TopBar/BottomNav — it simply pushes content down by one line while
  * visible, and collapses back to nothing the moment connectivity returns.
  */
-import { WifiOff } from 'lucide-react';
-import { useOnlineStatus } from '@/hooks/useOnlineStatus';
 import { InstrumentBanner } from '@/components/InstrumentBanner';
 
 export function OfflineBanner() {

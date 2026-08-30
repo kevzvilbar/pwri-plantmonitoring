@@ -15,7 +15,7 @@ interface PlantPulseHeroProps {
   plantIds: string[];
   production: number | null;
   dProduction: number | null;
-  chartData: any[];
+  chartData?: any[];
   onSelectPlant?: (plantId: string) => void;
 }
 
@@ -78,6 +78,29 @@ export function PlantPulseHero({
     staleTime: 60_000,
   });
 
+  // Query past 7 days production if chartData is not provided
+  const { data: fallbackSparkline } = useQuery({
+    queryKey: ['plant-pulse-hero-7d-sparkline', plantIds],
+    queryFn: async () => {
+      if (!plantIds.length) return [];
+      const sinceDate = format(new Date(Date.now() - 7 * 86400000), 'yyyy-MM-dd');
+      const { data } = await supabase
+        .from('daily_plant_summary')
+        .select('date, product_water_m3')
+        .in('plant_id', plantIds)
+        .gte('date', sinceDate)
+        .order('date', { ascending: true });
+
+      const dayMap: Record<string, number> = {};
+      (data ?? []).forEach((r) => {
+        dayMap[r.date] = (dayMap[r.date] ?? 0) + (Number(r.product_water_m3) || 0);
+      });
+      return Object.entries(dayMap).map(([date, val]) => ({ date, val }));
+    },
+    enabled: (!chartData || !chartData.length) && plantIds.length > 0,
+    staleTime: 5 * 60_000,
+  });
+
   const fleetCounts = useMemo(() => {
     let online = 0;
     let stale = 0;
@@ -100,11 +123,16 @@ export function PlantPulseHero({
 
   // Last 7 days sparkline slice
   const sparklineData = useMemo(() => {
-    if (!chartData || !chartData.length) return [];
-    return chartData.slice(-7).map((d) => ({
-      val: d.production != null && Number.isFinite(d.production) ? d.production : 0,
-    }));
-  }, [chartData]);
+    if (chartData && chartData.length > 0) {
+      return chartData.slice(-7).map((d) => ({
+        val: d.production != null && Number.isFinite(d.production) ? d.production : 0,
+      }));
+    }
+    if (fallbackSparkline && fallbackSparkline.length > 0) {
+      return fallbackSparkline;
+    }
+    return [];
+  }, [chartData, fallbackSparkline]);
 
   return (
     <div className="rounded-xl border border-border/80 bg-gradient-stat text-foreground p-4 sm:p-5 shadow-[var(--shadow-elev)] border-t-2 border-t-primary relative overflow-hidden">

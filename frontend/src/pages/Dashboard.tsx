@@ -329,7 +329,6 @@ export default function Dashboard() {
         plantIds={plantIds}
         production={production}
         dProduction={dProduction}
-        chartData={chartData}
         onSelectPlant={(pid) => navigate(`/plants/${pid}`)}
       />
 
