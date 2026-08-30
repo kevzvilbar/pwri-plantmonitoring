@@ -133,9 +133,11 @@ export const BOOK_PARTS: BookPart[] = [
               plant&rsquo;s data the current page shows — Operators are locked to their one assigned plant,
               everyone else can switch freely. A{' '}
               <strong className="font-sans font-semibold not-italic">notification bell</strong> surfaces active
-              alerts — compliance breaches, low chemical stock, overdue PM, downtime — each of which can be
-              snoozed or dismissed. Rounding it out: a theme control, and your account menu (Profile, Switch
-              operator, Sign out).
+              alarms and system logs with anti-fatigue rate-limited ringing on new critical events, quick snooze (1h / 24h),
+              and one-click dismissal. It also links directly to the dedicated{' '}
+              <strong className="font-sans font-semibold not-italic">Alert &amp; Notification Center</strong> (Chapter 19)
+              for fleet-wide triage. Rounding it out: a real-time sync status indicator, theme palette selector,
+              and your account menu (Profile, Switch operator, Sign out).
             </P>
             <Note kind="tip">
               Chapter 4 covers exactly who can see what, module by module — but as a shortcut while reading the
@@ -305,10 +307,20 @@ export const BOOK_PARTS: BookPart[] = [
               items={[
                 <><strong className="font-sans font-semibold not-italic">45-minute cooldown</strong> — the same person can&rsquo;t save a second reading for the same asset within 45 minutes of their last one; the Save button shows how many minutes remain.</>,
                 <><strong className="font-sans font-semibold not-italic">Duplicate blocking</strong> — an identical reading already logged for that asset/time is rejected outright.</>,
+                <><strong className="font-sans font-semibold not-italic">Mandatory Anomaly Remarks</strong> — whenever an entered reading deviates significantly from the moving baseline, a prominent amber/rose anomaly banner requires at least a 10-character operational explanation (e.g., pump serviced, peak demand, meter calibration) before the reading can be saved.</>,
                 <><strong className="font-sans font-semibold not-italic">Backward-reading and spike detection</strong> — a cumulative reading lower than the last one, or an implied flow rate more than double the recent average, is still saved, but automatically tagged pending review for a supervisor rather than silently rejected.</>,
                 <><strong className="font-sans font-semibold not-italic">Daily cap</strong> — wells stop accepting new readings after 3 in a single day.</>,
               ]}
             />
+            <H3>Logging reading gaps and maintenance reasons</H3>
+            <P>
+              When an asset was offline, under maintenance, or has no reading for today, the system surfaces a prominent{' '}
+              <strong className="font-sans font-semibold not-italic">&ldquo;Log gap reason&rdquo;</strong> badge directly
+              in the asset&rsquo;s metadata strip across all tabs — Locators, Wells, Blending, and Product meters.
+              These badges are never collapsed or hidden in menus: clicking the button prompts the operator for a reason
+              (e.g., Planned maintenance, Sensor offline, Valve closed), which is recorded permanently in the gap ledger
+              and displayed with a live status badge so supervisors and data analysts immediately understand missing telemetry.
+            </P>
             <P>
               Two checkboxes bypass the false-positive side of those checks when an abnormal-looking reading is
               legitimate:{' '}
@@ -693,17 +705,68 @@ export const BOOK_PARTS: BookPart[] = [
               exceptions — so a manager doesn&rsquo;t have to reconcile several other pages by hand just to know
               whether a plant&rsquo;s data is actually being kept up.
             </Lead>
+            <P>
+              The scorecard aggregates compliance across three dimensions: reading frequency (whether expected daily
+              entries were submitted on time), coverage of gap logs (confirming that every missing entry has an
+              explicit logged maintenance or outage reason), and pending correction resolution. It offers area
+              managers immediate visibility into operational compliance trends without requiring manual log audits.
+            </P>
           </>
         ),
       },
     ],
   },
   {
-    part: 'Part VII — Oversight',
+    part: 'Part VII — Oversight & Alarms',
     chapters: [
       {
-        id: 'compliance',
+        id: 'alerts-triage',
         number: 19,
+        title: 'Alert & Notification Center',
+        dek: 'Fleet-wide alarm triage, telemetry anomaly surveillance, and event audit',
+        body: (
+          <>
+            <Lead>
+              Reachable from the top bar notification bell or directly at <code className="font-sans text-sm font-semibold not-italic">/alerts</code>.
+              The Alert &amp; Notification Center is the central triage console for live plant alarms, sensor threshold breaches,
+              and historical system notifications across the entire fleet.
+            </Lead>
+            <Ref
+              cols={['Severity Tier', 'Visual Indicator', 'Operational Meaning']}
+              rows={[
+                ['Critical', 'Red glow Lamp + Rose edge-light', 'Immediate operational threat — high TDS, extreme pressure differential (ΔP), critical tank levels, or severe telemetry spike.'],
+                ['Warning', 'Amber glow Lamp + Amber edge-light', 'Approaching threshold or abnormal reading requiring supervisor remark or timely inspection.'],
+                ['Info / Normal', 'Sky/Teal Lamp + Blue edge-light', 'Routine lifecycle events, PM completions, shift handovers, and informational system notices.'],
+              ]}
+            />
+            <H3>Active Alarms vs. System Log</H3>
+            <P>
+              The triage console is split into two first-class tabs:
+            </P>
+            <List
+              items={[
+                <><strong className="font-sans font-semibold not-italic">Active Alarms</strong> — live telemetry conditions generated by sensor thresholds, flow rate deviation guards, and plant status. Active alarms remain visible until resolved, snoozed (1 hour or 24 hours), or dismissed.</>,
+                <><strong className="font-sans font-semibold not-italic">System Log</strong> — immutable audit records of system events, user approvals, report exports, and broadcast notifications.</>,
+              ]}
+            />
+            <H3>Triage and Batch Controls</H3>
+            <P>
+              KPI cards at the top provide instant counts for total active alarms, critical alarms, warnings, and unread logs.
+              Operators and managers can filter by severity tier, switch between specific plants, search by keyword, or perform
+              batch actions (<strong className="font-sans font-semibold not-italic">Snooze All (1h)</strong>,{' '}
+              <strong className="font-sans font-semibold not-italic">Dismiss All</strong>, or{' '}
+              <strong className="font-sans font-semibold not-italic">Mark All Read</strong>) to streamline high-volume shift changes.
+            </P>
+            <Note kind="tip">
+              The notification bell in the top bar uses an anti-fatigue rate-limiter: it rings once upon the arrival
+              of a new critical alarm rather than looping continuously, preventing alarm fatigue on shared shift terminals.
+            </Note>
+          </>
+        ),
+      },
+      {
+        id: 'compliance',
+        number: 20,
         title: 'Compliance',
         dek: 'Scoring plants against configurable thresholds',
         body: (
@@ -742,7 +805,7 @@ export const BOOK_PARTS: BookPart[] = [
       },
       {
         id: 'admin-console',
-        number: 20,
+        number: 21,
         title: 'Admin Console',
         dek: "The system's control room for accounts, plants, and audit history",
         body: (
@@ -789,7 +852,7 @@ export const BOOK_PARTS: BookPart[] = [
       },
       {
         id: 'profile',
-        number: 21,
+        number: 22,
         title: 'My Profile',
         dek: 'Your own identity, access level, and assigned plants',
         body: (
@@ -815,7 +878,7 @@ export const BOOK_PARTS: BookPart[] = [
     chapters: [
       {
         id: 'troubleshooting',
-        number: 22,
+        number: 23,
         title: 'Troubleshooting & FAQ',
         dek: 'Common problems, and the honest answer to a few recurring questions',
         body: (
@@ -861,7 +924,7 @@ export const BOOK_PARTS: BookPart[] = [
       },
       {
         id: 'glossary',
-        number: 23,
+        number: 24,
         title: 'Glossary & Quick Reference',
         dek: 'Terms used throughout this manual',
         body: (
