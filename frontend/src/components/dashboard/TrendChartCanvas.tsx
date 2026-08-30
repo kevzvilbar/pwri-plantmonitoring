@@ -10,11 +10,14 @@
 // Moved verbatim from TrendChart.tsx — no logic or markup changes, only
 // the props needed to reach the free variables it already used.
 import React from 'react';
+import { useQuery } from '@tanstack/react-query';
 import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
   Legend, ComposedChart, Bar, BarChart, ReferenceLine, Area, AreaChart,
 } from 'recharts';
 import { C_PRODUCTION, C_CONSUMPTION, C_NRW, C_RAWWATER, C_RECOVERY, C_TDS, C_GRID_PV } from '@/lib/chartColors';
+import { useAppStore } from '@/store/appStore';
+import { loadThresholds, DEFAULT_THRESHOLDS } from '@/pages/Compliance';
 import { makeDrillableBarShape } from './TrendChartDrillKit';
 
 const INSTRUMENT_TOOLTIP_STYLE: React.CSSProperties = {
@@ -46,6 +49,16 @@ export function TrendChartCanvas(props: Record<string, any>) {
     showTotalCostLine, showPowerCostLine, showChemCostLine,
     stackMode, rawwaterBreakdown, viewBreakdown, prodDrillSource,
   } = props;
+
+  const selectedPlantId = useAppStore((s) => s.selectedPlantId);
+  const thresholdScope = selectedPlantId || 'global';
+  const { data: thresholds } = useQuery({
+    queryKey: ['thresholds', thresholdScope],
+    queryFn: () => loadThresholds(thresholdScope),
+    staleTime: 2 * 60_000,
+  });
+  const nrwLimitPct = thresholds?.nrw_pct_max ?? DEFAULT_THRESHOLDS.nrw_pct_max;
+
   return (
         <ResponsiveContainer width="100%" height="100%">
           {(hasRoDrill && roDrillMode === 'by-train' && viewGran === 'daily') ? (
@@ -237,11 +250,11 @@ export function TrendChartCanvas(props: Record<string, any>) {
               />
               <ReferenceLine
                 yAxisId="pct"
-                y={15}
+                y={nrwLimitPct}
                 stroke="#ef4444"
                 strokeDasharray="4 4"
                 strokeWidth={1.5}
-                label={{ value: 'Limit: 15%', fill: '#ef4444', fontSize: 10, position: 'top' }}
+                label={{ value: `Limit: ${nrwLimitPct}%`, fill: '#ef4444', fontSize: 10, position: 'top' }}
               />
               <Line yAxisId="pct" type="monotone" dataKey="nrw" stroke={C_NRW} strokeWidth={2.5} dot={{ r: 3.5, fill: C_NRW, strokeWidth: 0 }} name="NRW %" />
             </ComposedChart>
