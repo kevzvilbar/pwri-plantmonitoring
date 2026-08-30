@@ -218,3 +218,58 @@ export const PesoSignIcon = ({ size, ...props }: WaterIconProps) => (
     <path d="M6 12.5h10" />
   </svg>
 );
+
+/** High Pressure Pump (HPP) — multi-stage centrifugal pump with high-pressure discharge port and impeller casing. Replaces generic Zap power icon. */
+export const HighPressurePumpIcon = ({ size, ...props }: WaterIconProps) => (
+  <svg {...baseProps(size, props)}>
+    <circle cx="10.5" cy="13.5" r="6" className="fill-info/20" />
+    <path d="M10.5 7.5V3h4v4.5" />
+    <path d="M14.5 3h2" />
+    <circle cx="10.5" cy="13.5" r="1.8" fill="currentColor" stroke="none" />
+    <path d="M10.5 10v-1.5M10.5 17v-1.5M7 13.5h1.5M14 13.5h-1.5" />
+    <path d="M4.5 13.5H2" />
+    <path d="M17 18l3-3-3-3" />
+  </svg>
+);
+
+/** Booster Pump — in-line centrifugal boost pump with intake/discharge nozzles and dynamic pressure boost arrow. Replaces generic Activity pulse icon. */
+export const BoosterPumpIcon = ({ size, ...props }: WaterIconProps) => (
+  <svg {...baseProps(size, props)}>
+    <circle cx="12" cy="12" r="6" className="fill-accent/20" />
+    <path d="M2 12h4M18 12h4" />
+    <path d="M11 9l3 3-3 3" />
+    <path d="M8.5 12h5.5" />
+    <path d="M6 9.5v5M18 9.5v5" />
+  </svg>
+);
+
+/** Media Filter (AFM / Sand / Dual Media) — vertical pressurized filtration vessel with media bed. Replaces generic funnel Filter. */
+export const MediaFilterIcon = ({ size, ...props }: WaterIconProps) => (
+  <svg {...baseProps(size, props)}>
+    <rect x="5" y="5" width="14" height="14" rx="4" className="fill-accent/15" />
+    <path d="M12 2v3M12 19v3" />
+    <path d="M8 9.5h8M8 14.5h8" strokeDasharray="1.5 2" />
+    <path d="M9.5 22h5M9.5 2h5" />
+  </svg>
+);
+
+/** Cartridge Filter Housing (CF / Micron Filter) — precision cylindrical housing with core element. Replaces generic Layers icon. */
+export const CartridgeFilterIcon = ({ size, ...props }: WaterIconProps) => (
+  <svg {...baseProps(size, props)}>
+    <rect x="6" y="4" width="12" height="16" rx="3" className="fill-accent/15" />
+    <path d="M10 4v16M14 4v16" strokeDasharray="2 2" />
+    <path d="M6 9h12M6 15h12" />
+    <path d="M3 12h3M18 12h3" />
+  </svg>
+);
+
+/** RO Membrane Vessel & Performance — pressure vessel showing permeate recovery separation. Replaces generic BarChart. */
+export const MembranePerformanceIcon = ({ size, ...props }: WaterIconProps) => (
+  <svg {...baseProps(size, props)}>
+    <rect x="2" y="7" width="16" height="10" rx="2.5" className="fill-info/15" />
+    <path d="M6.5 7v10M13.5 7v10" />
+    <path d="M2 12h16" strokeDasharray="2 2" />
+    <path d="M18 9.5h4M18 14.5h4" />
+    <path d="M20 8l2 1.5-2 1.5M20 13l2 1.5-2 1.5" />
+  </svg>
+);

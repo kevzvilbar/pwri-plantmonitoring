@@ -27,7 +27,10 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { ChevronLeft, ChevronDown, Plus, MapPin, Gauge, Wrench, Sun, Zap, Trash2, Loader2, Pencil, Upload, FileDown, X, TrendingUp, Download, BarChart2, Calendar, Droplet, Search, Waves, Filter, Activity, Layers } from 'lucide-react';
-import { ROTrainIcon, ChangeMeterIcon, MeterOdometerIcon, PressureGaugeIcon } from '@/components/icons/water-icons';
+import {
+  ROTrainIcon, ChangeMeterIcon, MeterOdometerIcon, PressureGaugeIcon,
+  HighPressurePumpIcon, BoosterPumpIcon, MediaFilterIcon, CartridgeFilterIcon, MembranePerformanceIcon,
+} from '@/components/icons/water-icons';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, ComposedChart, Area } from 'recharts';
 import { fmtNum } from '@/lib/calculations';
 import { toast } from 'sonner';
@@ -510,15 +513,15 @@ export function TrainsList({ plantId }: { plantId: string }) {
                   <div className="flex flex-wrap gap-1.5 pt-0.5">
                     {numAfm > 0 && (
                       <CompBtn trainId={t.id} activeKey={activeKey} sectionKey="afm"
-                        icon={<Filter className="h-3.5 w-3.5" />} label={mt} count={numAfm} />
+                        icon={<MediaFilterIcon className="h-3.5 w-3.5 text-accent" />} label={mt} count={numAfm} />
                     )}
                     {numBp > 0 && (
                       <CompBtn trainId={t.id} activeKey={activeKey} sectionKey="booster"
-                        icon={<Activity className="h-3.5 w-3.5" />} label="Booster Pump" count={numBp} />
+                        icon={<BoosterPumpIcon className="h-3.5 w-3.5 text-accent" />} label="Booster Pump" count={numBp} />
                     )}
                     {numCf > 0 && (
                       <CompBtn trainId={t.id} activeKey={activeKey} sectionKey="cf"
-                        icon={<Layers className="h-3.5 w-3.5" />}
+                        icon={<CartridgeFilterIcon className="h-3.5 w-3.5 text-accent" />}
                         label={ft === 'Bag Filter' ? 'Filter Housing' : 'CF Housing'}
                         count={numCf} />
                     )}
@@ -540,12 +543,12 @@ export function TrainsList({ plantId }: { plantId: string }) {
                   <div className="flex flex-wrap gap-1.5 pt-0.5">
                     {numHpp > 0 && (
                       <CompBtn trainId={t.id} activeKey={activeKey} sectionKey="hpp"
-                        icon={<Zap className="h-3.5 w-3.5" />} label="High Pressure Pump" count={numHpp} />
+                        icon={<HighPressurePumpIcon className="h-3.5 w-3.5 text-info" />} label="High Pressure Pump" count={numHpp} />
                     )}
                     <CompBtn trainId={t.id} activeKey={activeKey} sectionKey="ro"
-                      icon={<BarChart2 className="h-3.5 w-3.5" />} label="RO Performance" />
+                      icon={<MembranePerformanceIcon className="h-3.5 w-3.5 text-info" />} label="RO Performance" />
                     <CompBtn trainId={t.id} activeKey={activeKey} sectionKey="meters"
-                      icon={<MeterOdometerIcon className="h-3.5 w-3.5" />} label="Meters" />
+                      icon={<MeterOdometerIcon className="h-3.5 w-3.5 text-info" />} label="Meters" />
                   </div>
                 </div>
               </div>
@@ -555,7 +558,7 @@ export function TrainsList({ plantId }: { plantId: string }) {
                 <div className="p-3.5 rounded-xl border border-accent/40 bg-card animate-fade-in shadow-sm">
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-xs font-bold text-accent flex items-center gap-1.5">
-                      <Filter className="h-4 w-4" /> {mt} Media Filtration Telemetry
+                      <MediaFilterIcon className="h-4 w-4" /> {mt} Media Filtration Telemetry
                     </span>
                     <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-muted-foreground" onClick={() => toggleSection(t.id, 'afm')}>
                       <X className="h-3.5 w-3.5" />
@@ -569,7 +572,7 @@ export function TrainsList({ plantId }: { plantId: string }) {
                 <div className="p-3.5 rounded-xl border border-accent/40 bg-card animate-fade-in shadow-sm">
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-xs font-bold text-accent flex items-center gap-1.5">
-                      <Activity className="h-4 w-4" /> Booster Pump Pressure &amp; Flow
+                      <BoosterPumpIcon className="h-4 w-4" /> Booster Pump Pressure &amp; Flow
                     </span>
                     <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-muted-foreground" onClick={() => toggleSection(t.id, 'booster')}>
                       <X className="h-3.5 w-3.5" />
@@ -583,7 +586,7 @@ export function TrainsList({ plantId }: { plantId: string }) {
                 <div className="p-3.5 rounded-xl border border-accent/40 bg-card animate-fade-in shadow-sm">
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-xs font-bold text-accent flex items-center gap-1.5">
-                      <Layers className="h-4 w-4" /> {ft} Differential Pressure &amp; Replacement History
+                      <CartridgeFilterIcon className="h-4 w-4" /> {ft} Differential Pressure &amp; Replacement History
                     </span>
                     <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-muted-foreground" onClick={() => toggleSection(t.id, 'cf')}>
                       <X className="h-3.5 w-3.5" />
@@ -597,7 +600,7 @@ export function TrainsList({ plantId }: { plantId: string }) {
                 <div className="p-3.5 rounded-xl border border-info/40 bg-card animate-fade-in shadow-sm">
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-xs font-bold text-info flex items-center gap-1.5">
-                      <Zap className="h-4 w-4" /> High Pressure Pump Performance &amp; Current Draw
+                      <HighPressurePumpIcon className="h-4 w-4" /> High Pressure Pump Performance &amp; Current Draw
                     </span>
                     <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-muted-foreground" onClick={() => toggleSection(t.id, 'hpp')}>
                       <X className="h-3.5 w-3.5" />
@@ -611,7 +614,7 @@ export function TrainsList({ plantId }: { plantId: string }) {
                 <div className="p-3.5 rounded-xl border border-info/40 bg-card animate-fade-in shadow-sm">
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-xs font-bold text-info flex items-center gap-1.5">
-                      <BarChart2 className="h-4 w-4" /> Reverse Osmosis Recovery &amp; Salt Rejection
+                      <MembranePerformanceIcon className="h-4 w-4" /> Reverse Osmosis Recovery &amp; Salt Rejection
                     </span>
                     <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-muted-foreground" onClick={() => toggleSection(t.id, 'ro')}>
                       <X className="h-3.5 w-3.5" />
