@@ -263,101 +263,47 @@ export default function Dashboard() {
 
       {/* ─── Cluster 1: Overview ─── */}
       <section id="overview-cluster" className="scroll-mt-28 space-y-2.5">
-        <ClusterHeader icon={Droplet} title="Overview" accent="text-primary" />
+        <ClusterHeader icon={Droplet} title="Overview" accent="text-primary" subtitle="Distribution & Sources" />
         
-        {/* Tier 1: 2-Column Hero Bento Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
-          {/* Hero Bento Tile 1: Production Volume */}
-          <div
+        {/* 4-Column Operational Overview Grid */}
+        <div className="grid gap-2 grid-cols-2 sm:grid-cols-2 lg:grid-cols-4">
+          {/* 1. Locators Consumption / Offtake */}
+          <StatCard
+            icon={Receipt}
+            accent="text-highlight"
+            label="Locators Consumption"
+            value={fmtNum(consumption)}
+            unit="m³"
+            trend={dConsumption}
             onClick={handleMetricClick('production', 'Production vs Consumption')}
-            className="p-4 rounded-xl bg-card border border-border/80 border-l-4 border-l-primary hover:border-primary/60 transition-all cursor-pointer shadow-xs group"
-          >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <div className="p-2 rounded-lg bg-primary/10 text-primary group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
-                  <Droplet className="h-4 w-4" />
-                </div>
-                <div>
-                  <div className="text-2xs uppercase font-mono font-semibold tracking-wider text-muted-foreground">
-                    Headline Production
-                  </div>
-                  <div className="text-sm font-bold text-foreground">
-                    Treated Water Output
-                  </div>
-                </div>
-              </div>
-              {dProduction != null && (
-                <div className={`px-2 py-0.5 rounded-full text-2xs font-mono font-semibold ${
-                  dProduction >= 0 ? 'bg-accent/15 text-accent' : 'bg-danger/15 text-danger'
-                }`}>
-                  {dProduction >= 0 ? `+${fmtNum(dProduction)}` : fmtNum(dProduction)} m³ vs yest
-                </div>
-              )}
-            </div>
-            <div className="mt-3 flex items-baseline gap-2">
-              <span className="readout-num readout-glow text-3xl sm:text-4xl font-bold font-mono-num text-foreground">
-                {fmtNum(production)}
-              </span>
-              <span className="text-sm font-mono text-muted-foreground font-semibold">m³</span>
-            </div>
-            <div className="mt-1.5 text-3xs text-muted-foreground flex items-center justify-between">
-              <span>Total aggregate plant volume produced today</span>
-              <span className="text-primary font-medium group-hover:underline">Click for trend &rarr;</span>
-            </div>
-          </div>
+          />
 
-          {/* Hero Bento Tile 2: Locators Consumption */}
-          <div
-            onClick={handleMetricClick('production', 'Production vs Consumption')}
-            className="p-4 rounded-xl bg-card border border-border/80 border-l-4 border-l-highlight hover:border-highlight/60 transition-all cursor-pointer shadow-xs group"
-          >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <div className="p-2 rounded-lg bg-highlight/10 text-highlight group-hover:bg-highlight group-hover:text-white transition-colors">
-                  <Receipt className="h-4 w-4" />
-                </div>
-                <div>
-                  <div className="text-2xs uppercase font-mono font-semibold tracking-wider text-muted-foreground">
-                    Offtake Demand
-                  </div>
-                  <div className="text-sm font-bold text-foreground">
-                    Locators Consumption
-                  </div>
-                </div>
-              </div>
-              {dConsumption != null && (
-                <div className={`px-2 py-0.5 rounded-full text-2xs font-mono font-semibold ${
-                  dConsumption >= 0 ? 'bg-highlight/15 text-highlight' : 'bg-muted text-muted-foreground'
-                }`}>
-                  {dConsumption >= 0 ? `+${fmtNum(dConsumption)}` : fmtNum(dConsumption)} m³ vs yest
-                </div>
-              )}
-            </div>
-            <div className="mt-3 flex items-baseline gap-2">
-              <span className="readout-num text-3xl sm:text-4xl font-bold font-mono-num text-foreground">
-                {fmtNum(consumption)}
-              </span>
-              <span className="text-sm font-mono text-muted-foreground font-semibold">m³</span>
-            </div>
-            <div className="mt-1.5 text-3xs text-muted-foreground flex items-center justify-between">
-              <span>Billed and bulk offtake across all active locators</span>
-              <span className="text-highlight font-medium group-hover:underline">Click for trend &rarr;</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Tier 2: Supporting Metrics Row */}
-        <div className="grid gap-2 grid-cols-1 sm:grid-cols-3">
+          {/* 2. NRW Gauge Card */}
           <NRWGaugeCard
             nrw={nrw}
             yNrw={yNrw}
             onClick={handleMetricClick('nrw', 'NRW Trend')}
           />
-          <StatCard icon={RawWaterIcon} accent="text-info" label="Raw Water"
-            value={fmtNum(rawWaterVol)} unit="m³" trend={dRawWater}
-            onClick={handleMetricClick('rawwater', 'Raw Water (m³)')} />
-          <StatCard icon={Waves} accent="text-kpi-ro" label="Blending"
-            value={fmtNum(blending)} unit="m³" />
+
+          {/* 3. Raw Water Extraction */}
+          <StatCard
+            icon={RawWaterIcon}
+            accent="text-info"
+            label="Raw Water"
+            value={fmtNum(rawWaterVol)}
+            unit="m³"
+            trend={dRawWater}
+            onClick={handleMetricClick('rawwater', 'Raw Water (m³)')}
+          />
+
+          {/* 4. Blending Volume */}
+          <StatCard
+            icon={Waves}
+            accent="text-kpi-ro"
+            label="Blending"
+            value={fmtNum(blending)}
+            unit="m³"
+          />
         </div>
 
         <ClusterCharts metrics={OVERVIEW_CHART_METRICS} viewMode={viewMode} expandedMetric={expandedMetric} plantIds={plantIds} clusterId="overview" />
