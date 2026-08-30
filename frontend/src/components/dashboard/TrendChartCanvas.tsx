@@ -58,6 +58,9 @@ export function TrendChartCanvas(props: Record<string, any>) {
     staleTime: 2 * 60_000,
   });
   const nrwLimitPct = thresholds?.nrw_pct_max ?? DEFAULT_THRESHOLDS.nrw_pct_max;
+  const pvLimitMax = thresholds?.pv_ratio_max ?? DEFAULT_THRESHOLDS.pv_ratio_max;
+  const recoveryMinPct = thresholds?.recovery_pct_min ?? DEFAULT_THRESHOLDS.recovery_pct_min;
+  const permTdsMax = thresholds?.permeate_tds_max ?? DEFAULT_THRESHOLDS.permeate_tds_max;
 
   return (
         <ResponsiveContainer width="100%" height="100%">
@@ -380,11 +383,11 @@ export function TrendChartCanvas(props: Record<string, any>) {
               />
               <Tooltip content={<PvTooltip />} />
               <ReferenceLine
-                y={1.2}
+                y={pvLimitMax}
                 stroke="#f59e0b"
                 strokeDasharray="4 4"
                 strokeWidth={1.5}
-                label={{ value: 'Target: 1.2', fill: '#f59e0b', fontSize: 10, position: 'top' }}
+                label={{ value: `Target: ≤ ${pvLimitMax}`, fill: '#f59e0b', fontSize: 10, position: 'top' }}
               />
               <Line
                 type="monotone"
@@ -761,6 +764,13 @@ export function TrendChartCanvas(props: Record<string, any>) {
                 tickLine={false}
               />
               <Tooltip content={<NegativeAwareTooltip />} />
+              <ReferenceLine
+                y={permTdsMax}
+                stroke="#f59e0b"
+                strokeDasharray="4 4"
+                strokeWidth={1.5}
+                label={{ value: `Limit: ${permTdsMax} ppm`, fill: '#f59e0b', fontSize: 10, position: 'top' }}
+              />
               <Area
                 type="monotone"
                 dataKey="tds"
@@ -805,24 +815,26 @@ export function TrendChartCanvas(props: Record<string, any>) {
               {metric === 'recovery' && roDrillMode === 'default' && (
                 <>
                   <ReferenceLine
-                    y={65}
+                    y={recoveryMinPct}
                     stroke="#10b981"
                     strokeDasharray="3 3"
-                    strokeWidth={1}
-                    label={{ value: 'Min: 65%', fill: '#10b981', fontSize: 9, position: 'insideBottomLeft' }}
-                  />
-                  <ReferenceLine
-                    y={75}
-                    stroke="#10b981"
-                    strokeDasharray="3 3"
-                    strokeWidth={1}
-                    label={{ value: 'Max: 75%', fill: '#10b981', fontSize: 9, position: 'insideTopLeft' }}
+                    strokeWidth={1.5}
+                    label={{ value: `Min Target: ${recoveryMinPct}%`, fill: '#10b981', fontSize: 9, position: 'insideBottomLeft' }}
                   />
                   <Area type="monotone" dataKey="recovery" stroke={C_RECOVERY} strokeWidth={2.5} fill="url(#recoveryFill)" dot={false} name="Recovery (%)" />
                 </>
               )}
               {metric === 'tds' && roDrillMode === 'default' && (
-                <Area type="monotone" dataKey="tds" stroke={C_TDS} strokeWidth={2.5} fill="url(#tdsFill)" dot={false} name="Permeate TDS (ppm)" />
+                <>
+                  <ReferenceLine
+                    y={permTdsMax}
+                    stroke="#f59e0b"
+                    strokeDasharray="4 4"
+                    strokeWidth={1.5}
+                    label={{ value: `Limit: ${permTdsMax} ppm`, fill: '#f59e0b', fontSize: 10, position: 'top' }}
+                  />
+                  <Area type="monotone" dataKey="tds" stroke={C_TDS} strokeWidth={2.5} fill="url(#tdsFill)" dot={false} name="Permeate TDS (ppm)" />
+                </>
               )}
             </AreaChart>
           )}

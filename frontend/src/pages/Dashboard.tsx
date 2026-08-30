@@ -61,6 +61,7 @@ import { PendingReviewCard }   from '@/components/dashboard/PendingReviewCard';
 import { DataCompletenessRadarCard } from '@/components/dashboard/DataCompletenessRadarCard';
 import { CostSunburst }        from '@/components/dashboard/CostSunburst';
 import { DashboardSectionNav } from '@/components/dashboard/DashboardSectionNav';
+import { loadThresholds, DEFAULT_THRESHOLDS } from '@/pages/Compliance';
 import { useDashboardQueries } from './useDashboardQueries';
 import { useDashboardAggregates } from './useDashboardAggregates';
 import { useDashboardAlerts } from './useDashboardAlerts';
@@ -99,6 +100,15 @@ export default function Dashboard() {
     const timer = setInterval(() => setSecondsAgo(s => (s % 20) + 1), 1000);
     return () => clearInterval(timer);
   }, []);
+
+  // ── Compliance Thresholds (derived from compliance settings, per-plant or global) ──
+  const thresholdScope = selectedPlantId || 'global';
+  const { data: complianceThresholds } = useQuery({
+    queryKey: ['thresholds', thresholdScope],
+    queryFn: () => loadThresholds(thresholdScope),
+    staleTime: 2 * 60_000,
+  });
+  const thresholds = complianceThresholds ?? DEFAULT_THRESHOLDS;
 
   // ── Enhancement ⑥: open incident count for the compliance badge ───────────
   const { data: openIncidentCount = 0 } = useQuery<number>({
@@ -333,6 +343,9 @@ export default function Dashboard() {
             label="Product TDS"
             value={avgPermTds ?? '—'}
             unit="ppm"
+            threshold={`≤${thresholds.permeate_tds_max}`}
+            calc
+            calcTooltip={`Product TDS compliance limit: ≤ ${thresholds.permeate_tds_max} ppm`}
             onClick={handleMetricClick('tds', 'Permeate TDS Trend')}
             expandRows={roByTrain.map((r) => ({
               label: r.train_name ?? (r.train_number != null ? `Train ${r.train_number}` : '?'),
@@ -365,8 +378,16 @@ export default function Dashboard() {
             testId="raw-ntu-per-well-source"
             decimals={2}
           />
-          <StatCard icon={Percent} label="Recovery" value={avgRecovery ?? '—'} unit="%"
-            onClick={handleMetricClick('recovery', 'Recovery Trendline')} />
+          <StatCard
+            icon={Percent}
+            label="Recovery"
+            value={avgRecovery ?? '—'}
+            unit="%"
+            threshold={`≥${thresholds.recovery_pct_min}%`}
+            calc
+            calcTooltip={`Recovery compliance target: ≥ ${thresholds.recovery_pct_min}%`}
+            onClick={handleMetricClick('recovery', 'Recovery Trendline')}
+          />
         </div>
         <ClusterCharts metrics={QUALITY_CHART_METRICS} viewMode={viewMode} expandedMetric={expandedMetric} plantIds={plantIds} clusterId="quality" />
       </section>
@@ -406,10 +427,17 @@ export default function Dashboard() {
             unit={kwh > 0 ? 'kWh' : undefined}
             trend={dKwh}
             onClick={handleMetricClick('kwh', 'Power Consumption & Energy Mix')} />
-          <StatCard icon={Zap} accent="text-chart-6" label="PV Ratio" value={pv == null ? '—' : pv} unit="kWh/m³"
-            calc threshold="1.2"
-            calcTooltip="PV Ratio = Power kWh ÷ Production m³ (lower is more efficient)"
-            onClick={handleMetricClick('pv', 'PV Ratio Trend')} />
+          <StatCard
+            icon={Zap}
+            accent="text-chart-6"
+            label="PV Ratio"
+            value={pv == null ? '—' : pv}
+            unit="kWh/m³"
+            calc
+            threshold={`≤${thresholds.pv_ratio_max}`}
+            calcTooltip={`PV Ratio = Power kWh ÷ Production m³ (target: ≤ ${thresholds.pv_ratio_max} kWh/m³)`}
+            onClick={handleMetricClick('pv', 'PV Ratio Trend')}
+          />
         </div>
         <ClusterCharts
           metrics={[
