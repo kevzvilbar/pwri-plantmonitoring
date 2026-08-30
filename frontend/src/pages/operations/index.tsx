@@ -7,7 +7,7 @@ import { usePlants } from '@/hooks/usePlants';
 import { Button } from '@/components/ui/button';
 import {
   MapPin, Droplet, Zap, Upload, Download, ClipboardCheck,
-  Waves, Layers, Clock,
+  Waves, Layers, Clock, FlaskConical, Activity,
 } from 'lucide-react';
 
 import { LocatorReadingForm } from './locators/LocatorSection';
