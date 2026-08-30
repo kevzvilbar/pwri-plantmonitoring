@@ -25,7 +25,7 @@ export default function Costs() {
       />
 
       <Tabs value={tab} onValueChange={(v) => setParams({ tab: v })}>
-        <TabsList className={`grid ${canViewBudget ? 'grid-cols-3 sm:grid-cols-6' : 'grid-cols-3 sm:grid-cols-5'} w-full`}>
+        <TabsList className={`grid ${canViewBudget ? 'grid-cols-3 sm:grid-cols-6' : 'grid-cols-3 sm:grid-cols-5'} w-full h-auto sm:h-10 p-1 gap-1`}>
           <TabsTrigger value="rollup" className="gap-1.5">
             <BarChart2 className="h-3.5 w-3.5" />
             <span>Rollup</span>

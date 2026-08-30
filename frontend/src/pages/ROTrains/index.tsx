@@ -40,7 +40,7 @@ export default function ROTrains() {
     <div className="space-y-4 animate-fade-in">
       <PageHeader title="RO Trains & Pre-Treatment" />
       <Tabs value={tab} onValueChange={handleTabChange} className="space-y-3">
-        <TabsList className="grid grid-cols-2 sm:grid-cols-4 w-full h-10 p-1 rounded-xl bg-muted/50 border border-border/50 gap-1">
+        <TabsList className="grid grid-cols-2 sm:grid-cols-4 w-full h-auto sm:h-10 p-1 rounded-xl bg-muted/50 border border-border/50 gap-1">
           <TabsTrigger
             value="overview"
             className="h-8 rounded-lg px-3 text-xs font-semibold data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-xs text-muted-foreground transition-all gap-1.5"
