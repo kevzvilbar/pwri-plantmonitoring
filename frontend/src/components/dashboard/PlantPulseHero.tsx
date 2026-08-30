@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { ResponsiveContainer, AreaChart, Area } from 'recharts';
+import { ResponsiveContainer, AreaChart, Area, YAxis } from 'recharts';
 import { Lamp } from '@/components/ui/Lamp';
 import { TrendBadge } from './StatCard';
 import { fmtNum } from '@/lib/calculations';
@@ -251,9 +251,19 @@ export function PlantPulseHero({
           </div>
 
           {/* Middle: 7-Day Sparkline */}
-          <div className="md:col-span-4 h-12 flex flex-col justify-end">
+          <div className="md:col-span-4 flex flex-col justify-center bg-black/30 border border-white/10 rounded-xl px-3 py-2">
+            <div className="flex items-center justify-between gap-2 mb-1">
+              <span className="text-3xs font-mono font-semibold uppercase tracking-wider text-teal-200/90">
+                7-Day Production Trend
+              </span>
+              {sparklineData.length >= 2 && (
+                <span className="text-3xs font-mono text-cyan-300 font-bold">
+                  {fmtNum(sparklineData[sparklineData.length - 1]?.val ?? 0)} m³
+                </span>
+              )}
+            </div>
             {sparklineData.length >= 2 ? (
-              <div className="h-10 w-full">
+              <div className="h-7 w-full">
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={sparklineData} margin={{ top: 2, right: 2, left: 2, bottom: 0 }}>
                     <defs>
@@ -262,6 +272,13 @@ export function PlantPulseHero({
                         <stop offset="100%" stopColor="#2dd4bf" stopOpacity={0.0} />
                       </linearGradient>
                     </defs>
+                    <YAxis
+                      hide
+                      domain={[
+                        0,
+                        (dataMax: number) => (Number.isFinite(dataMax) && dataMax > 0 ? Math.max(dataMax * 1.25, 10) : 100),
+                      ]}
+                    />
                     <Area
                       type="monotone"
                       dataKey="val"
@@ -272,12 +289,9 @@ export function PlantPulseHero({
                     />
                   </AreaChart>
                 </ResponsiveContainer>
-                <div className="text-right text-3xs font-mono text-teal-200/80 -mt-1">
-                  7-day production trend
-                </div>
               </div>
             ) : (
-              <div className="text-3xs font-mono text-teal-200/70 flex items-center h-full">
+              <div className="text-3xs font-mono text-teal-200/60 flex items-center h-7">
                 Collecting 7-day sparkline telemetry…
               </div>
             )}
