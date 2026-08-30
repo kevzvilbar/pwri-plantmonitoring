@@ -7,6 +7,7 @@ interface PageHeaderProps {
    *  page-header decision that used to vary (text-xs on some pages, text-sm
    *  on others) for what is functionally the same element. */
   subtitle?: ReactNode;
+  description?: ReactNode;
   /** Optional leading icon tile, e.g. AI Assistant's gradient sparkle icon —
    *  rendered as its own block to the left of the title+subtitle. */
   icon?: ReactNode;
@@ -25,14 +26,15 @@ interface PageHeaderProps {
  * as the first child of its `space-y-4 animate-fade-in` root wrapper —
  * see any page in pages/ for the surrounding convention.
  */
-export function PageHeader({ title, subtitle, icon, titleIcon, actions, className }: PageHeaderProps) {
+export function PageHeader({ title, subtitle, description, icon, titleIcon, actions, className }: PageHeaderProps) {
+  const sub = subtitle ?? description;
   const titleBlock = (
     <div>
       <h1 className="text-xl font-semibold tracking-tight flex items-center gap-2">
         {titleIcon}
         {title}
       </h1>
-      {subtitle && <p className="text-sm text-muted-foreground mt-0.5">{subtitle}</p>}
+      {sub && <p className="text-sm text-muted-foreground mt-0.5">{sub}</p>}
     </div>
   );
 

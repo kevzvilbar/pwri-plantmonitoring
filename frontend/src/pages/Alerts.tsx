@@ -204,7 +204,7 @@ export default function Alerts() {
     <div className="space-y-5 pb-12">
       <PageHeader
         title="Alert & Notification Center"
-        description="Unified operations alarm triage, telemetry anomaly surveillance, and system event log."
+        subtitle="Unified operations alarm triage, telemetry anomaly surveillance, and system event log."
       />
 
       {/* KPI Cards / Severity Overview */}
