@@ -25,10 +25,12 @@ import { downloadCSV } from '@/lib/csv';
 import { toast } from 'sonner';
 import { friendlyError } from '@/lib/supabaseErrors';
 import { format } from 'date-fns';
-import { MapPin, Pencil, X, Droplet, Zap, Upload, Download, FileText, AlertCircle, Loader2, History, Gauge, FlaskConical, Keyboard, CalendarClock, ArrowUpRight, Lock, SquarePen } from 'lucide-react';
+import { MapPin, Pencil, X, Droplet, Zap, Upload, Download, FileText, AlertCircle, Loader2, History, Gauge, FlaskConical, Keyboard, CalendarClock, ArrowUpRight, Lock, SquarePen, MessageCircleOff } from 'lucide-react';
 import { MetaStrip } from '@/components/operations/MetaStrip';
 import { ControlCluster } from '@/components/operations/ControlCluster';
 import { cn } from '@/lib/utils';
+import { ReasonDialog } from '@/components/ReasonDialog';
+import { reasonCategoryLabel } from '@/lib/reasonCodes';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -237,9 +239,32 @@ export function ProductForm({ highlightId }: { highlightId?: string | null } = {
     return m;
   }, [mirrorSourceLocators, plants]);
 
+  // "No reading — why?" gap reasons logged for today, keyed by product meter ID
+  const todayDateStr = format(new Date(), 'yyyy-MM-dd');
+  const { data: gapReasons } = useQuery({
+    queryKey: ['product-gap-reasons', plantId, todayDateStr],
+    enabled: !!plantId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('reading_gap_reasons' as any)
+        .select('*')
+        .eq('plant_id', plantId)
+        .eq('entity_type', 'product')
+        .eq('gap_date', todayDateStr);
+      if (error) return [];
+      return (data ?? []) as any[];
+    },
+  });
+  const gapReasonsByMeter = useMemo(() => {
+    const m: Record<string, any> = {};
+    (gapReasons ?? []).forEach((g: any) => { m[g.entity_id] = g; });
+    return m;
+  }, [gapReasons]);
+
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ['op-product-meters', plantId] });
     qc.invalidateQueries({ queryKey: ['product-readings-latest-v2', plantId] });
+    qc.invalidateQueries({ queryKey: ['product-gap-reasons', plantId] });
     // Targeted Dashboard stat-card keys so new readings appear immediately
     qc.invalidateQueries({ queryKey: ['dash-product-meters-today'] });
     qc.invalidateQueries({ queryKey: ['dash-product-meters-yest'] });
@@ -314,10 +339,12 @@ export function ProductForm({ highlightId }: { highlightId?: string | null } = {
                     meter={m}
                     plantId={plantId}
                     latest={latestByMeter[m.id] ?? null}
+                    gapReason={gapReasonsByMeter[m.id] ?? null}
                     avgVol={avgByMeter[m.id] ?? null}
                     userId={user?.id ?? null}
                     canEdit={canEdit}
                     onSaved={invalidate}
+                    onGapReasonSaved={() => qc.invalidateQueries({ queryKey: ['product-gap-reasons', plantId] })}
                     mirrorSource={m.derived_from_locator_id ? mirrorSourceById[m.derived_from_locator_id] : null}
                     rowRef={(el) => { rowRefs.current[m.id] = el; }}
                     pulsing={pulseId === m.id}
@@ -508,15 +535,17 @@ function AddProductMeterButton({ plantId, onAdded }: { plantId: string; onAdded:
 // ── Product meter row ─────────────────────────────────────────────────────────
 
 function ProductMeterRow({
-  meter, plantId, latest, avgVol, userId, canEdit, onSaved, mirrorSource, rowRef, pulsing,
+  meter, plantId, latest, gapReason, avgVol, userId, canEdit, onSaved, onGapReasonSaved, mirrorSource, rowRef, pulsing,
 }: {
   meter: any;
   plantId: string;
   latest: any | null;
+  gapReason?: any | null;
   avgVol?: number | null;
   userId: string | null;
   canEdit: boolean;
   onSaved: () => void;
+  onGapReasonSaved?: () => void;
   mirrorSource?: { locatorName: string; plantName: string } | null;
   rowRef?: (el: HTMLDivElement | null) => void;
   pulsing?: boolean;
@@ -527,6 +556,8 @@ function ProductMeterRow({
   const lastPrefilledProduct = useRef<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [gapDialogOpen, setGapDialogOpen] = useState(false);
+  const [gapSaving, setGapSaving] = useState(false);
   const [customDt, setCustomDt] = useState(format(new Date(), "yyyy-MM-dd'T'HH:mm"));
   const dtInputRef = useRef<HTMLInputElement>(null);
   // "Meter replaced" — same two-way wiring fix as WellRow/LocatorRow: live at
@@ -714,6 +745,9 @@ function ProductMeterRow({
     );
   }
 
+  const todayDateStr = format(new Date(), 'yyyy-MM-dd');
+  const hasReadingToday = latest?.reading_datetime && format(new Date(latest.reading_datetime), 'yyyy-MM-dd') === todayDateStr;
+
   return (
     <div
       ref={rowRef}
@@ -740,6 +774,13 @@ function ProductMeterRow({
               })()
             }
             alerts={[
+              !hasReadingToday && {
+                tone: 'warn',
+                icon: MessageCircleOff,
+                label: gapReason ? reasonCategoryLabel(gapReason.reason_category) : 'Log gap reason',
+                onClick: () => setGapDialogOpen(true),
+                testId: `product-gap-reason-btn-${meter.id}`,
+              },
               productionVolume != null && {
                 tone: 'primary',
                 label: `Δ ${fmtNum(productionVolume)} m³`,
@@ -752,7 +793,7 @@ function ProductMeterRow({
                 onClick: () => navigate(`/plants/${plantId}?tab=product&highlight=${meter.id}`),
               },
             ]}
-            maxVisible={3}
+            maxVisible={4}
           />
         </div>
 
@@ -923,6 +964,31 @@ function ProductMeterRow({
           onClose={() => setShowReplaceMeter(false)}
         />
       )}
+
+      <ReasonDialog
+        open={gapDialogOpen}
+        onOpenChange={setGapDialogOpen}
+        title={`No reading today for "${meter.name}" — why?`}
+        description="This explains the gap in Data Summary for today. If a reading comes in later today, it takes priority over this note."
+        confirmLabel="Log reason"
+        busy={gapSaving}
+        onConfirm={async (category, detail) => {
+          setGapSaving(true);
+          const { error } = await supabase.from('reading_gap_reasons' as any).upsert(
+            [{
+              entity_type: 'product', entity_id: meter.id, plant_id: plantId,
+              gap_date: todayDateStr, reason_category: category, reason_detail: detail || null,
+              logged_by: userId ?? null,
+            }] as any,
+            { onConflict: 'entity_type,entity_id,gap_date' },
+          );
+          setGapSaving(false);
+          if (error) { toast.error(friendlyError(error)); return; }
+          toast.success(`${meter.name}: reason logged`);
+          setGapDialogOpen(false);
+          onGapReasonSaved?.();
+        }}
+      />
     </div>
   );
 }

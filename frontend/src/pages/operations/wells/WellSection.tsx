@@ -1002,6 +1002,13 @@ function WellRow({
               })()
             }
             alerts={[
+              todayCount === 0 && !editingId && {
+                tone: 'warn',
+                icon: MessageCircleOff,
+                label: gapReason ? reasonCategoryLabel(gapReason.reason_category) : 'Log gap reason',
+                onClick: () => setGapDialogOpen(true),
+                testId: `well-gap-reason-btn-${well.id}`,
+              },
               editingId && {
                 tone: 'primary',
                 label: 'Editing',
@@ -1026,14 +1033,8 @@ function WellRow({
                 label: 'Plant detail',
                 onClick: () => navigate(`/plants/${plantId}?tab=wells&highlight=${well.id}`),
               },
-              todayCount === 0 && !editingId && {
-                icon: MessageCircleOff,
-                label: gapReason ? reasonCategoryLabel(gapReason.reason_category) : 'Log gap reason',
-                onClick: () => setGapDialogOpen(true),
-                testId: `well-gap-reason-btn-${well.id}`,
-              },
             ].filter(Boolean)}
-            maxVisible={3}
+            maxVisible={4}
           />
         </div>
 

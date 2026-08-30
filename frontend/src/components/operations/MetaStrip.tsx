@@ -81,10 +81,13 @@ export function MetaStrip({
               data-testid={alert.testId}
               className={cn(
                 'inline-flex items-center gap-1 text-2xs font-semibold px-2 py-0.5 rounded-full transition-colors shrink-0',
+                alert.tone === 'primary' && 'bg-primary-soft text-primary border border-primary/40 hover:bg-primary/20',
+                alert.tone === 'info' && 'bg-info-soft text-info border border-info/40 hover:bg-info/20',
                 alert.tone === 'danger' && 'bg-danger-soft text-danger border border-danger/40 hover:bg-danger/20',
                 alert.tone === 'warn' && 'bg-warn-soft text-warn border border-warn/40 hover:bg-warn/20',
                 alert.tone === 'accent' && 'bg-accent-soft text-accent border border-accent/40 hover:bg-accent/20',
-                (!alert.tone || alert.tone === 'default') && 'bg-muted text-muted-foreground hover:text-foreground',
+                alert.tone === 'success' && 'bg-accent-soft text-accent border border-accent/40 hover:bg-accent/20',
+                (!alert.tone || alert.tone === 'default' || alert.tone === 'muted') && 'bg-muted text-muted-foreground hover:text-foreground',
                 alert.className,
               )}
             >

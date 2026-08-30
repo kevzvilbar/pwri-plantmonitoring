@@ -1356,6 +1356,13 @@ function LocatorRow({
               </StatusPill>
             }
             alerts={[
+              todayCount === 0 && !editingId && {
+                tone: 'warn',
+                icon: MessageCircleOff,
+                label: gapReason ? reasonCategoryLabel(gapReason.reason_category) : 'Log gap reason',
+                onClick: () => setGapDialogOpen(true),
+                testId: `locator-gap-reason-btn-${locator.id}`,
+              },
               editingId && {
                 tone: 'primary',
                 label: 'Editing',
@@ -1377,14 +1384,8 @@ function LocatorRow({
                 label: 'Plant detail',
                 onClick: () => navigate(`/plants/${plantId}?tab=locators&highlight=${locator.id}`),
               },
-              todayCount === 0 && !editingId && {
-                icon: MessageCircleOff,
-                label: gapReason ? reasonCategoryLabel(gapReason.reason_category) : 'Log gap reason',
-                onClick: () => setGapDialogOpen(true),
-                testId: `locator-gap-reason-btn-${locator.id}`,
-              },
             ].filter(Boolean)}
-            maxVisible={3}
+            maxVisible={4}
           />
         </div>
 

@@ -915,6 +915,13 @@ function BlendingRow({
               </Badge>
             }
             alerts={[
+              hasReadingForSelectedDate === false && !justSaved && !(isBackdated && backdatedContextLoading) && {
+                tone: 'warn',
+                icon: MessageCircleOff,
+                label: effectiveGapReason ? reasonCategoryLabel(effectiveGapReason.reason_category) : (isBackdated ? `Log gap (${eventDate})` : 'Log gap reason'),
+                onClick: () => setGapDialogOpen(true),
+                testId: `blending-gap-reason-btn-${well.id}`,
+              },
               chipState === 'logged' && {
                 tone: 'accent',
                 label: 'Logged today',
@@ -923,20 +930,13 @@ function BlendingRow({
                 tone: 'default',
                 label: 'Ready to save',
               },
-              chipState === 'pending' && {
+              chipState === 'pending' && !effectiveGapReason && {
                 tone: 'warn',
                 label: 'Not logged',
               },
             ].filter(Boolean)}
-            overflow={[
-              hasReadingForSelectedDate === false && !justSaved && !(isBackdated && backdatedContextLoading) && {
-                icon: MessageCircleOff,
-                label: effectiveGapReason ? reasonCategoryLabel(effectiveGapReason.reason_category) : (isBackdated ? `Log gap for ${eventDate}` : 'Log gap reason'),
-                onClick: () => setGapDialogOpen(true),
-                testId: `blending-gap-reason-btn-${well.id}`,
-              },
-            ].filter(Boolean)}
-            maxVisible={3}
+            overflow={[]}
+            maxVisible={4}
           />
         </div>
 
