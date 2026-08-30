@@ -25,6 +25,7 @@ import { format } from 'date-fns';
 import {
   ChevronDown, MapPin, Printer, AlertOctagon, ShieldAlert,
   AlertTriangle, CheckCircle2, Building2, Search, Download,
+  AlertTriangle, CheckCircle2, Search, Download,
   Flame, PlusCircle, History as HistoryIcon,
 } from 'lucide-react';
 import { downloadCSV } from '@/lib/csv';
@@ -126,6 +127,7 @@ export default function Incidents() {
           tone="accent"
         />
       </div>
+
 
       <Tabs value={tab} onValueChange={(v) => setTab(v as typeof tab)}>
         <TabsList className="grid grid-cols-3 w-full bg-muted/60 p-1 rounded-xl">

@@ -1773,6 +1773,7 @@ export default function DataCorrections() {
         />
       </div>
 
+
       <Tabs defaultValue="pending">
         <TabsList className="grid grid-cols-2 sm:grid-cols-4 gap-1 h-auto sm:h-10 w-full">
           <TabsTrigger value="pending" className="gap-1.5 text-xs">

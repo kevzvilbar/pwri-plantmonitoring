@@ -10,6 +10,7 @@ import {
   MapPin, Droplet, Zap, Upload, Download, ClipboardCheck,
   Waves, FlaskConical, Activity, Building2, Layers,
   Clock, ShieldCheck,
+  Waves, Layers, Clock,
 } from 'lucide-react';
 
 import { LocatorReadingForm } from './locators/LocatorSection';
@@ -179,6 +180,7 @@ export default function Operations() {
           tone="accent"
         />
       </div>
+
 
       {/* ── Quick Jump Utility Ribbon ── */}
       <div className="flex flex-wrap items-center justify-between gap-2.5 p-2 rounded-xl bg-muted/30 border border-border/60 text-xs">

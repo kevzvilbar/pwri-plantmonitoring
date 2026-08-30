@@ -1081,6 +1081,7 @@ export default function SmartImportPanel() {
         />
       </div>
 
+
       {/* 4-Step Guided Wizard Bar */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 p-2 rounded-xl bg-muted/30 border border-border/60 text-xs">
         <div className="flex items-center gap-2 px-2 py-1">

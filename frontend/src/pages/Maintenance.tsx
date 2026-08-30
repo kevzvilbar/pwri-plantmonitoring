@@ -22,6 +22,8 @@ import { format } from 'date-fns';
 import {
   ShieldCheck, Calendar, PlusCircle, ClipboardList, Search,
   Download, Building2, Wrench, CheckCircle2, AlertTriangle, Filter,
+  Calendar, PlusCircle, ClipboardList, Search,
+  Download, Wrench, CheckCircle2, AlertTriangle, Filter,
 } from 'lucide-react';
 import { PMS_TEMPLATES, PMS_CATEGORIES, PMS_FREQUENCIES } from '@/lib/pmsTemplates';
 import { PmsCalendar } from '@/components/PmsCalendar';
@@ -97,6 +99,7 @@ export default function Maintenance() {
           value="ISO/PWRI Compliant"
         />
       </div>
+
 
       <Tabs value={tab} onValueChange={(v) => setTab(v as typeof tab)}>
         <TabsList className="grid grid-cols-3 w-full bg-muted/60 p-1 rounded-xl">
