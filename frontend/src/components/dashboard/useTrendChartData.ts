@@ -647,9 +647,9 @@ export function useTrendChartData({
       return {
         date: format(dt, 'MMM d'),
         isoDate: dt.toISOString(),
-        production: null, consumption: null, rawwater: null,
+        production: 0, consumption: 0, rawwater: 0,
         recovery: null, tds: null, kwh: null, solarKwh: null,
-        nrw: null, powerCost: null, chemCost: null, totalCost: null,
+        nrw: 0, powerCost: null, chemCost: null, totalCost: null,
         _meterReplacements: [], _permeateSourceNames: [],
       };
     });

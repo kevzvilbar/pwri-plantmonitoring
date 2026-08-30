@@ -216,7 +216,7 @@ export function TrendChartCanvas(props: Record<string, any>) {
                 stackId={stackMode === 'stacked' ? 'nrw' : undefined}
                 shape={makeDrillableBarShape(handleDrillBarActivate, (p) => `Drill into ${p.date as string}`)}
               />
-              <Line yAxisId="pct" type="monotone" dataKey="nrw" stroke={C_NRW} strokeWidth={2.5} dot={{ r: 3.5, fill: C_NRW, strokeWidth: 0 }} name="NRW %" connectNulls />
+              <Line yAxisId="pct" type="monotone" dataKey="nrw" stroke={C_NRW} strokeWidth={2.5} dot={{ r: 3.5, fill: C_NRW, strokeWidth: 0 }} name="NRW %" />
             </ComposedChart>
           ) : metric === 'chemCost' ? (
             <AreaChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>

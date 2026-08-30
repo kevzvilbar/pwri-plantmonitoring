@@ -36,8 +36,12 @@ export const calc = {
   rejectFlow: (feedFlow: number, permFlow: number) =>
     Number.isFinite(feedFlow) && Number.isFinite(permFlow) ? +(feedFlow - permFlow).toFixed(2) : null,
 
-  nrw: (production: number, consumption: number) =>
-    production ? +(((production - consumption) / production) * 100).toFixed(1) : null,
+  nrw: (production: number, consumption: number) => {
+    if (!Number.isFinite(production) || !Number.isFinite(consumption)) return null;
+    if (production === 0 && consumption === 0) return 0;
+    if (production === 0) return null;
+    return +(((production - consumption) / production) * 100).toFixed(1);
+  },
 
   pvRatio: (kwh: number, m3: number) =>
     m3 ? +(kwh / m3).toFixed(2) : null,
