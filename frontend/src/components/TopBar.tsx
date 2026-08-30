@@ -1,4 +1,5 @@
-import { Bell, ClipboardCheck, ShieldAlert, Wrench, Zap, Info, AlertTriangle, AlertCircle, Clock, BellOff } from 'lucide-react';
+import { Bell, ClipboardCheck, ShieldAlert, Wrench, Zap, Info, AlertTriangle, AlertCircle, Clock, BellOff, Waves, Droplet, FlaskConical, Activity, CheckCircle2, ShieldCheck } from 'lucide-react';
+import { ROTrainIcon, RawWaterIcon, ChemicalsIcon } from '@/components/icons/water-icons';
 
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -59,9 +60,24 @@ const sevTier = (severity: string): SevTier => {
   }
 };
 
-const sevIcon = (severity: string) =>
-  sevTier(severity) === 'critical' ? AlertTriangle :
-  sevTier(severity) === 'warning'  ? AlertCircle : Info;
+/** Context-aware premium icon resolver for plant alerts */
+const getAlertIcon = (alert: { title: string; source?: string; severity: string }) => {
+  const t = (alert.title || '').toLowerCase();
+  const s = (alert.source || '').toLowerCase();
+
+  if (t.includes('water loss') || t.includes('nrw') || s.includes('nrw')) return RawWaterIcon;
+  if (t.includes('ph') || t.includes('chemical') || t.includes('conduct') || t.includes('tds')) return FlaskConical;
+  if (t.includes('recovery') || t.includes('ro') || t.includes('train') || s.includes('ro')) return ROTrainIcon;
+  if (t.includes('blending') || t.includes('bypass') || s.includes('blending')) return Waves;
+  if (t.includes('power') || t.includes('kwh') || t.includes('voltage') || t.includes('grid') || s.includes('power')) return Zap;
+  if (t.includes('well') || s.includes('well')) return Droplet;
+  if (t.includes('maintenance') || t.includes('pms') || s.includes('maintenance')) return Wrench;
+
+  const tier = sevTier(alert.severity);
+  if (tier === 'critical') return ShieldAlert;
+  if (tier === 'warning') return AlertTriangle;
+  return Activity;
+};
 
 const sevDotCls = (severity: string) =>
   sevTier(severity) === 'critical' ? 'bg-danger' :
@@ -414,7 +430,7 @@ export function TopBar() {
 
               {/* Plant Alerts */}
               {displayedAlerts.map((alert) => {
-                const Icon = sevIcon(alert.severity);
+                const Icon = getAlertIcon(alert);
                 const tier = sevTier(alert.severity);
                 const plantName = plantNameById.get(alert.plantId);
 
@@ -435,14 +451,20 @@ export function TopBar() {
                       if (alert.linkPath) navigate(alert.linkPath);
                     }}
                   >
-                    <div className="flex items-start gap-2.5">
+                    <div className="flex items-start gap-3">
+                      {/* Premium Industrial Glassmorphic Icon Badge */}
                       <div className={cn(
-                        'h-7 w-7 rounded-lg flex items-center justify-center shrink-0 mt-0.5 shadow-2xs',
-                        tier === 'critical' ? 'bg-danger text-white' :
-                        tier === 'warning' ? 'bg-warn text-warn-foreground' :
-                        'bg-info text-white'
+                        'h-9 w-9 rounded-xl flex items-center justify-center shrink-0 mt-0.5 border relative transition-transform duration-200 group-hover:scale-105',
+                        tier === 'critical'
+                          ? 'bg-danger/10 border-danger/30 text-danger shadow-xs ring-1 ring-danger/15'
+                          : tier === 'warning'
+                          ? 'bg-warn/15 border-warn/30 text-amber-600 dark:text-amber-400 shadow-xs ring-1 ring-warn/15'
+                          : 'bg-primary/10 border-primary/25 text-primary shadow-xs ring-1 ring-primary/15'
                       )}>
-                        <Icon className="h-4 w-4" />
+                        <Icon className="h-4.5 w-4.5 stroke-[1.8]" />
+                        {tier === 'critical' && (
+                          <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-danger animate-pulse ring-2 ring-card" />
+                        )}
                       </div>
 
                       <div className="flex-1 min-w-0">
@@ -528,8 +550,13 @@ export function TopBar() {
                         !n.read ? 'border-primary/40 bg-primary-soft/10' : ''
                       )}
                     >
-                      <div className="h-6 w-6 rounded-md bg-primary-soft text-primary flex items-center justify-center shrink-0 mt-0.5">
-                        <Info className="h-3.5 w-3.5" />
+                      <div className={cn(
+                        'h-8 w-8 rounded-xl flex items-center justify-center shrink-0 mt-0.5 border',
+                        !n.read
+                          ? 'bg-primary/10 border-primary/30 text-primary shadow-xs'
+                          : 'bg-muted/40 border-border/60 text-muted-foreground'
+                      )}>
+                        <Activity className="h-4 w-4" />
                       </div>
                       <div className="flex-1 min-w-0 space-y-0.5">
                         <div className="flex items-center justify-between gap-1">
