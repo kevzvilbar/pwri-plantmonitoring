@@ -13,32 +13,53 @@ import { deltaCache } from '@/lib/deltaCache';
 export function Sparkline({
   values,
   color = 'currentColor',
+  width = 60,
+  height = 20,
 }: {
   values: number[];
   color?: string;
+  width?: number;
+  height?: number;
 }) {
   if (values.length < 2)
-    return <span className="text-2xs text-muted-foreground/40">—</span>;
-  const w = 48; const h = 16;
-  const min = Math.min(...values); const max = Math.max(...values);
+    return <span className="text-3xs text-muted-foreground/40 font-mono">—</span>;
+
+  const pad = 2;
+  const w = width;
+  const h = height;
+  const min = Math.min(...values);
+  const max = Math.max(...values);
   const range = max - min || 1;
-  const pts = values
-    .map((v, i) => {
-      const x = (i / (values.length - 1)) * w;
-      const y = h - ((v - min) / range) * h;
-      return `${x},${y}`;
-    })
-    .join(' ');
+
+  const points = values.map((v, i) => {
+    const x = pad + (i / (values.length - 1)) * (w - pad * 2);
+    const y = pad + (1 - (v - min) / range) * (h - pad * 2);
+    return { x, y };
+  });
+
+  const pathD = points.reduce((acc, pt, i) => `${acc} ${i === 0 ? 'M' : 'L'} ${pt.x.toFixed(1)} ${pt.y.toFixed(1)}`, '');
+  const areaD = `${pathD} L ${points[points.length - 1].x.toFixed(1)} ${h} L ${points[0].x.toFixed(1)} ${h} Z`;
+  const lastPoint = points[points.length - 1];
+  const gradId = `spark-grad-${Math.abs(points[0].x + points[0].y).toFixed(0)}-${color.replace(/[^a-zA-Z0-9]/g, '')}`;
+
   return (
-    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} className="inline-block align-middle">
-      <polyline
-        points={pts}
+    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} className="inline-block overflow-visible shrink-0">
+      <defs>
+        <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={color} stopOpacity="0.25" />
+          <stop offset="100%" stopColor={color} stopOpacity="0.0" />
+        </linearGradient>
+      </defs>
+      <path d={areaD} fill={`url(#${gradId})`} />
+      <path
+        d={pathD}
         fill="none"
         stroke={color}
-        strokeWidth="1.5"
+        strokeWidth="1.75"
         strokeLinejoin="round"
         strokeLinecap="round"
       />
+      <circle cx={lastPoint.x} cy={lastPoint.y} r="2.25" fill={color} className="animate-pulse" />
     </svg>
   );
 }
