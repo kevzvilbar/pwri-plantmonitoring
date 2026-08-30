@@ -40,36 +40,36 @@ export default function ROTrains() {
     <div className="space-y-4 animate-fade-in">
       <PageHeader title="RO Trains & Pre-Treatment" />
       <Tabs value={tab} onValueChange={handleTabChange} className="space-y-3">
-        <TabsList className="grid grid-cols-2 sm:grid-cols-4 w-full h-auto p-1.5 rounded-2xl bg-card/80 backdrop-blur-md border border-border/70 shadow-2xs gap-1">
+        <TabsList className="grid grid-cols-2 sm:grid-cols-4 w-full h-10 p-1 rounded-xl bg-muted/50 border border-border/50 gap-1">
           <TabsTrigger
             value="overview"
-            className="min-h-[44px] rounded-xl py-2 px-3 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm text-xs sm:text-sm font-semibold gap-2 transition-all"
+            className="h-8 rounded-lg px-3 text-xs font-semibold data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-xs text-muted-foreground transition-all gap-1.5"
           >
-            <LayoutGrid className="h-4 w-4 shrink-0" aria-hidden />
+            <LayoutGrid className="h-3.5 w-3.5 shrink-0" aria-hidden />
             <span>Overview</span>
           </TabsTrigger>
 
           <TabsTrigger
             value="pretreat-ro"
-            className="min-h-[44px] rounded-xl py-2 px-3 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm text-xs sm:text-sm font-semibold gap-2 transition-all leading-tight"
+            className="h-8 rounded-lg px-3 text-xs font-semibold data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-xs text-muted-foreground transition-all gap-1.5"
           >
-            <ROTrainIcon className="h-4 w-4 shrink-0" aria-hidden />
+            <ROTrainIcon className="h-3.5 w-3.5 shrink-0" aria-hidden />
             <span>Pre-Treatment & RO</span>
           </TabsTrigger>
 
           <TabsTrigger
             value="cip"
-            className="min-h-[44px] rounded-xl py-2 px-3 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm text-xs sm:text-sm font-semibold gap-2 transition-all"
+            className="h-8 rounded-lg px-3 text-xs font-semibold data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-xs text-muted-foreground transition-all gap-1.5"
           >
-            <Recycle className="h-4 w-4 shrink-0" aria-hidden />
+            <Recycle className="h-3.5 w-3.5 shrink-0" aria-hidden />
             <span>CIP</span>
           </TabsTrigger>
 
           <TabsTrigger
             value="chemical-dosing"
-            className="min-h-[44px] rounded-xl py-2 px-3 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm text-xs sm:text-sm font-semibold gap-2 transition-all leading-tight"
+            className="h-8 rounded-lg px-3 text-xs font-semibold data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-xs text-muted-foreground transition-all gap-1.5"
           >
-            <ChemicalsIcon className="h-4 w-4 shrink-0" aria-hidden />
+            <ChemicalsIcon className="h-3.5 w-3.5 shrink-0" aria-hidden />
             <span>Chemical Dosing</span>
           </TabsTrigger>
         </TabsList>
