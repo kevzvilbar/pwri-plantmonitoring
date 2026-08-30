@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { TableProperties } from 'lucide-react';
 import { DateRangePicker } from '@/components/ui/date-picker';
 import { RangeKey } from './types';
 
@@ -88,9 +89,21 @@ export function TrendChartToolbar({
         )}
       </div>
 
-      <div className="flex items-center gap-1.5">
+      <div className="flex items-center gap-1.5 flex-wrap">
         {/* Mobile ⋮ overflow + desktop inline controls */}
         {trailingControls}
+
+        {/* Per-chart Data Summary Action */}
+        <button
+          type="button"
+          onClick={onOpenSummary}
+          className="h-5 px-2 text-2xs font-semibold rounded-md border border-border/80 bg-card text-foreground hover:bg-muted/80 hover:text-primary transition-all flex items-center gap-1 shadow-2xs cursor-pointer"
+          title={`Open ${title || metric} Data Summary`}
+          data-testid={`trend-data-summary-${metric}`}
+        >
+          <TableProperties className="h-3 w-3 text-primary shrink-0" />
+          <span>Data Summary</span>
+        </button>
       </div>
     </div>
   );

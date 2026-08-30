@@ -30,7 +30,7 @@ import {
   Droplet, Activity, Zap, FlaskConical, AlertTriangle, Gauge, Percent,
   Waves, Cloud, Receipt, Banknote, LayoutGrid, ListCollapse, ExternalLink,
   ArrowUpRight, ArrowDownRight, Minus, CalendarDays,
-  ShieldAlert, FileSpreadsheet, History, RefreshCw
+  ShieldAlert, History, RefreshCw
 } from 'lucide-react';
 import { useTrainAutoOffline } from '@/hooks/useTrainAutoOffline';
 import { DowntimeEventsModal } from '@/components/DowntimeEventsModal';
@@ -59,9 +59,6 @@ import { PMDueSoonCard }       from '@/components/dashboard/PMDueSoonCard';
 import { PendingReviewCard }   from '@/components/dashboard/PendingReviewCard';
 import { DataCompletenessRadarCard } from '@/components/dashboard/DataCompletenessRadarCard';
 import { CostSunburst }        from '@/components/dashboard/CostSunburst';
-
-
-import { DataSummaryModal, computePivotFromReadingsNoCache, pivotDayTotal } from '@/components/dashboard/DataSummaryModal';
 import { useDashboardQueries } from './useDashboardQueries';
 import { useDashboardAggregates } from './useDashboardAggregates';
 import { useDashboardAlerts } from './useDashboardAlerts';
@@ -95,7 +92,6 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const [modal, setModal] = useState<null | { metric: string; title: string }>(null);
   const [downtimeOpen, setDowntimeOpen] = useState(false);
-  const [summaryOpen, setSummaryOpen] = useState(false);
   const [secondsAgo, setSecondsAgo] = useState(2);
   useEffect(() => {
     const timer = setInterval(() => setSecondsAgo(s => (s % 20) + 1), 1000);
@@ -276,16 +272,6 @@ export default function Dashboard() {
 
           {/* Quick Metrics & Action Controls */}
           <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setSummaryOpen(true)}
-              className="h-8 text-xs gap-1.5 font-medium"
-            >
-              <FileSpreadsheet className="h-3.5 w-3.5 text-primary" />
-              <span className="hidden sm:inline">Data Summary</span>
-            </Button>
-
             <Button
               size="sm"
               variant="outline"
@@ -520,12 +506,6 @@ export default function Dashboard() {
         onClose={() => setDowntimeOpen(false)}
         plantId={selectedPlantId || undefined}
         plantName={selectedPlantId ? visiblePlants?.[0]?.name : 'All plants'}
-      />
-      <DataSummaryModal
-        open={summaryOpen}
-        onClose={() => setSummaryOpen(false)}
-        plantIds={plantIds}
-        plantCodeById={plantCodeById}
       />
     </div>
   );
