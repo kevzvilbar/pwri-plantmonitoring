@@ -1,5 +1,5 @@
 import React from 'react';
-import { StatusPill } from '@/components/StatusPill';
+import { StatusPill, type StatusPillTone } from '@/components/StatusPill';
 import { MoreHorizontal } from 'lucide-react';
 import {
   DropdownMenu,
@@ -10,7 +10,7 @@ import {
 import { cn } from '@/lib/utils';
 
 export interface MetaAlert {
-  tone?: 'default' | 'primary' | 'accent' | 'success' | 'good' | 'warn' | 'danger' | 'info' | 'highlight' | string;
+  tone?: StatusPillTone;
   icon?: React.ComponentType<{ className?: string }>;
   label: React.ReactNode;
   className?: string;
