@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useState, useCallback, useRef } from 'react';
 import { useTabPersist } from '@/hooks/useTabPersist';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { DataState } from '@/components/DataState';
 import { PageHeader } from '@/components/PageHeader';
 import {
@@ -654,6 +654,7 @@ async function fetchPreviousPeriodMetrics(
 // -----------------------------------------------------------------------
 
 export async function loadThresholds(scope: string): Promise<Thresholds> {
+  // 1. Try to fetch requested scope from Supabase
   try {
     const { data, error } = await supabase
       .from('compliance_thresholds')
@@ -668,8 +669,32 @@ export async function loadThresholds(scope: string): Promise<Thresholds> {
   } catch {
     // fall through
   }
+
+  // 1b. Check localStorage for requested scope
   const cached = lsLoadThresholds(scope);
   if (cached) return cached;
+
+  // 2. If scope is a specific plant and was not found, fallback to 'global' scope
+  if (scope !== 'global') {
+    try {
+      const { data, error } = await supabase
+        .from('compliance_thresholds')
+        .select('thresholds')
+        .eq('scope', 'global')
+        .maybeSingle();
+
+      if (!error && data?.thresholds) {
+        lsSaveThresholds('global', data.thresholds as Thresholds);
+        return data.thresholds as Thresholds;
+      }
+    } catch {
+      // fall through
+    }
+    const globalCached = lsLoadThresholds('global');
+    if (globalCached) return globalCached;
+  }
+
+  // 3. Fallback to default constants
   return { ...DEFAULT_THRESHOLDS };
 }
 
@@ -791,17 +816,16 @@ export default function Compliance() {
   // Fleet wide queries
   const { data: fleetSummaries = [], isLoading: fleetLoading, refetch: refetchFleet } = useFleetCompliance(plants, days);
 
+  const queryClient = useQueryClient();
+
   useEffect(() => {
     if (selectedPlantId) {
       setPlantId(selectedPlantId);
       setScope('plant');
-    } else if (plants && plants.length > 0 && (!plantId || plantId === 'global')) {
-      setPlantId(plants[0].id);
-      setScope('plant');
     }
-  }, [selectedPlantId, plants]);
+  }, [selectedPlantId]);
 
-  const thresholdScope = scope === 'plant' ? plantId : 'global';
+  const thresholdScope = scope === 'plant' && plantId ? plantId : 'global';
 
   const { data: thData, refetch: refetchThresholds } = useQuery({
     queryKey: ['thresholds', thresholdScope],
@@ -926,16 +950,18 @@ export default function Compliance() {
     setSaving(true);
     try {
       await persistThresholds(thresholdScope, local);
+      await queryClient.invalidateQueries({ queryKey: ['thresholds'] });
       toast.success('Thresholds saved successfully.');
       setEditing(false);
       refetchThresholds();
+      refetchFleet();
       runEvaluate();
     } catch (e) {
       toast.error(friendlyError(e));
     } finally {
       setSaving(false);
     }
-  }, [local, thresholdScope, refetchThresholds, runEvaluate]);
+  }, [local, thresholdScope, queryClient, refetchThresholds, refetchFleet, runEvaluate]);
 
   const summary = result ? buildSummary(result.violations) : null;
   const complianceScore = result ? computeComplianceScore(result.violations) : null;
@@ -1487,16 +1513,42 @@ export default function Compliance() {
         {/* ── Tab 3: Thresholds Editor ── */}
         <TabsContent value="thresholds" className="mt-4">
           <Card className="p-4 space-y-4">
-            <div className="flex items-center justify-between border-b pb-3">
-              <div>
-                <div className="text-sm font-bold text-foreground">
-                  Surveillance Limits:{' '}
-                  {thresholdScope === 'global'
-                    ? 'Global Fleet Standard'
-                    : (plants ?? []).find((p) => p.id === plantId)?.name ?? thresholdScope}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b pb-3">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-bold text-foreground">Surveillance Scope:</span>
+                  <Select
+                    value={thresholdScope}
+                    onValueChange={(val) => {
+                      if (val === 'global') {
+                        setScope('global');
+                        setPlantId('');
+                      } else {
+                        setScope('plant');
+                        setPlantId(val);
+                      }
+                      setEditing(false);
+                    }}
+                  >
+                    <SelectTrigger className="h-7 w-[210px] text-xs font-semibold">
+                      <SelectValue placeholder="Select scope" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="global" className="text-xs font-bold text-primary">
+                        🌐 Global Fleet Standard
+                      </SelectItem>
+                      {(plants ?? []).map((p) => (
+                        <SelectItem key={p.id} value={p.id} className="text-xs">
+                          🏭 {p.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="text-xs text-muted-foreground">
-                  Plant-specific thresholds override global defaults for this facility.
+                  {thresholdScope === 'global'
+                    ? 'Default baseline thresholds applied across all production facilities unless overridden.'
+                    : `Plant-specific threshold override for ${(plants ?? []).find((p) => p.id === plantId)?.name ?? thresholdScope}.`}
                 </div>
               </div>
               <div className="flex gap-2">
