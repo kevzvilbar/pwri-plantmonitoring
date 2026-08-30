@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { Plus } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import {
@@ -171,8 +172,9 @@ export function FilterReplacementDialog({
 
   return (
     <>
-      <Button data-testid="log-filter-replacement-btn" onClick={() => setOpen(true)}>
-        + Log Replacement
+      <Button size="sm" className="h-8 px-3 text-xs gap-1.5 font-medium shadow-xs" data-testid="log-filter-replacement-btn" onClick={() => setOpen(true)}>
+        <Plus className="h-3.5 w-3.5" />
+        Log Replacement
       </Button>
       <ResponsiveDialog
         open={open}

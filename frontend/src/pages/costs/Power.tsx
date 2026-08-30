@@ -181,7 +181,7 @@ async function insertBillingRows(
   return { count, errors };
 }
 
-// ─── Filters tab wrapper ──────────────────────────────────────────────────
+// ─── Power tab component ──────────────────────────────────────────────────
 
 export function Power() {
   const qc = useQueryClient();
@@ -190,63 +190,60 @@ export function Power() {
   const { selectedPlantId } = useAppStore();
   const [plantId, setPlantId] = useState(selectedPlantId ?? '');
 
-  // Month dropdown: generate last 24 months + next 2
-  const monthOptions = useMemo(() => {
-    const opts = [];
-    for (let i = -2; i <= 23; i++) {
-      const d = subMonths(startOfMonth(new Date()), i);
-      opts.push({ value: format(d, 'yyyy-MM-dd'), label: format(d, 'MMMM yyyy') });
-    }
-    return opts.reverse();
-  }, []);
-
   const [v, setV] = useState({
-    billing_month: format(startOfMonth(new Date()), 'yyyy-MM-dd'),
+    billing_month: format(startOfMonth(subMonths(new Date(), 1)), 'yyyy-MM-dd'),
     period_start: format(startOfMonth(subMonths(new Date(), 1)), 'yyyy-MM-dd'),
     period_end: format(endOfMonth(subMonths(new Date(), 1)), 'yyyy-MM-dd'),
     previous_reading: '', current_reading: '', multiplier: '1',
-    generation_charge: '', distribution_charge: '', other_charges: '', total_amount: '',
-    provider: '', remarks: '',
+    generation_charge: '', distribution_charge: '', other_charges: '',
+    total_amount: '', remarks: '', provider: '',
   });
 
-  // Multiplier confirmation dialog state
-  const [pendingMultiplier, setPendingMultiplier] = useState<string | null>(null);
-  const [confirmOpen, setConfirmOpen] = useState(false);
-  // Track whether auto-populate from useEffect is running so we skip the confirm dialog
-  const skipConfirmRef = { current: false };
+  const monthOptions = useMemo(() => {
+    const opts = [];
+    const now = new Date();
+    for (let i = 0; i < 24; i++) {
+      const d = subMonths(now, i);
+      opts.push({ value: format(startOfMonth(d), 'yyyy-MM-dd'), label: format(d, 'MMMM yyyy') });
+    }
+    return opts;
+  }, []);
 
-  const totalKwh = v.previous_reading && v.current_reading
-    ? (+v.current_reading - +v.previous_reading) * (+v.multiplier || 1) : null;
-  const derivedRate = totalKwh && totalKwh > 0 && +v.total_amount ? (+v.total_amount / totalKwh) : null;
+  const totalKwh = useMemo(() => {
+    if (!v.previous_reading || !v.current_reading) return null;
+    return (+v.current_reading - +v.previous_reading) * (+v.multiplier || 1);
+  }, [v.previous_reading, v.current_reading, v.multiplier]);
+
+  const derivedRate = useMemo(() => {
+    if (!totalKwh || totalKwh <= 0 || !v.total_amount) return null;
+    return +v.total_amount / totalKwh;
+  }, [totalKwh, v.total_amount]);
 
   const { data: bills } = useQuery({
     queryKey: ['bills', plantId],
-    queryFn: async () => plantId ? (await supabase.from('electric_bills').select('*').eq('plant_id', plantId).order('billing_month', { ascending: false })).data ?? [] : [],
-    enabled: !!plantId,
-  });
-  const { data: tariffs } = useQuery({
-    queryKey: ['tariffs', plantId],
-    queryFn: async () => plantId ? (await supabase.from('power_tariffs').select('*').eq('plant_id', plantId).order('effective_date', { ascending: false })).data ?? [] : [],
+    queryFn: async () => plantId ? (await supabase.from('electric_bills').select('*').eq('plant_id', plantId).order('billing_month', { ascending: false }).limit(12)).data ?? [] : [],
     enabled: !!plantId,
   });
 
-  // Auto-populate multiplier from last bill — skip confirm dialog during init
+  const { data: tariffs } = useQuery({
+    queryKey: ['tariffs', plantId],
+    queryFn: async () => plantId ? (await supabase.from('power_tariffs').select('*').eq('plant_id', plantId).order('effective_date', { ascending: false }).limit(12)).data ?? [] : [],
+    enabled: !!plantId,
+  });
+
   useEffect(() => {
-    if (bills && bills.length > 0) {
-      const lastBill = bills[0] as any;
-      if (lastBill.multiplier && lastBill.multiplier !== 1) {
-        skipConfirmRef.current = true;
-        setV(prev => ({ ...prev, multiplier: String(lastBill.multiplier) }));
-      }
+    if (bills && bills.length > 0 && bills[0].multiplier != null) {
+      setV(prev => ({ ...prev, multiplier: String(bills[0].multiplier) }));
     }
   }, [bills]);
 
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [pendingMult, setPendingMult] = useState('');
+
   const handleMultiplierChange = (val: string) => {
-    if (!canEdit) return;
-    if (skipConfirmRef.current) { skipConfirmRef.current = false; return; }
-    const current = v.multiplier;
-    if (val !== current && bills && bills.length > 0) {
-      setPendingMultiplier(val);
+    const prev = bills?.[0]?.multiplier;
+    if (prev != null && +val !== +prev && val !== '') {
+      setPendingMult(val);
       setConfirmOpen(true);
     } else {
       setV({ ...v, multiplier: val });
@@ -258,9 +255,6 @@ export function Power() {
     if (!v.total_amount) { toast.error('Total amount is required'); return; }
     if (totalKwh !== null && totalKwh < 0) { toast.error('Current reading is less than previous — check meter values'); return; }
 
-    // Build payload — omit total_kwh entirely: it is a GENERATED column in the DB
-    // and Supabase will throw "cannot insert a non-DEFAULT value" if we supply it.
-    // The DB computes it as (current_reading - previous_reading) * multiplier automatically.
     const payload: Record<string, any> = {
       plant_id: plantId,
       billing_month: v.billing_month,
@@ -290,7 +284,6 @@ export function Power() {
       });
     }
     toast.success(derivedRate ? 'Bill saved · tariff auto-derived' : 'Bill saved');
-    // Reset meter reading fields but keep plant/month context for quick re-entry
     setV(prev => ({ ...prev, previous_reading: '', current_reading: '', total_amount: '', generation_charge: '', distribution_charge: '', other_charges: '', remarks: '' }));
     qc.invalidateQueries({ queryKey: ['bills'] });
     qc.invalidateQueries({ queryKey: ['tariffs'] });
@@ -299,7 +292,7 @@ export function Power() {
   const [importOpen, setImportOpen] = useState(false);
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       {importOpen && (
         <ImportReadingsDialog
           title="Import Power Billing from CSV"
@@ -320,149 +313,213 @@ export function Power() {
         />
       )}
 
-      <Card className="p-3 space-y-3">
-        <div>
-          <Label htmlFor="costs-plant-3" className="text-xs">Plant</Label>
-          <div className="flex gap-2 items-center">
-            <div className="flex-1"><PlantPicker value={plantId} onChange={setPlantId} id="costs-plant-3" /></div>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="shrink-0 h-9 text-xs whitespace-nowrap"
-              onClick={() => { if (!plantId) { toast.error('Select a plant first'); return; } setImportOpen(true); }}
-            >
-              Import
-            </Button>
+      {/* ── Toolbar ── */}
+      <div className="p-1.5 rounded-xl border border-border/50 bg-card flex flex-wrap gap-2 items-center justify-between">
+        <div className="flex items-center gap-2 flex-1 min-w-[200px] max-w-sm">
+          <div className="flex-1">
+            <PlantPicker value={plantId} onChange={setPlantId} id="costs-plant-3" />
           </div>
         </div>
-
-        <div className="space-y-2">
-          <div className="text-xs uppercase tracking-wide text-muted-foreground font-semibold">Billing</div>
-          <div className="grid grid-cols-2 gap-2">
-            {/* Billing Month — dropdown instead of date picker */}
-            <div>
-              <Label htmlFor="costs-billing-month" className="text-xs">Billing month</Label>
-              <Select value={v.billing_month} onValueChange={(val) => setV({ ...v, billing_month: val })}>
-                <SelectTrigger className="h-9 text-sm" id="costs-billing-month"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {monthOptions.map(o => (
-                    <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div><Label htmlFor="costs-provider" className="text-xs">Provider</Label><Input value={v.provider} onChange={(e) => setV({ ...v, provider: e.target.value })} placeholder="VECO / NGCP" id="costs-provider"/></div>
-          </div>
-          <div className="flex gap-2">
-            <div className="flex-1 min-w-0"><Label htmlFor="costs-period-from" className="text-xs">Period from</Label><Input type="date" value={v.period_start} onChange={(e) => setV({ ...v, period_start: e.target.value })} id="costs-period-from"/></div>
-            <div className="flex-1 min-w-0"><Label htmlFor="costs-period-to" className="text-xs">Period to</Label><Input type="date" value={v.period_end} onChange={(e) => setV({ ...v, period_end: e.target.value })} id="costs-period-to"/></div>
-          </div>
-        </div>
-
-        <div className="space-y-2">
-          <div className="text-xs uppercase tracking-wide text-muted-foreground font-semibold">Meter</div>
-          <div className="grid grid-cols-2 gap-2">
-            <div><Label htmlFor="costs-previous" className="text-xs">Previous</Label><Input type="number" step="any" value={v.previous_reading} onChange={(e) => setV({ ...v, previous_reading: e.target.value })} id="costs-previous"/></div>
-            <div><Label htmlFor="costs-current" className="text-xs">Current</Label><Input type="number" step="any" value={v.current_reading} onChange={(e) => setV({ ...v, current_reading: e.target.value })} id="costs-current"/></div>
-          </div>
-          {/* Multiplier + Total kWh on same row */}
-          <div className="flex items-end gap-2">
-            <div className="flex-1">
-              <Label htmlFor="costs-multiplier" className="text-xs flex items-center gap-1">
-                Multiplier
-                {!canEdit && <span className="text-2xs text-muted-foreground">(read-only)</span>}
-              </Label>
-              <Input
-                type="number" step="any" value={v.multiplier}
-                readOnly={!canEdit}
-                className={!canEdit ? 'bg-muted cursor-not-allowed' : ''}
-                onChange={(e) => handleMultiplierChange(e.target.value)}
-              id="costs-multiplier"/>
-            </div>
-            <div className="flex-1">
-              <Label htmlFor="costs-total-kwh-auto" className="text-xs">Total kWh (auto)</Label>
-              <ComputedInput value={totalKwh != null ? fmtNum(totalKwh, 2) : ''} id="costs-total-kwh-auto"/>
-            </div>
-          </div>
-          {canEdit && (
-            <p className="text-2xs text-muted-foreground">
-              Multiplier auto-fills from the last saved bill. Change only if the meter transformer ratio changes.
-            </p>
-          )}
-        </div>
-
-        <div className="space-y-2">
-          <div className="text-xs uppercase tracking-wide text-muted-foreground font-semibold">Charges (₱)</div>
-          <div className="grid grid-cols-2 gap-2">
-            <div><Label htmlFor="costs-generation" className="text-xs">Generation</Label><Input type="number" step="any" value={v.generation_charge} onChange={(e) => setV({ ...v, generation_charge: e.target.value })} id="costs-generation"/></div>
-            <div><Label htmlFor="costs-distribution" className="text-xs">Distribution</Label><Input type="number" step="any" value={v.distribution_charge} onChange={(e) => setV({ ...v, distribution_charge: e.target.value })} id="costs-distribution"/></div>
-            <div><Label htmlFor="costs-other" className="text-xs">Other</Label><Input type="number" step="any" value={v.other_charges} onChange={(e) => setV({ ...v, other_charges: e.target.value })} id="costs-other"/></div>
-            <div><Label htmlFor="costs-total" className="text-xs font-semibold">Total</Label><Input type="number" step="any" value={v.total_amount} onChange={(e) => setV({ ...v, total_amount: e.target.value })} id="costs-total"/></div>
-          </div>
-        </div>
-
-        {derivedRate && (
-          <div className="rounded-md bg-accent-soft border border-accent/30 p-2 text-xs">
-            <span className="font-semibold">Auto-derived tariff:</span>{' '}
-            <span className="font-mono-num">₱{derivedRate.toFixed(4)}/kWh</span>
-            <span className="text-muted-foreground"> · effective {v.period_start}</span>
-          </div>
+        {plantId && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-8 px-3 text-xs gap-1.5 font-medium shadow-xs"
+            onClick={() => setImportOpen(true)}
+          >
+            <UploadCloud className="h-3.5 w-3.5" />
+            Import CSV
+          </Button>
         )}
+      </div>
 
-        <div><Label htmlFor="costs-remarks" className="text-xs">Remarks</Label><Input value={v.remarks} onChange={(e) => setV({ ...v, remarks: e.target.value })} id="costs-remarks"/></div>
-        <Button onClick={submit} className="w-full">Save bill {derivedRate ? '+ tariff' : ''}</Button>
-      </Card>
+      {!plantId && (
+        <Card className="p-8 text-center space-y-1 rounded-xl border border-dashed shadow-none">
+          <p className="text-xs font-semibold text-foreground">Select a plant</p>
+          <p className="text-3xs text-muted-foreground">Choose a facility from the picker above to record power bills and inspect tariffs.</p>
+        </Card>
+      )}
 
-      <Card className="p-3">
-        <div className="flex items-center justify-between mb-2">
-          <h4 className="text-sm font-semibold">Recent bills</h4>
-          {plantId && <ExportButton table="electric_bills" label="Export" filters={{ plant_id: plantId }} />}
-        </div>
-        <div className="space-y-1.5">
-          {bills?.map((b: any) => {
-            const isNegativeKwh = b.total_kwh != null && +b.total_kwh < 0;
-            return (
-              <div key={b.id} className={`flex justify-between items-center text-xs border-b last:border-0 py-1.5 ${isNegativeKwh ? 'bg-destructive/5 rounded px-1.5' : ''}`}>
-                <div>
-                  <div className="font-mono-num flex items-center gap-1.5">
-                    {b.billing_month ? format(parseISO(b.billing_month), 'MMM yyyy') : '—'}
-                    {isNegativeKwh && (
-                      <span className="inline-flex items-center gap-0.5 text-2xs font-semibold text-destructive border border-destructive/40 rounded px-1 py-0.5">
-                        <AlertTriangle className="h-2.5 w-2.5" /> Reversed readings
-                      </span>
-                    )}
-                  </div>
-                  <div className={`font-mono-num ${isNegativeKwh ? 'text-destructive font-semibold' : 'text-muted-foreground'}`}>
-                    {fmtNum(b.total_kwh, 0)} kWh · ₱{b.total_kwh && +b.total_kwh > 0 ? (+b.total_amount / +b.total_kwh).toFixed(4) : '—'}/kWh · ×{b.multiplier}
-                  </div>
-                </div>
-                <div className="font-mono-num font-semibold">₱{fmtNum(b.total_amount, 2)}</div>
-              </div>
-            );
-          })}
-          {!bills?.length && plantId && <p className="text-xs text-center text-muted-foreground py-2">No bills yet</p>}
-        </div>
-      </Card>
-
-      <Card className="p-3">
-        <div className="flex items-center justify-between mb-2">
-          <h4 className="text-sm font-semibold">Tariff history</h4>
-          {plantId && <ExportButton table="power_tariffs" label="Export" filters={{ plant_id: plantId }} />}
-        </div>
-        <div className="space-y-1.5">
-          {tariffs?.map((t: any) => (
-            <div key={t.id} className="flex justify-between items-center text-xs border-b last:border-0 py-1.5">
-              <div>
-                <div className="font-mono-num">{t.effective_date}</div>
-                <div className="text-muted-foreground">{t.provider ?? '—'} · ×{t.multiplier}</div>
-              </div>
-              <div className="font-mono-num font-semibold">₱{(+t.rate_per_kwh).toFixed(4)}/kWh</div>
+      {plantId && (
+        <>
+          {/* ── Power Billing Entry Form ── */}
+          <Card className="p-4 space-y-3 border-border/60 shadow-2xs">
+            <div>
+              <h4 className="text-sm font-semibold text-foreground">Log Electric Bill</h4>
+              <p className="text-2xs text-muted-foreground">Record monthly power utility bill and derive effective kWh rate</p>
             </div>
-          ))}
-          {!tariffs?.length && plantId && <p className="text-xs text-center text-muted-foreground py-2">No tariffs</p>}
-        </div>
-      </Card>
+
+            {/* Section 1: Billing Period */}
+            <div className="p-3 rounded-xl border border-border/50 bg-muted/20 space-y-2">
+              <div className="text-3xs uppercase tracking-wider font-semibold text-muted-foreground">Billing Period &amp; Utility</div>
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5">
+                <div>
+                  <Label htmlFor="costs-billing-month" className="text-3xs uppercase tracking-wider text-muted-foreground">Billing Month</Label>
+                  <Select value={v.billing_month} onValueChange={(val) => setV({ ...v, billing_month: val })}>
+                    <SelectTrigger className="h-8.5 text-xs bg-background" id="costs-billing-month"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {monthOptions.map(o => (
+                        <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label htmlFor="costs-provider" className="text-3xs uppercase tracking-wider text-muted-foreground">Provider</Label>
+                  <Input className="h-8.5 text-xs" value={v.provider} onChange={(e) => setV({ ...v, provider: e.target.value })} placeholder="VECO / NGCP" id="costs-provider"/>
+                </div>
+                <div>
+                  <Label htmlFor="costs-period-from" className="text-3xs uppercase tracking-wider text-muted-foreground">Period From</Label>
+                  <Input type="date" className="h-8.5 text-xs" value={v.period_start} onChange={(e) => setV({ ...v, period_start: e.target.value })} id="costs-period-from"/>
+                </div>
+                <div>
+                  <Label htmlFor="costs-period-to" className="text-3xs uppercase tracking-wider text-muted-foreground">Period To</Label>
+                  <Input type="date" className="h-8.5 text-xs" value={v.period_end} onChange={(e) => setV({ ...v, period_end: e.target.value })} id="costs-period-to"/>
+                </div>
+              </div>
+            </div>
+
+            {/* Section 2: Meter Readings */}
+            <div className="p-3 rounded-xl border border-border/50 bg-muted/20 space-y-2">
+              <div className="text-3xs uppercase tracking-wider font-semibold text-muted-foreground">Meter Telemetry</div>
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5">
+                <div>
+                  <Label htmlFor="costs-previous" className="text-3xs uppercase tracking-wider text-muted-foreground">Previous Reading</Label>
+                  <Input type="number" step="any" className="h-8.5 text-xs font-mono-num" placeholder="0.00" value={v.previous_reading} onChange={(e) => setV({ ...v, previous_reading: e.target.value })} id="costs-previous"/>
+                </div>
+                <div>
+                  <Label htmlFor="costs-current" className="text-3xs uppercase tracking-wider text-muted-foreground">Current Reading</Label>
+                  <Input type="number" step="any" className="h-8.5 text-xs font-mono-num" placeholder="0.00" value={v.current_reading} onChange={(e) => setV({ ...v, current_reading: e.target.value })} id="costs-current"/>
+                </div>
+                <div>
+                  <Label htmlFor="costs-multiplier" className="text-3xs uppercase tracking-wider text-muted-foreground">Multiplier</Label>
+                  <Input
+                    type="number" step="any" value={v.multiplier}
+                    readOnly={!canEdit}
+                    className={`h-8.5 text-xs font-mono-num ${!canEdit ? 'bg-muted cursor-not-allowed' : ''}`}
+                    onChange={(e) => handleMultiplierChange(e.target.value)}
+                    id="costs-multiplier"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="costs-total-kwh-auto" className="text-3xs uppercase tracking-wider text-muted-foreground">Total kWh (Auto)</Label>
+                  <ComputedInput value={totalKwh != null ? fmtNum(totalKwh, 2) : ''} id="costs-total-kwh-auto"/>
+                </div>
+              </div>
+            </div>
+
+            {/* Section 3: Charges Breakdown */}
+            <div className="p-3 rounded-xl border border-border/50 bg-muted/20 space-y-2">
+              <div className="text-3xs uppercase tracking-wider font-semibold text-muted-foreground">Charges Breakdown (₱)</div>
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5">
+                <div>
+                  <Label htmlFor="costs-generation" className="text-3xs uppercase tracking-wider text-muted-foreground">Generation</Label>
+                  <Input type="number" step="any" className="h-8.5 text-xs font-mono-num" placeholder="0.00" value={v.generation_charge} onChange={(e) => setV({ ...v, generation_charge: e.target.value })} id="costs-generation"/>
+                </div>
+                <div>
+                  <Label htmlFor="costs-distribution" className="text-3xs uppercase tracking-wider text-muted-foreground">Distribution</Label>
+                  <Input type="number" step="any" className="h-8.5 text-xs font-mono-num" placeholder="0.00" value={v.distribution_charge} onChange={(e) => setV({ ...v, distribution_charge: e.target.value })} id="costs-distribution"/>
+                </div>
+                <div>
+                  <Label htmlFor="costs-other" className="text-3xs uppercase tracking-wider text-muted-foreground">Other Charges</Label>
+                  <Input type="number" step="any" className="h-8.5 text-xs font-mono-num" placeholder="0.00" value={v.other_charges} onChange={(e) => setV({ ...v, other_charges: e.target.value })} id="costs-other"/>
+                </div>
+                <div>
+                  <Label htmlFor="costs-total" className="text-3xs uppercase tracking-wider font-bold text-foreground">Total Amount</Label>
+                  <Input type="number" step="any" className="h-8.5 text-xs font-mono-num font-semibold" placeholder="0.00" value={v.total_amount} onChange={(e) => setV({ ...v, total_amount: e.target.value })} id="costs-total"/>
+                </div>
+              </div>
+            </div>
+
+            {derivedRate && (
+              <div className="rounded-lg bg-accent-soft border border-accent/30 p-2.5 text-xs flex items-center justify-between">
+                <div>
+                  <span className="font-semibold text-accent">Auto-Derived Tariff:</span>{' '}
+                  <span className="font-mono-num font-bold text-accent">₱{derivedRate.toFixed(4)} / kWh</span>
+                </div>
+                <span className="text-3xs text-muted-foreground">Effective {v.period_start}</span>
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-end pt-1">
+              <div className="sm:col-span-9 space-y-1">
+                <Label htmlFor="costs-remarks" className="text-3xs uppercase tracking-wider text-muted-foreground">Remarks (Optional)</Label>
+                <Input className="h-8.5 text-xs" placeholder="e.g. Peak rate adjustment" value={v.remarks} onChange={(e) => setV({ ...v, remarks: e.target.value })} id="costs-remarks"/>
+              </div>
+              <div className="sm:col-span-3 flex justify-end">
+                <Button onClick={submit} className="h-8.5 w-full sm:w-auto px-4 text-xs gap-1.5 font-medium shadow-xs">
+                  <Zap className="h-3.5 w-3.5" />
+                  Save Bill {derivedRate ? '+ Tariff' : ''}
+                </Button>
+              </div>
+            </div>
+          </Card>
+
+          {/* ── Recent Bills & Tariff History ── */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+            {/* Recent bills */}
+            <Card className="p-4 space-y-3 border-border/60 shadow-2xs">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="text-sm font-semibold text-foreground">Recent Bills</h4>
+                  <p className="text-2xs text-muted-foreground">Recorded power utility charges</p>
+                </div>
+                {plantId && <ExportButton table="electric_bills" label="Export" filters={{ plant_id: plantId }} />}
+              </div>
+
+              <div className="divide-y divide-border/40">
+                {bills?.map((b: any) => {
+                  const isNegativeKwh = b.total_kwh != null && +b.total_kwh < 0;
+                  return (
+                    <div key={b.id} className={`flex justify-between items-center text-xs py-2 hover:bg-muted/20 transition-colors ${isNegativeKwh ? 'bg-destructive/5 rounded px-2' : ''}`}>
+                      <div>
+                        <div className="font-mono-num font-semibold text-foreground flex items-center gap-1.5">
+                          {b.billing_month ? format(parseISO(b.billing_month), 'MMM yyyy') : '—'}
+                          {isNegativeKwh && (
+                            <span className="inline-flex items-center gap-0.5 text-3xs font-bold text-destructive border border-destructive/40 rounded px-1.5 py-0.2">
+                              <AlertTriangle className="h-2.5 w-2.5" /> Reversed
+                            </span>
+                          )}
+                        </div>
+                        <div className={`font-mono-num text-3xs ${isNegativeKwh ? 'text-destructive font-semibold' : 'text-muted-foreground'}`}>
+                          {fmtNum(b.total_kwh, 0)} kWh · ₱{b.total_kwh && +b.total_kwh > 0 ? (+b.total_amount / +b.total_kwh).toFixed(4) : '—'}/kWh · ×{b.multiplier}
+                        </div>
+                      </div>
+                      <div className="font-mono-num font-bold text-foreground">₱{fmtNum(b.total_amount, 2)}</div>
+                    </div>
+                  );
+                })}
+                {!bills?.length && plantId && <p className="text-xs text-center text-muted-foreground py-4">No bills on record</p>}
+              </div>
+            </Card>
+
+            {/* Tariff history */}
+            <Card className="p-4 space-y-3 border-border/60 shadow-2xs">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="text-sm font-semibold text-foreground">Tariff History</h4>
+                  <p className="text-2xs text-muted-foreground">Effective energy rates per kWh</p>
+                </div>
+                {plantId && <ExportButton table="power_tariffs" label="Export" filters={{ plant_id: plantId }} />}
+              </div>
+
+              <div className="divide-y divide-border/40">
+                {tariffs?.map((t: any) => (
+                  <div key={t.id} className="flex justify-between items-center text-xs py-2 hover:bg-muted/20 transition-colors">
+                    <div>
+                      <div className="font-mono-num font-semibold text-foreground">{t.effective_date}</div>
+                      <div className="text-3xs text-muted-foreground">{t.provider ?? '—'} · ×{t.multiplier}</div>
+                    </div>
+                    <div className="font-mono-num font-bold text-primary">₱{(+t.rate_per_kwh).toFixed(4)} <span className="text-3xs text-muted-foreground">/ kWh</span></div>
+                  </div>
+                ))}
+                {!tariffs?.length && plantId && <p className="text-xs text-center text-muted-foreground py-4">No tariffs on record</p>}
+              </div>
+            </Card>
+          </div>
+        </>
+      )}
 
       {/* Multiplier change confirmation dialog */}
       <ResponsiveAlertDialog

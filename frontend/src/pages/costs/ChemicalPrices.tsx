@@ -139,8 +139,24 @@ export function ChemicalPrices() {
       effective_date: v.effective_date, updated_by: user?.id,
     });
     if (error) { toast.error(friendlyError(error)); return; }
-    toast.success('Price added');
-    setV((prev) => ({ ...prev, chemical_name: '', custom: '', unit: 'kg', customUnit: '', unit_price: '', effective_date: format(new Date(), 'yyyy-MM-dd') }));
+    toast.success('Price record added');
+    setV((prev) => ({ ...prev, chemical_name: '', custom: '', unit_price: '', effective_date: format(new Date(), 'yyyy-MM-dd') }));
+    qc.invalidateQueries({ queryKey: ['chem-prices'] });
+    qc.invalidateQueries({ queryKey: ['chem-current-prices'] });
+  };
+
+  // ── Inline edit save ─────────────────────────────────────────────────────────
+  const saveEdit = async (id: string) => {
+    if (!editV.chemical_name || !editV.unit_price) { toast.error('Name and price required'); return; }
+    setSaving(true);
+    const { error } = await supabase.from('chemical_prices').update({
+      chemical_name: editV.chemical_name, unit_price: +editV.unit_price,
+      effective_date: editV.effective_date, updated_by: user?.id,
+    }).eq('id', id);
+    setSaving(false);
+    if (error) { toast.error(friendlyError(error)); return; }
+    toast.success('Price record updated');
+    setEditId(null);
     qc.invalidateQueries({ queryKey: ['chem-prices'] });
     qc.invalidateQueries({ queryKey: ['chem-current-prices'] });
   };
@@ -158,29 +174,6 @@ export function ChemicalPrices() {
 
   const cancelEdit = () => setEditId(null);
 
-  // ── Save edited row ──────────────────────────────────────────────────────────
-  const saveEdit = async () => {
-    if (!editId) return;
-    const price = parseFloat(editV.unit_price);
-    if (!editV.chemical_name.trim() || isNaN(price) || price < 0 || !editV.effective_date) {
-      toast.error('Item name, price (≥ 0) and date are required');
-      return;
-    }
-    setSaving(true);
-    const { error } = await supabase.from('chemical_prices').update({
-      chemical_name:  editV.chemical_name.trim(),
-      unit_price:     price,
-      effective_date: editV.effective_date,
-      updated_by:     user?.id,
-    }).eq('id', editId);
-    setSaving(false);
-    if (error) { toast.error(friendlyError(error)); return; }
-    toast.success('Price updated');
-    setEditId(null);
-    qc.invalidateQueries({ queryKey: ['chem-prices'] });
-    qc.invalidateQueries({ queryKey: ['chem-current-prices'] });
-  };
-
   // ── Delete a row ─────────────────────────────────────────────────────────────
   const confirmDelete = async () => {
     if (!deleteId) return;
@@ -197,53 +190,67 @@ export function ChemicalPrices() {
   return (
     <div className="space-y-3">
       {/* ── Add price form ─────────────────────────────────────────────────── */}
-      <Card className="p-3 space-y-2">
-        <h4 className="text-sm font-semibold">Add price</h4>
-        <div className="grid grid-cols-2 gap-2">
-          <div className="col-span-2">
-            <div className="flex items-center justify-between mb-1">
-              <Label className="text-xs">{itemCategory === 'power' ? 'Plant' : 'Item'}</Label>
-              <div className="inline-flex rounded-md border bg-muted p-0.5" role="tablist" aria-label="Item category">
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={itemCategory === 'chemical'}
-                  onClick={() => switchCategory('chemical')}
-                  className={`px-2.5 py-1 text-2xs font-medium rounded transition-colors ${itemCategory === 'chemical' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
-                >
-                  Chemicals
-                </button>
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={itemCategory === 'filter'}
-                  onClick={() => switchCategory('filter')}
-                  className={`px-2.5 py-1 text-2xs font-medium rounded transition-colors ${itemCategory === 'filter' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
-                >
-                  Filters
-                </button>
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={itemCategory === 'power'}
-                  onClick={() => switchCategory('power')}
-                  className={`px-2.5 py-1 text-2xs font-medium rounded transition-colors ${itemCategory === 'power' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
-                >
-                  Power
-                </button>
-              </div>
-            </div>
+      <Card className="p-4 space-y-3 border-border/60 shadow-2xs">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h4 className="text-sm font-semibold text-foreground">Add Price Record</h4>
+            <p className="text-2xs text-muted-foreground">Register unit pricing for chemicals, filter media, or power tariffs</p>
+          </div>
+
+          {/* Segmented Category Control */}
+          <div className="flex items-center gap-0.5 bg-muted/40 p-0.5 rounded-lg border border-border/40" role="tablist" aria-label="Item category">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={itemCategory === 'chemical'}
+              onClick={() => switchCategory('chemical')}
+              className={`inline-flex items-center gap-1 px-2.5 py-1 text-2xs font-medium rounded-md transition-all ${
+                itemCategory === 'chemical' ? 'bg-background text-foreground shadow-xs font-semibold' : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <FlaskConical className="h-3 w-3" />
+              <span>Chemicals</span>
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={itemCategory === 'filter'}
+              onClick={() => switchCategory('filter')}
+              className={`inline-flex items-center gap-1 px-2.5 py-1 text-2xs font-medium rounded-md transition-all ${
+                itemCategory === 'filter' ? 'bg-background text-foreground shadow-xs font-semibold' : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <Layers className="h-3 w-3" />
+              <span>Filters</span>
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={itemCategory === 'power'}
+              onClick={() => switchCategory('power')}
+              className={`inline-flex items-center gap-1 px-2.5 py-1 text-2xs font-medium rounded-md transition-all ${
+                itemCategory === 'power' ? 'bg-background text-foreground shadow-xs font-semibold' : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <Zap className="h-3 w-3" />
+              <span>Power</span>
+            </button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 pt-1">
+          <div className="sm:col-span-4 space-y-1">
+            <Label className="text-3xs uppercase tracking-wider font-semibold text-muted-foreground">
+              {itemCategory === 'power' ? 'Facility' : 'Item Name'}
+            </Label>
             {itemCategory === 'power' ? (
-              <>
-                <PlantPicker value={v.plant_id} onChange={(id) => setV({ ...v, plant_id: id })} />
-                <p className="text-2xs text-muted-foreground mt-1">
-                  Wired to the same tariff record the Power tab derives from bills — this just lets you set a rate directly.
-                </p>
-              </>
+              <PlantPicker value={v.plant_id} onChange={(id) => setV({ ...v, plant_id: id })} />
             ) : (
               <>
                 <Select value={v.chemical_name} onValueChange={handleItemChange}>
-                  <SelectTrigger><SelectValue placeholder={itemCategory === 'filter' ? 'Pick filter' : 'Pick chemical'} /></SelectTrigger>
+                  <SelectTrigger className="h-8.5 text-xs bg-background">
+                    <SelectValue placeholder={itemCategory === 'filter' ? 'Pick filter' : 'Pick chemical'} />
+                  </SelectTrigger>
                   <SelectContent>
                     {itemCategory === 'chemical'
                       ? <>
@@ -255,19 +262,22 @@ export function ChemicalPrices() {
                   </SelectContent>
                 </Select>
                 {v.chemical_name === '__custom__' && (
-                  <Input className="mt-2" placeholder="Custom name" value={v.custom} onChange={(e) => setV({ ...v, custom: e.target.value })} />
+                  <Input className="mt-1.5 h-8.5 text-xs" placeholder="Custom item name" value={v.custom} onChange={(e) => setV({ ...v, custom: e.target.value })} />
                 )}
               </>
             )}
           </div>
-          <div>
-            <Label htmlFor="costs-field" className="text-xs">{itemCategory === 'power' ? 'Provider (optional)' : 'Unit'}</Label>
+
+          <div className="sm:col-span-3 space-y-1">
+            <Label htmlFor="costs-field" className="text-3xs uppercase tracking-wider font-semibold text-muted-foreground">
+              {itemCategory === 'power' ? 'Provider (optional)' : 'Unit'}
+            </Label>
             {itemCategory === 'power' ? (
-              <Input placeholder="VECO / NGCP" value={v.provider} onChange={(e) => setV({ ...v, provider: e.target.value })} id="costs-field"/>
+              <Input placeholder="VECO / NGCP" className="h-8.5 text-xs" value={v.provider} onChange={(e) => setV({ ...v, provider: e.target.value })} id="costs-field"/>
             ) : (
               <>
                 <Select value={v.unit} onValueChange={(x) => setV({ ...v, unit: x })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="h-8.5 text-xs bg-background"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {itemCategory === 'filter'
                       ? FILTER_UNITS.map((u) => <SelectItem key={u} value={u}>{u}</SelectItem>)
@@ -279,31 +289,40 @@ export function ChemicalPrices() {
                   </SelectContent>
                 </Select>
                 {v.unit === '__custom__' && itemCategory === 'chemical' && (
-                  <Input className="mt-2" placeholder="e.g. drum" value={v.customUnit} onChange={(e) => setV({ ...v, customUnit: e.target.value })} />
-                )}
-                {itemCategory === 'filter' && (
-                  <p className="text-2xs text-muted-foreground mt-1">Filters are priced per piece or per set, not by weight/volume.</p>
+                  <Input className="mt-1.5 h-8.5 text-xs" placeholder="e.g. drum" value={v.customUnit} onChange={(e) => setV({ ...v, customUnit: e.target.value })} />
                 )}
               </>
             )}
           </div>
-          <div>
-            <Label htmlFor="costs-price" className="text-xs">Price ₱ / {itemCategory === 'power' ? 'kWh' : (v.unit === '__custom__' ? (v.customUnit || 'unit') : v.unit)}</Label>
-            <Input type="number" step="any" value={v.unit_price} onChange={(e) => setV({ ...v, unit_price: e.target.value })} id="costs-price"/>
+
+          <div className="sm:col-span-2 space-y-1">
+            <Label htmlFor="costs-price" className="text-3xs uppercase tracking-wider font-semibold text-muted-foreground">
+              Price ₱ / {itemCategory === 'power' ? 'kWh' : (v.unit === '__custom__' ? (v.customUnit || 'unit') : v.unit)}
+            </Label>
+            <Input type="number" step="any" className="h-8.5 text-xs font-mono-num" placeholder="0.00" value={v.unit_price} onChange={(e) => setV({ ...v, unit_price: e.target.value })} id="costs-price"/>
           </div>
-          <div className="col-span-2">
-            <Label htmlFor="costs-effective-date" className="text-xs">Effective date</Label>
-            <Input type="date" value={v.effective_date} onChange={(e) => setV({ ...v, effective_date: e.target.value })} id="costs-effective-date"/>
+
+          <div className="sm:col-span-3 space-y-1">
+            <Label htmlFor="costs-effective-date" className="text-3xs uppercase tracking-wider font-semibold text-muted-foreground">
+              Effective Date
+            </Label>
+            <Input type="date" className="h-8.5 text-xs" value={v.effective_date} onChange={(e) => setV({ ...v, effective_date: e.target.value })} id="costs-effective-date"/>
           </div>
         </div>
-        <Button onClick={submit} className="w-full bg-primary hover:bg-primary/90 text-primary-foreground" size="sm">Add price</Button>
+
+        <div className="flex items-center justify-end pt-1">
+          <Button onClick={submit} size="sm" className="h-8.5 px-4 text-xs gap-1.5 font-medium shadow-xs">
+            <Plus className="h-3.5 w-3.5" />
+            Add Price
+          </Button>
+        </div>
 
         {itemCategory === 'power' && v.plant_id && (
-          <div className="pt-1 border-t">
-            <div className="text-2xs uppercase tracking-wide text-muted-foreground font-semibold mt-2 mb-1">Recent rates for this plant</div>
+          <div className="pt-2 border-t border-border/40">
+            <div className="text-3xs uppercase tracking-wider text-muted-foreground font-semibold mb-1.5">Recent rates for this plant</div>
             <div className="space-y-1">
               {recentTariffs?.map((t: any) => (
-                <div key={t.id} className="flex justify-between items-center text-xs py-1">
+                <div key={t.id} className="flex justify-between items-center text-xs py-1 px-2 rounded bg-muted/30">
                   <span className="text-muted-foreground">{t.effective_date}{t.provider ? ` · ${t.provider}` : ''}</span>
                   <span className="font-mono-num font-semibold">₱{(+t.rate_per_kwh).toFixed(4)}/kWh</span>
                 </div>
@@ -315,18 +334,21 @@ export function ChemicalPrices() {
       </Card>
 
       {/* ── Price history table ────────────────────────────────────────────── */}
-      <Card className="p-3">
-        <div className="flex items-center justify-between mb-2">
-          <h4 className="text-sm font-semibold">Price history</h4>
+      <Card className="p-4 space-y-3 border-border/60 shadow-2xs">
+        <div className="flex items-center justify-between">
+          <div>
+            <h4 className="text-sm font-semibold text-foreground">Price History</h4>
+            <p className="text-2xs text-muted-foreground">Active and historical cost benchmarks</p>
+          </div>
           <ExportButton table="chemical_prices" label="Export" />
         </div>
 
         {/* Column headers */}
-        <div className={`grid gap-2 text-2xs text-muted-foreground pb-1 border-b ${canEdit ? 'grid-cols-[1fr_90px_80px_56px]' : 'grid-cols-[1fr_100px_90px]'}`}>
+        <div className={`grid gap-2 text-3xs uppercase tracking-wider font-semibold text-muted-foreground pb-2 border-b ${canEdit ? 'grid-cols-[1fr_100px_90px_60px]' : 'grid-cols-[1fr_110px_100px]'}`}>
           <div>Item</div>
           <div className="text-right">Price</div>
           <div className="text-right">Date</div>
-          {canEdit && <div />}
+          {canEdit && <div className="text-right">Actions</div>}
         </div>
 
         {/* Rows */}

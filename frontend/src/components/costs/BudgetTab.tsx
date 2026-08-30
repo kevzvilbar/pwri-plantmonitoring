@@ -23,6 +23,9 @@ type Metric = 'total' | 'power' | 'chem';
 const toneTextClass = (tone: ReturnType<typeof opexVarianceTone>) =>
   tone === 'danger' ? 'text-danger' : tone === 'warn' ? 'text-warn-foreground' : tone === 'accent' ? 'text-accent' : '';
 
+import { StatCard } from '@/components/dashboard/StatCard';
+import { Calculator, Banknote, Scale, TrendingUp, Sun, Pencil, Check, X, Loader2 } from 'lucide-react';
+
 export function BudgetTab() {
   const { user } = useAuth();
   const { selectedPlantId } = useAppStore();
@@ -77,157 +80,218 @@ export function BudgetTab() {
 
   return (
     <div className="space-y-3">
-      <Card className="p-3 space-y-2">
-        <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-2 items-end">
-          <div><Label htmlFor="budgettab-plant" className="text-xs">Plant</Label><PlantPicker value={plantId} onChange={setPlantId} id="budgettab-plant" /></div>
-          <div className="w-24">
-            <Label htmlFor="budgettab-year" className="text-xs">Year</Label>
-            <Select value={String(year)} onValueChange={(v) => setYear(+v)}>
-              <SelectTrigger id="budgettab-year"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {[year - 1, year, year + 1].map((y) => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
-              </SelectContent>
-            </Select>
+      {/* ── Toolbar ── */}
+      <div className="p-1.5 rounded-xl border border-border/50 bg-card flex flex-wrap gap-2 items-center justify-between">
+        <div className="flex items-center gap-2 flex-1 min-w-[200px] max-w-sm">
+          <div className="flex-1">
+            <PlantPicker value={plantId} onChange={setPlantId} id="budgettab-plant" />
           </div>
         </div>
-      </Card>
 
-      {!plantId && <Card className="p-6 text-center text-sm text-muted-foreground">Select a plant</Card>}
+        <div className="flex items-center gap-1.5">
+          <span className="text-2xs text-muted-foreground font-semibold">Year:</span>
+          <Select value={String(year)} onValueChange={(v) => setYear(+v)}>
+            <SelectTrigger id="budgettab-year" className="h-8 w-24 rounded-lg text-xs font-medium bg-background">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {[year - 1, year, year + 1].map((y) => (
+                <SelectItem key={y} value={String(y)}>{y}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      {!plantId && (
+        <Card className="p-8 text-center space-y-1 rounded-xl border border-dashed shadow-none">
+          <p className="text-xs font-semibold text-foreground">Select a plant</p>
+          <p className="text-3xs text-muted-foreground">Choose a facility from the picker above to inspect OPEX budget performance.</p>
+        </Card>
+      )}
 
       {plantId && (
         <>
-          <div className="grid grid-cols-2 gap-2">
-            <Card className="p-3"><div className="text-xs text-muted-foreground">Budget YTD</div><div className="font-mono-num text-lg">₱{fmtNum(totals.budget, 0)}</div></Card>
-            <Card className="p-3"><div className="text-xs text-muted-foreground">Actual YTD</div><div className="font-mono-num text-lg">₱{fmtNum(totals.actual, 0)}</div></Card>
-            <Card className="p-3">
-              <div className="text-xs text-muted-foreground">Variance</div>
-              <div className={`font-mono-num text-lg ${toneTextClass(totalTone)}`}>
-                {totalVariancePct != null ? `${totals.actual >= totals.budget ? '+' : '-'}₱${fmtNum(Math.abs(totals.actual - totals.budget), 0)}` : '—'}
-              </div>
-            </Card>
-            <Card className="p-3">
-              <div className="text-xs text-muted-foreground">Variance %</div>
-              <div className="text-lg">
-                {totalVariancePct != null ? (
-                  <StatusPill tone={totalTone}>{totalVariancePct >= 0 ? '+' : ''}{totalVariancePct.toFixed(1)}%</StatusPill>
-                ) : '—'}
-              </div>
-            </Card>
+          {/* ── 4 KPI Stat Cards ── */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+            <StatCard
+              icon={Calculator}
+              accent="text-muted-foreground"
+              label="Budget YTD"
+              value={`₱${fmtNum(totals.budget, 0)}`}
+              subtext="Accumulated baseline plan"
+            />
+            <StatCard
+              icon={Banknote}
+              accent="text-primary"
+              label="Actual YTD"
+              value={`₱${fmtNum(totals.actual, 0)}`}
+              subtext="Total power & chem expenses"
+            />
+            <StatCard
+              icon={Scale}
+              accent="text-highlight"
+              label="Variance"
+              value={totalVariancePct != null ? `${totals.actual >= totals.budget ? '+' : '-'}₱${fmtNum(Math.abs(totals.actual - totals.budget), 0)}` : '—'}
+              subtext={totals.hasBudget ? 'Net variance vs budget' : 'No budget configured'}
+            />
+            <StatCard
+              icon={TrendingUp}
+              label="Variance %"
+              value={totalVariancePct != null ? `${totalVariancePct >= 0 ? '+' : ''}${totalVariancePct.toFixed(1)}%` : '—'}
+              badge={totalVariancePct != null ? (
+                <StatusPill tone={totalTone === 'accent' ? 'success' : totalTone}>
+                  {totalVariancePct <= 0 ? 'On Track' : totalVariancePct > 15 ? 'Critical' : 'Over'}
+                </StatusPill>
+              ) : undefined}
+              subtext={totals.hasBudget ? 'Relative budget delta' : 'Unbudgeted period'}
+            />
           </div>
 
           {plant?.has_solar && (
-            <Card className="p-3 flex items-start gap-2 text-xs text-muted-foreground">
-              <Sun className="h-4 w-4 shrink-0 mt-0.5" />
+            <div className="rounded-xl border border-border/60 bg-muted/30 p-3 flex items-start gap-2.5 text-xs text-muted-foreground">
+              <Sun className="h-4 w-4 text-warn shrink-0 mt-0.5" />
               <span>
-                Solar generation this year avoided about ₱{fmtNum(totals.solar, 0)} in grid cost. Solar has no
-                opex line of its own here — it's capex, grid-tied, no battery — shown for context only.
+                Solar generation this year avoided about <strong className="text-foreground font-mono-num">₱{fmtNum(totals.solar, 0)}</strong> in grid cost. (Informational offset — solar is capex, grid-tied, no battery).
               </span>
-            </Card>
+            </div>
           )}
 
-          <Card className="p-3">
-            <div className="flex items-center justify-between mb-2">
-              <h4 className="text-sm font-semibold">Monthly budget vs actual</h4>
-              <span className="text-2xs text-muted-foreground">Manager/Admin only</span>
+          {/* ── Monthly Budget vs Actual Table ── */}
+          <Card className="p-4 space-y-3 border-border/60 shadow-2xs">
+            <div className="flex items-center justify-between">
+              <div>
+                <h4 className="text-sm font-semibold text-foreground">Monthly Budget vs Actual</h4>
+                <p className="text-2xs text-muted-foreground">Detailed breakdown by month for Power and Chemicals</p>
+              </div>
+              <span className="text-3xs font-medium uppercase tracking-wider text-muted-foreground bg-muted px-2 py-0.5 rounded">
+                Manager/Admin only
+              </span>
             </div>
 
-            {isLoading && Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-12 w-full my-2" />)}
+            {/* Table Header */}
+            <div className="grid grid-cols-[80px_1fr_1fr_90px_40px] gap-2 text-3xs uppercase tracking-wider font-semibold text-muted-foreground pb-2 border-b">
+              <div>Month</div>
+              <div>Power OPEX</div>
+              <div>Chemical OPEX</div>
+              <div className="text-center">Variance</div>
+              <div className="text-right">Action</div>
+            </div>
 
-            {!isLoading && (rows ?? []).map((r) => {
-              const tone = opexVarianceTone(r.variancePct);
-              const isEditing = editMonth === r.month;
-              return (
-                <div key={r.month} className="py-2 border-b last:border-0">
-                  {isEditing ? (
-                    <div className="space-y-2">
-                      <div className="text-xs font-medium">{r.label}</div>
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <Label htmlFor="budgettab-power-budget" className="text-2xs">Power budget ₱</Label>
-                          <Input className="h-7 text-xs font-mono-num" type="number" min="0" step="any"
-                            value={editV.power} onChange={(e) => setEditV({ ...editV, power: e.target.value })} id="budgettab-power-budget"/>
-                        </div>
-                        <div>
-                          <Label htmlFor="budgettab-chem-budget" className="text-2xs">Chem budget ₱</Label>
-                          <Input className="h-7 text-xs font-mono-num" type="number" min="0" step="any"
-                            value={editV.chem} onChange={(e) => setEditV({ ...editV, chem: e.target.value })} id="budgettab-chem-budget"/>
-                        </div>
-                      </div>
-                      <div className="flex gap-1.5 justify-end">
-                        <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={cancelEdit} disabled={saving}>
-                          <X className="h-3 w-3" /> Cancel
-                        </Button>
-                        <Button size="sm" className="h-7 text-xs gap-1 bg-primary hover:bg-primary/90 text-primary-foreground" onClick={() => save(r.month)} disabled={saving}>
-                          {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />} Save
-                        </Button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-[56px_1fr_1fr_72px_28px] gap-2 items-center text-xs">
-                      <div className="font-mono-num">{r.label}</div>
-                      <div>
-                        <div className="text-2xs text-muted-foreground">Budget ₱{fmtNum(r.powerBudget, 0)}</div>
-                        <div className="font-mono-num font-medium">₱{fmtNum(r.powerActual, 0)}</div>
-                        {plant?.has_solar && (
-                          <div className="text-2xs text-muted-foreground flex items-center gap-1">
-                            <Sun className="h-2.5 w-2.5" />
-                            ₱{fmtNum(r.solarOffset, 0)} offset{r.solarSharePct != null ? ` · ${r.solarSharePct.toFixed(0)}% of load` : ''}
+            {isLoading && Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-10 w-full my-1 rounded-lg" />)}
+
+            {!isLoading && (
+              <div className="divide-y divide-border/40">
+                {(rows ?? []).map((r) => {
+                  const tone = opexVarianceTone(r.variancePct);
+                  const isEditing = editMonth === r.month;
+                  return (
+                    <div key={r.month} className="py-2 hover:bg-muted/20 transition-colors">
+                      {isEditing ? (
+                        <div className="p-2.5 rounded-lg bg-muted/40 border border-border/60 space-y-2">
+                          <div className="text-xs font-semibold text-foreground">{r.label}</div>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <Label htmlFor="budgettab-power-budget" className="text-3xs uppercase font-medium text-muted-foreground">Power budget (₱)</Label>
+                              <Input className="h-8 text-xs font-mono-num bg-background" type="number" min="0" step="any"
+                                value={editV.power} onChange={(e) => setEditV({ ...editV, power: e.target.value })} id="budgettab-power-budget"/>
+                            </div>
+                            <div>
+                              <Label htmlFor="budgettab-chem-budget" className="text-3xs uppercase font-medium text-muted-foreground">Chem budget (₱)</Label>
+                              <Input className="h-8 text-xs font-mono-num bg-background" type="number" min="0" step="any"
+                                value={editV.chem} onChange={(e) => setEditV({ ...editV, chem: e.target.value })} id="budgettab-chem-budget"/>
+                            </div>
                           </div>
-                        )}
-                      </div>
-                      <div>
-                        <div className="text-2xs text-muted-foreground">Budget ₱{fmtNum(r.chemBudget, 0)}</div>
-                        <div className="font-mono-num font-medium">₱{fmtNum(r.chemActual, 0)}</div>
-                      </div>
-                      <div>
-                        {r.variancePct != null
-                          ? <StatusPill tone={tone}>{r.variancePct >= 0 ? '+' : ''}{r.variancePct.toFixed(1)}%</StatusPill>
-                          : <span className="text-muted-foreground text-2xs">No budget</span>}
-                      </div>
-                      <Button size="icon" variant="ghost" className="h-6 w-6 text-muted-foreground hover:text-foreground"
-                        title="Edit budget" aria-label={`Edit budget for ${r.label}`} onClick={() => startEdit(r)}>
-                        <Pencil className="h-3 w-3" />
-                      </Button>
+                          <div className="flex gap-1.5 justify-end pt-1">
+                            <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={cancelEdit} disabled={saving}>
+                              <X className="h-3 w-3" /> Cancel
+                            </Button>
+                            <Button size="sm" className="h-7 text-xs gap-1 shadow-xs" onClick={() => save(r.month)} disabled={saving}>
+                              {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />} Save
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-[80px_1fr_1fr_90px_40px] gap-2 items-center text-xs">
+                          <div className="font-semibold text-foreground font-mono-num">{r.label.split(' ')[0]}</div>
+                          <div>
+                            <div className="font-mono-num font-medium text-foreground">₱{fmtNum(r.powerActual, 0)}</div>
+                            <div className="text-3xs text-muted-foreground font-mono-num">
+                              Plan: ₱{fmtNum(r.powerBudget, 0)}
+                              {plant?.has_solar && r.solarOffset > 0 && (
+                                <span className="ml-1 text-chart-6">· ₱{fmtNum(r.solarOffset, 0)} solar</span>
+                              )}
+                            </div>
+                          </div>
+                          <div>
+                            <div className="font-mono-num font-medium text-foreground">₱{fmtNum(r.chemActual, 0)}</div>
+                            <div className="text-3xs text-muted-foreground font-mono-num">Plan: ₱{fmtNum(r.chemBudget, 0)}</div>
+                          </div>
+                          <div className="text-center">
+                            {r.variancePct != null ? (
+                              <StatusPill tone={tone === 'accent' ? 'success' : tone}>
+                                {r.variancePct >= 0 ? '+' : ''}{r.variancePct.toFixed(1)}%
+                              </StatusPill>
+                            ) : (
+                              <span className="text-muted-foreground/60 text-2xs">—</span>
+                            )}
+                          </div>
+                          <div className="text-right">
+                            <Button size="icon" variant="ghost" className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                              title="Edit budget" aria-label={`Edit budget for ${r.label}`} onClick={() => startEdit(r)}>
+                              <Pencil className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
-              );
-            })}
+                  );
+                })}
+              </div>
+            )}
           </Card>
 
-          <Card className="p-3">
-            <div className="flex items-center justify-between mb-2">
-              <h4 className="text-sm font-semibold">Budget vs actual</h4>
-              <div className="flex gap-1">
+          {/* ── Visual Comparison Chart ── */}
+          <Card className="p-4 space-y-3 border-border/60 shadow-2xs">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h4 className="text-sm font-semibold text-foreground">Budget vs Actual Variance Chart</h4>
+                <p className="text-2xs text-muted-foreground">Monthly expense comparisons</p>
+              </div>
+              <div className="flex items-center gap-1 bg-muted/40 p-0.5 rounded-lg border border-border/40">
                 {(['total', 'power', 'chem'] as Metric[]).map((m) => (
-                  <Button key={m} size="sm" variant="outline"
-                    className={`h-7 text-xs ${metric === m ? 'bg-primary hover:bg-primary/90 text-primary-foreground border-primary' : ''}`}
-                    onClick={() => setMetric(m)}>
+                  <button
+                    key={m}
+                    className={`px-2.5 py-1 text-2xs font-medium rounded-md transition-all ${
+                      metric === m ? 'bg-background text-foreground shadow-xs font-semibold' : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                    onClick={() => setMetric(m)}
+                  >
                     {m === 'total' ? 'Total' : m === 'power' ? 'Power' : 'Chemicals'}
-                  </Button>
+                  </button>
                 ))}
               </div>
             </div>
-            <div className="h-64">
-              <ResponsiveContainer>
-                <BarChart data={chartData}>
+            <div className="h-64 pt-2">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={chartData} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
                   <defs>
                     <linearGradient id="budgetFill" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="hsl(var(--muted-foreground))" stopOpacity={0.85} />
-                      <stop offset="100%" stopColor="hsl(var(--muted-foreground))" stopOpacity={0.45} />
+                      <stop offset="5%" stopColor="hsl(var(--muted-foreground))" stopOpacity={0.7} />
+                      <stop offset="100%" stopColor="hsl(var(--muted-foreground))" stopOpacity={0.3} />
                     </linearGradient>
                     <linearGradient id="actualFill" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="hsl(var(--chart-1))" stopOpacity={0.95} />
-                      <stop offset="100%" stopColor="hsl(var(--chart-1))" stopOpacity={0.55} />
+                      <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.95} />
+                      <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity={0.55} />
                     </linearGradient>
                   </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} strokeOpacity={0.6} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} opacity={0.4} />
                   <XAxis dataKey="month" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 11 }} tickFormatter={(v: number) => `₱${(v / 1000).toFixed(0)}k`} axisLine={false} tickLine={false} />
                   <Tooltip contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 10, fontSize: 12, boxShadow: 'var(--shadow-elev)', backdropFilter: 'blur(8px)' }} />
                   <Legend wrapperStyle={{ fontSize: 12 }} />
-                  <Bar dataKey="budget" fill="url(#budgetFill)" name="Budget ₱" radius={[6, 6, 0, 0]} maxBarSize={32} />
-                  <Bar dataKey="actual" fill="url(#actualFill)" name="Actual ₱" radius={[6, 6, 0, 0]} maxBarSize={32} />
+                  <Bar dataKey="budget" fill="url(#budgetFill)" name="Budget (₱)" radius={[4, 4, 0, 0]} maxBarSize={28} />
+                  <Bar dataKey="actual" fill="url(#actualFill)" name="Actual (₱)" radius={[4, 4, 0, 0]} maxBarSize={28} />
                 </BarChart>
               </ResponsiveContainer>
             </div>

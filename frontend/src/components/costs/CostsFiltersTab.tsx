@@ -1,10 +1,7 @@
-// src/components/costs/CostsFiltersTab.tsx
-//
-// Content for the new "Costs → Filters" tab. Wire this in wherever the
-// Rollup / Budget tab components are already registered as siblings —
-// see PATCH_INSTRUCTIONS.md, section 3.
 import { useCallback, useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { StatCard } from "@/components/dashboard/StatCard";
+import { Banknote, CalendarClock, History, Layers } from "lucide-react";
 import {
   FilterReplacement,
   aggregateMonthly,
@@ -46,39 +43,40 @@ export function CostsFiltersTab({ plantId, plantName, filterHousingType, canEdit
   const lastReplacement = rows[0]?.replacement_date ?? "—";
 
   return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Spend this month
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="text-2xl font-semibold" data-testid="filter-spend-this-period">
-            ₱{thisPeriodSpend.toLocaleString()}
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Avg. days between changes
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="text-2xl font-semibold">{avgDays ?? "—"}</CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Last replacement
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="text-2xl font-semibold">{lastReplacement}</CardContent>
-        </Card>
+    <div className="space-y-3">
+      {/* ── 3 KPI Cards ── */}
+      <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
+        <StatCard
+          icon={Banknote}
+          accent="text-primary"
+          label="Spend this month"
+          value={`₱${thisPeriodSpend.toLocaleString()}`}
+          subtext="Latest monthly filter spend"
+        />
+        <StatCard
+          icon={CalendarClock}
+          accent="text-highlight"
+          label="Avg. Days Between Changes"
+          value={avgDays != null ? avgDays : "—"}
+          unit={avgDays != null ? "days" : undefined}
+          subtext="Calculated mean change interval"
+        />
+        <StatCard
+          icon={History}
+          accent="text-info"
+          label="Last Replacement"
+          value={lastReplacement}
+          subtext={`Current housing: ${filterHousingType}`}
+        />
       </div>
 
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle>Monthly Filter Cost</CardTitle>
+      {/* ── Monthly Filter Cost Chart ── */}
+      <Card className="p-4 space-y-3 border-border/60 shadow-2xs">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h4 className="text-sm font-semibold text-foreground">Monthly Filter Cost</h4>
+            <p className="text-2xs text-muted-foreground">Cartridge &amp; bag filter expenditures by month</p>
+          </div>
           {canEdit && (
             <FilterReplacementDialog
               plantId={plantId}
@@ -87,23 +85,24 @@ export function CostsFiltersTab({ plantId, plantName, filterHousingType, canEdit
               onLogged={reload}
             />
           )}
-        </CardHeader>
-        <CardContent>
+        </div>
+
+        <div>
           {loading ? (
-            <div className="py-12 text-center text-muted-foreground">Loading…</div>
+            <div className="py-12 text-center text-xs text-muted-foreground">Loading filter metrics…</div>
           ) : (
             <FilterCostChart data={monthly} />
           )}
-        </CardContent>
+        </div>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Replacement History</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <FilterReplacementHistory rows={rows} canDelete={canEdit} onChanged={reload} />
-        </CardContent>
+      {/* ── Replacement History ── */}
+      <Card className="p-4 space-y-3 border-border/60 shadow-2xs">
+        <div>
+          <h4 className="text-sm font-semibold text-foreground">Replacement History</h4>
+          <p className="text-2xs text-muted-foreground">Log of cartridge &amp; bag filter changeouts</p>
+        </div>
+        <FilterReplacementHistory rows={rows} canDelete={canEdit} onChanged={reload} />
       </Card>
     </div>
   );
