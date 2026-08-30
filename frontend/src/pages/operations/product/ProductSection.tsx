@@ -24,8 +24,10 @@ import { findExistingReading } from '@/lib/duplicateCheck';
 import { downloadCSV } from '@/lib/csv';
 import { toast } from 'sonner';
 import { friendlyError } from '@/lib/supabaseErrors';
-import { format } from 'date-fns';
-import { MapPin, Pencil, X, Droplet, Zap, Upload, Download, FileText, AlertCircle, Loader2, History, Gauge, FlaskConical, Keyboard, CalendarClock, ArrowUpRight } from 'lucide-react';
+import { MapPin, Pencil, X, Droplet, Zap, Upload, Download, FileText, AlertCircle, Loader2, History, Gauge, FlaskConical, Keyboard, CalendarClock, ArrowUpRight, Lock, SquarePen } from 'lucide-react';
+import { MetaStrip } from '@/components/operations/MetaStrip';
+import { ControlCluster } from '@/components/operations/ControlCluster';
+import { cn } from '@/lib/utils';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -714,78 +716,87 @@ function ProductMeterRow({
   return (
     <div
       ref={rowRef}
-      className={`p-3 space-y-2 transition-shadow ${pulsing ? 'ring-2 ring-accent ring-inset rounded-lg' : ''}`}
+      className={cn(
+        'instrument-housing p-4 space-y-3 transition-all border border-border/80 rounded-2xl mb-3 shadow-xs',
+        pulsing ? 'ring-2 ring-accent ring-inset' : '',
+      )}
       data-testid={`product-meter-row-${meter.id}`}
     >
-      {/* Row 1: Name | compact date picker on right */}
-      <div className="min-w-0">
-        <div className="flex items-center justify-between gap-2 min-w-0">
-          <div className="text-sm font-medium truncate flex items-center gap-1.5 min-w-0 flex-1">
-            <Gauge className="h-3.5 w-3.5 text-primary shrink-0" />
-            <span className="truncate">{meter.name}</span>
-          </div>
-          <label className="shrink-0 cursor-pointer relative">
-            <span
-              className="inline-flex items-center gap-1.5 text-xs text-muted-foreground bg-muted border border-border rounded px-3 py-1 font-mono-num whitespace-nowrap hover:bg-muted/70 transition-colors peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-ring peer-focus-visible:outline-offset-2"
-              onClick={(e) => {
-                e.preventDefault();
-                const el = dtInputRef.current;
-                if (!el) return;
-                if (typeof el.showPicker === 'function') {
-                  try { el.showPicker(); } catch { el.focus(); }
-                } else {
-                  el.focus();
-                }
-              }}
-            >
-              {customDt ? new Date(customDt).toLocaleString([], { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—'}
-              <CalendarClock className="h-3 w-3 shrink-0 opacity-70" />
-            </span>
-            <Input ref={dtInputRef} type="datetime-local" value={customDt}
-              onChange={e => setCustomDt(e.target.value)}
-              className="peer absolute inset-0 opacity-0 w-full h-full pointer-events-none"
-              title="Reading date & time" />
-          </label>
+      {/* Row 1: Name + Prioritized MetaStrip | compact date picker */}
+      <div className="flex items-start justify-between gap-2 min-w-0">
+        <div className="flex items-center gap-2 flex-wrap min-w-0 flex-1">
+          <span className="text-sm font-bold text-foreground break-words">{meter.name}</span>
+          <MetaStrip
+            primary={
+              (() => {
+                const fresh = lastReadingFreshness(latest?.reading_datetime);
+                return (
+                  <StatusPill tone={fresh.tone}>
+                    <CalendarClock className="h-3 w-3" />
+                    {fresh.label}
+                  </StatusPill>
+                );
+              })()
+            }
+            alerts={[
+              productionVolume != null && {
+                tone: 'primary',
+                label: `Δ ${fmtNum(productionVolume)} m³`,
+              },
+            ].filter(Boolean)}
+            overflow={[
+              {
+                icon: ArrowUpRight,
+                label: 'Plant detail',
+                onClick: () => navigate(`/plants/${plantId}?tab=product&highlight=${meter.id}`),
+              },
+            ]}
+            maxVisible={3}
+          />
         </div>
-        {/* "Last reading" freshness + link to this meter's card in Plant
-            detail — see LocatorSection.tsx's lastReadingFreshness for why
-            this isn't called a "flag". */}
-        <div className="flex items-center gap-1.5 flex-wrap mt-1">
-          {(() => {
-            const fresh = lastReadingFreshness(latest?.reading_datetime);
-            return (
-              <StatusPill tone={fresh.tone}>
-                <CalendarClock className="h-2.5 w-2.5" />
-                {fresh.label}
-              </StatusPill>
-            );
-          })()}
-          <button
-            type="button"
-            onClick={() => navigate(`/plants/${plantId}?tab=product&highlight=${meter.id}`)}
-            title="Open this meter in Plant detail"
-            aria-label="Open this meter in Plant detail"
-            className="shrink-0 inline-flex items-center gap-0.5 text-2xs font-medium text-muted-foreground hover:text-foreground bg-muted hover:bg-muted/80 px-1.5 py-0.5 rounded-full transition-colors"
+
+        {/* Date picker */}
+        <label className="shrink-0 cursor-pointer relative">
+          <span
+            className="inline-flex items-center gap-1.5 text-2xs text-muted-foreground bg-muted border border-border/70 rounded-full px-3 py-1 font-mono-num whitespace-nowrap hover:bg-muted/80 hover:text-foreground transition-colors"
+            onClick={(e) => {
+              e.preventDefault();
+              const el = dtInputRef.current;
+              if (!el) return;
+              if (typeof el.showPicker === 'function') {
+                try { el.showPicker(); } catch { el.focus(); }
+              } else {
+                el.focus();
+              }
+            }}
           >
-            <ArrowUpRight className="h-2.5 w-2.5" />
-            Plant detail
-          </button>
-        </div>
-        <div className="text-xs text-muted-foreground mt-0.5">
-          prev: <span className="font-mono-num">{previous == null ? '—' : fmtNum(previous)}</span>
+            {customDt ? new Date(customDt).toLocaleString([], { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—'}
+            <CalendarClock className="h-3 w-3 shrink-0 opacity-70" />
+          </span>
+          <Input ref={dtInputRef} type="datetime-local" value={customDt}
+            onChange={e => setCustomDt(e.target.value)}
+            className="peer absolute inset-0 opacity-0 w-full h-full pointer-events-none"
+            title="Reading date & time" />
+        </label>
+      </div>
+
+      {/* Row 2: Recessed Telemetry Panel */}
+      <div className="recessed-glass p-2.5 sm:p-3 flex items-center justify-between gap-2 flex-wrap">
+        <div className="text-xs text-muted-foreground">
+          prev: <span className="font-mono-num font-semibold text-foreground">{previous == null ? '—' : fmtNum(previous)}</span>
           {productionVolume != null && (
             <>
               {' · '}
-              <span className="font-mono-num text-primary font-medium">{fmtNum(productionVolume)} m³</span>
+              <span className="font-mono-num font-semibold text-primary">{fmtNum(productionVolume)} m³</span>
               {' produced'}
             </>
           )}
         </div>
       </div>
 
-      {/* Row 2: reading input + save + history */}
+      {/* Row 3: reading input + save + history */}
       {isMobile ? (
-        <div className="space-y-2">
+        <div className="space-y-2.5">
           <OdometerRollerInput
             value={reading}
             onChange={setReading}
@@ -796,48 +807,55 @@ function ProductMeterRow({
           <div className="flex items-center gap-2">
             <Button
               onClick={save} disabled={saving || !reading || anomalyRemarkRequired}
-              className="flex-1 h-11 text-sm bg-primary hover:bg-primary/90 active:bg-primary text-primary-foreground shadow-sm"
+              className="flex-1 h-11 rounded-full text-sm font-semibold bg-primary hover:bg-primary/90 active:scale-[0.98] text-primary-foreground shadow-sm transition-all"
               data-testid={`product-meter-save-${meter.id}`}
             >
-              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Save'}
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Save reading'}
             </Button>
             {canEdit && (
-              <Button variant="ghost" size="sm" className="h-11 w-11 p-0 rounded-lg text-muted-foreground shrink-0"
-                onClick={() => setShowHistory(true)} title="View history">
-                <History className="h-3.5 w-3.5" />
-              </Button>
+              <ControlCluster
+                actions={[
+                  {
+                    icon: History,
+                    title: 'View history',
+                    onClick: () => setShowHistory(true),
+                  },
+                ]}
+              />
             )}
           </div>
         </div>
       ) : (
         <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
           <div className="relative flex-1 min-w-0">
-            <Gauge className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-primary pointer-events-none" />
+            <Gauge className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-primary pointer-events-none" />
             <Input
               type="number" step="any" inputMode="decimal"
               value={reading}
               onChange={(e) => setReading(e.target.value)}
               placeholder="Product Reading"
-              className="h-9 pl-7 w-full border-primary focus-visible:ring-primary bg-primary-soft/40"
+              className="h-11 pl-9 w-full rounded-xl border-primary/30 focus-visible:ring-primary bg-primary-soft/30 font-mono-num font-medium"
               data-testid={`product-meter-input-${meter.id}`}
             />
           </div>
           <Button
             onClick={save}
             disabled={saving || !reading || anomalyRemarkRequired}
-            size="sm"
-            className="h-9 px-3 text-xs shrink-0"
+            className="h-11 px-6 rounded-full text-sm font-semibold shrink-0 bg-primary hover:bg-primary/90 active:scale-[0.98] text-primary-foreground shadow-sm transition-all"
             data-testid={`product-meter-save-${meter.id}`}
           >
-            {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Save'}
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Save reading'}
           </Button>
           {canEdit && (
-            <Button
-              variant="ghost" size="sm" className="h-9 w-9 p-0 rounded-full text-muted-foreground shrink-0"
-              onClick={() => setShowHistory(true)} title="View history"
-            >
-              <History className="h-3.5 w-3.5" />
-            </Button>
+            <ControlCluster
+              actions={[
+                {
+                  icon: History,
+                  title: 'View history',
+                  onClick: () => setShowHistory(true),
+                },
+              ]}
+            />
           )}
         </div>
       )}

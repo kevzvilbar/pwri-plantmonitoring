@@ -26,8 +26,10 @@ import { downloadCSV } from '@/lib/csv';
 import { toast } from 'sonner';
 import { friendlyError } from '@/lib/supabaseErrors';
 import { format } from 'date-fns';
-import { MapPin, Pencil, X, Droplet, Zap, Upload, Download, FileText, AlertCircle, AlertTriangle, Loader2, History, FlaskConical, Keyboard, MessageCircleOff, CalendarClock, RefreshCw, PencilLine, ShieldAlert, ArrowUpRight } from 'lucide-react';
+import { MapPin, Pencil, X, Droplet, Zap, Upload, Download, FileText, AlertCircle, AlertTriangle, Loader2, History, FlaskConical, Keyboard, MessageCircleOff, CalendarClock, RefreshCw, PencilLine, ShieldAlert, ArrowUpRight, Lock, SquarePen } from 'lucide-react';
 import { DerivedMeterIcon } from '@/components/icons/water-icons';
+import { MetaStrip } from '@/components/operations/MetaStrip';
+import { ControlCluster } from '@/components/operations/ControlCluster';
 
 // High-voltage transmission tower icon — matches Plants.tsx grid icon exactly.
 
@@ -853,6 +855,7 @@ function LocatorRow({
 
   // Tracks whether the last save was auto-quarantined as pending_review
   const [lastSavePending, setLastSavePending] = useState(false);
+  const [justSaved, setJustSaved] = useState(false);
   // Cooldown: minutes left before operator can submit again for this locator
   const [cooldownMinutes, setCooldownMinutes] = useState(0);
   const [cooldownAvailableAt, setCooldownAvailableAt] = useState<Date | null>(null);
@@ -1014,6 +1017,8 @@ function LocatorRow({
       const vol  = savedRow?.daily_volume;
       toast.success(fmtSaveToast(locator.name, editingId ? 'updated' : 'saved', curr, prev, vol), { duration: 5000 });
     }
+    setJustSaved(true);
+    setTimeout(() => setJustSaved(false), 500);
     setReading(''); clearDraftReading(); setEditingId(null); onSaved();
     setMeterReplacePending(null); setShowReplaceMeter(false);
   };
@@ -1284,43 +1289,41 @@ function LocatorRow({
 
   const ActionButtons = (
     <>
-      {lastToday && !editingId && canSelfEdit && (
-        <Button variant="ghost" size="sm"
-          className="h-10 w-10 p-0 rounded-lg shrink-0 text-muted-foreground hover:text-foreground hover:bg-muted"
-          onClick={() => { setEditingId(lastToday.id); setReading(String(lastToday.current_reading)); }}
-          title={`Edit last reading (${fmtNum(lastToday.current_reading)})`}>
-          <Pencil className="h-3.5 w-3.5" />
-        </Button>
-      )}
-      {editingId && (
-        <Button variant="ghost" size="sm"
-          className="h-10 w-10 p-0 rounded-lg shrink-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-          onClick={() => { setEditingId(null); setReading(''); }} title="Cancel edit">
-          <X className="h-3.5 w-3.5" />
-        </Button>
-      )}
-      {isManagerOrAdmin && (
-        <Button variant="ghost" size="sm"
-          className="h-10 w-10 p-0 rounded-lg shrink-0 text-muted-foreground hover:text-foreground hover:bg-muted"
-          onClick={() => setShowHistory(true)} title="View reading history">
-          <History className="h-3.5 w-3.5" />
-        </Button>
-      )}
-      {/* Item 9: locked badge — reading approved by supervisor, cannot be edited */}
-      {isLocked && lastToday && !editingId && (
-        <span className="h-10 px-2 flex items-center text-2xs font-medium text-primary bg-primary-soft border border-primary/30 rounded-lg gap-1 shrink-0">
-          🔒 Locked
-        </span>
-      )}
-      {/* Item 8: correction request — visible for entries 2h–7d old that aren't locked */}
-      {lastToday && !editingId && canRequest && (
-        <Button variant="ghost" size="sm"
-          className="h-10 px-2.5 rounded-lg shrink-0 text-warn hover:text-warn hover:bg-warn/10 text-xs font-medium gap-1.5"
-          onClick={handleCorrectionRequest}
-          title="Entry is older than 2 hours — submit a correction request for supervisor review">
-          ✎ Fix
-        </Button>
-      )}
+      <ControlCluster
+        actions={[
+          lastToday && !editingId && canSelfEdit && {
+            icon: Pencil,
+            title: `Edit last reading (${fmtNum(lastToday.current_reading)})`,
+            onClick: () => { setEditingId(lastToday.id); setReading(String(lastToday.current_reading)); },
+          },
+          editingId && {
+            icon: X,
+            title: 'Cancel edit',
+            variant: 'danger',
+            onClick: () => { setEditingId(null); setReading(''); },
+          },
+          isManagerOrAdmin && {
+            icon: History,
+            title: 'View reading history',
+            onClick: () => setShowHistory(true),
+          },
+          isLocked && lastToday && !editingId && {
+            icon: Lock,
+            label: 'Locked',
+            title: 'Reading approved by supervisor — locked from editing',
+            variant: 'danger',
+            disabled: true,
+            onClick: () => {},
+          },
+          lastToday && !editingId && canRequest && {
+            icon: SquarePen,
+            label: 'Fix',
+            title: 'Entry is older than 2 hours — submit a correction request for supervisor review',
+            variant: 'warn',
+            onClick: handleCorrectionRequest,
+          },
+        ]}
+      />
       {/* Item 8: CorrectionRequestDialog mounts when correctionTarget is set */}
       {correctionTarget && (
         <CorrectionRequestDialog
@@ -1335,87 +1338,60 @@ function LocatorRow({
   return (
     <div
       ref={rowRef}
-      className={`px-4 py-3 space-y-2.5 transition-shadow ${pulsing ? 'ring-2 ring-accent ring-inset' : ''}`}
+      className={cn(
+        'p-4 space-y-3 transition-all border-b last:border-b-0 border-border/60',
+        pulsing ? 'ring-2 ring-accent ring-inset bg-accent-soft/20' : '',
+      )}
     >
-      {/* Row 1: Name + editing badge (full width — no truncation) */}
+      {/* Row 1: Name + Prioritized MetaStrip + Date picker */}
       <div className="flex items-start justify-between gap-2 min-w-0">
         <div className="flex items-center gap-2 flex-wrap min-w-0 flex-1">
-          <div className="text-sm font-semibold text-foreground break-words">{locator.name}</div>
-          {/* "Last reading" freshness — see lastReadingFreshness() above for
-              why this isn't called a "flag". */}
-          <StatusPill tone={freshness.tone}>
-            <CalendarClock className="h-3 w-3" />
-            {freshness.label}
-          </StatusPill>
-          {/* Cross-navigation to the same locator's card in Plant detail
-              (Config tab, meter brand/serial, "fed by" meter, lock state).
-              Deliberately a separate small icon, not a click on the whole
-              card — this row already owns clicks for status toggle, edit,
-              delete, and the reading input itself. */}
-          <button
-            type="button"
-            onClick={() => navigate(`/plants/${plantId}?tab=locators&highlight=${locator.id}`)}
-            title="Open this locator in Plant detail"
-            aria-label="Open this locator in Plant detail"
-            className="shrink-0 inline-flex items-center gap-0.5 text-2xs font-medium text-muted-foreground hover:text-foreground bg-muted hover:bg-muted/80 px-1.5 py-0.5 rounded-full transition-colors"
-          >
-            <ArrowUpRight className="h-3 w-3" />
-            Plant detail
-          </button>
-          {/* Meter lock state — separate concept from the supervisor-approval
-              "Locked" badge further down this card. Intentionally a
-              different icon (ShieldAlert, not Lock) and tone so the two
-              never look like the same thing. Always shown while is_locked,
-              not just when there's a reading today, so it stays visible
-              even on a day nobody's logged anything yet. */}
-          {locator.is_locked && (
-            <StatusPill tone="danger">
-              <ShieldAlert className="h-3 w-3" />
-              meter locked
-            </StatusPill>
-          )}
-          {lastToday?.off_location_flag && (
-            <StatusPill tone="warn"><MapPin className="h-3 w-3" /> off-site</StatusPill>
-          )}
-          {editingId && (
-            <span className="text-2xs font-semibold uppercase tracking-widest text-primary bg-primary-soft px-1.5 py-0.5 rounded">Editing</span>
-          )}
-          {todayCount === 0 && !editingId && (
-            gapReason ? (
-              <button
-                type="button"
-                onClick={() => setGapDialogOpen(true)}
-                title={`No reading — ${reasonCategoryLabel(gapReason.reason_category)}${gapReason.reason_detail ? ': ' + gapReason.reason_detail : ''} (click to edit)`}
-                className="shrink-0 inline-flex items-center gap-0.5 text-2xs font-medium text-warn bg-warn-soft border border-warn px-1.5 py-0.5 rounded-full hover:bg-warn-soft transition-colors"
-                data-testid={`locator-gap-reason-badge-${locator.id}`}
-              >
-                <MessageCircleOff className="h-2.5 w-2.5" />
-                {reasonCategoryLabel(gapReason.reason_category)}
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={() => setGapDialogOpen(true)}
-                title="No reading today — log why"
-                aria-label="No reading today — log why"
-                className="shrink-0 p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-                data-testid={`locator-gap-reason-btn-${locator.id}`}
-              >
-                <MessageCircleOff className="h-3.5 w-3.5" />
-              </button>
-            )
-          )}
+          <span className="text-sm font-semibold text-foreground break-words">{locator.name}</span>
+          <MetaStrip
+            primary={
+              <StatusPill tone={freshness.tone}>
+                <CalendarClock className="h-3 w-3" />
+                {freshness.label}
+              </StatusPill>
+            }
+            alerts={[
+              editingId && {
+                tone: 'primary',
+                label: 'Editing',
+              },
+              locator.is_locked && {
+                tone: 'danger',
+                icon: ShieldAlert,
+                label: 'meter locked',
+              },
+              lastToday?.off_location_flag && {
+                tone: 'warn',
+                icon: MapPin,
+                label: 'off-site',
+              },
+            ].filter(Boolean)}
+            overflow={[
+              {
+                icon: ArrowUpRight,
+                label: 'Plant detail',
+                onClick: () => navigate(`/plants/${plantId}?tab=locators&highlight=${locator.id}`),
+              },
+              todayCount === 0 && !editingId && {
+                icon: MessageCircleOff,
+                label: gapReason ? reasonCategoryLabel(gapReason.reason_category) : 'Log gap reason',
+                onClick: () => setGapDialogOpen(true),
+                testId: `locator-gap-reason-btn-${locator.id}`,
+              },
+            ].filter(Boolean)}
+            maxVisible={3}
+          />
         </div>
+
         {/* Date picker always visible, not fighting for space with the name */}
         <label className="shrink-0 cursor-pointer relative">
           <span
-            className="inline-flex items-center gap-1.5 text-2xs text-muted-foreground bg-muted border border-border/70 rounded-md px-3.5 py-1.5 font-mono-num whitespace-nowrap hover:bg-muted/80 transition-colors peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-ring peer-focus-visible:outline-offset-2"
+            className="inline-flex items-center gap-1.5 text-2xs text-muted-foreground bg-muted border border-border/70 rounded-full px-3 py-1 font-mono-num whitespace-nowrap hover:bg-muted/80 hover:text-foreground transition-colors peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-ring peer-focus-visible:outline-offset-2"
             onClick={(e) => {
-              // Clicking inside the input's own box only focuses/places the
-              // cursor in most browsers — it does not open the picker
-              // overlay. Explicitly request it so a single click/tap always
-              // pops it up (falls back to focus() where showPicker() isn't
-              // supported, e.g. Firefox).
               e.preventDefault();
               const el = dtInputRef.current;
               if (!el) return;
@@ -1434,38 +1410,41 @@ function LocatorRow({
         </label>
       </div>
 
-      {/* Row 2: input mode (read-only — set in Plant config > Locators by a Manager/Admin) + status */}
-      <div className="flex items-center gap-3">
-        <div
-          className="flex items-center rounded-lg border border-border overflow-hidden text-2xs font-semibold shrink-0 px-2.5 py-1.5 bg-kpi-locator text-white"
-          title={locInputMode === 'raw'
-            ? 'Cumulative meter reading — Δ auto-computed. Set in Plant config > Locators.'
-            : 'Daily m³ entered directly. Set in Plant config > Locators.'}
-        >
-          {locInputMode === 'raw' ? 'Raw' : 'Direct m³'}
+      {/* Row 2: Recessed Telemetry Gauge Panel */}
+      <div className="recessed-glass p-2.5 sm:p-3 flex items-center justify-between gap-2 flex-wrap">
+        <div className="flex items-center gap-2">
+          <div
+            className="flex items-center rounded-full border border-kpi-locator/40 overflow-hidden text-2xs font-semibold shrink-0 px-2.5 py-0.5 bg-kpi-locator/20 text-kpi-locator"
+            title={locInputMode === 'raw'
+              ? 'Cumulative meter reading — Δ auto-computed. Set in Plant config > Locators.'
+              : 'Daily m³ entered directly. Set in Plant config > Locators.'}
+          >
+            {locInputMode === 'raw' ? 'Raw Meter' : 'Direct m³'}
+          </div>
+          <div className="text-xs text-muted-foreground">
+            {locInputMode === 'raw' ? (
+              <>
+                prev: <span className="font-mono-num font-semibold text-foreground">{previous == null ? '—' : fmtNum(previous)}</span>
+                {!isMobile && dailyVol != null && <> · Δ <span className="font-mono-num font-semibold text-primary">{fmtNum(dailyVol)} m³</span></>}
+              </>
+            ) : (
+              <>
+                {dailyVol != null ? <><span className="font-mono-num font-semibold text-primary">{fmtNum(dailyVol)} m³</span> to save</> : <span className="text-muted-foreground/70">enter daily volume</span>}
+              </>
+            )}
+          </div>
         </div>
-        <div className="text-xs text-muted-foreground truncate">
-          {locInputMode === 'raw' ? (
-            <>
-              prev: <span className="font-mono-num text-foreground/80">{previous == null ? '—' : fmtNum(previous)}</span>
-              {/* On mobile the delta is shown below the drum, so only show it inline on desktop */}
-              {!isMobile && dailyVol != null && <> · Δ <span className="font-mono-num font-medium text-primary">{fmtNum(dailyVol)} m³</span></>}
-              <span className="mx-1.5 text-border">·</span>
-              <span className={atLimit ? 'text-warn-foreground font-medium' : 'text-muted-foreground'}>{todayCount}/{maxReadingsPerDay} today</span>
-            </>
-          ) : (
-            <>
-              {dailyVol != null ? <><span className="font-mono-num font-medium text-primary">{fmtNum(dailyVol)} m³</span> to save</> : <span className="text-muted-foreground/60">enter daily volume</span>}
-              <span className="mx-1.5 text-border">·</span>
-              <span className={atLimit ? 'text-warn-foreground font-medium' : 'text-muted-foreground'}>{todayCount}/{maxReadingsPerDay} today</span>
-            </>
-          )}
+
+        <div className="text-xs font-mono-num">
+          <span className={cn('px-2 py-0.5 rounded-full font-medium', atLimit ? 'bg-warn-soft text-warn font-semibold' : 'bg-muted/60 text-muted-foreground')}>
+            {todayCount}/{maxReadingsPerDay} today
+          </span>
         </div>
       </div>
 
       {/* ── Row 3 (mobile raw mode): Odometer drum + current reading + save ── */}
       {isMobile && locInputMode === 'raw' ? (
-        <div className="space-y-2">
+        <div className="space-y-2.5">
           {/* Drum display */}
           <OdometerRollerInput
             value={reading}
@@ -1476,8 +1455,8 @@ function LocatorRow({
           />
 
           {/* Current reading label + delta */}
-          <div className="flex items-center justify-between text-xs px-0.5 min-h-[18px]">
-            <span className="text-muted-foreground">
+          <div className="flex items-center justify-between text-xs px-1 min-h-[18px]">
+            <span className="text-muted-foreground font-medium">
               Current:{' '}
               <span className={`font-mono-num font-semibold ${reading ? 'text-foreground' : 'text-muted-foreground/50'}`}>
                 {reading ? (+reading).toFixed(2) : '—'}
@@ -1494,9 +1473,13 @@ function LocatorRow({
           <div className="flex items-center gap-2">
             <Button
               onClick={save} disabled={saving || !readingChanged || atLimit || anomalyRemarkRequired}
-              className="flex-1 h-11 text-sm bg-kpi-locator hover:bg-kpi-locator/90 active:bg-kpi-locator/80 text-white shadow-sm"
+              style={{ '--confirm-glow': 'hsl(var(--kpi-locator, 175 84% 32%) / 0.5)' } as React.CSSProperties}
+              className={cn(
+                'flex-1 h-11 rounded-full text-sm font-semibold bg-kpi-locator hover:bg-kpi-locator/90 active:scale-[0.98] text-white shadow-sm transition-all',
+                justSaved && 'animate-gauge-confirm',
+              )}
             >
-              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : editingId ? 'Update' : 'Save'}
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : editingId ? 'Update reading' : 'Save reading'}
             </Button>
             {ActionButtons}
           </div>
@@ -1505,19 +1488,23 @@ function LocatorRow({
         /* ── Row 3 (desktop or direct-mode): standard Input row ── */
         <div className="flex items-center gap-2">
           <div className="relative flex-1">
-            <Droplet className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-kpi-locator pointer-events-none" />
+            <Droplet className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-kpi-locator pointer-events-none" />
             <Input
               type="number" step="any" inputMode="decimal"
               value={reading} onChange={(e) => { setReading(e.target.value); setDraftReading({ value: e.target.value }); }}
               placeholder={locInputMode === 'direct' ? 'Daily volume (m³)' : 'Meter reading'}
-              className="pl-8 h-10 bg-kpi-locator/5 border-kpi-locator/30 focus-visible:ring-kpi-locator/30"
+              className="pl-9 h-11 rounded-xl bg-kpi-locator/5 border-kpi-locator/30 focus-visible:ring-kpi-locator/30 font-mono-num font-medium"
             />
           </div>
           <Button
             onClick={save} disabled={saving || !readingChanged || atLimit || anomalyRemarkRequired}
-            className="h-10 px-4 text-sm shrink-0 bg-kpi-locator hover:bg-kpi-locator/90 active:bg-kpi-locator/80 text-white shadow-sm"
+            style={{ '--confirm-glow': 'hsl(var(--kpi-locator, 175 84% 32%) / 0.5)' } as React.CSSProperties}
+            className={cn(
+              'h-11 px-6 rounded-full text-sm font-semibold shrink-0 bg-kpi-locator hover:bg-kpi-locator/90 active:scale-[0.98] text-white shadow-sm transition-all',
+              justSaved && 'animate-gauge-confirm',
+            )}
           >
-            {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : editingId ? 'Update' : 'Save'}
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : editingId ? 'Update reading' : 'Save reading'}
           </Button>
           {ActionButtons}
         </div>

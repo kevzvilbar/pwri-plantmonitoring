@@ -30,7 +30,8 @@ import { downloadCSV } from '@/lib/csv';
 import { toast } from 'sonner';
 import { friendlyError } from '@/lib/supabaseErrors';
 import { format } from 'date-fns';
-import { MapPin, Pencil, X, Droplet, Zap, Upload, Download, FileText, AlertCircle, Loader2, History, Gauge, FlaskConical, Keyboard } from 'lucide-react';
+import { MapPin, Pencil, X, Droplet, Zap, Upload, Download, FileText, AlertCircle, Loader2, History, Gauge, FlaskConical, Keyboard, Sun, Lock, SquarePen } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 // High-voltage transmission tower icon — matches Plants.tsx grid icon exactly.
 
@@ -1113,7 +1114,7 @@ export function PowerForm() {
               {/* ── Solar column ── */}
               <div className="space-y-2">
                 <div className="flex items-center gap-1.5 pb-1 border-b border-warn">
-                  <span className="text-warn text-sm leading-none">☀</span>
+                  <Sun className="h-3.5 w-3.5 text-warn shrink-0" />
                   <span className="text-xs font-semibold text-warn uppercase tracking-wide">Solar</span>
                   <span className="text-2xs text-muted-foreground ml-auto">{solarMeterCount} meter{solarMeterCount !== 1 ? 's' : ''}</span>
                 </div>
@@ -1136,7 +1137,7 @@ export function PowerForm() {
                   return (
                     <div key={`solar-${idx}`}>
                       <Label htmlFor="powersection-classname-ml-auto-p-0-5-rounded-text-muted-fore" className="flex items-center gap-1 text-xs">
-                        <span className="text-warn text-2xs">☀</span>
+                        <Sun className="h-3 w-3 text-warn shrink-0" />
                         {meterLabel}
                         {isFirst && editingId && <span className="text-2xs text-warn ml-1">(editing)</span>}
                         {(isAdmin || isManager || isDataAnalyst) && (
@@ -1204,7 +1205,7 @@ export function PowerForm() {
                 {/* Total Δ row — only meaningful in raw mode */}
                 {solarInputMode === 'raw' && deltaSolar != null && solarMeterCount > 1 && (
                   <div className="rounded border border-warn bg-warn-soft/60 px-2 py-1 text-xs flex items-center gap-1.5 mt-1">
-                    <span className="text-warn">☀</span>
+                    <Sun className="h-3 w-3 text-warn shrink-0" />
                     <span className="text-muted-foreground">Total Δ</span>
                     <span className={`font-mono-num font-semibold ml-auto ${deltaSolar >= 0 ? 'text-warn' : 'text-destructive'}`}>
                       {fmtNum(deltaSolar)} kWh

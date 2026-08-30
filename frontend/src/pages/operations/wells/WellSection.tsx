@@ -26,8 +26,10 @@ import { findExistingReading } from '@/lib/duplicateCheck';
 import { downloadCSV } from '@/lib/csv';
 import { toast } from 'sonner';
 import { friendlyError } from '@/lib/supabaseErrors';
-import { format } from 'date-fns';
-import { MapPin, Pencil, X, Droplet, Zap, Upload, Download, FileText, AlertCircle, Loader2, History, Gauge, FlaskConical, Keyboard, MessageCircleOff, CalendarClock, ArrowUpRight } from 'lucide-react';
+import { MapPin, Pencil, X, Droplet, Zap, Upload, Download, FileText, AlertCircle, Loader2, History, Gauge, FlaskConical, Keyboard, MessageCircleOff, CalendarClock, ArrowUpRight, Lock, SquarePen, Activity } from 'lucide-react';
+import { MetaStrip } from '@/components/operations/MetaStrip';
+import { ControlCluster } from '@/components/operations/ControlCluster';
+import { cn } from '@/lib/utils';
 
 // High-voltage transmission tower icon — matches Plants.tsx grid icon exactly.
 
@@ -974,181 +976,120 @@ function WellRow({
   return (
     <div
       ref={rowRef}
-      className={`border border-border/70 rounded-lg overflow-hidden bg-card transition-shadow ${pulsing ? 'ring-2 ring-accent ring-inset' : ''}`}
+      className={cn(
+        'instrument-housing overflow-hidden shadow-xs transition-all border border-border/80 rounded-2xl mb-3',
+        pulsing ? 'ring-2 ring-accent ring-inset' : '',
+      )}
       data-testid={`well-row-${well.id}`}
     >
 
-      {/* ── Header: name + badges top/left | date + controls bottom/right ── */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-3.5 py-2.5 bg-muted/30 border-b border-border/60">
-        {/* Top/Left: Name + Status badge + Blending / Shared */}
-        <div className="flex items-center justify-between sm:justify-start gap-2 flex-wrap min-w-0 flex-1">
-          <div className="flex items-center gap-1.5 flex-wrap min-w-0">
-            <span className="text-sm font-bold text-foreground break-words">{well.name}</span>
-            {(() => {
-              const fresh = lastReadingFreshness(freshDt);
-              return (
-                <StatusPill tone={fresh.tone}>
-                  <CalendarClock className="h-2.5 w-2.5" />
-                  {fresh.label}
-                </StatusPill>
-              );
-            })()}
-            {isBlending && (
-              <span className="shrink-0 text-2xs font-semibold text-primary bg-primary-soft border border-primary/60 px-1.5 py-0.5 rounded-full" data-testid={`blending-badge-${well.id}`}>Blending</span>
-            )}
-            {well.has_power_meter && isInSharedPowerGroup && (
-              <span className="shrink-0 inline-flex items-center gap-0.5 text-2xs font-semibold text-warn bg-warn-soft/80 border border-warn/60 px-1.5 py-0.5 rounded-full">
-                <Zap className="h-2.5 w-2.5" />Shared
-              </span>
-            )}
-            {editingId && (
-              <span className="shrink-0 text-2xs font-bold uppercase tracking-widest text-primary bg-primary-soft px-1.5 py-0.5 rounded">Editing</span>
-            )}
-          </div>
-
-          {/* Mobile-only right action buttons beside title */}
-          <div className="flex sm:hidden items-center gap-1 shrink-0">
-            <span className={`text-2xs tabular-nums font-semibold px-2 py-0.5 rounded-full border ${atLimit ? 'text-warn bg-warn-soft border-warn' : 'text-muted-foreground bg-muted border-transparent'}`}>
-              {todayCount}/{WELL_MAX_READINGS_PER_DAY}
-            </span>
-            {lastToday && !editingId && (
-              <button
-                onClick={() => {
-                  setEditingId(lastToday.id);
-                  setReading(String(lastToday.current_reading ?? ''));
-                  setPowerReading(lastToday.power_meter_reading != null ? String(lastToday.power_meter_reading) : '');
-                  setTdsReading(lastToday.tds_ppm != null ? String(lastToday.tds_ppm) : '');
-                  setNtuReading((lastToday as any).turbidity_ntu != null ? String((lastToday as any).turbidity_ntu) : '');
-                  setPressureReading(lastToday.pressure_psi != null ? String(lastToday.pressure_psi) : '');
-                }}
-                title={`Edit last today reading (${fmtNum(lastToday.current_reading)})`}
-                aria-label={`Edit last today reading (${fmtNum(lastToday.current_reading)})`}
-                className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
-                <Pencil className="h-4 w-4" />
-              </button>
-            )}
-            {editingId && (
-              <button onClick={() => { setEditingId(null); setReading(''); setPowerReading(''); setTdsReading(''); setNtuReading(''); setPressureReading(''); }}
-                title="Cancel edit"
-                aria-label="Cancel edit"
-                className="p-1 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors">
-                <X className="h-4 w-4" />
-              </button>
-            )}
-            {isManagerOrAdmin && (
-              <button onClick={() => setShowHistory(true)} title="View reading history" aria-label="View reading history"
-                className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
-                <History className="h-4 w-4" />
-              </button>
-            )}
-          </div>
+      {/* ── Header: name + Prioritized MetaStrip | Date + ControlCluster ── */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 px-4 py-3 bg-muted/20 border-b border-border/60">
+        {/* Left: Name + MetaStrip */}
+        <div className="flex items-center gap-2 flex-wrap min-w-0 flex-1">
+          <span className="text-sm font-bold text-foreground break-words">{well.name}</span>
+          <MetaStrip
+            primary={
+              (() => {
+                const fresh = lastReadingFreshness(freshDt);
+                return (
+                  <StatusPill tone={fresh.tone}>
+                    <CalendarClock className="h-2.5 w-2.5" />
+                    {fresh.label}
+                  </StatusPill>
+                );
+              })()
+            }
+            alerts={[
+              editingId && {
+                tone: 'primary',
+                label: 'Editing',
+              },
+              isBlending && {
+                tone: 'accent',
+                label: 'Blending',
+              },
+              well.has_power_meter && isInSharedPowerGroup && {
+                tone: 'warn',
+                icon: Zap,
+                label: 'Shared Power',
+              },
+              dailyVol != null && {
+                tone: 'default',
+                label: `Δ ${fmtNum(dailyVol)} m³`,
+              },
+            ].filter(Boolean)}
+            overflow={[
+              {
+                icon: ArrowUpRight,
+                label: 'Plant detail',
+                onClick: () => navigate(`/plants/${plantId}?tab=wells&highlight=${well.id}`),
+              },
+              todayCount === 0 && !editingId && {
+                icon: MessageCircleOff,
+                label: gapReason ? reasonCategoryLabel(gapReason.reason_category) : 'Log gap reason',
+                onClick: () => setGapDialogOpen(true),
+                testId: `well-gap-reason-btn-${well.id}`,
+              },
+            ].filter(Boolean)}
+            maxVisible={3}
+          />
         </div>
 
-        {/* Second row on mobile / Right side on desktop */}
-        <div className="flex items-center justify-between sm:justify-end gap-2 shrink-0 pt-1.5 sm:pt-0 border-t border-border/40 sm:border-t-0">
-          <button
-            type="button"
-            onClick={() => navigate(`/plants/${plantId}?tab=wells&highlight=${well.id}`)}
-            title="Open this well in Plant detail"
-            aria-label="Open this well in Plant detail"
-            className="shrink-0 inline-flex items-center gap-1 text-2xs font-medium text-muted-foreground hover:text-foreground bg-muted/80 hover:bg-muted px-2 py-1 rounded-md transition-colors"
-          >
-            <ArrowUpRight className="h-3 w-3" />
-            Plant detail
-          </button>
+        {/* Right: Date Picker & ControlCluster */}
+        <div className="flex items-center justify-between sm:justify-end gap-2 shrink-0">
+          <span className={cn('text-2xs font-mono-num font-semibold px-2 py-0.5 rounded-full border', atLimit ? 'text-warn bg-warn-soft border-warn/40' : 'text-muted-foreground bg-muted/60 border-border/50')}>
+            {todayCount}/{WELL_MAX_READINGS_PER_DAY} today
+          </span>
 
-          <div className="flex items-center gap-1.5">
-            {/* Desktop reading counter */}
-            <span className={`hidden sm:inline-block text-2xs tabular-nums font-semibold px-2 py-0.5 rounded-full border ${atLimit ? 'text-warn bg-warn-soft border-warn' : 'text-muted-foreground bg-muted border-transparent'}`}>
-              {todayCount}/{WELL_MAX_READINGS_PER_DAY}
+          <label className="cursor-pointer relative shrink-0">
+            <span
+              className="inline-flex items-center gap-1.5 text-2xs text-muted-foreground bg-muted border border-border/70 rounded-full px-3 py-1 font-mono-num whitespace-nowrap hover:bg-muted/80 hover:text-foreground transition-colors"
+              onClick={(e) => {
+                e.preventDefault();
+                const el = dtInputRef.current;
+                if (!el) return;
+                if (typeof el.showPicker === 'function') {
+                  try { el.showPicker(); } catch { el.focus(); }
+                } else {
+                  el.focus();
+                }
+              }}
+            >
+              {new Date(customDt).toLocaleString([], { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
+              <CalendarClock className="h-3 w-3 shrink-0 opacity-70" />
             </span>
+            <input ref={dtInputRef} type="datetime-local" value={customDt} onChange={e => setCustomDt(e.target.value)}
+              className="peer absolute inset-0 opacity-0 w-full h-full pointer-events-none" title="Reading date & time" />
+          </label>
 
-            {todayCount === 0 && !editingId && (
-              gapReason ? (
-                <button
-                  type="button"
-                  onClick={() => setGapDialogOpen(true)}
-                  title={`No reading — ${reasonCategoryLabel(gapReason.reason_category)}${gapReason.reason_detail ? ': ' + gapReason.reason_detail : ''} (click to edit)`}
-                  className="shrink-0 inline-flex items-center gap-0.5 text-2xs font-medium text-warn bg-warn-soft border border-warn px-2 py-0.5 rounded-full hover:bg-warn-soft transition-colors"
-                  data-testid={`well-gap-reason-badge-${well.id}`}
-                >
-                  <MessageCircleOff className="h-2.5 w-2.5" />
-                  {reasonCategoryLabel(gapReason.reason_category)}
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => setGapDialogOpen(true)}
-                  title="No reading today — log why"
-                  aria-label="No reading today — log why"
-                  className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-                  data-testid={`well-gap-reason-btn-${well.id}`}
-                >
-                  <MessageCircleOff className="h-3.5 w-3.5" />
-                </button>
-              )
-            )}
-
-            {dailyVol != null && (
-              <span className="text-2xs font-semibold text-primary tabular-nums bg-primary-soft/60 px-1.5 py-0.5 rounded border border-primary/20">
-                Δ{fmtNum(dailyVol)}
-              </span>
-            )}
-
-            {/* Date picker — hidden native input behind styled label */}
-            <label className="cursor-pointer relative shrink-0">
-              <span
-                className="inline-flex items-center gap-1.5 text-xs text-muted-foreground bg-background border border-border/70 rounded-md px-2.5 py-1 font-mono-num whitespace-nowrap hover:bg-muted/50 transition-colors shadow-2xs"
-                onClick={(e) => {
-                  e.preventDefault();
-                  const el = dtInputRef.current;
-                  if (!el) return;
-                  if (typeof el.showPicker === 'function') {
-                    try { el.showPicker(); } catch { el.focus(); }
-                  } else {
-                    el.focus();
-                  }
-                }}
-              >
-                {new Date(customDt).toLocaleString([], { month: '2-digit', day: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                <CalendarClock className="h-3 w-3 shrink-0 opacity-70" />
-              </span>
-              <input ref={dtInputRef} type="datetime-local" value={customDt} onChange={e => setCustomDt(e.target.value)}
-                className="peer absolute inset-0 opacity-0 w-full h-full pointer-events-none" title="Reading date & time" />
-            </label>
-
-            {/* Desktop edit & history buttons */}
-            {lastToday && !editingId && (
-              <button
-                onClick={() => {
+          <ControlCluster
+            actions={[
+              lastToday && !editingId && {
+                icon: Pencil,
+                title: `Edit last today reading (${fmtNum(lastToday.current_reading)})`,
+                onClick: () => {
                   setEditingId(lastToday.id);
                   setReading(String(lastToday.current_reading ?? ''));
                   setPowerReading(lastToday.power_meter_reading != null ? String(lastToday.power_meter_reading) : '');
                   setTdsReading(lastToday.tds_ppm != null ? String(lastToday.tds_ppm) : '');
                   setNtuReading((lastToday as any).turbidity_ntu != null ? String((lastToday as any).turbidity_ntu) : '');
                   setPressureReading(lastToday.pressure_psi != null ? String(lastToday.pressure_psi) : '');
-                }}
-                title={`Edit last today reading (${fmtNum(lastToday.current_reading)})`}
-                aria-label={`Edit last today reading (${fmtNum(lastToday.current_reading)})`}
-                className="hidden sm:inline-flex p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
-                <Pencil className="h-3.5 w-3.5" />
-              </button>
-            )}
-            {editingId && (
-              <button onClick={() => { setEditingId(null); setReading(''); setPowerReading(''); setTdsReading(''); setNtuReading(''); setPressureReading(''); }}
-                title="Cancel edit"
-                aria-label="Cancel edit"
-                className="hidden sm:inline-flex p-1.5 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors">
-                <X className="h-3.5 w-3.5" />
-              </button>
-            )}
-            {isManagerOrAdmin && (
-              <button onClick={() => setShowHistory(true)} title="View reading history" aria-label="View reading history"
-                className="hidden sm:inline-flex p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
-                <History className="h-3.5 w-3.5" />
-              </button>
-            )}
-          </div>
+                },
+              },
+              editingId && {
+                icon: X,
+                title: 'Cancel edit',
+                variant: 'danger',
+                onClick: () => { setEditingId(null); setReading(''); setPowerReading(''); setTdsReading(''); setNtuReading(''); setPressureReading(''); },
+              },
+              isManagerOrAdmin && {
+                icon: History,
+                title: 'View reading history',
+                onClick: () => setShowHistory(true),
+              },
+            ]}
+          />
         </div>
       </div>
 

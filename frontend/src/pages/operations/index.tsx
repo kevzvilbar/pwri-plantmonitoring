@@ -184,25 +184,33 @@ export default function Operations() {
       </div>
 
       {/* ── Tab Navigation Bar ── */}
-      <div className="flex gap-1 p-1 bg-muted/60 border border-border/60 rounded-xl w-full">
+      <div className="flex gap-1.5 p-1.5 bg-muted/60 border border-border/70 rounded-2xl w-full shadow-inner">
         {TAB_CONFIG.map(({ key, label, count, icon: Icon }) => {
           const active = tab === key;
+          const tabColor =
+            key === 'locator'  ? 'hsl(var(--kpi-locator, 175 84% 32%))'
+            : key === 'well'     ? 'hsl(var(--info, 199 95% 60%))'
+            : key === 'product'  ? 'hsl(var(--primary, 175 84% 32%))'
+            : key === 'blending' ? 'hsl(var(--kpi-ro, 271 81% 56%))'
+            : 'hsl(var(--chart-6, 217 91% 60%))';
+
           return (
             <button
               key={key}
               onClick={() => handleTabChange(key)}
+              style={active ? ({ '--tab-glow': tabColor } as React.CSSProperties) : undefined}
               className={cn(
-                'flex-1 flex flex-col sm:flex-row items-center justify-center gap-1.5 py-2 px-1 sm:px-3 text-xs sm:text-sm font-semibold rounded-lg transition-all duration-150',
+                'relative flex-1 flex flex-col sm:flex-row items-center justify-center gap-1.5 py-2.5 px-2 sm:px-4 text-xs sm:text-sm font-semibold rounded-xl transition-all duration-200 select-none',
                 active
-                  ? 'bg-card text-primary shadow-xs border border-border/80'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-muted/40',
+                  ? 'bg-card text-foreground shadow-xs border border-border/80 after:absolute after:inset-x-3 after:-bottom-[2px] after:h-[2.5px] after:rounded-full after:bg-[--tab-glow] after:shadow-[0_0_8px_var(--tab-glow)]'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-card/50',
               )}
             >
-              <Icon className={cn('h-3.5 w-3.5 shrink-0', active ? 'text-primary' : 'text-muted-foreground/70')} />
+              <Icon className={cn('h-3.5 w-3.5 shrink-0 transition-colors', active ? 'text-foreground' : 'text-muted-foreground/70')} />
               <span className="leading-none">{label}</span>
               {count != null && count > 0 && (
                 <span className={cn(
-                  'text-3xs px-1.5 py-0.5 rounded-full font-bold tabular-nums',
+                  'text-2xs px-1.5 py-0.5 rounded-full font-bold font-mono-num',
                   active ? 'bg-primary/15 text-primary' : 'bg-muted text-muted-foreground',
                 )}>
                   {count}

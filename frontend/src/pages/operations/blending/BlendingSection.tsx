@@ -23,8 +23,10 @@ import { findExistingReading } from '@/lib/duplicateCheck';
 import { downloadCSV } from '@/lib/csv';
 import { toast } from 'sonner';
 import { friendlyError } from '@/lib/supabaseErrors';
-import { format, subDays } from 'date-fns';
-import { MapPin, Pencil, X, Droplet, Zap, Upload, Download, FileText, AlertCircle, Loader2, History, Gauge, FlaskConical, Keyboard, CalendarClock, MessageCircleOff } from 'lucide-react';
+import { MapPin, Pencil, X, Droplet, Zap, Upload, Download, FileText, AlertCircle, Loader2, History, Gauge, FlaskConical, Keyboard, CalendarClock, MessageCircleOff, ArrowUpRight, Lock, SquarePen } from 'lucide-react';
+import { MetaStrip } from '@/components/operations/MetaStrip';
+import { ControlCluster } from '@/components/operations/ControlCluster';
+import { cn } from '@/lib/utils';
 import { ReasonDialog } from '@/components/ReasonDialog';
 import { reasonCategoryLabel } from '@/lib/reasonCodes';
 import { resolveBlendingDateContext } from '@/lib/blendingBackdate';
@@ -898,60 +900,59 @@ function BlendingRow({
 
   return (
     <div
-      className="p-3.5 space-y-2.5 border border-border rounded-xl hover:border-muted-foreground/40 transition-colors bg-card"
+      className="instrument-housing p-4 space-y-3 border border-border/80 rounded-2xl mb-3 shadow-xs"
       data-testid={`blending-row-${well.id}`}
     >
-      {/* Row 1: Well name + badge + history icon (always visible) */}
-      <div className="flex items-start gap-2 min-w-0">
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="text-sm font-medium break-words">{well.name}</span>
-            <Badge className="bg-kpi-ro/15 text-kpi-ro border-kpi-ro hover:bg-kpi-ro/15 font-normal text-2xs">Blending</Badge>
-          </div>
+      {/* Row 1: Well name + Prioritized MetaStrip + ControlCluster + date */}
+      <div className="flex items-start justify-between gap-2 min-w-0">
+        <div className="flex items-center gap-2 flex-wrap min-w-0 flex-1">
+          <span className="text-sm font-bold text-foreground break-words">{well.name}</span>
+          <MetaStrip
+            primary={
+              <Badge className="bg-kpi-ro/20 text-kpi-ro border-kpi-ro/40 hover:bg-kpi-ro/20 font-semibold text-2xs rounded-full">
+                Blending
+              </Badge>
+            }
+            alerts={[
+              chipState === 'logged' && {
+                tone: 'accent',
+                label: 'Logged today',
+              },
+              chipState === 'ready' && {
+                tone: 'default',
+                label: 'Ready to save',
+              },
+              chipState === 'pending' && {
+                tone: 'warn',
+                label: 'Not logged',
+              },
+            ].filter(Boolean)}
+            overflow={[
+              hasReadingForSelectedDate === false && !justSaved && !(isBackdated && backdatedContextLoading) && {
+                icon: MessageCircleOff,
+                label: effectiveGapReason ? reasonCategoryLabel(effectiveGapReason.reason_category) : (isBackdated ? `Log gap for ${eventDate}` : 'Log gap reason'),
+                onClick: () => setGapDialogOpen(true),
+                testId: `blending-gap-reason-btn-${well.id}`,
+              },
+            ].filter(Boolean)}
+            maxVisible={3}
+          />
         </div>
-        {/* History + date always in top-right, never behind name */}
-        <div className="flex items-center gap-1.5 shrink-0">
-          {/* Previously gated behind isManagerOrAdmin, which contradicted
-              this row's own "always visible" comment above and hid blending
-              history from Operator/Technician roles entirely — including
-              the exact moment they most need it, right when a "possible
-              meter rollback" warning is asking them to verify a reading.
-              Safe to open to everyone: ReadingHistoryDialog already
-              restricts edit/delete per-row via canEditEntry/hasFullAccess
-              (own entries within 8h for non-full-access roles), so this
-              button only ever controlled read-only visibility. */}
-          {hasReadingForSelectedDate === false && !justSaved && !(isBackdated && backdatedContextLoading) && (
-            effectiveGapReason ? (
-              <button
-                type="button"
-                onClick={() => setGapDialogOpen(true)}
-                title={`No reading — ${reasonCategoryLabel(effectiveGapReason.reason_category)}${effectiveGapReason.reason_detail ? ': ' + effectiveGapReason.reason_detail : ''} (click to edit)`}
-                className="shrink-0 inline-flex items-center gap-0.5 text-2xs font-medium text-warn bg-warn-soft border border-warn px-1.5 py-0.5 rounded-full hover:bg-warn-soft transition-colors"
-                data-testid={`blending-gap-reason-badge-${well.id}`}
-              >
-                <MessageCircleOff className="h-2.5 w-2.5" />
-                {reasonCategoryLabel(effectiveGapReason.reason_category)}
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={() => setGapDialogOpen(true)}
-                title={isBackdated ? `No reading on ${eventDate} — log why` : 'No reading today — log why'}
-                aria-label={isBackdated ? `No reading on ${eventDate} — log why` : 'No reading today — log why'}
-                className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-                data-testid={`blending-gap-reason-btn-${well.id}`}
-              >
-                <MessageCircleOff className="h-3.5 w-3.5" />
-              </button>
-            )
-          )}
-          <Button variant="ghost" size="sm" className="h-8 w-8 p-0 rounded-full text-muted-foreground"
-            onClick={() => setShowHistory(true)} title="View blending history">
-            <History className="h-3.5 w-3.5" />
-          </Button>
+
+        {/* Controls & Date */}
+        <div className="flex items-center gap-2 shrink-0">
+          <ControlCluster
+            actions={[
+              {
+                icon: History,
+                title: 'View blending history',
+                onClick: () => setShowHistory(true),
+              },
+            ]}
+          />
           <label className="cursor-pointer relative">
             <span
-              className="inline-flex items-center gap-1.5 text-xs text-muted-foreground bg-muted border border-border rounded px-3 py-1 font-mono-num whitespace-nowrap hover:bg-muted/70 transition-colors peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-ring peer-focus-visible:outline-offset-2"
+              className="inline-flex items-center gap-1.5 text-2xs text-muted-foreground bg-muted border border-border/70 rounded-full px-3 py-1 font-mono-num whitespace-nowrap hover:bg-muted/80 hover:text-foreground transition-colors"
               onClick={(e) => {
                 e.preventDefault();
                 const el = dtInputRef.current;
@@ -972,16 +973,10 @@ function BlendingRow({
         </div>
       </div>
 
-      {/* Row 2: prev / today data (left) + status chip (right) — the chip
-          replaces having to parse "prev: — · today: 0 m³ logged" for state;
-          color reads at a glance, the text alongside it keeps the real numbers. */}
-      <div className="flex items-center justify-between gap-2 flex-wrap">
+      {/* Row 2: Recessed Telemetry Panel */}
+      <div className="recessed-glass p-2.5 sm:p-3 flex items-center justify-between gap-2 flex-wrap">
         <div className="text-xs text-muted-foreground">
-          {/* Priority when on today: localStorage → DB raw_meter_reading →
-              daily vol fallback. When backdated: the true chronological
-              predecessor resolved above, so this never shows a "previous"
-              reading dated AFTER the entry being made. */}
-          prev meter: <span className="font-mono-num" title={
+          prev meter: <span className="font-mono-num font-semibold text-foreground" title={
             isBackdated
               ? (backdatedContextLoading
                   ? 'Looking up the reading before this date…'
@@ -999,65 +994,52 @@ function BlendingRow({
           {prevDateStr && (
             <span className="text-muted-foreground/60 ml-1">({prevDateStr})</span>
           )}
-          <span className="mx-1">·</span>
-          today: <span className="font-mono-num">{fmtNum(todayVolume)} m³</span>
+          <span className="mx-1.5 text-border">·</span>
+          today: <span className="font-mono-num font-semibold text-primary">{fmtNum(todayVolume)} m³</span>
         </div>
-
-        {chipState === 'logged' && (
-          <span className="inline-flex items-center gap-1 text-2xs font-semibold px-2 py-0.5 rounded-full bg-accent-soft text-accent shrink-0">
-            <span className="w-1.5 h-1.5 rounded-full bg-current" />Logged today
-          </span>
-        )}
-        {chipState === 'ready' && (
-          <span className="inline-flex items-center gap-1 text-2xs font-semibold px-2 py-0.5 rounded-full bg-kpi-ro/15 text-kpi-ro shrink-0">
-            <span className="w-1.5 h-1.5 rounded-full bg-current" />Ready to save
-          </span>
-        )}
-        {chipState === 'pending' && (
-          <span className="inline-flex items-center gap-1 text-2xs font-semibold px-2 py-0.5 rounded-full bg-warn-soft text-warn shrink-0">
-            <span className="w-1.5 h-1.5 rounded-full bg-current" />Not logged
-          </span>
-        )}
       </div>
 
-      {/* Row 3: Input — drum roller (mobile) or regular input. Blending wells
-          are always metered, so this is always a cumulative meter reading —
-          there is no direct-volume alternative to switch to. */}
+      {/* Row 3: Input — drum roller (mobile) or regular input */}
       {isMobile ? (
-        <div className="space-y-1">
+        <div className="space-y-2">
           <OdometerRollerInput
             value={volume} onChange={setVolume}
             alertState={!volumeChanged ? 'neutral' : blendBelowPrev ? 'warn' : blendHighVol ? 'warn' : 'ok'}
             disabled={saving}
             testId={`blending-input-${well.id}`}
           />
-          <div className="text-xs text-muted-foreground px-0.5">
-            prev: <span className="font-mono-num">{prevCumulative != null ? fmtNum(prevCumulative) : '—'}</span>
+          <div className="text-xs text-muted-foreground px-1">
+            prev: <span className="font-mono-num font-semibold text-foreground">{prevCumulative != null ? fmtNum(prevCumulative) : '—'}</span>
           </div>
         </div>
       ) : (
         <div className="relative">
-          <Droplet className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-kpi-ro pointer-events-none" />
+          <Droplet className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-kpi-ro pointer-events-none" />
           <Input type="number" step="any" inputMode="decimal" value={volume}
             onChange={(e) => setVolume(e.target.value)}
             placeholder="Cumulative meter reading"
-            className="h-9 pl-7 w-full border-kpi-ro focus-visible:ring-kpi-ro bg-kpi-ro/40"
+            className="h-11 pl-9 w-full rounded-xl border-kpi-ro/30 focus-visible:ring-kpi-ro bg-kpi-ro/10 font-mono-num font-medium"
             data-testid={`blending-input-${well.id}`} />
         </div>
       )}
 
-      {/* Live preview of what Save will actually commit — sits right above
-          the button so the Δ that's about to be written is never a surprise. */}
+      {/* Live preview of what Save will actually commit */}
       {previewLine && (
-        <div className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg bg-kpi-ro/15 border border-kpi-ro">
+        <div className="flex items-center gap-1.5 text-xs px-3 py-2 rounded-xl bg-kpi-ro/15 border border-kpi-ro/30 text-kpi-ro font-medium">
           {previewLine}
         </div>
       )}
 
-      {/* Row 5: Save button — full-width on mobile */}
+      {/* Save button */}
       <Button onClick={save} disabled={saving || !volumeChanged || anomalyRemarkRequired || (isBackdated && backdatedContextLoading)}
-        className={isMobile ? 'w-full h-11 text-sm bg-primary text-primary-foreground hover:bg-primary/90 active:bg-primary shadow-sm' : 'h-9 px-4 text-xs w-full bg-primary text-primary-foreground hover:bg-primary/90'}>
-        {saving ? <Loader2 className={isMobile ? 'h-4 w-4 animate-spin' : 'h-3 w-3 animate-spin'} /> : (isBackdated && backdatedContextLoading) ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Save'}
+        style={{ '--confirm-glow': 'hsl(var(--kpi-ro, 271 81% 56%) / 0.5)' } as React.CSSProperties}
+        className={cn(
+          'w-full sm:w-auto h-11 px-6 rounded-full text-sm font-semibold bg-kpi-ro hover:bg-kpi-ro/90 active:scale-[0.98] text-white shadow-sm transition-all',
+          justSaved && 'animate-gauge-confirm',
+        )}
+        data-testid={`blending-save-${well.id}`}
+      >
+        {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : isBackdated ? `Save reading for ${eventDate}` : 'Save reading'}
       </Button>
 
       {/* Warning banner */}
