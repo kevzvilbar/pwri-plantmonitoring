@@ -71,7 +71,6 @@ export function TrendChartCanvas(props: Record<string, any>) {
                   stroke={color}
                   strokeWidth={2}
                   dot={false}
-                  connectNulls
                 />
               ))}
             </LineChart>
@@ -148,7 +147,6 @@ export function TrendChartCanvas(props: Record<string, any>) {
                 strokeWidth={2.5}
                 fill="url(#hourlyDrillFill)"
                 dot={false}
-                connectNulls
               />
             </AreaChart>
           ) : (hasConsumptionDrill && drillMode === 'drilldown' && viewGran === 'daily') ? (
@@ -176,7 +174,6 @@ export function TrendChartCanvas(props: Record<string, any>) {
                   stroke={color}
                   strokeWidth={2}
                   dot={false}
-                  connectNulls
                 />
               ))}
             </ComposedChart>
@@ -252,7 +249,7 @@ export function TrendChartCanvas(props: Record<string, any>) {
               <XAxis dataKey="date" tick={{ fontSize: 10, fontWeight: 500 }} stroke="hsl(var(--muted-foreground))" axisLine={false} tickLine={false} />
               <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--highlight))" tickFormatter={formatYAxis} width={44} axisLine={false} tickLine={false} />
               <Tooltip content={<NegativeAwareTooltip />} />
-              <Area type="monotone" dataKey="chemCost" stroke="hsl(var(--highlight))" strokeWidth={2.5} fill="url(#chemCostFill)" dot={false} name="Chemical Cost (₱)" connectNulls />
+              <Area type="monotone" dataKey="chemCost" stroke="hsl(var(--highlight))" strokeWidth={2.5} fill="url(#chemCostFill)" dot={false} name="Chemical Cost (₱)" />
             </AreaChart>
           ) : metric === 'powerCost' ? (
             <AreaChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
@@ -266,7 +263,7 @@ export function TrendChartCanvas(props: Record<string, any>) {
               <XAxis dataKey="date" tick={{ fontSize: 10, fontWeight: 500 }} stroke="hsl(var(--muted-foreground))" axisLine={false} tickLine={false} />
               <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--chart-6))" tickFormatter={formatYAxis} width={44} axisLine={false} tickLine={false} />
               <Tooltip content={<NegativeAwareTooltip />} />
-              <Area type="monotone" dataKey="powerCost" stroke="hsl(var(--chart-6))" strokeWidth={2.5} fill="url(#powerCostFill)" dot={false} name="Power Cost (₱)" connectNulls />
+              <Area type="monotone" dataKey="powerCost" stroke="hsl(var(--chart-6))" strokeWidth={2.5} fill="url(#powerCostFill)" dot={false} name="Power Cost (₱)" />
             </AreaChart>
           ) : (metric === 'productionCost' && stackMode === 'stacked') ? (
             // Production Cost — stacked composition view (M2): "the best
@@ -324,13 +321,13 @@ export function TrendChartCanvas(props: Record<string, any>) {
                 ]}
               />
               {showTotalCostLine && (
-                <Line type="monotone" dataKey="totalCost" stroke="hsl(var(--accent))" strokeWidth={2.5} dot={{ r: 2 }} name="Prod Cost (₱/m³)" connectNulls />
+                <Line type="monotone" dataKey="totalCost" stroke="hsl(var(--accent))" strokeWidth={2.5} dot={{ r: 2 }} name="Prod Cost (₱/m³)" />
               )}
               {showPowerCostLine && (
-                <Line type="monotone" dataKey="powerCost" stroke="hsl(var(--chart-6))" strokeWidth={2} dot={false} name="Power (₱/m³)" connectNulls />
+                <Line type="monotone" dataKey="powerCost" stroke="hsl(var(--chart-6))" strokeWidth={2} dot={false} name="Power (₱/m³)" />
               )}
               {showChemCostLine && (
-                <Line type="monotone" dataKey="chemCost" stroke="hsl(var(--highlight))" strokeWidth={2} dot={false} name="Chem (₱/m³)" connectNulls />
+                <Line type="monotone" dataKey="chemCost" stroke="hsl(var(--highlight))" strokeWidth={2} dot={false} name="Chem (₱/m³)" />
               )}
             </LineChart>
           ) : metric === 'pv' ? (
@@ -368,7 +365,6 @@ export function TrendChartCanvas(props: Record<string, any>) {
                 strokeWidth={2.5}
                 dot={false}
                 name="Grid PV (kWh/m³)"
-                connectNulls
               />
               <Line
                 type="monotone"
@@ -380,7 +376,6 @@ export function TrendChartCanvas(props: Record<string, any>) {
                 strokeDasharray="4 3"
                 dot={false}
                 name="(Grid+Solar) PV (kWh/m³)"
-                connectNulls
               />
             </LineChart>
           ) : metric === 'kwh' ? (
@@ -627,7 +622,7 @@ export function TrendChartCanvas(props: Record<string, any>) {
                 onClick={handleWellLegendIsolate}
               />
               {visibleWellEntities.map(({ id, label, color }) => (
-                <Line key={id} type="monotone" dataKey={id} name={label} stroke={color} strokeWidth={2} dot={false} connectNulls />
+                <Line key={id} type="monotone" dataKey={id} name={label} stroke={color} strokeWidth={2} dot={false} />
               ))}
             </ComposedChart>
           ) : (metric === 'rawwater' && rawwaterBreakdown === 'by-well') ? (
@@ -703,7 +698,6 @@ export function TrendChartCanvas(props: Record<string, any>) {
                 fill="url(#rawWaterFill)"
                 dot={false}
                 name="Raw Water (m³)"
-                connectNulls
               />
             </AreaChart>
           ) : (metric === 'tds' && roDrillMode === 'default') ? (
@@ -747,7 +741,6 @@ export function TrendChartCanvas(props: Record<string, any>) {
                 fill="url(#tdsFill)"
                 dot={false}
                 name="Permeate TDS (ppm)"
-                connectNulls
               />
             </AreaChart>
           ) : (
@@ -778,14 +771,14 @@ export function TrendChartCanvas(props: Record<string, any>) {
               <Tooltip content={<NegativeAwareTooltip />} />
               {metric === 'production' && (<>
                 {/* Render consumption behind production for the overlapping-area effect */}
-                <Area type="monotone" dataKey="consumption" stroke={C_CONSUMPTION} strokeWidth={2.5} fill="url(#consumptionFill)" dot={false} name="Consumption (m³)" connectNulls />
-                <Area type="monotone" dataKey="production" stroke={C_PRODUCTION} strokeWidth={2.5} fill="url(#productionFill)" dot={false} name="Production (m³)" connectNulls />
+                <Area type="monotone" dataKey="consumption" stroke={C_CONSUMPTION} strokeWidth={2.5} fill="url(#consumptionFill)" dot={false} name="Consumption (m³)" />
+                <Area type="monotone" dataKey="production" stroke={C_PRODUCTION} strokeWidth={2.5} fill="url(#productionFill)" dot={false} name="Production (m³)" />
               </>)}
               {metric === 'recovery' && roDrillMode === 'default' && (
-                <Area type="monotone" dataKey="recovery" stroke={C_RECOVERY} strokeWidth={2.5} fill="url(#recoveryFill)" dot={false} name="Recovery (%)" connectNulls />
+                <Area type="monotone" dataKey="recovery" stroke={C_RECOVERY} strokeWidth={2.5} fill="url(#recoveryFill)" dot={false} name="Recovery (%)" />
               )}
               {metric === 'tds' && roDrillMode === 'default' && (
-                <Area type="monotone" dataKey="tds" stroke={C_TDS} strokeWidth={2.5} fill="url(#tdsFill)" dot={false} name="Permeate TDS (ppm)" connectNulls />
+                <Area type="monotone" dataKey="tds" stroke={C_TDS} strokeWidth={2.5} fill="url(#tdsFill)" dot={false} name="Permeate TDS (ppm)" />
               )}
             </AreaChart>
           )}
