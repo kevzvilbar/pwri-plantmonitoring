@@ -52,6 +52,8 @@ import { PlantMeterConfigCard, CIPChemicalsSection } from './config/MeterConfig'
 import { ProductMetersCard, ProductMetersStat }      from './config/ProductMeters';
 import { PowerMetersCard }                           from './config/PowerMeters';
 import { BackwashModeCard, EnergySourceCard, EnergySourceInline } from './config/Appearance';
+import { PlantHeroBanner }                           from './components/PlantHeroBanner';
+import { PlantTelemetryChart }                       from './charts/PlantTelemetryChart';
 
 function FadingAddressText({ address }: { address: string }) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -982,168 +984,135 @@ function PlantDetail({ plantId }: { plantId: string }) {
 
   return (
     <div className="space-y-4 animate-fade-in">
-      {/* ── Breadcrumb Header ── */}
-      <div className="flex items-center justify-between">
-        <button
-          onClick={() => navigate('/plants')}
-          className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground hover:text-primary transition-colors group"
-        >
-          <ChevronLeft className="h-4 w-4 transition-transform group-hover:-translate-x-0.5" />
-          <span>All Facilities</span>
-          <span className="text-border">/</span>
-          <span className="text-foreground">{plant.name}</span>
-        </button>
-
-        <span className="text-2xs font-mono text-muted-foreground">
-          ID: {plant.id.slice(0, 8)}
-        </span>
-      </div>
-
-      {/* ── Facility Detail Header Card ── */}
-      <div className="rounded-lg border border-border bg-card text-foreground p-5 shadow-xs">
-        <div className="space-y-4">
-          
-          {/* Top Row: Facility Identity + Status + Actions */}
-          <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
-            
-            {/* Name + Address + Code */}
-            <div className="space-y-1">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-2xs font-mono font-medium px-2 py-0.5 rounded bg-primary-soft text-primary border border-primary/30">
-                  FACILITY
-                </span>
-                <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-foreground">
-                  {plant.name}
-                </h1>
-                <span className={`inline-flex items-center gap-1.5 text-2xs font-medium px-2.5 py-0.5 rounded-full border ${
-                  plant.status === 'Active'
-                    ? 'bg-accent-soft text-accent border-accent/30'
-                    : 'bg-warn-soft text-warn border-warn/30'
-                }`}>
-                  <span className={`h-1.5 w-1.5 rounded-full ${plant.status === 'Active' ? 'bg-accent' : 'bg-warn'}`} />
-                  {plant.status}
-                </span>
-              </div>
-              
-              <p className="text-xs text-muted-foreground flex items-center gap-1.5 pt-0.5">
-                <MapPin className="h-3.5 w-3.5 text-primary shrink-0" />
-                <span>{plant.address || 'Address unassigned'}</span>
-              </p>
-            </div>
-
-            {/* Actions: Edit + Delete */}
-            <div className="flex items-center gap-2 shrink-0">
-              {isManager && (
+      {/* ── Double-Bezel Facility Hero Banner ── */}
+      <PlantHeroBanner
+        plant={plant}
+        trainCounts={trainCounts}
+        isManager={isManager}
+        onEdit={openInfoEdit}
+        onBack={() => navigate('/plants')}
+        deleteButton={
+          isManager && (
+            <DeleteEntityMenu
+              kind="plant"
+              id={plant.id}
+              label={plant.name}
+              canSoftDelete={plant.status === 'Active'}
+              canHardDelete
+              invalidateKeys={[['plants']]}
+              onDeleted={() => navigate('/plants')}
+              trigger={
                 <Button
                   size="sm"
                   variant="outline"
-                  onClick={openInfoEdit}
-                  data-testid="edit-plant-info-btn"
-                  className="h-8 px-3 gap-1.5 text-xs font-medium"
+                  className="h-7 px-2.5 gap-1.5 border-destructive/40 text-destructive hover:bg-destructive/10 text-xs font-medium bg-card shadow-2xs"
                 >
-                  <Pencil className="h-3.5 w-3.5 text-primary" />
-                  <span>Edit Facility</span>
+                  <Trash2 className="h-3 w-3" />
+                  <span>Delete</span>
                 </Button>
-              )}
-              {isManager && (
-                <DeleteEntityMenu
-                  kind="plant"
-                  id={plant.id}
-                  label={plant.name}
-                  canSoftDelete={plant.status === 'Active'}
-                  canHardDelete
-                  invalidateKeys={[['plants']]}
-                  onDeleted={() => navigate('/plants')}
-                  trigger={
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-8 px-3 gap-1.5 border-destructive/40 text-destructive hover:bg-destructive/10 text-xs font-medium"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                      <span>Delete</span>
-                    </Button>
-                  }
-                />
-              )}
-            </div>
+              }
+            />
+          )
+        }
+      />
+
+      {/* ── 4 Category Color-Coded KPI Tiles ── */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+        
+        {/* 1. Design Extraction Capacity */}
+        <div className="p-3 rounded-xl bg-card border border-border/80 border-l-[3px] border-l-cyan-400 space-y-1 shadow-2xs">
+          <div className="text-2xs uppercase font-mono font-medium tracking-wider text-muted-foreground flex items-center justify-between">
+            <span className="flex items-center gap-1.5 text-cyan-500 dark:text-cyan-400 font-semibold">
+              <Droplet className="h-3.5 w-3.5" />
+              <span>Design Cap</span>
+            </span>
+            <span className="text-3xs font-mono text-muted-foreground">MLD</span>
           </div>
-
-          {/* 3 Telemetry Metric Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
-            
-            {/* Design Capacity Tile */}
-            <div className="p-3.5 rounded-lg bg-muted/40 border border-border/80 space-y-1">
-              <div className="text-2xs uppercase font-mono font-medium tracking-wider text-muted-foreground flex items-center gap-1.5">
-                <Droplet className="h-3 w-3 text-primary" />
-                <span>Design Capacity</span>
-              </div>
-              <div className="flex items-baseline gap-1.5 flex-wrap">
-                <span className="font-mono text-xl sm:text-2xl font-bold text-foreground tabular-nums">
-                  {plant.design_capacity_m3 ? fmtNum(plant.design_capacity_m3) : '—'}
-                </span>
-                {plant.design_capacity_m3 ? (
-                  <>
-                    <span className="text-xs font-semibold text-primary font-mono">MLD</span>
-                    <span className="text-2xs text-muted-foreground font-mono font-medium">({fmtNum(plant.design_capacity_m3 * 1000)} m³/d)</span>
-                  </>
-                ) : (
-                  <span className="text-2xs text-muted-foreground italic">Unassigned</span>
-                )}
-              </div>
-              <div className="text-3xs text-muted-foreground">Peak extraction throughput</div>
-            </div>
-
-            {/* RO Trains Status Tile */}
-            <div className="p-3.5 rounded-lg bg-muted/40 border border-border/80 space-y-1">
-              <div className="text-2xs uppercase font-mono font-medium tracking-wider text-muted-foreground flex items-center gap-1.5">
-                <ROTrainIcon className="h-3 w-3 text-chart-4" />
-                <span>RO Trains Fleet</span>
-              </div>
-              <div className="font-mono text-xl sm:text-2xl font-bold text-foreground tabular-nums">
-                {trainCounts ? (
-                  <>
-                    <span className={
-                      trainCounts.active === trainCounts.total && trainCounts.total > 0
-                        ? 'text-accent'
-                        : trainCounts.active === 0 && trainCounts.total > 0
-                          ? 'text-danger'
-                          : 'text-primary'
-                    }>{trainCounts.active}</span>
-                    <span className="text-muted-foreground font-normal text-base">/{trainCounts.total}</span>
-                  </>
-                ) : (
-                  <span>{plant.num_ro_trains ?? '—'}</span>
-                )}
-              </div>
-              <div className="text-3xs text-muted-foreground">
-                {trainCounts && trainCounts.total > 0 
-                  ? `${Math.round((trainCounts.active / trainCounts.total) * 100)}% fleet operational`
-                  : 'Active train telemetry'}
-              </div>
-            </div>
-
-            {/* Product Distribution Meters Tile */}
-            <div className="p-3.5 rounded-lg bg-muted/40 border border-border/80 space-y-1">
-              <div className="text-2xs uppercase font-mono font-medium tracking-wider text-muted-foreground flex items-center gap-1.5">
-                <Gauge className="h-3 w-3 text-info" />
-                <span>Product Distribution</span>
-              </div>
-              <div className="font-mono text-xl sm:text-2xl font-bold text-foreground tabular-nums">
-                <ProductMetersStat plantId={plant.id} />
-              </div>
-              <div className="text-3xs text-muted-foreground">Offtake &amp; bulk consumption</div>
-            </div>
-
+          <div className="flex items-baseline gap-1.5 flex-wrap">
+            <span className="font-mono text-xl sm:text-2xl font-bold text-foreground tabular-nums">
+              {plant.design_capacity_m3 ? fmtNum(plant.design_capacity_m3) : '—'}
+            </span>
+            {plant.design_capacity_m3 ? (
+              <span className="text-2xs text-muted-foreground font-mono font-medium">
+                ({fmtNum(plant.design_capacity_m3 * 1000)} m³/d)
+              </span>
+            ) : (
+              <span className="text-2xs text-muted-foreground italic">Unassigned</span>
+            )}
           </div>
+          <div className="text-3xs text-muted-foreground">Peak extraction throughput</div>
+        </div>
 
-          {/* Energy Sources Strip */}
-          <div className="pt-3 border-t border-border/60">
+        {/* 2. RO Trains Fleet Status */}
+        <div className="p-3 rounded-xl bg-card border border-border/80 border-l-[3px] border-l-indigo-400 space-y-1 shadow-2xs">
+          <div className="text-2xs uppercase font-mono font-medium tracking-wider text-muted-foreground flex items-center justify-between">
+            <span className="flex items-center gap-1.5 text-indigo-500 dark:text-indigo-400 font-semibold">
+              <ROTrainIcon className="h-3.5 w-3.5" />
+              <span>RO Fleet</span>
+            </span>
+            <span className="text-3xs font-mono text-muted-foreground">TRAINS</span>
+          </div>
+          <div className="font-mono text-xl sm:text-2xl font-bold text-foreground tabular-nums">
+            {trainCounts ? (
+              <>
+                <span className={
+                  trainCounts.active === trainCounts.total && trainCounts.total > 0
+                    ? 'text-accent'
+                    : trainCounts.active === 0 && trainCounts.total > 0
+                      ? 'text-danger'
+                      : 'text-primary'
+                }>{trainCounts.active}</span>
+                <span className="text-muted-foreground font-normal text-base">/{trainCounts.total}</span>
+              </>
+            ) : (
+              <span>{plant.num_ro_trains ?? '—'}</span>
+            )}
+          </div>
+          <div className="text-3xs text-muted-foreground">
+            {trainCounts && trainCounts.total > 0 
+              ? `${Math.round((trainCounts.active / trainCounts.total) * 100)}% fleet operational`
+              : 'Active train telemetry'}
+          </div>
+        </div>
+
+        {/* 3. Product Distribution Meters */}
+        <div className="p-3 rounded-xl bg-card border border-border/80 border-l-[3px] border-l-amber-400 space-y-1 shadow-2xs">
+          <div className="text-2xs uppercase font-mono font-medium tracking-wider text-muted-foreground flex items-center justify-between">
+            <span className="flex items-center gap-1.5 text-amber-500 dark:text-amber-400 font-semibold">
+              <Gauge className="h-3.5 w-3.5" />
+              <span>Distribution</span>
+            </span>
+            <span className="text-3xs font-mono text-muted-foreground">METERS</span>
+          </div>
+          <div className="font-mono text-xl sm:text-2xl font-bold text-foreground tabular-nums">
+            <ProductMetersStat plantId={plant.id} />
+          </div>
+          <div className="text-3xs text-muted-foreground">Offtake &amp; bulk consumption</div>
+        </div>
+
+        {/* 4. Energy & Power Sources */}
+        <div className="p-3 rounded-xl bg-card border border-border/80 border-l-[3px] border-l-teal-400 space-y-1 shadow-2xs">
+          <div className="text-2xs uppercase font-mono font-medium tracking-wider text-muted-foreground flex items-center justify-between">
+            <span className="flex items-center gap-1.5 text-teal-500 dark:text-teal-400 font-semibold">
+              <Zap className="h-3.5 w-3.5" />
+              <span>Power Mix</span>
+            </span>
+            <span className="text-3xs font-mono text-muted-foreground">ENERGY</span>
+          </div>
+          <div className="pt-0.5">
             <EnergySourceInline plant={plant} />
           </div>
-
+          <div className="text-3xs text-muted-foreground">Grid / Solar telemetry</div>
         </div>
+
       </div>
+
+      {/* ── Facility Telemetry Production & Consumption Trend ── */}
+      <PlantTelemetryChart
+        plantId={plant.id}
+        designCapacityM3={plant.design_capacity_m3}
+        plantName={plant.name}
+      />
 
       {/* ── Subsystem Segmented Tab Navigation ── */}
       <div className="flex gap-1 p-1 bg-muted/60 border border-border/60 rounded-xl w-full overflow-x-auto shadow-sm">

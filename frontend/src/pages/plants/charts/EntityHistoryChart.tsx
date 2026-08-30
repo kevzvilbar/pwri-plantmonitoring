@@ -424,14 +424,21 @@ export function EntityHistoryChart({
   const customTooltip = ({ active, payload, label }: any) => {
     if (!active || !payload?.length) return null;
     return (
-      <div className="bg-popover border rounded-lg shadow-lg px-3 py-2 text-xs">
-        <p className="font-semibold text-foreground mb-1">{label}</p>
-        {payload.map((p: any) => (
-          <p key={p.dataKey} style={{ color: p.color }}>
-            {p.name}: <span className="font-mono font-semibold">{fmtNum(p.value)}</span>
-            {p.dataKey === 'nrw' || p.dataKey === 'blendedPct' ? '%' : ' m³'}
-          </p>
-        ))}
+      <div className="bg-popover/95 backdrop-blur-md border border-border/80 rounded-xl shadow-lg p-2.5 text-xs space-y-1.5">
+        <p className="font-semibold text-foreground border-b border-border/50 pb-1 font-mono text-2xs">{label}</p>
+        <div className="space-y-1">
+          {payload.map((p: any) => (
+            <div key={p.dataKey} className="flex items-center justify-between gap-3 text-2xs">
+              <span className="flex items-center gap-1.5">
+                <span className="h-2 w-2 rounded-full shrink-0" style={{ background: p.color }} />
+                <span className="text-muted-foreground">{p.name}</span>
+              </span>
+              <span className="font-mono font-bold text-foreground">
+                {fmtNum(p.value)} {p.dataKey === 'nrw' || p.dataKey === 'blendedPct' ? '%' : 'm³'}
+              </span>
+            </div>
+          ))}
+        </div>
       </div>
     );
   };
@@ -624,7 +631,7 @@ export function EntityHistoryChart({
                 ) : (
                   <Bar yAxisId="vol" dataKey="siblingTotal" fill={C_CONSUMPTION} name="Locators Total" radius={[2,2,0,0]} />
                 )}
-                <Line yAxisId="pct" type="monotone" dataKey="nrw" stroke={C_NRW} strokeWidth={2} dot={{ r: 2.5, fill: C_NRW, strokeWidth: 0 }} name="NRW %" connectNulls />
+                <Line yAxisId="pct" type="monotone" dataKey="nrw" stroke={C_NRW} strokeWidth={2} dot={{ r: 2.5, fill: C_NRW, strokeWidth: 0 }} name="NRW %" />
               </ComposedChart>
             </ResponsiveContainer>
             </div>
@@ -660,7 +667,7 @@ export function EntityHistoryChart({
                 <Legend wrapperStyle={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.02em', paddingTop: 4 }} />
                 <Bar yAxisId="vol" dataKey="consumption" fill={C_RAWWATER} name="Raw Water" radius={[2,2,0,0]} />
                 <Bar yAxisId="vol" dataKey="blendedVolume" fill={C_BLEND_VOLUME} name="Blended" radius={[2,2,0,0]} />
-                <Line yAxisId="pct" type="monotone" dataKey="blendedPct" stroke={C_BLEND_PCT} strokeWidth={2} dot={{ r: 2.5, fill: C_BLEND_PCT, strokeWidth: 0 }} name="% Blended" connectNulls />
+                <Line yAxisId="pct" type="monotone" dataKey="blendedPct" stroke={C_BLEND_PCT} strokeWidth={2} dot={{ r: 2.5, fill: C_BLEND_PCT, strokeWidth: 0 }} name="% Blended" />
               </ComposedChart>
             </ResponsiveContainer>
           </div>
