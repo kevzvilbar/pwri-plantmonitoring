@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { AlertTriangle, FlaskConical, Zap, Droplet, Tag, Calendar, Download, TrendingUp, Building2 } from 'lucide-react';
 import { StatusPill } from '@/components/StatusPill';
+import { StatCard } from '@/components/dashboard/StatCard';
 import { ExportButton } from '@/components/ExportButton';
 import { PlantPicker } from '@/components/costs/PlantPicker';
 import { useMonthlyOpex, opexVarianceTone } from '@/hooks/useOpexBudget';
@@ -183,63 +184,54 @@ export function Rollup() {
             </div>
           )}
 
-          {/* ── 4 KPI Metric Cards ── */}
+          {/* ── 4 KPI Metric Cards (using shared StatCard component) ── */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             {/* Chemical Cost */}
-            <Card className="p-3.5 space-y-1">
-              <div className="flex items-center justify-between">
-                <span className="text-2xs uppercase tracking-wider font-medium text-muted-foreground">Chemical OPEX</span>
-                <FlaskConical className="h-4 w-4 text-highlight" />
-              </div>
-              <p className="font-numeral font-bold text-xl text-foreground tabular-nums">
-                ₱{fmtNum(totals.chem, 0)}
-              </p>
-              <p className="text-2xs text-muted-foreground">
-                <span className="font-semibold font-numeral text-highlight">{fmtNum(totals.chemPct, 1)}%</span> of total OPEX
-              </p>
-            </Card>
+            <StatCard
+              icon={FlaskConical}
+              accent="text-highlight"
+              label="Chemical OPEX"
+              value={`₱${fmtNum(totals.chem, 0)}`}
+              subtext={<><span className="font-semibold text-highlight font-numeral">{fmtNum(totals.chemPct, 1)}%</span> of total OPEX</>}
+            />
 
             {/* Power Cost */}
-            <Card className="p-3.5 space-y-1">
-              <div className="flex items-center justify-between">
-                <span className="text-2xs uppercase tracking-wider font-medium text-muted-foreground">Power OPEX</span>
-                <Zap className="h-4 w-4 text-chart-6" />
-              </div>
-              <p className="font-numeral font-bold text-xl text-foreground tabular-nums">
-                ₱{fmtNum(totals.power, 0)}
-              </p>
-              <p className="text-2xs text-muted-foreground">
-                <span className="font-semibold font-numeral text-chart-6">{fmtNum(totals.powerPct, 1)}%</span> of total OPEX
-              </p>
-            </Card>
+            <StatCard
+              icon={Zap}
+              accent="text-chart-6"
+              label="Power OPEX"
+              value={`₱${fmtNum(totals.power, 0)}`}
+              subtext={<><span className="font-semibold text-chart-6 font-numeral">{fmtNum(totals.powerPct, 1)}%</span> of total OPEX</>}
+            />
 
-            {/* Finished Production */}
-            <Card className="p-3.5 space-y-1">
-              <div className="flex items-center justify-between">
-                <span className="text-2xs uppercase tracking-wider font-medium text-muted-foreground">Total Production</span>
-                <Droplet className="h-4 w-4 text-info" />
-              </div>
-              <p className="font-numeral font-bold text-xl text-foreground tabular-nums">
-                {fmtNum(totals.prod, 0)} <span className="text-xs font-normal text-muted-foreground">m³</span>
-              </p>
-              <p className="text-2xs text-muted-foreground">
-                Daily avg: <span className="font-semibold text-foreground font-numeral">{fmtNum(totals.dailyAvgProd, 0)} m³/day</span>
-              </p>
-            </Card>
+            {/* Total Production */}
+            <StatCard
+              icon={Droplet}
+              accent="text-info"
+              label="Total Production"
+              value={fmtNum(totals.prod, 0)}
+              unit="m³"
+              subtext={<>Daily avg: <span className="font-semibold text-foreground font-numeral">{fmtNum(totals.dailyAvgProd, 0)} m³/day</span></>}
+            />
 
-            {/* Unit Cost per m3 */}
-            <Card className="p-3.5 space-y-1">
-              <div className="flex items-center justify-between">
-                <span className="text-2xs uppercase tracking-wider font-medium text-muted-foreground">Unit Production Cost</span>
-                <Tag className="h-4 w-4 text-primary" />
-              </div>
-              <p className="font-numeral font-bold text-xl text-primary tabular-nums">
-                {totals.perM3 ? `₱${totals.perM3.toFixed(2)}` : '—'}<span className="text-xs font-normal text-muted-foreground"> / m³</span>
-              </p>
-              <p className="text-2xs text-muted-foreground">
-                Total OPEX: <span className="font-semibold text-foreground font-numeral">₱{fmtNum(totals.total, 0)}</span>
-              </p>
-            </Card>
+            {/* Unit Cost per m3 + OPEX Budget Variance */}
+            <StatCard
+              icon={Tag}
+              accent="text-primary"
+              label="Unit Production Cost"
+              value={totals.perM3 ? `₱${totals.perM3.toFixed(2)}` : '—'}
+              unit="/ m³"
+              badge={budgetRow && budgetRow.variancePct != null ? (
+                <StatusPill tone={opexVarianceTone(budgetRow.variancePct) === 'accent' ? 'success' : opexVarianceTone(budgetRow.variancePct)}>
+                  {budgetRow.variancePct > 0 ? `+${budgetRow.variancePct.toFixed(1)}%` : `${budgetRow.variancePct.toFixed(1)}%`} vs budget
+                </StatusPill>
+              ) : undefined}
+              subtext={budgetRow ? (
+                <span>Budget: ₱{fmtNum(budgetRow.totalBudget, 0)} · Actual: ₱{fmtNum(totals.total, 0)}</span>
+              ) : (
+                <span>Total OPEX: ₱{fmtNum(totals.total, 0)}</span>
+              )}
+            />
           </div>
 
           {/* Daily Costs Stacked Bar Chart */}

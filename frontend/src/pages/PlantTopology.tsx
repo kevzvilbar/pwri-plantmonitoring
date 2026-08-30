@@ -616,9 +616,11 @@ export default function PlantTopology() {
       {/* ── SCADA Header ── */}
       <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-border bg-card shrink-0">
         <div className="flex items-center gap-4 min-w-0">
-          <div className="shrink-0">
-            <p className="text-2xs tracking-widest text-primary font-mono uppercase font-semibold">Plant Monitor</p>
-            <h1 className="text-xl font-semibold tracking-tight text-foreground leading-tight">Network Topology</h1>
+          <div className="shrink-0 space-y-0.5">
+            <h1 className="text-lg font-semibold tracking-tight text-foreground leading-tight">Network Topology</h1>
+            <p className="text-2xs text-muted-foreground hidden sm:block">
+              Process flow wiring diagram showing raw well water extraction, treatment trains, product meters, and power distribution
+            </p>
           </div>
 
           {/* Plant selector pills */}

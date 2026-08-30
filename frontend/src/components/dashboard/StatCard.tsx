@@ -43,7 +43,7 @@ export type ExpandRow = { label: string; value: string | number | null };
 export function StatCard({
   icon: Icon, label, value, unit, tone, onClick, accent, calc, threshold,
   size = 'default', trend = null, calcTooltip,
-  expandRows, expandUnit,
+  expandRows, expandUnit, subtext, badge,
 }: {
   icon: any; label: string; value: any; unit?: string;
   tone?: StatTone; onClick?: () => void; accent?: string;
@@ -55,6 +55,8 @@ export function StatCard({
   expandRows?: ExpandRow[];
   // Unit appended to each row value; defaults to the card's own `unit`.
   expandUnit?: string;
+  subtext?: React.ReactNode;
+  badge?: React.ReactNode;
 }) {
   const [expanded, setExpanded] = useState(false);
 
@@ -85,6 +87,7 @@ export function StatCard({
           )}
         </div>
         <div className="flex items-center gap-1 shrink-0">
+          {badge}
           {calc && (
             <span
               className="text-3xs uppercase tracking-wider px-1 py-0.5 rounded bg-info-soft text-info border border-info/30"
@@ -118,6 +121,13 @@ export function StatCard({
       {trend !== null && trend !== undefined && (
         <div className="mt-1">
           <TrendBadge delta={trend} />
+        </div>
+      )}
+
+      {/* ── Subtext / Metadata footer ── */}
+      {subtext && (
+        <div className="mt-1.5 text-2xs text-muted-foreground truncate">
+          {subtext}
         </div>
       )}
 
