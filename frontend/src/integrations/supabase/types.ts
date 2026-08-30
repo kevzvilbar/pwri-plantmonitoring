@@ -1168,6 +1168,7 @@ export type Database = {
           plant_id: string
           power_kwh: number | null
           product_tds: number | null
+          product_water_m3: number | null
           production_m3: number | null
           pv_ratio: number | null
           raw_turbidity_ntu: number | null
@@ -1193,6 +1194,7 @@ export type Database = {
           plant_id: string
           power_kwh?: number | null
           product_tds?: number | null
+          product_water_m3?: number | null
           production_m3?: number | null
           pv_ratio?: number | null
           raw_turbidity_ntu?: number | null
@@ -1218,6 +1220,7 @@ export type Database = {
           plant_id?: string
           power_kwh?: number | null
           product_tds?: number | null
+          product_water_m3?: number | null
           production_m3?: number | null
           pv_ratio?: number | null
           raw_turbidity_ntu?: number | null
