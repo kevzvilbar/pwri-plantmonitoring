@@ -6,6 +6,8 @@ import { formatDistanceToNow } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { Activity } from 'lucide-react';
 
+import { Lamp, type LampTone } from '@/components/ui/Lamp';
+
 // ── Status helpers ────────────────────────────────────────────────────────────
 // A plant is considered "online" when it has at least one reading in the last
 // 2 hours, "stale" for 2-8 hours, and "offline" beyond that (or no data).
@@ -19,17 +21,13 @@ function statusFromLastDt(dt: string | null | undefined): StripStatus {
   return 'offline';
 }
 
-const DOT_CLS: Record<StripStatus, string> = {
-  online:  'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.7)]',
-  stale:   'bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.6)]',
-  offline: 'bg-muted-foreground/40',
-};
-
-const PILL_CLS: Record<StripStatus, string> = {
-  online:  'border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 hover:border-emerald-500/50',
-  stale:   'border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400 hover:border-amber-500/50',
-  offline: 'border-border/60 bg-muted/20 text-muted-foreground hover:border-border',
-};
+function statusToLampTone(status: StripStatus): LampTone {
+  switch (status) {
+    case 'online':  return 'good';
+    case 'stale':   return 'warn';
+    case 'offline': return 'muted';
+  }
+}
 
 interface Props {
   /** Plant IDs currently visible on the dashboard (respects global filter) */
@@ -127,24 +125,25 @@ export function PlantHealthStrip({ plantIds, onSelectPlant }: Props) {
               key={plant.id}
               onClick={() => onSelectPlant?.(plant.id)}
               className={cn(
-                'inline-flex items-center gap-2 px-3 py-1 rounded-full border text-xs font-semibold whitespace-nowrap transition-all cursor-pointer select-none shrink-0 shadow-sm',
-                PILL_CLS[status],
+                'inline-flex items-center gap-2 px-3 py-1 rounded-lg border text-xs font-semibold whitespace-nowrap transition-all cursor-pointer select-none shrink-0',
+                status === 'online' && 'bg-card border-border/80 text-foreground hover:border-primary/50',
+                status === 'stale' && 'bg-warn-soft/30 border-warn/40 text-warn hover:border-warn',
+                status === 'offline' && 'bg-muted/30 border-border/50 text-muted-foreground hover:border-border',
               )}
               title={`${plant.name} · Last reading: ${lastDt ? new Date(lastDt).toLocaleString() : 'none'}`}
             >
-              <span className="relative flex h-2 w-2">
-                {status === 'online' && (
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                )}
-                <span className={cn('relative inline-flex rounded-full h-2 w-2', DOT_CLS[status])} />
-              </span>
+              <Lamp
+                tone={statusToLampTone(status)}
+                pulse={status === 'online'}
+                size={7}
+              />
               <span>{shortName}</span>
               {lastDt ? (
                 <span className="text-2xs font-normal opacity-75 font-mono">
                   {formatDistanceToNow(new Date(lastDt), { addSuffix: false })}
                 </span>
               ) : (
-                <span className="text-2xs font-normal opacity-50">Offline</span>
+                <span className="text-2xs font-normal opacity-50 font-mono">Offline</span>
               )}
             </div>
           );

@@ -9,12 +9,29 @@
 //
 // Moved verbatim from TrendChart.tsx — no logic or markup changes, only
 // the props needed to reach the free variables it already used.
+import React from 'react';
 import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
   Legend, ComposedChart, Bar, BarChart, ReferenceLine, Area, AreaChart,
 } from 'recharts';
 import { C_PRODUCTION, C_CONSUMPTION, C_NRW, C_RAWWATER, C_RECOVERY, C_TDS, C_GRID_PV } from '@/lib/chartColors';
 import { makeDrillableBarShape } from './TrendChartDrillKit';
+
+const INSTRUMENT_TOOLTIP_STYLE: React.CSSProperties = {
+  background: 'hsl(var(--card))',
+  border: '1px solid hsl(var(--border) / 0.8)',
+  borderRadius: 12,
+  fontSize: 11,
+  boxShadow: 'var(--shadow-card)',
+  color: 'hsl(var(--foreground))',
+  padding: '8px 12px',
+};
+
+const CHART_CURSOR = {
+  stroke: 'hsl(var(--highlight))',
+  strokeWidth: 1,
+  strokeDasharray: '3 3',
+};
 
 export function TrendChartCanvas(props: Record<string, any>) {
   const {
@@ -37,7 +54,8 @@ export function TrendChartCanvas(props: Record<string, any>) {
               <XAxis dataKey="date" tick={{ fontSize: 10, fontWeight: 500 }} stroke="hsl(var(--muted-foreground))" axisLine={false} tickLine={false} />
               <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" width={44} axisLine={false} tickLine={false} />
               <Tooltip
-                contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 10, fontSize: 11, boxShadow: 'var(--shadow-elev)' }}
+                contentStyle={INSTRUMENT_TOOLTIP_STYLE}
+                cursor={CHART_CURSOR}
                 formatter={(v: any, name: string) => [v != null ? `${v} ${roUnit}` : '—', name]}
               />
               <Legend
@@ -71,7 +89,8 @@ export function TrendChartCanvas(props: Record<string, any>) {
               <XAxis dataKey="date" tick={{ fontSize: 10, fontWeight: 500 }} stroke="hsl(var(--muted-foreground))" axisLine={false} tickLine={false} />
               <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" width={44} axisLine={false} tickLine={false} />
               <Tooltip
-                contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 10, fontSize: 11, boxShadow: 'var(--shadow-elev)' }}
+                contentStyle={INSTRUMENT_TOOLTIP_STYLE}
+                cursor={CHART_CURSOR}
                 formatter={(v: any, name: string) => [v != null ? `${v} ${roUnit}` : '—', name]}
               />
               <Legend
@@ -116,7 +135,8 @@ export function TrendChartCanvas(props: Record<string, any>) {
               />
               <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" width={44} axisLine={false} tickLine={false} />
               <Tooltip
-                contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 11, boxShadow: 'var(--shadow-elev)' }}
+                contentStyle={INSTRUMENT_TOOLTIP_STYLE}
+                cursor={CHART_CURSOR}
                 formatter={(v: any) => [v != null ? `${v} ${roUnit}` : '—', metric === 'tds' ? 'Avg TDS' : 'Avg Recovery']}
                 labelFormatter={(label) => label}
               />
@@ -139,7 +159,8 @@ export function TrendChartCanvas(props: Record<string, any>) {
               <XAxis dataKey="date" tick={{ fontSize: 10, fontWeight: 500 }} stroke="hsl(var(--muted-foreground))" axisLine={false} tickLine={false} />
               <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" tickFormatter={formatYAxis} width={44} axisLine={false} tickLine={false} />
               <Tooltip
-                contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 10, fontSize: 11, boxShadow: 'var(--shadow-elev)' }}
+                contentStyle={INSTRUMENT_TOOLTIP_STYLE}
+                cursor={CHART_CURSOR}
                 formatter={(v: any, name: string) => [v != null ? v.toLocaleString(undefined, { maximumFractionDigits: 1 }) : '—', name]}
               />
               <Legend
@@ -170,7 +191,8 @@ export function TrendChartCanvas(props: Record<string, any>) {
               <XAxis dataKey="date" tick={{ fontSize: 10, fontWeight: 500 }} stroke="hsl(var(--muted-foreground))" axisLine={false} tickLine={false} />
               <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" tickFormatter={formatYAxis} width={44} axisLine={false} tickLine={false} />
               <Tooltip
-                contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 10, fontSize: 11, boxShadow: 'var(--shadow-elev)' }}
+                contentStyle={INSTRUMENT_TOOLTIP_STYLE}
+                cursor={CHART_CURSOR}
                 formatter={(v: any, name: string) => [v != null ? v.toLocaleString(undefined, { maximumFractionDigits: 1 }) : '—', name]}
               />
               <Legend
@@ -257,7 +279,8 @@ export function TrendChartCanvas(props: Record<string, any>) {
               <XAxis dataKey="date" tick={{ fontSize: 10, fontWeight: 500 }} stroke="hsl(var(--muted-foreground))" axisLine={false} tickLine={false} />
               <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--accent))" tickFormatter={(v) => `₱${formatYAxis(v)}`} width={44} axisLine={false} tickLine={false} />
               <Tooltip
-                contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 11, boxShadow: 'var(--shadow-elev)' }}
+                contentStyle={INSTRUMENT_TOOLTIP_STYLE}
+                cursor={CHART_CURSOR}
                 formatter={(v: any, name: string) => [v != null ? `₱${(+v).toFixed(4)}/m³` : '—', name]}
               />
               {showPowerCostLine && (
@@ -293,7 +316,8 @@ export function TrendChartCanvas(props: Record<string, any>) {
                 tickLine={false}
               />
               <Tooltip
-                contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 11, boxShadow: 'var(--shadow-elev)' }}
+                contentStyle={INSTRUMENT_TOOLTIP_STYLE}
+                cursor={CHART_CURSOR}
                 formatter={(v: any, name: string) => [
                   v != null ? `₱${(+v).toFixed(4)}/m³` : '—',
                   name,
@@ -594,7 +618,8 @@ export function TrendChartCanvas(props: Record<string, any>) {
               <XAxis dataKey="date" tick={{ fontSize: 10, fontWeight: 500 }} stroke="hsl(var(--muted-foreground))" axisLine={false} tickLine={false} />
               <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" tickFormatter={formatYAxis} width={44} axisLine={false} tickLine={false} />
               <Tooltip
-                contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 10, fontSize: 11, boxShadow: 'var(--shadow-elev)' }}
+                contentStyle={INSTRUMENT_TOOLTIP_STYLE}
+                cursor={CHART_CURSOR}
                 formatter={(v: any, name: string) => [v != null ? v.toLocaleString(undefined, { maximumFractionDigits: 1 }) : '—', name]}
               />
               <Legend
@@ -617,7 +642,8 @@ export function TrendChartCanvas(props: Record<string, any>) {
               <XAxis dataKey="date" tick={{ fontSize: 10, fontWeight: 500 }} stroke="hsl(var(--muted-foreground))" axisLine={false} tickLine={false} />
               <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" tickFormatter={formatYAxis} width={44} axisLine={false} tickLine={false} />
               <Tooltip
-                contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 10, fontSize: 11, boxShadow: 'var(--shadow-elev)' }}
+                contentStyle={INSTRUMENT_TOOLTIP_STYLE}
+                cursor={CHART_CURSOR}
                 formatter={(v: any, name: string) => [v != null ? v.toLocaleString(undefined, { maximumFractionDigits: 1 }) : '—', name]}
               />
               <Legend

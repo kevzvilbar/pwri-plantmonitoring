@@ -24,17 +24,19 @@ import { useOnlineStatus } from '@/hooks/useOnlineStatus';
  * TopBar/BottomNav — it simply pushes content down by one line while
  * visible, and collapses back to nothing the moment connectivity returns.
  */
+import { WifiOff } from 'lucide-react';
+import { useOnlineStatus } from '@/hooks/useOnlineStatus';
+import { InstrumentBanner } from '@/components/InstrumentBanner';
+
 export function OfflineBanner() {
   const isOnline = useOnlineStatus();
   if (isOnline) return null;
 
   return (
-    <div
-      role="status"
-      className="shrink-0 flex items-center justify-center gap-2 bg-warn text-white text-xs font-medium px-3 py-1.5 text-center"
-    >
-      <WifiOff className="h-3.5 w-3.5 shrink-0" aria-hidden />
-      You're offline — new readings won't save until you reconnect.
+    <div className="px-4 py-2 bg-background border-b border-border/60">
+      <InstrumentBanner tone="warn" icon={WifiOff} className="max-w-[1600px] mx-auto">
+        <span><strong className="font-semibold text-warn">Offline Mode Active:</strong> New readings and modifications will be queued locally until connection is restored.</span>
+      </InstrumentBanner>
     </div>
   );
 }

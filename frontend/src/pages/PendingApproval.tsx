@@ -27,7 +27,7 @@ export default function PendingApproval() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-stat p-4">
+    <div className="min-h-screen flex items-center justify-center bg-background p-4">
       <Card
         className="max-w-md w-full p-6 text-center space-y-4"
         data-testid="pending-approval-card"

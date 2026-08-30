@@ -14,7 +14,7 @@ import { useCostComposition, type CostSunburstNode } from '@/hooks/useCostCompos
 import { rangeKeyToDays } from './types';
 import { useAppStore } from '@/store/appStore';
 
-const GEO_FONT = "'DM Sans', ui-sans-serif, system-ui, sans-serif";
+const GEO_FONT = "'JetBrains Mono', 'IBM Plex Mono', monospace";
 
 interface Props {
   plantIds: string[];

@@ -51,6 +51,7 @@ import {
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
+import { PlantPulseHero }       from '@/components/dashboard/PlantPulseHero';
 import { PlantHealthStrip }    from '@/components/dashboard/PlantHealthStrip';
 import { NRWGaugeCard }        from '@/components/dashboard/NRWGaugeCard';
 import { WaterBalanceBridgeCard } from '@/components/dashboard/WaterBalanceBridgeCard';
@@ -322,6 +323,15 @@ export default function Dashboard() {
 
         </div>
       </div>
+
+      {/* ─── Hero Surface: Live Plant Pulse & Realtime Telemetry ─── */}
+      <PlantPulseHero
+        plantIds={plantIds}
+        production={production}
+        dProduction={dProduction}
+        chartData={chartData}
+        onSelectPlant={(pid) => navigate(`/plants/${pid}`)}
+      />
 
       {/* ① Plant health strip — per-plant status dots + last reading time */}
       <PlantHealthStrip 

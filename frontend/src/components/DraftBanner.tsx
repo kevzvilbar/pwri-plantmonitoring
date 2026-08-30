@@ -1,35 +1,30 @@
 import { History } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { InstrumentBanner } from '@/components/InstrumentBanner';
 
 interface DraftBannerProps {
   /** Called when the user clicks "Discard" */
   onDiscard: () => void;
 }
 
-/**
- * Show this at the top of a form whenever `hasDraft` is true.
- * The banner tells the user their previous input was restored and lets
- * them wipe it cleanly via the Discard button.
- *
- * Example:
- *   {hasDraft && <DraftBanner onDiscard={discardDraft} />}
- */
 export function DraftBanner({ onDiscard }: DraftBannerProps) {
   return (
-    <div className="flex items-center gap-2.5 px-3 py-2 rounded-lg border border-warn bg-warn-soft text-warn">
-      <History className="h-3.5 w-3.5 shrink-0" />
-      <p className="flex-1 text-xs leading-snug">
-        <span className="font-semibold">Draft restored</span> — you have unsaved changes from a previous session.
-      </p>
-      <Button
-        type="button"
-        variant="ghost"
-        size="sm"
-        className="h-6 px-2 text-xs text-warn hover:bg-warn-soft shrink-0"
-        onClick={onDiscard}
-      >
-        Discard
-      </Button>
-    </div>
+    <InstrumentBanner
+      tone="warn"
+      icon={History}
+      actions={
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-7 px-2.5 text-xs border-warn/40 text-warn hover:bg-warn-soft/20"
+          onClick={onDiscard}
+        >
+          Discard
+        </Button>
+      }
+    >
+      <span className="font-semibold text-warn">Draft Restored:</span> You have unsaved changes from a previous session.
+    </InstrumentBanner>
   );
 }
