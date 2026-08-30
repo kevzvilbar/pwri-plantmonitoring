@@ -531,10 +531,15 @@ export default function Plants() {
           <div className="flex items-center gap-4 sm:gap-6 border-t sm:border-t-0 sm:border-l border-border/60 pt-3 sm:pt-0 sm:pl-6">
             <div className="text-left sm:text-right">
               <div className="text-3xs uppercase font-bold tracking-wider text-muted-foreground">Total Capacity</div>
-              <div className="text-lg sm:text-xl font-black text-foreground font-mono">
-                {totalCapacity > 0 ? (totalCapacity >= 1000 ? (totalCapacity / 1000).toFixed(1) : fmtNum(totalCapacity)) : '—'}{' '}
-                <span className="text-2xs font-bold text-primary font-sans">{totalCapacity >= 1000 ? 'MLD' : 'm³/d'}</span>
+              <div className="text-lg sm:text-xl font-black text-foreground font-mono leading-tight">
+                {totalCapacity > 0 ? fmtNum(totalCapacity) : '—'}{' '}
+                <span className="text-2xs font-bold text-primary font-sans">MLD</span>
               </div>
+              {totalCapacity > 0 && (
+                <div className="text-3xs text-muted-foreground font-mono font-medium">
+                  {fmtNum(totalCapacity * 1000)} m³/d
+                </div>
+              )}
             </div>
             <div className="h-8 w-px bg-border/60" />
             <div className="text-left sm:text-right">
@@ -1073,12 +1078,15 @@ function PlantDetail({ plantId }: { plantId: string }) {
                 <Droplet className="h-3 w-3 text-primary" />
                 <span>Design Capacity</span>
               </div>
-              <div className="flex items-baseline gap-1.5">
+              <div className="flex items-baseline gap-1.5 flex-wrap">
                 <span className="font-mono text-xl sm:text-2xl font-bold text-foreground tabular-nums">
                   {plant.design_capacity_m3 ? fmtNum(plant.design_capacity_m3) : '—'}
                 </span>
                 {plant.design_capacity_m3 ? (
-                  <span className="text-xs font-semibold text-primary font-mono">MLD</span>
+                  <>
+                    <span className="text-xs font-semibold text-primary font-mono">MLD</span>
+                    <span className="text-2xs text-muted-foreground font-mono font-medium">({fmtNum(plant.design_capacity_m3 * 1000)} m³/d)</span>
+                  </>
                 ) : (
                   <span className="text-2xs text-muted-foreground italic">Unassigned</span>
                 )}

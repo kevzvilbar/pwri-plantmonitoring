@@ -64,7 +64,7 @@ export function PlantsPanel() {
                 <div className="text-xs text-muted-foreground truncate">{p.address ?? '—'}</div>
                 <div className="text-xs mt-1 flex flex-wrap gap-x-3">
                   <span>RO trains: <strong>{p.num_ro_trains}</strong></span>
-                  <span>Capacity: <strong>{p.design_capacity_m3 ?? '—'} m³</strong></span>
+                  <span>Capacity: <strong>{p.design_capacity_m3 != null ? `${p.design_capacity_m3} MLD (${p.design_capacity_m3 * 1000} m³/d)` : '—'}</strong></span>
                 </div>
               </div>
               <div className="flex items-center gap-2 shrink-0">
