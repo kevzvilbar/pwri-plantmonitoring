@@ -978,144 +978,193 @@ function WellRow({
       data-testid={`well-row-${well.id}`}
     >
 
-      {/* ── Header: name + badges left | status + date + actions right ── */}
-      <div className="flex items-start justify-between flex-wrap gap-2 px-3 py-2 bg-muted/30 border-b border-border/60">
-        {/* Left: name + badges — allow wrap so name is never hidden */}
-        <div className="flex items-center gap-1.5 flex-wrap min-w-0 flex-1">
-          <span className="text-sm font-semibold text-foreground break-words">{well.name}</span>
-          {(() => {
-            const fresh = lastReadingFreshness(freshDt);
-            return (
-              <StatusPill tone={fresh.tone}>
-                <CalendarClock className="h-2.5 w-2.5" />
-                {fresh.label}
-              </StatusPill>
-            );
-          })()}
+      {/* ── Header: name + badges top/left | date + controls bottom/right ── */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-3.5 py-2.5 bg-muted/30 border-b border-border/60">
+        {/* Top/Left: Name + Status badge + Blending / Shared */}
+        <div className="flex items-center justify-between sm:justify-start gap-2 flex-wrap min-w-0 flex-1">
+          <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+            <span className="text-sm font-bold text-foreground break-words">{well.name}</span>
+            {(() => {
+              const fresh = lastReadingFreshness(freshDt);
+              return (
+                <StatusPill tone={fresh.tone}>
+                  <CalendarClock className="h-2.5 w-2.5" />
+                  {fresh.label}
+                </StatusPill>
+              );
+            })()}
+            {isBlending && (
+              <span className="shrink-0 text-2xs font-semibold text-primary bg-primary-soft border border-primary/60 px-1.5 py-0.5 rounded-full" data-testid={`blending-badge-${well.id}`}>Blending</span>
+            )}
+            {well.has_power_meter && isInSharedPowerGroup && (
+              <span className="shrink-0 inline-flex items-center gap-0.5 text-2xs font-semibold text-warn bg-warn-soft/80 border border-warn/60 px-1.5 py-0.5 rounded-full">
+                <Zap className="h-2.5 w-2.5" />Shared
+              </span>
+            )}
+            {editingId && (
+              <span className="shrink-0 text-2xs font-bold uppercase tracking-widest text-primary bg-primary-soft px-1.5 py-0.5 rounded">Editing</span>
+            )}
+          </div>
+
+          {/* Mobile-only right action buttons beside title */}
+          <div className="flex sm:hidden items-center gap-1 shrink-0">
+            <span className={`text-2xs tabular-nums font-semibold px-2 py-0.5 rounded-full border ${atLimit ? 'text-warn bg-warn-soft border-warn' : 'text-muted-foreground bg-muted border-transparent'}`}>
+              {todayCount}/{WELL_MAX_READINGS_PER_DAY}
+            </span>
+            {lastToday && !editingId && (
+              <button
+                onClick={() => {
+                  setEditingId(lastToday.id);
+                  setReading(String(lastToday.current_reading ?? ''));
+                  setPowerReading(lastToday.power_meter_reading != null ? String(lastToday.power_meter_reading) : '');
+                  setTdsReading(lastToday.tds_ppm != null ? String(lastToday.tds_ppm) : '');
+                  setNtuReading((lastToday as any).turbidity_ntu != null ? String((lastToday as any).turbidity_ntu) : '');
+                  setPressureReading(lastToday.pressure_psi != null ? String(lastToday.pressure_psi) : '');
+                }}
+                title={`Edit last today reading (${fmtNum(lastToday.current_reading)})`}
+                aria-label={`Edit last today reading (${fmtNum(lastToday.current_reading)})`}
+                className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
+                <Pencil className="h-4 w-4" />
+              </button>
+            )}
+            {editingId && (
+              <button onClick={() => { setEditingId(null); setReading(''); setPowerReading(''); setTdsReading(''); setNtuReading(''); setPressureReading(''); }}
+                title="Cancel edit"
+                aria-label="Cancel edit"
+                className="p-1 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors">
+                <X className="h-4 w-4" />
+              </button>
+            )}
+            {isManagerOrAdmin && (
+              <button onClick={() => setShowHistory(true)} title="View reading history" aria-label="View reading history"
+                className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
+                <History className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Second row on mobile / Right side on desktop */}
+        <div className="flex items-center justify-between sm:justify-end gap-2 shrink-0 pt-1.5 sm:pt-0 border-t border-border/40 sm:border-t-0">
           <button
             type="button"
             onClick={() => navigate(`/plants/${plantId}?tab=wells&highlight=${well.id}`)}
             title="Open this well in Plant detail"
             aria-label="Open this well in Plant detail"
-            className="shrink-0 inline-flex items-center gap-0.5 text-2xs font-medium text-muted-foreground hover:text-foreground bg-muted hover:bg-muted/80 px-1.5 py-0.5 rounded-full transition-colors"
+            className="shrink-0 inline-flex items-center gap-1 text-2xs font-medium text-muted-foreground hover:text-foreground bg-muted/80 hover:bg-muted px-2 py-1 rounded-md transition-colors"
           >
-            <ArrowUpRight className="h-2.5 w-2.5" />
+            <ArrowUpRight className="h-3 w-3" />
             Plant detail
           </button>
-          {isBlending && (
-            <span className="shrink-0 text-2xs font-semibold text-primary bg-primary-soft border border-primary/60 px-1.5 py-0.5 rounded-full" data-testid={`blending-badge-${well.id}`}>Blending</span>
-          )}
-          {well.has_power_meter && isInSharedPowerGroup && (
-            <span className="shrink-0 inline-flex items-center gap-0.5 text-2xs font-semibold text-warn bg-warn-soft/80 border border-warn/60 px-1.5 py-0.5 rounded-full">
-              <Zap className="h-2.5 w-2.5" />Shared
-            </span>
-          )}
-          {editingId && (
-            <span className="shrink-0 text-2xs font-bold uppercase tracking-widest text-primary bg-primary-soft px-1.5 py-0.5 rounded">Editing</span>
-          )}
-        </div>
 
-        {/* Right: count · delta · date · icons */}
-        <div className="flex items-center gap-1.5 shrink-0">
-          <span className={`text-2xs tabular-nums font-medium px-1.5 py-0.5 rounded-full border ${atLimit ? 'text-warn bg-warn-soft border-warn' : 'text-muted-foreground bg-muted border-transparent'}`}>
-            {todayCount}/{WELL_MAX_READINGS_PER_DAY}
-          </span>
-          {todayCount === 0 && !editingId && (
-            gapReason ? (
-              <button
-                type="button"
-                onClick={() => setGapDialogOpen(true)}
-                title={`No reading — ${reasonCategoryLabel(gapReason.reason_category)}${gapReason.reason_detail ? ': ' + gapReason.reason_detail : ''} (click to edit)`}
-                className="shrink-0 inline-flex items-center gap-0.5 text-2xs font-medium text-warn bg-warn-soft border border-warn px-1.5 py-0.5 rounded-full hover:bg-warn-soft transition-colors"
-                data-testid={`well-gap-reason-badge-${well.id}`}
-              >
-                <MessageCircleOff className="h-2.5 w-2.5" />
-                {reasonCategoryLabel(gapReason.reason_category)}
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={() => setGapDialogOpen(true)}
-                title="No reading today — log why"
-                aria-label="No reading today — log why"
-                className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-                data-testid={`well-gap-reason-btn-${well.id}`}
-              >
-                <MessageCircleOff className="h-3.5 w-3.5" />
-              </button>
-            )
-          )}
-          {dailyVol != null && (
-            <span className="text-2xs font-semibold text-primary tabular-nums">Δ{fmtNum(dailyVol)}</span>
-          )}
-          {/* Date picker — hidden native input behind styled label */}
-          <label className="cursor-pointer relative shrink-0">
-            <span
-              className="inline-flex items-center gap-1.5 text-xs text-muted-foreground bg-background border border-border/70 rounded px-3 py-1 font-mono-num whitespace-nowrap hover:bg-muted/50 transition-colors peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-ring peer-focus-visible:outline-offset-2"
-              onClick={(e) => {
-                // A click landing inside the input's own box only focuses it
-                // in most browsers — it won't open the calendar overlay.
-                // Request it explicitly so the badge is reliably editable.
-                e.preventDefault();
-                const el = dtInputRef.current;
-                if (!el) return;
-                if (typeof el.showPicker === 'function') {
-                  try { el.showPicker(); } catch { el.focus(); }
-                } else {
-                  el.focus();
-                }
-              }}
-            >
-              {new Date(customDt).toLocaleString([], { month: '2-digit', day: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
-              <CalendarClock className="h-3 w-3 shrink-0 opacity-70" />
+          <div className="flex items-center gap-1.5">
+            {/* Desktop reading counter */}
+            <span className={`hidden sm:inline-block text-2xs tabular-nums font-semibold px-2 py-0.5 rounded-full border ${atLimit ? 'text-warn bg-warn-soft border-warn' : 'text-muted-foreground bg-muted border-transparent'}`}>
+              {todayCount}/{WELL_MAX_READINGS_PER_DAY}
             </span>
-            <input ref={dtInputRef} type="datetime-local" value={customDt} onChange={e => setCustomDt(e.target.value)}
-              className="peer absolute inset-0 opacity-0 w-full h-full pointer-events-none" title="Reading date & time" />
-          </label>
-          {/* Edit today's record */}
-          {lastToday && !editingId && (
-            <button
-              onClick={() => {
-                setEditingId(lastToday.id);
-                setReading(String(lastToday.current_reading ?? ''));
-                setPowerReading(lastToday.power_meter_reading != null ? String(lastToday.power_meter_reading) : '');
-                setTdsReading(lastToday.tds_ppm != null ? String(lastToday.tds_ppm) : '');
-                setNtuReading((lastToday as any).turbidity_ntu != null ? String((lastToday as any).turbidity_ntu) : '');
-                setPressureReading(lastToday.pressure_psi != null ? String(lastToday.pressure_psi) : '');
-              }}
-              title={`Edit last today reading (${fmtNum(lastToday.current_reading)})`}
-              aria-label={`Edit last today reading (${fmtNum(lastToday.current_reading)})`}
-              className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
-              <Pencil className="h-3.5 w-3.5" />
-            </button>
-          )}
-          {editingId && (
-            <button onClick={() => { setEditingId(null); setReading(''); setPowerReading(''); setTdsReading(''); setNtuReading(''); setPressureReading(''); }}
-              title="Cancel edit"
-              aria-label="Cancel edit"
-              className="p-1 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors">
-              <X className="h-3.5 w-3.5" />
-            </button>
-          )}
-          {isManagerOrAdmin && (
-            <button onClick={() => setShowHistory(true)} title="View reading history" aria-label="View reading history"
-              className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
-              <History className="h-3.5 w-3.5" />
-            </button>
-          )}
+
+            {todayCount === 0 && !editingId && (
+              gapReason ? (
+                <button
+                  type="button"
+                  onClick={() => setGapDialogOpen(true)}
+                  title={`No reading — ${reasonCategoryLabel(gapReason.reason_category)}${gapReason.reason_detail ? ': ' + gapReason.reason_detail : ''} (click to edit)`}
+                  className="shrink-0 inline-flex items-center gap-0.5 text-2xs font-medium text-warn bg-warn-soft border border-warn px-2 py-0.5 rounded-full hover:bg-warn-soft transition-colors"
+                  data-testid={`well-gap-reason-badge-${well.id}`}
+                >
+                  <MessageCircleOff className="h-2.5 w-2.5" />
+                  {reasonCategoryLabel(gapReason.reason_category)}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setGapDialogOpen(true)}
+                  title="No reading today — log why"
+                  aria-label="No reading today — log why"
+                  className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                  data-testid={`well-gap-reason-btn-${well.id}`}
+                >
+                  <MessageCircleOff className="h-3.5 w-3.5" />
+                </button>
+              )
+            )}
+
+            {dailyVol != null && (
+              <span className="text-2xs font-semibold text-primary tabular-nums bg-primary-soft/60 px-1.5 py-0.5 rounded border border-primary/20">
+                Δ{fmtNum(dailyVol)}
+              </span>
+            )}
+
+            {/* Date picker — hidden native input behind styled label */}
+            <label className="cursor-pointer relative shrink-0">
+              <span
+                className="inline-flex items-center gap-1.5 text-xs text-muted-foreground bg-background border border-border/70 rounded-md px-2.5 py-1 font-mono-num whitespace-nowrap hover:bg-muted/50 transition-colors shadow-2xs"
+                onClick={(e) => {
+                  e.preventDefault();
+                  const el = dtInputRef.current;
+                  if (!el) return;
+                  if (typeof el.showPicker === 'function') {
+                    try { el.showPicker(); } catch { el.focus(); }
+                  } else {
+                    el.focus();
+                  }
+                }}
+              >
+                {new Date(customDt).toLocaleString([], { month: '2-digit', day: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                <CalendarClock className="h-3 w-3 shrink-0 opacity-70" />
+              </span>
+              <input ref={dtInputRef} type="datetime-local" value={customDt} onChange={e => setCustomDt(e.target.value)}
+                className="peer absolute inset-0 opacity-0 w-full h-full pointer-events-none" title="Reading date & time" />
+            </label>
+
+            {/* Desktop edit & history buttons */}
+            {lastToday && !editingId && (
+              <button
+                onClick={() => {
+                  setEditingId(lastToday.id);
+                  setReading(String(lastToday.current_reading ?? ''));
+                  setPowerReading(lastToday.power_meter_reading != null ? String(lastToday.power_meter_reading) : '');
+                  setTdsReading(lastToday.tds_ppm != null ? String(lastToday.tds_ppm) : '');
+                  setNtuReading((lastToday as any).turbidity_ntu != null ? String((lastToday as any).turbidity_ntu) : '');
+                  setPressureReading(lastToday.pressure_psi != null ? String(lastToday.pressure_psi) : '');
+                }}
+                title={`Edit last today reading (${fmtNum(lastToday.current_reading)})`}
+                aria-label={`Edit last today reading (${fmtNum(lastToday.current_reading)})`}
+                className="hidden sm:inline-flex p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
+                <Pencil className="h-3.5 w-3.5" />
+              </button>
+            )}
+            {editingId && (
+              <button onClick={() => { setEditingId(null); setReading(''); setPowerReading(''); setTdsReading(''); setNtuReading(''); setPressureReading(''); }}
+                title="Cancel edit"
+                aria-label="Cancel edit"
+                className="hidden sm:inline-flex p-1.5 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors">
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+            {isManagerOrAdmin && (
+              <button onClick={() => setShowHistory(true)} title="View reading history" aria-label="View reading history"
+                className="hidden sm:inline-flex p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
+                <History className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
       {/* ── Body: two-column grid ── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2">
+      <div className="grid grid-cols-1 sm:grid-cols-2 divide-y sm:divide-y-0 sm:divide-x divide-border/50">
 
         {/* LEFT column: Water Meter + optional Grid/Power Meter */}
-        <div className="px-3 py-2 space-y-2 border-b border-border/40 sm:border-b-0">
+        <div className="px-3.5 py-3 space-y-2.5">
 
           {/* Water Meter Reading — odometer drum on mobile, compact input on desktop */}
           {isMobile ? (
-            <div className="space-y-1.5">
-              <p className="text-2xs font-medium text-muted-foreground">Water Meter</p>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-bold text-foreground">Water Meter</p>
+                <span className="text-3xs text-muted-foreground">Swipe digits or tap Type</span>
+              </div>
               <OdometerRollerInput
                 value={reading}
                 onChange={(v) => { setReading(v); setDraftWell({ value: v }); }}
@@ -1124,49 +1173,47 @@ function WellRow({
                 testId={`well-meter-input-${well.id}`}
               />
               {/* prev + delta info row */}
-              <div className="flex items-center justify-between text-xs px-0.5">
-                <span className="text-muted-foreground">
-                  prev: <span className="font-mono-num text-foreground/80">
+              <div className="flex items-center justify-between text-xs px-1 py-0.5 rounded-md bg-muted/40 border border-border/40">
+                <span className="text-muted-foreground text-2xs">
+                  prev: <span className="font-mono-num font-semibold text-foreground">
                     {previousMeter != null ? fmtNum(previousMeter) : '—'}
                   </span>
                 </span>
                 {dailyVol != null && (
-                  <span className="font-mono-num font-semibold text-primary">
+                  <span className="font-mono-num font-bold text-primary text-2xs">
                     Δ {fmtNum(dailyVol)} m³
                   </span>
                 )}
               </div>
               <Button
                 onClick={save} disabled={saving || !meterChanged || atLimit || anomalyRemarkRequired}
-                className="w-full h-10 text-sm bg-primary hover:bg-primary/90 active:bg-primary text-primary-foreground shadow-sm"
+                className="w-full h-11 text-sm font-bold bg-primary hover:bg-primary/90 active:bg-primary text-primary-foreground shadow-sm rounded-xl"
                 title="Save water meter reading">
-                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : editingId ? 'Update' : 'Save'}
+                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : editingId ? 'Update Meter' : 'Save Water Meter'}
               </Button>
             </div>
           ) : (
-            <div className="flex items-center gap-1.5">
-              <p className="text-2xs font-medium text-muted-foreground w-24 shrink-0">Water Meter</p>
+            <div className="flex items-center gap-2">
+              <p className="text-2xs font-bold text-muted-foreground w-24 shrink-0">Water Meter</p>
               <Input
                 type="number" step="any" inputMode="decimal"
                 value={reading} onChange={e => setReading(e.target.value)}
                 placeholder={previousMeter != null ? `Prev: ${fmtNum(previousMeter)}` : 'Enter reading'}
-                className="h-7 flex-1 min-w-0 text-xs border-border/70 bg-background focus-visible:ring-ring/30 placeholder:text-muted-foreground/50"
+                className="h-8 flex-1 min-w-0 text-xs border-border/70 bg-background focus-visible:ring-ring/30 font-mono-num placeholder:text-muted-foreground/50"
                 data-testid={`well-meter-input-${well.id}`}
               />
               <Button
                 onClick={save} disabled={saving || !meterChanged || atLimit || anomalyRemarkRequired}
                 size="sm"
-                className="h-7 px-2.5 shrink-0 bg-primary hover:bg-primary/90 active:bg-primary text-primary-foreground text-xs shadow-sm"
+                className="h-8 px-3.5 shrink-0 bg-primary hover:bg-primary/90 active:bg-primary text-primary-foreground text-xs font-semibold shadow-sm"
                 title="Save water meter reading">
-                {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : editingId ? 'Update' : 'Save'}
+                {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : editingId ? 'Update' : 'Save'}
               </Button>
             </div>
           )}
 
-          {/* Meter replaced — two-way: live here at entry time, and also from
-              Reading History for post-hoc corrections. Opens the same required
-              ReplaceMeterDialog (old final reading, new initial reading, date). */}
-          <label className="flex items-center gap-1.5 text-2xs text-muted-foreground cursor-pointer select-none">
+          {/* Meter replaced */}
+          <label className="flex items-center gap-2 text-2xs text-muted-foreground cursor-pointer select-none pt-1">
             <Checkbox
               checked={!!meterReplacePending}
               onCheckedChange={(v) => {
@@ -1174,50 +1221,50 @@ function WellRow({
                 else setMeterReplacePending(null);
               }}
             />
-            Meter replaced
-            {meterReplacePending && <span className="text-primary font-medium">— logged</span>}
+            <span>Meter replaced</span>
+            {meterReplacePending && <span className="text-primary font-bold">— logged</span>}
           </label>
 
-          {/* Grid / Dedicated Power Meter — only for wells with a power meter not in a shared group */}
+          {/* Grid / Dedicated Power Meter */}
           {showDedicatedPower && (
-            <div className="flex items-center gap-1.5">
-              <p className="text-2xs font-medium text-muted-foreground w-24 shrink-0 flex items-center gap-0.5">
-                <Zap className="h-2.5 w-2.5 text-warn" />Grid Meter
+            <div className="flex items-center gap-2 pt-1 border-t border-border/40">
+              <p className="text-2xs font-bold text-muted-foreground w-24 shrink-0 flex items-center gap-1">
+                <Zap className="h-3 w-3 text-warn" />Grid Meter
               </p>
               <Input
                 type="number" step="any" inputMode="decimal"
                 value={powerReading} onChange={e => setPowerReading(e.target.value)}
                 placeholder={previousPower != null ? `Prev: ${fmtNum(previousPower)}` : 'kWh reading'}
-                className="h-7 flex-1 min-w-0 text-xs border-warn/80 bg-warn-soft/30 focus-visible:ring-warn/30 placeholder:text-muted-foreground/50"
+                className="h-8 sm:h-7 flex-1 min-w-0 text-xs border-warn/60 bg-warn-soft/30 font-mono-num focus-visible:ring-warn/30 placeholder:text-muted-foreground/50"
                 data-testid={`well-power-input-${well.id}`}
               />
               <Button
                 onClick={savePower} disabled={savingPower || !powerReading}
                 size="sm"
-                className="h-7 px-2.5 shrink-0 bg-warn hover:bg-warn/90 text-white text-xs shadow-sm border-0"
+                className="h-8 sm:h-7 px-3 shrink-0 bg-warn hover:bg-warn/90 text-white text-xs font-semibold shadow-sm border-0"
                 title="Save power meter reading">
                 {savingPower ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Save'}
               </Button>
             </div>
           )}
 
-          {/* Shared Power Meter — shown only on the last well of the group */}
+          {/* Shared Power Meter */}
           {sharedPower && (
-            <div className="flex items-center gap-1.5">
-              <p className="text-2xs font-medium text-muted-foreground w-24 shrink-0 flex items-center gap-0.5">
-                <Zap className="h-2.5 w-2.5 text-warn" />Shared Power
+            <div className="flex items-center gap-2 pt-1 border-t border-border/40">
+              <p className="text-2xs font-bold text-muted-foreground w-24 shrink-0 flex items-center gap-1">
+                <Zap className="h-3 w-3 text-warn" />Shared Power
               </p>
               <Input
                 type="number" step="any" inputMode="decimal"
                 value={sharedPowerReading} onChange={e => setSharedPowerReading(e.target.value)}
                 placeholder={sharedPower.previousPower != null ? `Prev: ${fmtNum(sharedPower.previousPower)}` : 'kWh reading'}
-                className="h-7 flex-1 min-w-0 text-xs border-warn/80 bg-warn-soft/30 focus-visible:ring-warn/30 placeholder:text-muted-foreground/50"
+                className="h-8 sm:h-7 flex-1 min-w-0 text-xs border-warn/60 bg-warn-soft/30 font-mono-num focus-visible:ring-warn/30 placeholder:text-muted-foreground/50"
                 data-testid={`shared-power-input-${sharedPower.primaryWellId}`}
               />
               <Button
                 onClick={saveSharedPower} disabled={savingSharedPower || !sharedPowerReading}
                 size="sm"
-                className="h-7 px-2.5 shrink-0 bg-warn hover:bg-warn/90 text-white text-xs shadow-sm border-0"
+                className="h-8 sm:h-7 px-3 shrink-0 bg-warn hover:bg-warn/90 text-white text-xs font-semibold shadow-sm border-0"
                 title="Save shared power meter reading">
                 {savingSharedPower ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Save'}
               </Button>
@@ -1225,63 +1272,75 @@ function WellRow({
           )}
         </div>
 
-        {/* RIGHT column: TDS + Pressure */}
-        <div className="px-3 py-2 space-y-2">
+        {/* RIGHT column: TDS + Turbidity (NTU) + Pressure */}
+        <div className="px-3.5 py-3 space-y-2.5 bg-muted/10 sm:bg-transparent">
+          <p className="text-3xs font-bold uppercase tracking-wider text-muted-foreground sm:hidden">
+            Water Quality &amp; Pressure Telemetry
+          </p>
 
           {/* TDS */}
-          <div className="flex items-center gap-1.5">
-            <p className="text-2xs font-medium text-muted-foreground w-16 shrink-0">TDS</p>
-            <Input
-              type="number" step="any" inputMode="decimal"
-              value={tdsReading} onChange={e => setTdsReading(e.target.value)}
-              placeholder="ppm"
-              className="h-7 flex-1 min-w-0 text-xs border-border/70 bg-background focus-visible:ring-ring/20 placeholder:text-muted-foreground/40"
-              data-testid={`well-tds-input-${well.id}`}
-            />
+          <div className="flex items-center gap-2">
+            <p className="text-2xs font-bold text-muted-foreground w-16 shrink-0">TDS</p>
+            <div className="relative flex-1 min-w-0">
+              <Input
+                type="number" step="any" inputMode="decimal"
+                value={tdsReading} onChange={e => setTdsReading(e.target.value)}
+                placeholder="Enter TDS"
+                className="h-8 sm:h-7 text-xs pr-10 border-border/70 bg-background focus-visible:ring-ring/20 font-mono-num placeholder:text-muted-foreground/40"
+                data-testid={`well-tds-input-${well.id}`}
+              />
+              <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-3xs font-semibold text-muted-foreground pointer-events-none">ppm</span>
+            </div>
             <Button
               onClick={saveTds} disabled={savingTds || !tdsReading}
               size="sm" variant="outline"
-              className="h-7 px-2.5 shrink-0 text-xs border-border/70"
+              className="h-8 sm:h-7 px-3 text-xs shrink-0 font-semibold border-border/70"
               title="Save TDS reading">
-              {savingTds ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Save'}
+              {savingTds ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Save'}
             </Button>
           </div>
 
           {/* Turbidity (NTU) */}
-          <div className="flex items-center gap-1.5">
-            <p className="text-2xs font-medium text-muted-foreground w-16 shrink-0">NTU</p>
-            <Input
-              type="number" step="any" inputMode="decimal"
-              value={ntuReading} onChange={e => setNtuReading(e.target.value)}
-              placeholder="NTU"
-              className="h-7 flex-1 min-w-0 text-xs border-border/70 bg-background focus-visible:ring-ring/20 placeholder:text-muted-foreground/40"
-              data-testid={`well-ntu-input-${well.id}`}
-            />
+          <div className="flex items-center gap-2">
+            <p className="text-2xs font-bold text-muted-foreground w-16 shrink-0">NTU</p>
+            <div className="relative flex-1 min-w-0">
+              <Input
+                type="number" step="any" inputMode="decimal"
+                value={ntuReading} onChange={e => setNtuReading(e.target.value)}
+                placeholder="Enter NTU"
+                className="h-8 sm:h-7 text-xs pr-10 border-border/70 bg-background focus-visible:ring-ring/20 font-mono-num placeholder:text-muted-foreground/40"
+                data-testid={`well-ntu-input-${well.id}`}
+              />
+              <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-3xs font-semibold text-muted-foreground pointer-events-none">NTU</span>
+            </div>
             <Button
               onClick={saveNtu} disabled={savingNtu || !ntuReading}
               size="sm" variant="outline"
-              className="h-7 px-2.5 shrink-0 text-xs border-border/70"
+              className="h-8 sm:h-7 px-3 text-xs shrink-0 font-semibold border-border/70"
               title="Save turbidity (NTU) reading">
-              {savingNtu ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Save'}
+              {savingNtu ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Save'}
             </Button>
           </div>
 
           {/* Pressure */}
-          <div className="flex items-center gap-1.5">
-            <p className="text-2xs font-medium text-muted-foreground w-16 shrink-0">Pressure</p>
-            <Input
-              type="number" step="any" inputMode="decimal"
-              value={pressureReading} onChange={e => setPressureReading(e.target.value)}
-              placeholder="psi"
-              className="h-7 flex-1 min-w-0 text-xs border-border/70 bg-background focus-visible:ring-ring/20 placeholder:text-muted-foreground/40"
-              data-testid={`well-pressure-input-${well.id}`}
-            />
+          <div className="flex items-center gap-2">
+            <p className="text-2xs font-bold text-muted-foreground w-16 shrink-0">Pressure</p>
+            <div className="relative flex-1 min-w-0">
+              <Input
+                type="number" step="any" inputMode="decimal"
+                value={pressureReading} onChange={e => setPressureReading(e.target.value)}
+                placeholder="Enter pressure"
+                className="h-8 sm:h-7 text-xs pr-10 border-border/70 bg-background focus-visible:ring-ring/20 font-mono-num placeholder:text-muted-foreground/40"
+                data-testid={`well-pressure-input-${well.id}`}
+              />
+              <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-3xs font-semibold text-muted-foreground pointer-events-none">psi</span>
+            </div>
             <Button
               onClick={savePressure} disabled={savingPressure || !pressureReading}
               size="sm" variant="outline"
-              className="h-7 px-2.5 shrink-0 text-xs border-border/70"
+              className="h-8 sm:h-7 px-3 text-xs shrink-0 font-semibold border-border/70"
               title="Save pressure reading">
-              {savingPressure ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Save'}
+              {savingPressure ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Save'}
             </Button>
           </div>
         </div>

@@ -22,7 +22,7 @@ import { findExistingReading } from '@/lib/duplicateCheck';
 import { downloadCSV } from '@/lib/csv';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
-import { MapPin, Pencil, X, Droplet, Zap, Upload, Download, FileText, AlertCircle, Loader2, History, Gauge, FlaskConical, Keyboard, CheckCircle2, AlertTriangle, XCircle } from 'lucide-react';
+import { MapPin, Pencil, X, Droplet, Zap, Upload, Download, FileText, AlertCircle, Loader2, History, Gauge, FlaskConical, Keyboard, CheckCircle2, AlertTriangle, XCircle, ChevronLeft, ChevronRight } from 'lucide-react';
 
 // High-voltage transmission tower icon — matches Plants.tsx grid icon exactly.
 
@@ -491,24 +491,33 @@ export function MobileCarousel({
   return (
     <div>
       {/* Navigation bar */}
-      <div className="flex items-center justify-between px-4 py-2 border-b bg-muted/20">
-        {headerLeft ?? <span />}
-        <div className="flex items-center gap-2">
+      <div className="flex items-center justify-between px-3.5 py-2 border-b bg-muted/20">
+        {headerLeft ?? (
+          <div className="flex items-center gap-1.5 text-xs font-bold text-foreground">
+            <span>Item</span>
+            <span className="text-3xs text-muted-foreground font-normal">({clampedIdx + 1} of {items.length})</span>
+          </div>
+        )}
+        <div className="flex items-center gap-1.5 bg-muted/60 p-0.5 rounded-full border border-border/50">
           <button
             onClick={prev}
             disabled={clampedIdx === 0}
-            className="w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-30 disabled:cursor-default transition-colors"
+            className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-foreground hover:bg-card disabled:opacity-30 disabled:cursor-default transition-colors shadow-2xs"
             aria-label="Previous"
-          >‹</button>
-          <span className="text-xs font-semibold text-muted-foreground tabular-nums min-w-[32px] text-center">
+          >
+            <ChevronLeft className="h-3.5 w-3.5" />
+          </button>
+          <span className="text-xs font-bold text-foreground font-mono-num px-2 text-center min-w-[44px]">
             {clampedIdx + 1} / {items.length}
           </span>
           <button
             onClick={next}
             disabled={clampedIdx === items.length - 1}
-            className="w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-30 disabled:cursor-default transition-colors"
+            className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-foreground hover:bg-card disabled:opacity-30 disabled:cursor-default transition-colors shadow-2xs"
             aria-label="Next"
-          >›</button>
+          >
+            <ChevronRight className="h-3.5 w-3.5" />
+          </button>
         </div>
       </div>
       {/* Swipeable item */}
