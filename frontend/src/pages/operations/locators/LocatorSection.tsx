@@ -30,6 +30,7 @@ import { MapPin, Pencil, X, Droplet, Zap, Upload, Download, FileText, AlertCircl
 import { DerivedMeterIcon } from '@/components/icons/water-icons';
 import { MetaStrip } from '@/components/operations/MetaStrip';
 import { ControlCluster } from '@/components/operations/ControlCluster';
+import { cn } from '@/lib/utils';
 
 // High-voltage transmission tower icon — matches Plants.tsx grid icon exactly.
 

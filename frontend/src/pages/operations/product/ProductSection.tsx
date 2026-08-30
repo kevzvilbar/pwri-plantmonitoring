@@ -24,6 +24,7 @@ import { findExistingReading } from '@/lib/duplicateCheck';
 import { downloadCSV } from '@/lib/csv';
 import { toast } from 'sonner';
 import { friendlyError } from '@/lib/supabaseErrors';
+import { format } from 'date-fns';
 import { MapPin, Pencil, X, Droplet, Zap, Upload, Download, FileText, AlertCircle, Loader2, History, Gauge, FlaskConical, Keyboard, CalendarClock, ArrowUpRight, Lock, SquarePen } from 'lucide-react';
 import { MetaStrip } from '@/components/operations/MetaStrip';
 import { ControlCluster } from '@/components/operations/ControlCluster';

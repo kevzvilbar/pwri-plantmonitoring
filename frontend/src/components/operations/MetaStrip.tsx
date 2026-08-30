@@ -10,7 +10,7 @@ import {
 import { cn } from '@/lib/utils';
 
 export interface MetaAlert {
-  tone?: 'default' | 'accent' | 'warn' | 'danger' | 'info' | 'highlight';
+  tone?: 'default' | 'primary' | 'accent' | 'success' | 'good' | 'warn' | 'danger' | 'info' | 'highlight' | string;
   icon?: React.ComponentType<{ className?: string }>;
   label: React.ReactNode;
   className?: string;
