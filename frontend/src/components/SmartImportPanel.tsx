@@ -17,7 +17,6 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
-import { StatCard } from '@/components/dashboard/StatCard';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
@@ -1054,32 +1053,6 @@ export default function SmartImportPanel() {
         </div>
       </div>
 
-      {/* ── Executive Studio Strip ── */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <StatCard
-          icon={Layers}
-          label="Supported Schemas"
-          value="11 Data Types"
-        />
-        <StatCard
-          icon={Building2}
-          label="Target Plant"
-          value={plantId ? selectedPlantName : 'Required'}
-          tone={plantId ? 'accent' : 'warn'}
-        />
-        <StatCard
-          icon={CheckCircle2}
-          label="Parsed Records"
-          value={parsedRows.length > 0 ? `${validCount} Valid / ${parsedRows.length} Total` : '0 Uploaded'}
-          tone={invalidCount > 0 ? 'warn' : undefined}
-        />
-        <StatCard
-          icon={Activity}
-          label="Import Pipeline Status"
-          value={status === 'importing' ? 'Syncing...' : status === 'done' ? 'Sync Complete' : status === 'preview' ? 'Ready to Sync' : 'Awaiting CSV'}
-          tone={status === 'done' ? 'accent' : undefined}
-        />
-      </div>
 
 
       {/* 4-Step Guided Wizard Bar */}

@@ -375,55 +375,6 @@ export default function DataAnalysis() {
         }
       />
 
-      {/* 4-KPI Metric Strip */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <Card className="p-3 space-y-0.5">
-          <span className="text-2xs uppercase tracking-wider font-medium text-muted-foreground">Target Metric</span>
-          <p className="font-mono font-semibold text-xs sm:text-sm text-foreground truncate">{column}</p>
-          <span className="text-2xs text-muted-foreground truncate block">{TABLE_LABELS[sourceTable] ?? sourceTable}</span>
-        </Card>
-
-        <Card className="p-3 space-y-0.5">
-          <span className="text-2xs uppercase tracking-wider font-medium text-muted-foreground">Outliers Flagged</span>
-          <div className="flex items-center gap-1.5">
-            <span className="font-semibold text-xs sm:text-sm text-danger font-numeral tabular-nums">
-              {totalOutliers} Total
-            </span>
-            {pendingCount > 0 && (
-              <Badge variant="outline" className="text-3xs px-1.5 py-0 border-warn text-warn">
-                {pendingCount} new
-              </Badge>
-            )}
-          </div>
-          <span className="text-2xs text-muted-foreground">Across recent runs</span>
-        </Card>
-
-        <Card className="p-3 space-y-0.5">
-          <span className="text-2xs uppercase tracking-wider font-medium text-muted-foreground">Latest Model Fit (R²)</span>
-          <div className="flex items-center gap-1.5">
-            <span className="font-semibold text-xs sm:text-sm text-foreground font-numeral tabular-nums">
-              {latestRun?.r_squared != null ? `R² = ${latestRun.r_squared.toFixed(4)}` : '—'}
-            </span>
-            {latestRun?.r_squared != null && (
-              <Badge variant="secondary" className="text-3xs px-1 py-0 font-normal">
-                {latestRun.r_squared > 0.90 ? 'Excellent' : latestRun.r_squared > 0.75 ? 'Good' : 'Moderate'}
-              </Badge>
-            )}
-          </div>
-          <span className="text-2xs text-muted-foreground">Linear goodness of fit</span>
-        </Card>
-
-        <Card className="p-3 space-y-0.5">
-          <span className="text-2xs uppercase tracking-wider font-medium text-muted-foreground">Scope Facility</span>
-          <p className="font-semibold text-xs sm:text-sm text-foreground truncate">
-            {plantId === 'all' ? 'All Plants' : plants.find(p => p.id === plantId)?.name ?? plantId}
-          </p>
-          <span className="text-2xs text-muted-foreground font-mono truncate block">
-            {entityId === 'all' ? 'Entire Subsystem' : `Entity: ${entityId.slice(0, 8)}…`}
-          </span>
-        </Card>
-      </div>
-
       {/* ── 2. QUICK SOURCE TABLES SELECTOR ── */}
       <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
         {Object.entries(TABLE_LABELS).map(([k, label]) => {

@@ -5,11 +5,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAppStore } from '@/store/appStore';
 import { usePlants } from '@/hooks/usePlants';
 import { Button } from '@/components/ui/button';
-import { StatCard } from '@/components/dashboard/StatCard';
 import {
   MapPin, Droplet, Zap, Upload, Download, ClipboardCheck,
-  Waves, FlaskConical, Activity, Building2, Layers,
-  Clock, ShieldCheck,
   Waves, Layers, Clock,
 } from 'lucide-react';
 
@@ -155,31 +152,6 @@ export default function Operations() {
         }
       />
 
-      {/* ── Executive Operational KPI Strip ── */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <StatCard
-          icon={Building2}
-          label="Active Plant Facility"
-          value={activePlant?.name ?? 'Global Fleet'}
-          tone={activePlant ? 'accent' : undefined}
-        />
-        <StatCard
-          icon={MapPin}
-          label="Distribution Network"
-          value={`${locatorCount} Locators`}
-        />
-        <StatCard
-          icon={Droplet}
-          label="Raw Water Extraction"
-          value={`${wellCount} Active Wells`}
-        />
-        <StatCard
-          icon={ShieldCheck}
-          label="Telemetry Validation"
-          value="Guard Active"
-          tone="accent"
-        />
-      </div>
 
 
       {/* ── Quick Jump Utility Ribbon ── */}

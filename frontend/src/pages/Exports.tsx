@@ -22,7 +22,6 @@ import { friendlyError } from '@/lib/supabaseErrors';
 import { format, subDays } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
-import { StatCard } from '@/components/dashboard/StatCard';
 import { Checkbox } from '@/components/ui/checkbox';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -553,30 +552,6 @@ export default function Exports() {
         </div>
       </div>
 
-      {/* ── Executive Warehouse Strip ── */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <StatCard
-          icon={Layers}
-          label="Available Export Tables"
-          value={`${ALL_TABLES.length} Tables`}
-        />
-        <StatCard
-          icon={Building2}
-          label="Target Facility"
-          value={selectedPlantName}
-        />
-        <StatCard
-          icon={Activity}
-          label="Active Time Range"
-          value={activePreset ? `${activePreset} Days Horizon` : `${from} → ${to}`}
-        />
-        <StatCard
-          icon={CheckCircle2}
-          label="Selected Export Package"
-          value={selectedTableIds.size > 0 ? `${selectedTableIds.size} Selected` : 'Ready to Export'}
-          tone={selectedTableIds.size > 0 ? 'accent' : undefined}
-        />
-      </div>
 
 
       {/* Filters & Range Toolbar */}

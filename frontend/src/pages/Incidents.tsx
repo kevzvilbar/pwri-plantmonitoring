@@ -17,14 +17,12 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { StatusPill } from '@/components/StatusPill';
-import { StatCard } from '@/components/dashboard/StatCard';
 import { getCurrentPosition } from '@/lib/calculations';
 import { toast } from 'sonner';
 import { friendlyError } from '@/lib/supabaseErrors';
 import { format } from 'date-fns';
 import {
   ChevronDown, MapPin, Printer, AlertOctagon, ShieldAlert,
-  AlertTriangle, CheckCircle2, Building2, Search, Download,
   AlertTriangle, CheckCircle2, Search, Download,
   Flame, PlusCircle, History as HistoryIcon,
 } from 'lucide-react';
@@ -100,33 +98,6 @@ export default function Incidents() {
         </div>
       </div>
 
-      {/* ── Executive Incidents KPI Ribbon ── */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <StatCard
-          icon={Building2}
-          label="Active Plant Facility"
-          value={activePlant?.name ?? 'All Plants'}
-          tone={activePlant ? 'accent' : undefined}
-        />
-        <StatCard
-          icon={AlertOctagon}
-          label="Active Open Incidents"
-          value={`${openIncidents.length} Unresolved`}
-          tone={openIncidents.length > 0 ? 'warn' : undefined}
-        />
-        <StatCard
-          icon={Flame}
-          label="Critical / High Priority"
-          value={`${criticalHighCount} Urgent`}
-          tone={criticalHighCount > 0 ? 'danger' : 'accent'}
-        />
-        <StatCard
-          icon={CheckCircle2}
-          label="Resolved (30D)"
-          value={`${resolved30dCount} Cases`}
-          tone="accent"
-        />
-      </div>
 
 
       <Tabs value={tab} onValueChange={(v) => setTab(v as typeof tab)}>

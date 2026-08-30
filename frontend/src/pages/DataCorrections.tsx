@@ -41,7 +41,6 @@ import {
   Users, ArrowRight, Pencil, Search, ShieldAlert, Gauge,
   AlertTriangle, CheckSquare, FileText,
 } from 'lucide-react';
-import { StatCard } from '@/components/dashboard/StatCard';
 import { cn } from '@/lib/utils';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -1745,33 +1744,6 @@ export default function DataCorrections() {
         subtitle="Review flagged readings, approve operator requested corrections, retract errors, and track data quality in one place."
       />
 
-      {/* ── Summary Tiles ── */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <StatCard
-          icon={ClipboardCheck}
-          label="Pending Flagged Readings"
-          value={pendingCount.toLocaleString()}
-          tone={pendingCount > 0 ? 'warn' : undefined}
-        />
-        <StatCard
-          icon={CheckSquare}
-          label="Operator Requests Awaiting Approval"
-          value={corrReqsCount.toLocaleString()}
-          tone={corrReqsCount > 0 ? 'danger' : undefined}
-        />
-        <StatCard
-          icon={Inbox}
-          label="Active Backward Anomalies"
-          value={inboxCount.toLocaleString()}
-          tone={inboxCount > 0 ? 'warn' : undefined}
-        />
-        <StatCard
-          icon={CheckCircle2}
-          label="Review Pipeline Status"
-          value={pendingCount === 0 && corrReqsCount === 0 ? 'All Clear' : 'Action Required'}
-          tone={pendingCount === 0 && corrReqsCount === 0 ? 'accent' : 'warn'}
-        />
-      </div>
 
 
       <Tabs defaultValue="pending">

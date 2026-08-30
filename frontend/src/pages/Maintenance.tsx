@@ -15,13 +15,10 @@ import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { StatusPill } from '@/components/StatusPill';
-import { StatCard } from '@/components/dashboard/StatCard';
 import { toast } from 'sonner';
 import { friendlyError } from '@/lib/supabaseErrors';
 import { format } from 'date-fns';
 import {
-  ShieldCheck, Calendar, PlusCircle, ClipboardList, Search,
-  Download, Building2, Wrench, CheckCircle2, AlertTriangle, Filter,
   Calendar, PlusCircle, ClipboardList, Search,
   Download, Wrench, CheckCircle2, AlertTriangle, Filter,
 } from 'lucide-react';
@@ -74,31 +71,6 @@ export default function Maintenance() {
         </div>
       </div>
 
-      {/* ── Executive PMS KPI Ribbon ── */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <StatCard
-          icon={Building2}
-          label="Active Plant"
-          value={activePlant?.name ?? 'All Plants'}
-          tone={activePlant ? 'accent' : undefined}
-        />
-        <StatCard
-          icon={Wrench}
-          label="Active PMS Schedules"
-          value={`${templatesCount} Routines`}
-        />
-        <StatCard
-          icon={CheckCircle2}
-          label="Executions (30D)"
-          value={`${completed30dCount} Done`}
-          tone="accent"
-        />
-        <StatCard
-          icon={ShieldCheck}
-          label="Equipment Standard"
-          value="ISO/PWRI Compliant"
-        />
-      </div>
 
 
       <Tabs value={tab} onValueChange={(v) => setTab(v as typeof tab)}>

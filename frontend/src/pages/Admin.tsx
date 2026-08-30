@@ -8,7 +8,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { StatCard } from '@/components/dashboard/StatCard';
 import {
   ShieldAlert, Users, Building2, ClipboardList, Database,
   ClipboardCheck, ArrowRight, KeyRound, ShieldCheck, Download,
@@ -127,30 +126,6 @@ export default function Admin() {
         </div>
       </div>
 
-      {/* ── Executive Governance Strip ── */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <StatCard
-          icon={Users}
-          label="Registered Staff Profiles"
-          value={usersCount.toLocaleString()}
-        />
-        <StatCard
-          icon={Building2}
-          label="Monitored Facilities"
-          value={`${plants.length} Plants`}
-        />
-        <StatCard
-          icon={ClipboardList}
-          label="Security & Audit Events"
-          value={auditCount.toLocaleString()}
-        />
-        <StatCard
-          icon={ShieldCheck}
-          label="System Access Control"
-          value="RLS Enforced"
-          tone="accent"
-        />
-      </div>
 
 
       {/* Quick Navigation Utility Ribbon */}

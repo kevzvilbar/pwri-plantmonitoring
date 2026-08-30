@@ -20,7 +20,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { StatCard } from '@/components/dashboard/StatCard';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
@@ -1048,32 +1047,7 @@ export default function Compliance() {
         </div>
       </div>
 
-      {/* ── Executive Compliance Strip ── */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <StatCard
-          icon={ShieldCheck}
-          label="Fleet Compliance Index"
-          value={avgFleetScore !== null ? `${avgFleetScore}% · ${scoreLabel(avgFleetScore)}` : '—'}
-          tone={avgFleetScore !== null && avgFleetScore < 75 ? 'danger' : avgFleetScore !== null && avgFleetScore < 85 ? 'warn' : 'accent'}
-        />
-        <StatCard
-          icon={ShieldAlert}
-          label="Critical Violations Active"
-          value={totalCriticalViolations.toLocaleString()}
-          tone={totalCriticalViolations > 0 ? 'danger' : undefined}
-        />
-        <StatCard
-          icon={Beaker}
-          label="Chemical Supply Alerts"
-          value={totalChemWarnings.toLocaleString()}
-          tone={totalChemWarnings > 0 ? 'warn' : undefined}
-        />
-        <StatCard
-          icon={Building2}
-          label="Monitored Facilities"
-          value={`${plants?.length ?? 0} Plants`}
-        />
-      </div>
+
 
       {/* Controls Card */}
       <Card className="p-3 bg-muted/20 border-border/70">
