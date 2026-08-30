@@ -636,6 +636,110 @@
   --gradient-highlight: linear-gradient(135deg, hsl(273 89% 55%) 0%, hsl(210 96% 38%) 100%);
 }
 
+/* ── Theme: Titanium & Gold  (#0B0F19 · #334155 · #F59E0B) ─────────────────── */
+[data-theme="titanium-gold"] {
+  --primary:            215  25% 27%;   /* #334155 slate */
+  --primary-foreground: 0 0% 100%;
+  --primary-soft:       215  20% 92%;
+  --primary-glow:       38   92% 50%;
+  --ring:               38   92% 50%;
+
+  --topbar:             222  47%  8%;   /* #0B0F19 matte graphite */
+  --topbar-foreground:  210  20% 95%;
+  --topbar-muted:       215  15% 60%;
+
+  --sidebar-background: 222  47%  8%;
+  --sidebar-foreground: 210  20% 95%;
+  --sidebar-primary:    38   92% 50%;   /* #F59E0B champagne gold */
+  --sidebar-primary-foreground: 222 47% 8%;
+  --sidebar-accent:     217  33% 14%;
+  --sidebar-accent-foreground: 210 20% 95%;
+  --sidebar-border:     217  33% 16%;
+  --sidebar-ring:       38   92% 50%;
+
+  --gradient-stat:      linear-gradient(135deg, hsl(222 47% 8%) 0%, hsl(215 25% 22%) 100%);
+  --gradient-accent:    linear-gradient(135deg, hsl(215 25% 25%) 0%, hsl(38 92% 50%) 100%);
+  --gradient-highlight: linear-gradient(135deg, hsl(38 92% 50%) 0%, hsl(215 25% 25%) 100%);
+}
+
+/* ── Theme: Nordic Aurora  (#02141A · #059669 · #10B981) ──────────────────── */
+[data-theme="nordic-aurora"] {
+  --primary:            160  84% 39%;   /* #10B981 emerald */
+  --primary-foreground: 0 0% 100%;
+  --primary-soft:       160  60% 92%;
+  --primary-glow:       160  84% 45%;
+  --ring:               160  84% 39%;
+
+  --topbar:             198  80%  6%;   /* #02141A arctic fjord */
+  --topbar-foreground:  160  20% 95%;
+  --topbar-muted:       160  15% 60%;
+
+  --sidebar-background: 198  80%  6%;
+  --sidebar-foreground: 160  20% 95%;
+  --sidebar-primary:    160  84% 39%;
+  --sidebar-primary-foreground: 198 80% 6%;
+  --sidebar-accent:     198  50% 12%;
+  --sidebar-accent-foreground: 160 20% 95%;
+  --sidebar-border:     198  40% 14%;
+  --sidebar-ring:       160  84% 39%;
+
+  --gradient-stat:      linear-gradient(135deg, hsl(198 80% 6%) 0%, hsl(160 84% 20%) 100%);
+  --gradient-accent:    linear-gradient(135deg, hsl(160 84% 25%) 0%, hsl(175 80% 40%) 100%);
+  --gradient-highlight: linear-gradient(135deg, hsl(175 80% 40%) 0%, hsl(160 84% 25%) 100%);
+}
+
+/* ── Theme: Obsidian Rose  (#09090B · #E11D48 · #9333EA) ──────────────────── */
+[data-theme="obsidian-rose"] {
+  --primary:            347  77% 50%;   /* #E11D48 metallic rose */
+  --primary-foreground: 0 0% 100%;
+  --primary-soft:       347  60% 94%;
+  --primary-glow:       347  80% 60%;
+  --ring:               347  77% 50%;
+
+  --topbar:             240  10%  4%;   /* #09090B pitch obsidian */
+  --topbar-foreground:  340  20% 95%;
+  --topbar-muted:       340  10% 60%;
+
+  --sidebar-background: 240  10%  4%;
+  --sidebar-foreground: 340  20% 95%;
+  --sidebar-primary:    347  77% 50%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent:     240   8% 12%;
+  --sidebar-accent-foreground: 340 20% 95%;
+  --sidebar-border:     240   8% 15%;
+  --sidebar-ring:       347  77% 50%;
+
+  --gradient-stat:      linear-gradient(135deg, hsl(240 10% 4%) 0%, hsl(347 77% 24%) 100%);
+  --gradient-accent:    linear-gradient(135deg, hsl(347 77% 35%) 0%, hsl(270 70% 50%) 100%);
+  --gradient-highlight: linear-gradient(135deg, hsl(270 70% 50%) 0%, hsl(347 77% 35%) 100%);
+}
+
+/* ── Theme: Cyberpunk Amber  (#050505 · #2563EB · #EAB308) ────────────────── */
+[data-theme="cyberpunk-amber"] {
+  --primary:            45   93% 47%;   /* #EAB308 solar gold */
+  --primary-foreground: 0 0% 0%;
+  --primary-soft:       45   60% 92%;
+  --primary-glow:       45   93% 55%;
+  --ring:               45   93% 47%;
+
+  --topbar:             0    0%   3%;   /* #050505 OLED black */
+  --topbar-foreground:  45   20% 95%;
+  --topbar-muted:       45   15% 60%;
+
+  --sidebar-background: 0    0%   3%;
+  --sidebar-foreground: 45   20% 95%;
+  --sidebar-primary:    45   93% 47%;
+  --sidebar-primary-foreground: 0 0% 0%;
+  --sidebar-accent:     0    0%  10%;
+  --sidebar-accent-foreground: 45 20% 95%;
+  --sidebar-border:     0    0%  14%;
+  --sidebar-ring:       45   93% 47%;
+
+  --gradient-stat:      linear-gradient(135deg, hsl(0 0% 3%) 0%, hsl(217 91% 25%) 100%);
+  --gradient-accent:    linear-gradient(135deg, hsl(217 91% 35%) 0%, hsl(45 93% 47%) 100%);
+  --gradient-highlight: linear-gradient(135deg, hsl(45 93% 47%) 0%, hsl(217 91% 35%) 100%);
+}
+
 /* ════════════════════════════════════════════════════════════════════════════
    DARK MODE THEME ADAPTATIONS
    Guarantees that when dark mode is enabled, theme primary colors and tints
@@ -706,6 +810,50 @@
   --gradient-stat:      linear-gradient(135deg, hsl(224 80% 12%) 0%, hsl(273 60% 18%) 100%);
   --gradient-accent:    linear-gradient(135deg, hsl(210 96% 32%) 0%, hsl(273 89% 50%) 100%);
   --gradient-highlight: linear-gradient(135deg, hsl(273 89% 50%) 0%, hsl(210 96% 32%) 100%);
+}
+
+.dark[data-theme="titanium-gold"] {
+  --primary:            38   92% 54%;
+  --primary-foreground: 222  47% 8%;
+  --primary-soft:       38   40% 16%;
+  --primary-glow:       38   92% 50%;
+  --ring:               38   92% 54%;
+  --gradient-stat:      linear-gradient(135deg, hsl(222 47% 7%) 0%, hsl(215 25% 14%) 100%);
+  --gradient-accent:    linear-gradient(135deg, hsl(215 25% 20%) 0%, hsl(38 92% 48%) 100%);
+  --gradient-highlight: linear-gradient(135deg, hsl(38 92% 48%) 0%, hsl(215 25% 20%) 100%);
+}
+
+.dark[data-theme="nordic-aurora"] {
+  --primary:            160  70% 48%;
+  --primary-foreground: 198  80% 6%;
+  --primary-soft:       160  40% 16%;
+  --primary-glow:       160  84% 45%;
+  --ring:               160  70% 48%;
+  --gradient-stat:      linear-gradient(135deg, hsl(198 80% 5%) 0%, hsl(160 60% 14%) 100%);
+  --gradient-accent:    linear-gradient(135deg, hsl(160 60% 20%) 0%, hsl(175 70% 36%) 100%);
+  --gradient-highlight: linear-gradient(135deg, hsl(175 70% 36%) 0%, hsl(160 60% 20%) 100%);
+}
+
+.dark[data-theme="obsidian-rose"] {
+  --primary:            347  85% 62%;
+  --primary-foreground: 240  10% 4%;
+  --primary-soft:       347  40% 16%;
+  --primary-glow:       347  85% 62%;
+  --ring:               347  85% 62%;
+  --gradient-stat:      linear-gradient(135deg, hsl(240 10% 3%) 0%, hsl(347 60% 16%) 100%);
+  --gradient-accent:    linear-gradient(135deg, hsl(347 60% 24%) 0%, hsl(270 60% 40%) 100%);
+  --gradient-highlight: linear-gradient(135deg, hsl(270 60% 40%) 0%, hsl(347 60% 24%) 100%);
+}
+
+.dark[data-theme="cyberpunk-amber"] {
+  --primary:            45   96% 53%;
+  --primary-foreground: 0    0%  0%;
+  --primary-soft:       45   40% 16%;
+  --primary-glow:       45   96% 53%;
+  --ring:               45   96% 53%;
+  --gradient-stat:      linear-gradient(135deg, hsl(0 0% 2%) 0%, hsl(217 80% 15%) 100%);
+  --gradient-accent:    linear-gradient(135deg, hsl(217 80% 22%) 0%, hsl(45 93% 45%) 100%);
+  --gradient-highlight: linear-gradient(135deg, hsl(45 93% 45%) 0%, hsl(217 80% 22%) 100%);
 }
 
 /* ── Base resets & typography ──────────────────────────────────────────────── */

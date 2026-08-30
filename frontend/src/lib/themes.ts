@@ -20,8 +20,32 @@ export const COLOR_THEMES: ColorTheme[] = [
   {
     id: 'default',
     name: 'Ocean Teal',
-    description: 'Classic navy & teal — the original PWRI look.',
+    description: 'Classic navy & emerald teal — the signature PWRI look.',
     swatches: ['#0b1e2e', '#0d9488', '#06b6d4', '#f1f5f9'],
+  },
+  {
+    id: 'titanium-gold',
+    name: 'Titanium & Gold',
+    description: 'Matte graphite, titanium slate, and champagne gold — Swiss instrumentation luxury.',
+    swatches: ['#0b0f19', '#334155', '#f59e0b', '#f8fafc'],
+  },
+  {
+    id: 'nordic-aurora',
+    name: 'Nordic Aurora',
+    description: 'Arctic fjord midnight and boreal emerald with luminous mint.',
+    swatches: ['#02141a', '#059669', '#10b981', '#f0fdf4'],
+  },
+  {
+    id: 'obsidian-rose',
+    name: 'Obsidian Rose',
+    description: 'Pitch obsidian with metallic rose copper and royal amethyst shimmer.',
+    swatches: ['#09090b', '#e11d48', '#9333ea', '#fafafa'],
+  },
+  {
+    id: 'cyberpunk-amber',
+    name: 'Cyber Amber',
+    description: 'OLED carbon and laser cobalt with high-voltage solar gold.',
+    swatches: ['#050505', '#2563eb', '#eab308', '#ffffff'],
   },
   {
     id: 'aerial-autumn',

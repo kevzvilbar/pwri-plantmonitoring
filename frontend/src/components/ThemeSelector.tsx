@@ -35,20 +35,20 @@ export function ThemeSelector() {
       <PopoverContent
         align="end"
         sideOffset={8}
-        className="w-80 max-w-[94vw] p-4 rounded-xl bg-card/95 backdrop-blur-xl border border-border shadow-2xl space-y-3.5"
+        className="w-[360px] max-w-[94vw] p-4 rounded-2xl bg-card/95 backdrop-blur-xl border border-border shadow-2xl space-y-3.5"
       >
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="h-7 w-7 rounded-md bg-primary-soft flex items-center justify-center text-primary">
-              <Palette className="h-3.5 w-3.5" />
+            <div className="h-7 w-7 rounded-lg bg-primary-soft flex items-center justify-center text-primary">
+              <Palette className="h-4 w-4" />
             </div>
             <div>
-              <p className="text-xs font-semibold text-foreground">Theme & Lighting</p>
+              <p className="text-xs font-bold text-foreground">Theme &amp; Lighting</p>
               <p className="text-3xs text-muted-foreground">Select your workspace style</p>
             </div>
           </div>
-          <span className="text-3xs font-semibold px-2 py-0.5 rounded-full bg-muted text-muted-foreground border border-border/60">
+          <span className="text-3xs font-bold px-2 py-0.5 rounded-full bg-muted text-muted-foreground border border-border/60">
             {currentThemeObj.name}
           </span>
         </div>
@@ -85,10 +85,12 @@ export function ThemeSelector() {
 
         {/* Color Palette Grid */}
         <div className="space-y-1.5">
-          <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
-            Color Palettes
-          </p>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="flex items-center justify-between">
+            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+              Color Palettes ({COLOR_THEMES.length})
+            </p>
+          </div>
+          <div className="grid grid-cols-2 gap-2 max-h-[48vh] overflow-y-auto pr-1">
             {COLOR_THEMES.map((theme) => {
               const active = colorTheme === theme.id;
               const [sidebarSwatch, primarySwatch, accentSwatch, bgSwatch] = theme.swatches;
@@ -97,15 +99,16 @@ export function ThemeSelector() {
                 <button
                   key={theme.id}
                   onClick={() => setColorTheme(theme.id)}
+                  title={theme.description}
                   className={cn(
-                    'group relative p-2 rounded-xl border text-left transition-all',
+                    'group relative p-2.5 rounded-xl border text-left transition-all',
                     active
-                      ? 'border-primary bg-primary-soft/40 ring-1 ring-primary shadow-2xs'
+                      ? 'border-primary bg-primary-soft/40 ring-2 ring-primary/30 shadow-xs'
                       : 'border-border/60 bg-muted/20 hover:bg-muted/60 hover:border-border',
                   )}
                 >
                   {/* Swatch Bar */}
-                  <div className="flex h-2.5 w-full rounded-full overflow-hidden mb-1.5 shadow-2xs">
+                  <div className="flex h-3 w-full rounded-md overflow-hidden mb-2 shadow-2xs border border-border/40">
                     <span className="flex-1" style={{ background: sidebarSwatch }} />
                     <span className="flex-1" style={{ background: primarySwatch }} />
                     <span className="flex-1" style={{ background: accentSwatch }} />
@@ -118,7 +121,7 @@ export function ThemeSelector() {
                       {theme.name}
                     </span>
                     {active && (
-                      <Check className="h-3 w-3 text-primary shrink-0 stroke-[3]" />
+                      <Check className="h-3.5 w-3.5 text-primary shrink-0 stroke-[3]" />
                     )}
                   </div>
                 </button>
