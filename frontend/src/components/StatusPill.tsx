@@ -2,9 +2,9 @@ import { ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 import { Lamp, type LampTone } from '@/components/ui/Lamp';
 
-export type StatusPillTone = 'default' | 'primary' | 'accent' | 'success' | 'good' | 'warn' | 'danger' | 'info' | 'muted' | 'highlight';
+export type StatusPillTone = 'default' | 'primary' | 'accent' | 'success' | 'good' | 'warn' | 'danger' | 'info' | 'muted' | 'highlight' | (string & {});
 
-function toLampTone(tone: StatusPillTone): LampTone {
+function toLampTone(tone?: string): LampTone {
   switch (tone) {
     case 'good':
     case 'success':
@@ -33,7 +33,7 @@ export function StatusPill({
   showDot = true,
   pulse = false,
 }: {
-  tone?: StatusPillTone;
+  tone?: StatusPillTone | string;
   children?: ReactNode;
   className?: string;
   showDot?: boolean;

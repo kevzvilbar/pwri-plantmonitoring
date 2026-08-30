@@ -10,7 +10,7 @@ import {
 import { cn } from '@/lib/utils';
 
 export interface MetaAlert {
-  tone?: StatusPillTone;
+  tone?: StatusPillTone | string;
   icon?: React.ComponentType<{ className?: string }>;
   label: React.ReactNode;
   className?: string;
