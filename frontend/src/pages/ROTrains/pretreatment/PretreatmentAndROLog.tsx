@@ -41,6 +41,114 @@ type AfmRow = {
   pressureOut: string;
 };
 
+const AFM_REASON_OPTIONS = [
+  'Pressure gauge broken / unreadable',
+  'Unit isolated / in bypass',
+  'Unit in standby / offline',
+  'Under maintenance / media replacement',
+  'Differential pressure gauge faulty',
+  'Other',
+];
+
+const BOOSTER_REASON_OPTIONS = [
+  'Pump in standby / not running',
+  'Ammeter broken / unreadable',
+  'VFD fault / tripped',
+  'Under maintenance / isolated',
+  'Pressure transmitter offline',
+  'Other',
+];
+
+const HPP_REASON_OPTIONS = [
+  'HPP pressure gauge broken / unreadable',
+  'HPP in standby / not running',
+  'Pressure transmitter fault',
+  'Under maintenance',
+  'Other',
+];
+
+const HOUSING_REASON_OPTIONS = [
+  'Pressure gauge broken / stuck',
+  'Housing bypassed / isolated',
+  'Housing in standby',
+  'Under maintenance / filter change in progress',
+  'Other',
+];
+
+function getUnitReasonText(entry?: { reason: string; custom: string } | string | null) {
+  if (!entry) return '';
+  if (typeof entry === 'string') return entry.trim();
+  if (entry.reason === 'Other') return entry.custom?.trim() || 'Other';
+  return entry.reason?.trim() || '';
+}
+
+function PerUnitReasonRow({
+  unitLabel,
+  options,
+  value,
+  customValue,
+  onChange,
+  onCustomChange,
+  onApplyAll,
+  applyAllLabel,
+}: {
+  unitLabel: string;
+  options: string[];
+  value?: string;
+  customValue?: string;
+  onChange: (val: string) => void;
+  onCustomChange: (val: string) => void;
+  onApplyAll?: () => void;
+  applyAllLabel?: string;
+}) {
+  const isOther = value === 'Other';
+  return (
+    <div className="mt-2 pt-2 border-t border-warn/30 bg-warn-soft/50 p-2.5 rounded-lg space-y-1.5 animate-fade-in">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <span className="text-2xs font-bold text-warn uppercase tracking-wider flex items-center gap-1.5">
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-warn" />
+          {unitLabel} Reason for Missing Value <span className="text-danger">*</span>
+        </span>
+        {onApplyAll && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={onApplyAll}
+            className="h-5 text-3xs px-2 py-0 border-warn/40 text-warn hover:bg-warn-soft font-medium"
+          >
+            {applyAllLabel ?? 'Apply reason to all missing'}
+          </Button>
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        <Select value={value || ''} onValueChange={onChange}>
+          <SelectTrigger className="h-8 text-xs bg-background border-warn/40 focus:ring-warn">
+            <SelectValue placeholder="Select reason for missing reading…" />
+          </SelectTrigger>
+          <SelectContent>
+            {options.map((opt) => (
+              <SelectItem key={opt} value={opt} className="text-xs">
+                {opt}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        {isOther && (
+          <Input
+            value={customValue ?? ''}
+            onChange={(e) => onCustomChange(e.target.value)}
+            placeholder="Specify reason details…"
+            className="h-8 text-xs bg-background border-warn/50"
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function PretreatmentAndROLog() {
   const qc = useQueryClient();
   // ── Use activeOperator, not user ──────────────────────────────────────────
@@ -347,20 +455,21 @@ export function PretreatmentAndROLog() {
   // disabled while it's true — see submit() and the Save button below.
   const [isSaving, setIsSaving] = useState(false);
 
-  // ── Missing-value override notes ─────────────────────────────────────────
-  // Every field in each section is now required to proceed/save (previously
-  // only a majority was required). When an operator genuinely cannot supply
-  // a value (broken meter, sensor out for calibration, instrument not yet
-  // installed, etc.) they may proceed anyway by entering a reason. The
-  // reason input only appears after a blocked attempt (keeps the common
-  // fully-filled case uncluttered) and is persisted with the reading so
-  // it's auditable later — see `incomplete_reason` on both tables.
+  // ── Missing-value override notes (per-unit and section-level) ─────────────
+  // Every unit/field in each section is now required to proceed/save. When an
+  // operator cannot supply a value, they must provide a reason for each
+  // specific unit with missing data.
   const [afmReasonNeeded, setAfmReasonNeeded] = useState(false);
-  const [afmIncompleteReason, setAfmIncompleteReason] = useState('');
+  const [afmUnitReasons, setAfmUnitReasons] = useState<Record<number, { reason: string; custom: string }>>({});
+
   const [boosterReasonNeeded, setBoosterReasonNeeded] = useState(false);
-  const [boosterIncompleteReason, setBoosterIncompleteReason] = useState('');
+  const [boosterUnitReasons, setBoosterUnitReasons] = useState<Record<number, { reason: string; custom: string }>>({});
+  const [hppUnitReason, setHppUnitReason] = useState<{ reason: string; custom: string }>({ reason: '', custom: '' });
+
   const [housingReasonNeeded, setHousingReasonNeeded] = useState(false);
-  const [housingIncompleteReason, setHousingIncompleteReason] = useState('');
+  const [cartridgeUnitReasons, setCartridgeUnitReasons] = useState<Record<number, { reason: string; custom: string }>>({});
+  const [housingUnitReasons, setHousingUnitReasons] = useState<Record<number, { reason: string; custom: string }>>({});
+
   const [roReasonNeeded, setRoReasonNeeded] = useState(false);
   const [roIncompleteReason, setRoIncompleteReason] = useState('');
 
@@ -385,9 +494,9 @@ export function PretreatmentAndROLog() {
     // duration (now - lastReading) wrong when the page has been open a long time.
     setDt(format(new Date(), "yyyy-MM-dd'T'HH:mm"));
     setAfmSectionStarted(false); setBoosterHppSectionStarted(false); setCartridgeSectionStarted(false);
-    setAfmReasonNeeded(false); setAfmIncompleteReason('');
-    setBoosterReasonNeeded(false); setBoosterIncompleteReason('');
-    setHousingReasonNeeded(false); setHousingIncompleteReason('');
+    setAfmReasonNeeded(false); setAfmUnitReasons({});
+    setBoosterReasonNeeded(false); setBoosterUnitReasons({}); setHppUnitReason({ reason: '', custom: '' });
+    setHousingReasonNeeded(false); setCartridgeUnitReasons({}); setHousingUnitReasons({});
     setRoReasonNeeded(false); setRoIncompleteReason('');
     setAfmmf({}); setBoosters({}); setHousings({}); setCartridgeHousings({});
     setSyncBwOn(false); setSyncBwStart(''); setSyncBwEnd('');
@@ -1056,52 +1165,104 @@ export function PretreatmentAndROLog() {
             meter_end: r.meterEnd ? +r.meterEnd : null,
           }));
 
-    // Merge backwash + inlet/outlet pressures into the single afm_units jsonb column
-    const afm_units = rowsArr
-      .filter((r) => r.bw || r.pressureIn || r.pressureOut)
-      .map((r) => {
-        const pIn = r.pressureIn ? +r.pressureIn : null;
-        const pOut = r.pressureOut ? +r.pressureOut : null;
-        const dp_psi = pIn !== null && pOut !== null ? +(pIn - pOut).toFixed(2) : null;
-        const bwOngoing = isSynchronized ? syncBwOn : r.bw;
-        return {
-          unit: r.unit,
-          backwash_start: bwOngoing
-            ? (isSynchronized
-                ? (syncBwStart ? new Date(syncBwStart).toISOString() : null)
-                : (r.bwStart ? new Date(r.bwStart).toISOString() : null))
-            : null,
-          backwash_end: bwOngoing
-            ? (isSynchronized
-                ? (syncBwEnd ? new Date(syncBwEnd).toISOString() : null)
-                : (r.bwEnd ? new Date(r.bwEnd).toISOString() : null))
-            : null,
-          in_psi: bwOngoing ? null : pIn,
-          out_psi: bwOngoing ? null : pOut,
-          dp_psi: bwOngoing ? null : dp_psi,
-        };
-      });
+    // Merge backwash + inlet/outlet pressures into the single afm_units jsonb column with per-unit reason
+    const afm_units = Array.from({ length: train.num_afm }, (_, i) => i + 1).map((u) => {
+      const r = afmmf[u] || { unit: u, bw: false, bwStart: '', bwEnd: '', meterStart: '', meterEnd: '', pressureIn: '', pressureOut: '' };
+      const pIn = r.pressureIn ? +r.pressureIn : null;
+      const pOut = r.pressureOut ? +r.pressureOut : null;
+      const dp_psi = pIn !== null && pOut !== null ? +(pIn - pOut).toFixed(2) : null;
+      const bwOngoing = isSynchronized ? syncBwOn : r.bw;
+      const reasonTxt = getUnitReasonText(afmUnitReasons[u]);
+      return {
+        unit: u,
+        backwash_start: bwOngoing
+          ? (isSynchronized
+              ? (syncBwStart ? new Date(syncBwStart).toISOString() : null)
+              : (r.bwStart ? new Date(r.bwStart).toISOString() : null))
+          : null,
+        backwash_end: bwOngoing
+          ? (isSynchronized
+              ? (syncBwEnd ? new Date(syncBwEnd).toISOString() : null)
+              : (r.bwEnd ? new Date(r.bwEnd).toISOString() : null))
+          : null,
+        in_psi: bwOngoing ? null : pIn,
+        out_psi: bwOngoing ? null : pOut,
+        dp_psi: bwOngoing ? null : dp_psi,
+        ...(reasonTxt ? { reason: reasonTxt } : {}),
+      };
+    });
 
-    const booster_pumps = Object.entries(boosters).filter(([, v]) => v.hz || v.target || v.amp)
-      .map(([k, v]) => ({
-        unit: +k,
+    const booster_pumps = Array.from({ length: train.num_booster_pumps }, (_, i) => i + 1).map((u) => {
+      const v = boosters[u] || { hz: '', target: '', amp: '', psiMode: boosterPrefPsi };
+      const reasonTxt = getUnitReasonText(boosterUnitReasons[u]);
+      return {
+        unit: u,
         target_pressure_psi: (!v.psiMode || v.psiMode === undefined) ? null : (v.target ? +v.target : null),
         target_hz: v.psiMode ? null : (v.hz ? +v.hz : null),
         hz_mode: !v.psiMode,
         amperage: v.amp ? +v.amp : null,
-      }));
-    const filter_housings = Object.entries(housings).filter(([, v]) => v.inP || v.outP)
-      .map(([k, v]) => ({ unit: +k, in_psi: v.inP ? +v.inP : null, out_psi: v.outP ? +v.outP : null }));
-    // Cartridge / Bag filter housings (pre-filter) — stored separately from AFM/MMF filter housings
-    const cartridge_filter_housings = Object.entries(cartridgeHousings).filter(([, v]) => v.inP || v.outP)
-      .map(([k, v]) => ({ unit: +k, in_psi: v.inP ? +v.inP : null, out_psi: v.outP ? +v.outP : null }));
+        ...(reasonTxt ? { reason: reasonTxt } : {}),
+      };
+    });
 
-    // Combine the three pretreatment step-gate override reasons (AFM/MMF, Booster
-    // + HPP, Cartridge/Filter Housing) into one auditable note, labeled by section.
+    const filter_housings = Array.from({ length: train.num_filter_housings ?? 0 }, (_, i) => i + 1).map((u) => {
+      const v = housings[u] || { inP: '', outP: '' };
+      const reasonTxt = getUnitReasonText(housingUnitReasons[u]);
+      return {
+        unit: u,
+        in_psi: v.inP ? +v.inP : null,
+        out_psi: v.outP ? +v.outP : null,
+        ...(reasonTxt ? { reason: reasonTxt } : {}),
+      };
+    });
+
+    // Cartridge / Bag filter housings (pre-filter) — stored separately from AFM/MMF filter housings
+    const cartridge_filter_housings = Array.from({ length: train.num_cartridge_filters ?? 0 }, (_, i) => i + 1).map((u) => {
+      const v = cartridgeHousings[u] || { inP: '', outP: '' };
+      const reasonTxt = getUnitReasonText(cartridgeUnitReasons[u]);
+      return {
+        unit: u,
+        in_psi: v.inP ? +v.inP : null,
+        out_psi: v.outP ? +v.outP : null,
+        ...(reasonTxt ? { reason: reasonTxt } : {}),
+      };
+    });
+
+    // Compile audit summary of all per-unit reasons
+    const afmReasonList = Array.from({ length: train.num_afm }, (_, i) => i + 1)
+      .map(u => {
+        const txt = getUnitReasonText(afmUnitReasons[u]);
+        return txt ? `MMF ${u}: ${txt}` : null;
+      }).filter((p): p is string => p !== null);
+
+    const boosterReasonList = Array.from({ length: train.num_booster_pumps }, (_, i) => i + 1)
+      .map(u => {
+        const txt = getUnitReasonText(boosterUnitReasons[u]);
+        return txt ? `Booster ${u}: ${txt}` : null;
+      }).filter((p): p is string => p !== null);
+
+    const hppReasonTxt = getUnitReasonText(hppUnitReason);
+    if (hppReasonTxt && !(train?.hpp_target_pressure_psi != null || hppTarget)) {
+      boosterReasonList.push(`HPP: ${hppReasonTxt}`);
+    }
+
+    const cartridgeReasonList = Array.from({ length: train.num_cartridge_filters ?? 0 }, (_, i) => i + 1)
+      .map(u => {
+        const txt = getUnitReasonText(cartridgeUnitReasons[u]);
+        return txt ? `Housing ${u}: ${txt}` : null;
+      }).filter((p): p is string => p !== null);
+
+    const filterHousingReasonList = Array.from({ length: train.num_filter_housings ?? 0 }, (_, i) => i + 1)
+      .map(u => {
+        const txt = getUnitReasonText(housingUnitReasons[u]);
+        return txt ? `Filter Housing ${u}: ${txt}` : null;
+      }).filter((p): p is string => p !== null);
+
     const pretreatReasonParts = [
-      afmIncompleteReason.trim()     ? `AFM/MMF: ${afmIncompleteReason.trim()}`         : null,
-      boosterIncompleteReason.trim() ? `Booster/HPP: ${boosterIncompleteReason.trim()}` : null,
-      housingIncompleteReason.trim() ? `Housing: ${housingIncompleteReason.trim()}`     : null,
+      afmReasonList.length ? afmReasonList.join('; ') : null,
+      boosterReasonList.length ? boosterReasonList.join('; ') : null,
+      cartridgeReasonList.length ? cartridgeReasonList.join('; ') : null,
+      filterHousingReasonList.length ? filterHousingReasonList.join('; ') : null,
     ].filter((p): p is string => p !== null);
 
     const { error: pretreatError } = await supabase.from('ro_pretreatment_readings').insert({
@@ -1130,9 +1291,9 @@ export function PretreatmentAndROLog() {
     setSyncBwOn(false); setSyncBwStart(''); setSyncBwEnd('');
     setSyncMeterStart(''); setSyncMeterEnd('');
     setHppTarget(''); setBagsChanged('0'); setRemarks('');
-    setAfmReasonNeeded(false); setAfmIncompleteReason('');
-    setBoosterReasonNeeded(false); setBoosterIncompleteReason('');
-    setHousingReasonNeeded(false); setHousingIncompleteReason('');
+    setAfmReasonNeeded(false); setAfmUnitReasons({});
+    setBoosterReasonNeeded(false); setBoosterUnitReasons({}); setHppUnitReason({ reason: '', custom: '' });
+    setHousingReasonNeeded(false); setCartridgeUnitReasons({}); setHousingUnitReasons({});
     setRoReasonNeeded(false); setRoIncompleteReason('');
     // BUG FIX: re-lock the step gates after every successful save (previously
     // only reset when switching trains — see the train-change useEffect above).
@@ -1648,6 +1809,9 @@ export function PretreatmentAndROLog() {
                   const bwOngoing = isSynchronized ? syncBwOn : row.bw;
                   const prevEnd = prevMeterEndByUnit[u];
                   const meterStartValue = row.meterStart !== '' ? row.meterStart : (prevEnd != null ? String(prevEnd) : '');
+                  const msVal = isSynchronized ? (row.meterStart || syncMeterStart) : row.meterStart;
+                  const meVal = isSynchronized ? (row.meterEnd || syncMeterEnd) : row.meterEnd;
+                  const isUnitComplete = bwOngoing ? !!(msVal && meVal) : !!(row.pressureIn && row.pressureOut);
                   return (
                     <div key={u} className="border rounded-md p-2 space-y-2">
                       <div className="flex items-center justify-between gap-2">
@@ -1731,6 +1895,45 @@ export function PretreatmentAndROLog() {
                           </div>
                         </div>
                       )}
+
+                      {/* Per-unit missing value reason */}
+                      {afmReasonNeeded && !isUnitComplete && (
+                        <PerUnitReasonRow
+                          unitLabel={`AFM/MMF ${u}`}
+                          options={AFM_REASON_OPTIONS}
+                          value={afmUnitReasons[u]?.reason}
+                          customValue={afmUnitReasons[u]?.custom}
+                          onChange={(val) => setAfmUnitReasons(prev => ({
+                            ...prev,
+                            [u]: { reason: val, custom: val === 'Other' ? (prev[u]?.custom || '') : '' }
+                          }))}
+                          onCustomChange={(val) => setAfmUnitReasons(prev => ({
+                            ...prev,
+                            [u]: { reason: prev[u]?.reason || 'Other', custom: val }
+                          }))}
+                          onApplyAll={() => {
+                            const cur = afmUnitReasons[u];
+                            if (!cur?.reason) {
+                              toast.error(`Select a reason for AFM/MMF ${u} first before applying to all.`);
+                              return;
+                            }
+                            const next = { ...afmUnitReasons };
+                            Array.from({ length: train.num_afm }, (_, i) => i + 1).forEach((idx) => {
+                              const r = afmmf[idx];
+                              const bw = isSynchronized ? syncBwOn : r?.bw;
+                              const ms = isSynchronized ? (r?.meterStart || syncMeterStart) : r?.meterStart;
+                              const me = isSynchronized ? (r?.meterEnd || syncMeterEnd) : r?.meterEnd;
+                              const isComplete = bw ? !!(ms && me) : !!(r?.pressureIn && r?.pressureOut);
+                              if (!isComplete) {
+                                next[idx] = { ...cur };
+                              }
+                            });
+                            setAfmUnitReasons(next);
+                            toast.success('Applied reason to all incomplete AFM/MMF units.');
+                          }}
+                          applyAllLabel="Apply reason to all incomplete AFM/MMFs"
+                        />
+                      )}
                     </div>
                   );
                 })}
@@ -1743,23 +1946,33 @@ export function PretreatmentAndROLog() {
                     size="sm"
                     className="w-full bg-primary hover:bg-primary/90 text-primary-foreground gap-2"
                     onClick={() => {
-                      // Guard: EVERY configured AFM/MMF unit must have its active field pair
-                      // fully filled (both Pressure In & Out, or both Meter Start & End).
                       if (train.num_afm > 0) {
-                        const filledUnits = Array.from({ length: train.num_afm }, (_, i) => i + 1).filter((u) => {
+                        const incompleteUnits: number[] = [];
+                        const unreasonedUnits: number[] = [];
+
+                        Array.from({ length: train.num_afm }, (_, i) => i + 1).forEach((u) => {
                           const row = afmmf[u];
-                          if (!row) return false;
-                          const bwOn = isSynchronized ? syncBwOn : row.bw;
-                          const msVal = isSynchronized ? (row.meterStart || syncMeterStart) : row.meterStart;
-                          const meVal = isSynchronized ? (row.meterEnd || syncMeterEnd) : row.meterEnd;
-                          return bwOn ? !!(msVal && meVal) : !!(row.pressureIn && row.pressureOut);
-                        }).length;
-                        if (filledUnits < train.num_afm && !afmIncompleteReason.trim()) {
+                          const bwOn = isSynchronized ? syncBwOn : row?.bw;
+                          const msVal = isSynchronized ? (row?.meterStart || syncMeterStart) : row?.meterStart;
+                          const meVal = isSynchronized ? (row?.meterEnd || syncMeterEnd) : row?.meterEnd;
+                          const isComplete = bwOn ? !!(msVal && meVal) : !!(row?.pressureIn && row?.pressureOut);
+                          if (!isComplete) {
+                            incompleteUnits.push(u);
+                            const reasonTxt = getUnitReasonText(afmUnitReasons[u]);
+                            if (!reasonTxt) {
+                              unreasonedUnits.push(u);
+                            }
+                          }
+                        });
+
+                        if (incompleteUnits.length > 0) {
                           setAfmReasonNeeded(true);
-                          toast.error(
-                            `${filledUnits} of ${train.num_afm} AFM/MMF unit(s) complete. Fill in every field, or enter a reason below to proceed with missing values.`,
-                          );
-                          return;
+                          if (unreasonedUnits.length > 0) {
+                            toast.error(
+                              `AFM/MMF unit(s) ${unreasonedUnits.join(', ')} missing reading: please specify a reason for each incomplete unit.`,
+                            );
+                            return;
+                          }
                         }
                       }
                       setAfmSectionStarted(true);
@@ -1768,21 +1981,8 @@ export function PretreatmentAndROLog() {
                     Proceed to Booster Pump and HPP →
                   </Button>
                   <p className="text-2xs text-muted-foreground text-center mt-1">
-                    Fill in every AFM/MMF field above, or click to proceed if none apply.
+                    Fill in every AFM/MMF field above, or provide a reason for incomplete units to proceed.
                   </p>
-                  {afmReasonNeeded && (
-                    <div className="pt-1.5">
-                      <Label htmlFor="pretreat-reason-for-missing-value-s-required-to-proceed" className="text-xs text-warn">
-                        Reason for missing value(s) — required to proceed
-                      </Label>
-                      <Textarea
-                        value={afmIncompleteReason}
-                        onChange={(e) => setAfmIncompleteReason(e.target.value)}
-                        placeholder="e.g. Unit 3 pressure gauge out of service, replacement pending"
-                        className="text-xs"
-                      id="pretreat-reason-for-missing-value-s-required-to-proceed"/>
-                    </div>
-                  )}
                 </div>
               )}
             </Card>
@@ -1867,128 +2067,209 @@ export function PretreatmentAndROLog() {
                     const setB = (patch: Partial<typeof b>) =>
                       setBoosters({ ...boosters, [u]: { ...b, ...patch } });
                     return (
-                      <div key={u} className="grid grid-cols-[72px_1fr_1fr_1fr] gap-x-3 items-center">
-                        <span className="text-sm font-semibold text-foreground">Pump {u}</span>
-                        {/* psi input */}
-                        <Input
-                          type="number" step="any"
-                          value={psiMode ? b.target : ''}
-                          disabled={!psiMode || pumpConfigured}
-                          readOnly={pumpConfigured}
-                          placeholder={psiMode ? 'Enter psi' : '—'}
-                          title={pumpConfigured ? 'Set in Train Settings' : undefined}
-                          className={cn(
-                            'text-center placeholder:text-2xs placeholder:text-muted-foreground/40 rounded-lg',
-                            !psiMode && 'opacity-35 cursor-not-allowed bg-muted/30',
-                            psiMode && pumpConfigured && 'bg-muted/40'
-                          )}
-                          onChange={(e) => setB({ target: e.target.value })}
-                        />
-                        {/* Hz input */}
-                        <Input
-                          type="number" step="any"
-                          value={!psiMode ? b.hz : ''}
-                          disabled={psiMode || pumpConfigured}
-                          readOnly={pumpConfigured}
-                          placeholder={!psiMode ? 'Enter Hz' : '—'}
-                          title={pumpConfigured ? 'Set in Train Settings' : undefined}
-                          className={cn(
-                            'text-center placeholder:text-2xs placeholder:text-muted-foreground/40 rounded-lg',
-                            psiMode && 'opacity-35 cursor-not-allowed bg-muted/30',
-                            !psiMode && pumpConfigured && 'bg-muted/40'
-                          )}
-                          onChange={(e) => setB({ hz: e.target.value })}
-                        />
-                        {/* Amperage */}
-                        <Input
-                          type="number" step="any"
-                          value={b.amp}
-                          placeholder="Enter A"
-                          className="text-center placeholder:text-2xs placeholder:text-muted-foreground/40 rounded-lg"
-                          onChange={(e) => setB({ amp: e.target.value })}
-                        />
-                      </div>
-                    );
-                  })}
-                </div>
+                      <div key={u} className="border rounded-md p-2 space-y-2">
+                          <div className="grid grid-cols-[72px_1fr_1fr_1fr] gap-x-3 items-center">
+                            <span className="text-sm font-semibold text-foreground">Pump {u}</span>
+                            {/* psi input */}
+                            <Input
+                              type="number" step="any"
+                              value={psiMode ? b.target : ''}
+                              disabled={!psiMode || pumpConfigured}
+                              readOnly={pumpConfigured}
+                              placeholder={psiMode ? 'Enter psi' : '—'}
+                              title={pumpConfigured ? 'Set in Train Settings' : undefined}
+                              className={cn(
+                                'text-center placeholder:text-2xs placeholder:text-muted-foreground/40 rounded-lg',
+                                !psiMode && 'opacity-35 cursor-not-allowed bg-muted/30',
+                                psiMode && pumpConfigured && 'bg-muted/40'
+                              )}
+                              onChange={(e) => setB({ target: e.target.value })}
+                            />
+                            {/* Hz input */}
+                            <Input
+                              type="number" step="any"
+                              value={!psiMode ? b.hz : ''}
+                              disabled={psiMode || pumpConfigured}
+                              readOnly={pumpConfigured}
+                              placeholder={!psiMode ? 'Enter Hz' : '—'}
+                              title={pumpConfigured ? 'Set in Train Settings' : undefined}
+                              className={cn(
+                                'text-center placeholder:text-2xs placeholder:text-muted-foreground/40 rounded-lg',
+                                psiMode && 'opacity-35 cursor-not-allowed bg-muted/30',
+                                !psiMode && pumpConfigured && 'bg-muted/40'
+                              )}
+                              onChange={(e) => setB({ hz: e.target.value })}
+                            />
+                            {/* Amperage */}
+                            <Input
+                              type="number" step="any"
+                              value={b.amp}
+                              placeholder="Enter A"
+                              className="text-center placeholder:text-2xs placeholder:text-muted-foreground/40 rounded-lg"
+                              onChange={(e) => setB({ amp: e.target.value })}
+                            />
+                          </div>
 
-                {/* Mode hint */}
-                <p className="text-3xs text-muted-foreground/50 italic">
-                  {boosterConfig
-                    ? `${globalPsiMode ? 'psi' : 'Hz'} mode — set in Train Settings, applies to all pumps on this train.`
-                    : globalPsiMode ? 'psi mode — Hz column locked. Tap psi/Hz to switch.' : 'Hz mode — psi column locked. Tap psi/Hz to switch.'}
-                </p>
-              </Card>
-              )}
+                          {/* Per-pump missing value reason */}
+                          {(() => {
+                            const hasTarget = psiMode ? !!b.target : !!b.hz;
+                            const hasAmp = !!b.amp;
+                            const isPumpComplete = hasTarget && hasAmp;
+                            if (boosterReasonNeeded && !isPumpComplete) {
+                              return (
+                                <PerUnitReasonRow
+                                  unitLabel={`Booster Pump ${u}`}
+                                  options={BOOSTER_REASON_OPTIONS}
+                                  value={boosterUnitReasons[u]?.reason}
+                                  customValue={boosterUnitReasons[u]?.custom}
+                                  onChange={(val) => setBoosterUnitReasons(prev => ({
+                                    ...prev,
+                                    [u]: { reason: val, custom: val === 'Other' ? (prev[u]?.custom || '') : '' }
+                                  }))}
+                                  onCustomChange={(val) => setBoosterUnitReasons(prev => ({
+                                    ...prev,
+                                    [u]: { reason: prev[u]?.reason || 'Other', custom: val }
+                                  }))}
+                                  onApplyAll={() => {
+                                    const cur = boosterUnitReasons[u];
+                                    if (!cur?.reason) {
+                                      toast.error(`Select a reason for Booster Pump ${u} first before applying to all.`);
+                                      return;
+                                    }
+                                    const next = { ...boosterUnitReasons };
+                                    Array.from({ length: train.num_booster_pumps }, (_, i) => i + 1).forEach((idx) => {
+                                      const rowB = boosters[idx] || { hz: '', target: '', amp: '', psiMode: boosterPrefPsi };
+                                      const rowPsiMode = rowB.psiMode !== false;
+                                      const rowTarget = rowPsiMode ? !!rowB.target : !!rowB.hz;
+                                      const rowAmp = !!rowB.amp;
+                                      if (!(rowTarget && rowAmp)) {
+                                        next[idx] = { ...cur };
+                                      }
+                                    });
+                                    setBoosterUnitReasons(next);
+                                    toast.success('Applied reason to all incomplete Booster Pumps.');
+                                  }}
+                                  applyAllLabel="Apply reason to all incomplete Booster Pumps"
+                                />
+                              );
+                            }
+                            return null;
+                          })()}
+                        </div>
+                      );
+                    })}
+                  </div>
 
-              {/* HPP card — always shown in this section */}
-              <Card className="p-3 space-y-2">
-                <h4 className="text-xs font-semibold uppercase text-muted-foreground tracking-wider">High-Pressure Pump</h4>
-                <div>
-                  <Label htmlFor="pretreat-hpp-target-pressure-psi" className="text-xs text-muted-foreground">HPP Target Pressure (psi)</Label>
-                  {train?.hpp_target_pressure_psi != null ? (
-                    <>
-                      <Input type="number" step="any" value={hppTarget} readOnly disabled
-                        className="font-mono-num bg-muted/40" id="pretreat-hpp-target-pressure-psi"/>
-                      <p className="text-2xs text-muted-foreground mt-1">
-                        Set in Train Settings — applies to every reading until changed there.
-                      </p>
-                    </>
-                  ) : (
-                    <Input type="number" step="any" value={hppTarget} onChange={(e) => setHppTarget(e.target.value)} />
-                  )}
-                </div>
-              </Card>
-
-              {/* ── Step gate: Booster + HPP must be fully filled (or reasoned) before Cartridge Housing unlocks ── */}
-              {!boosterHppSectionStarted && (
-                <Card className="p-3">
-                  <Button
-                    type="button"
-                    size="sm"
-                    className="w-full bg-primary hover:bg-primary/90 text-primary-foreground gap-2"
-                    onClick={() => {
-                      // Guard: EVERY Booster Pump + HPP field must be filled — HPP target,
-                      // plus for each pump the active column (psi target OR Hz, whichever
-                      // mode is toggled — the other column is disabled) and amperage.
-                      const totalFields = 1 + train.num_booster_pumps * 2; // HPP + (target/hz + amp) per pump
-                      let filledCount = hppTarget ? 1 : 0;
-                      Array.from({ length: train.num_booster_pumps }, (_, i) => i + 1).forEach((u) => {
-                        const b = boosters[u];
-                        const psiMode = b?.psiMode !== false;
-                        if (psiMode ? b?.target : b?.hz) filledCount++;
-                        if (b?.amp) filledCount++;
-                      });
-                      if (filledCount < totalFields && !boosterIncompleteReason.trim()) {
-                        setBoosterReasonNeeded(true);
-                        toast.error(
-                          `${filledCount} of ${totalFields} Booster Pump & HPP field(s) complete. Fill in every field, or enter a reason below to proceed with missing values.`,
-                        );
-                        return;
-                      }
-                      setBoosterHppSectionStarted(true);
-                    }}
-                  >
-                    Proceed to Cartridge Housing / Bag Filter →
-                  </Button>
-                  <p className="text-2xs text-muted-foreground text-center mt-1">
-                    Fill in every Booster Pump & HPP field above to proceed.
+                  {/* Mode hint */}
+                  <p className="text-3xs text-muted-foreground/50 italic">
+                    {boosterConfig
+                      ? `${globalPsiMode ? 'psi' : 'Hz'} mode — set in Train Settings, applies to all pumps on this train.`
+                      : globalPsiMode ? 'psi mode — Hz column locked. Tap psi/Hz to switch.' : 'Hz mode — psi column locked. Tap psi/Hz to switch.'}
                   </p>
-                  {boosterReasonNeeded && (
-                    <div className="pt-1.5">
-                      <Label htmlFor="pretreat-reason-for-missing-value-s-required-to-proceed-2" className="text-xs text-warn">
-                        Reason for missing value(s) — required to proceed
-                      </Label>
-                      <Textarea
-                        value={boosterIncompleteReason}
-                        onChange={(e) => setBoosterIncompleteReason(e.target.value)}
-                        placeholder="e.g. Pump 2 ammeter not yet installed"
-                        className="text-xs"
-                      id="pretreat-reason-for-missing-value-s-required-to-proceed-2"/>
-                    </div>
+                </Card>
+                )}
+
+                {/* HPP card — always shown in this section */}
+                <Card className="p-3 space-y-2">
+                  <h4 className="text-xs font-semibold uppercase text-muted-foreground tracking-wider">High-Pressure Pump</h4>
+                  <div>
+                    <Label htmlFor="pretreat-hpp-target-pressure-psi" className="text-xs text-muted-foreground">HPP Target Pressure (psi)</Label>
+                    {train?.hpp_target_pressure_psi != null ? (
+                      <>
+                        <Input type="number" step="any" value={hppTarget} readOnly disabled
+                          className="font-mono-num bg-muted/40" id="pretreat-hpp-target-pressure-psi"/>
+                        <p className="text-2xs text-muted-foreground mt-1">
+                          Set in Train Settings — applies to every reading until changed there.
+                        </p>
+                      </>
+                    ) : (
+                      <Input type="number" step="any" value={hppTarget} onChange={(e) => setHppTarget(e.target.value)} />
+                    )}
+                  </div>
+
+                  {/* HPP missing value reason */}
+                  {boosterReasonNeeded && !(train?.hpp_target_pressure_psi != null || hppTarget) && (
+                    <PerUnitReasonRow
+                      unitLabel="High-Pressure Pump"
+                      options={HPP_REASON_OPTIONS}
+                      value={hppUnitReason.reason}
+                      customValue={hppUnitReason.custom}
+                      onChange={(val) => setHppUnitReason(prev => ({
+                        ...prev,
+                        reason: val,
+                        custom: val === 'Other' ? prev.custom : ''
+                      }))}
+                      onCustomChange={(val) => setHppUnitReason(prev => ({
+                        ...prev,
+                        reason: prev.reason || 'Other',
+                        custom: val
+                      }))}
+                    />
                   )}
                 </Card>
-              )}
+
+                {/* ── Step gate: Booster + HPP must be fully filled (or reasoned) before Cartridge Housing unlocks ── */}
+                {!boosterHppSectionStarted && (
+                  <Card className="p-3">
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="w-full bg-primary hover:bg-primary/90 text-primary-foreground gap-2"
+                      onClick={() => {
+                        const unreasonedPumps: number[] = [];
+                        let hasIncomplete = false;
+
+                        // Check booster pumps
+                        Array.from({ length: train.num_booster_pumps }, (_, i) => i + 1).forEach((u) => {
+                          const b = boosters[u];
+                          const psiMode = b?.psiMode !== false;
+                          const hasTarget = psiMode ? !!b?.target : !!b?.hz;
+                          const hasAmp = !!b?.amp;
+                          if (!(hasTarget && hasAmp)) {
+                            hasIncomplete = true;
+                            if (!getUnitReasonText(boosterUnitReasons[u])) {
+                              unreasonedPumps.push(u);
+                            }
+                          }
+                        });
+
+                        // Check HPP
+                        const isHppConfigured = train?.hpp_target_pressure_psi != null;
+                        const isHppFilled = isHppConfigured || !!hppTarget;
+                        let unreasonedHpp = false;
+                        if (!isHppFilled) {
+                          hasIncomplete = true;
+                          if (!getUnitReasonText(hppUnitReason)) {
+                            unreasonedHpp = true;
+                          }
+                        }
+
+                        if (hasIncomplete) {
+                          setBoosterReasonNeeded(true);
+                          if (unreasonedPumps.length > 0 || unreasonedHpp) {
+                            const parts: string[] = [];
+                            if (unreasonedPumps.length > 0) {
+                              parts.push(`Booster Pump ${unreasonedPumps.join(', ')}`);
+                            }
+                            if (unreasonedHpp) {
+                              parts.push('High-Pressure Pump');
+                            }
+                            toast.error(
+                              `Missing reading for ${parts.join(' and ')}: please specify a reason for each incomplete unit.`,
+                            );
+                            return;
+                          }
+                        }
+                        setBoosterHppSectionStarted(true);
+                      }}
+                    >
+                      Proceed to Cartridge Housing / Bag Filter →
+                    </Button>
+                    <p className="text-2xs text-muted-foreground text-center mt-1">
+                      Fill in every Booster Pump & HPP field above, or provide a reason for incomplete units to proceed.
+                    </p>
+                  </Card>
+                )}
               </>
             );
           })()}
@@ -2013,37 +2294,76 @@ export function PretreatmentAndROLog() {
                 const cfDp = cartridgeHousings[u]?.inP && cartridgeHousings[u]?.outP
                   ? (inP - outP).toFixed(2) : '';
                 const cfDpWarn = cfDp !== '' && +cfDp >= 25; // 25 psi DP = typical cartridge/bag replacement threshold
+                const isHousingComplete = !!(cartridgeHousings[u]?.inP && cartridgeHousings[u]?.outP);
+
                 return (
-                  <div key={u} className="grid grid-cols-4 gap-2 items-end">
-                    <div className="text-xs font-medium pb-2">Housing {u}</div>
-                    <div>
-                      <Label htmlFor="pretreat-pressure-in-psi-2" className="text-xs text-muted-foreground">Pressure In (psi)</Label>
-                      <Input
-                        type="number" step="any"
-                        value={cartridgeHousings[u]?.inP ?? ''}
-                        onChange={(e) => setCartridgeHousings({
-                          ...cartridgeHousings,
-                          [u]: { ...(cartridgeHousings[u] || { outP: '' }), inP: e.target.value },
-                        })}
-                      id="pretreat-pressure-in-psi-2"/>
+                  <div key={u} className="border rounded-md p-2 space-y-2">
+                    <div className="grid grid-cols-4 gap-2 items-end">
+                      <div className="text-xs font-medium pb-2">Housing {u}</div>
+                      <div>
+                        <Label htmlFor={`pretreat-pressure-in-psi-cart-${u}`} className="text-xs text-muted-foreground">Pressure In (psi)</Label>
+                        <Input
+                          type="number" step="any"
+                          value={cartridgeHousings[u]?.inP ?? ''}
+                          onChange={(e) => setCartridgeHousings({
+                            ...cartridgeHousings,
+                            [u]: { ...(cartridgeHousings[u] || { outP: '' }), inP: e.target.value },
+                          })}
+                        id={`pretreat-pressure-in-psi-cart-${u}`}/>
+                      </div>
+                      <div>
+                        <Label htmlFor={`pretreat-pressure-out-psi-cart-${u}`} className="text-xs text-muted-foreground">Pressure Out (psi)</Label>
+                        <Input
+                          type="number" step="any"
+                          value={cartridgeHousings[u]?.outP ?? ''}
+                          onChange={(e) => setCartridgeHousings({
+                            ...cartridgeHousings,
+                            [u]: { ...(cartridgeHousings[u] || { inP: '' }), outP: e.target.value },
+                          })}
+                        id={`pretreat-pressure-out-psi-cart-${u}`}/>
+                      </div>
+                      <div>
+                        <Label htmlFor={`pretreat-pressure-cart-${u}`} className={cn('text-xs', cfDpWarn ? 'text-warn' : 'text-muted-foreground')}>
+                          ΔPressure{cfDpWarn ? ' ⚠' : ''}
+                        </Label>
+                        <ComputedInput value={cfDp} className={cfDpWarn ? 'border-warn text-warn-foreground font-semibold' : 'text-foreground font-medium'} id={`pretreat-pressure-cart-${u}`}/>
+                      </div>
                     </div>
-                    <div>
-                      <Label htmlFor="pretreat-pressure-out-psi-2" className="text-xs text-muted-foreground">Pressure Out (psi)</Label>
-                      <Input
-                        type="number" step="any"
-                        value={cartridgeHousings[u]?.outP ?? ''}
-                        onChange={(e) => setCartridgeHousings({
-                          ...cartridgeHousings,
-                          [u]: { ...(cartridgeHousings[u] || { inP: '' }), outP: e.target.value },
-                        })}
-                      id="pretreat-pressure-out-psi-2"/>
-                    </div>
-                    <div>
-                      <Label htmlFor="pretreat-pressure-2" className={cn('text-xs', cfDpWarn ? 'text-warn' : 'text-muted-foreground')}>
-                        ΔPressure{cfDpWarn ? ' ⚠' : ''}
-                      </Label>
-                      <ComputedInput value={cfDp} className={cfDpWarn ? 'border-warn text-warn-foreground font-semibold' : 'text-foreground font-medium'} id="pretreat-pressure-2"/>
-                    </div>
+
+                    {/* Per-housing missing value reason */}
+                    {housingReasonNeeded && !isHousingComplete && (
+                      <PerUnitReasonRow
+                        unitLabel={`${cartridgeHousingLabel} ${u}`}
+                        options={HOUSING_REASON_OPTIONS}
+                        value={cartridgeUnitReasons[u]?.reason}
+                        customValue={cartridgeUnitReasons[u]?.custom}
+                        onChange={(val) => setCartridgeUnitReasons(prev => ({
+                          ...prev,
+                          [u]: { reason: val, custom: val === 'Other' ? (prev[u]?.custom || '') : '' }
+                        }))}
+                        onCustomChange={(val) => setCartridgeUnitReasons(prev => ({
+                          ...prev,
+                          [u]: { reason: prev[u]?.reason || 'Other', custom: val }
+                        }))}
+                        onApplyAll={() => {
+                          const cur = cartridgeUnitReasons[u];
+                          if (!cur?.reason) {
+                            toast.error(`Select a reason for Housing ${u} first before applying to all.`);
+                            return;
+                          }
+                          const next = { ...cartridgeUnitReasons };
+                          Array.from({ length: train.num_cartridge_filters }, (_, i) => i + 1).forEach((idx) => {
+                            const isDone = !!(cartridgeHousings[idx]?.inP && cartridgeHousings[idx]?.outP);
+                            if (!isDone) {
+                              next[idx] = { ...cur };
+                            }
+                          });
+                          setCartridgeUnitReasons(next);
+                          toast.success('Applied reason to all incomplete housings.');
+                        }}
+                        applyAllLabel="Apply reason to all incomplete housings"
+                      />
+                    )}
                   </div>
                 );
               })}
@@ -2062,23 +2382,62 @@ export function PretreatmentAndROLog() {
                 const inP = +(housings[u]?.inP ?? '');
                 const outP = +(housings[u]?.outP ?? '');
                 const housingDp = housings[u]?.inP && housings[u]?.outP ? (inP - outP).toFixed(2) : '';
+                const isHousingComplete = !!(housings[u]?.inP && housings[u]?.outP);
+
                 return (
-                  <div key={u} className="grid grid-cols-4 gap-2 items-center">
-                    <div className="text-xs font-medium self-center">Housing {u}</div>
-                    <div>
-                      <Label htmlFor="pretreat-in-psi" className="text-xs text-muted-foreground">In (psi)</Label>
-                      <Input type="number" step="any" value={housings[u]?.inP ?? ''}
-                        onChange={(e) => setHousings({ ...housings, [u]: { ...(housings[u] || { outP: '' }), inP: e.target.value } })} id="pretreat-in-psi"/>
+                  <div key={u} className="border rounded-md p-2 space-y-2">
+                    <div className="grid grid-cols-4 gap-2 items-center">
+                      <div className="text-xs font-medium self-center">Housing {u}</div>
+                      <div>
+                        <Label htmlFor={`pretreat-in-psi-filter-${u}`} className="text-xs text-muted-foreground">In (psi)</Label>
+                        <Input type="number" step="any" value={housings[u]?.inP ?? ''}
+                          onChange={(e) => setHousings({ ...housings, [u]: { ...(housings[u] || { outP: '' }), inP: e.target.value } })} id={`pretreat-in-psi-filter-${u}`}/>
+                      </div>
+                      <div>
+                        <Label htmlFor={`pretreat-out-psi-filter-${u}`} className="text-xs text-muted-foreground">Out (psi)</Label>
+                        <Input type="number" step="any" value={housings[u]?.outP ?? ''}
+                          onChange={(e) => setHousings({ ...housings, [u]: { ...(housings[u] || { inP: '' }), outP: e.target.value } })} id={`pretreat-out-psi-filter-${u}`}/>
+                      </div>
+                      <div>
+                        <Label htmlFor={`pretreat-pressure-filter-${u}`} className="text-xs text-muted-foreground">ΔPressure</Label>
+                        <ComputedInput value={housingDp} className="text-foreground font-medium" id={`pretreat-pressure-filter-${u}`}/>
+                      </div>
                     </div>
-                    <div>
-                      <Label htmlFor="pretreat-out-psi" className="text-xs text-muted-foreground">Out (psi)</Label>
-                      <Input type="number" step="any" value={housings[u]?.outP ?? ''}
-                        onChange={(e) => setHousings({ ...housings, [u]: { ...(housings[u] || { inP: '' }), outP: e.target.value } })} id="pretreat-out-psi"/>
-                    </div>
-                    <div>
-                      <Label htmlFor="pretreat-pressure-3" className="text-xs text-muted-foreground">ΔPressure</Label>
-                      <ComputedInput value={housingDp} className="text-foreground font-medium" id="pretreat-pressure-3"/>
-                    </div>
+
+                    {/* Per-housing missing value reason */}
+                    {housingReasonNeeded && !isHousingComplete && (
+                      <PerUnitReasonRow
+                        unitLabel={`Filter Housing ${u}`}
+                        options={HOUSING_REASON_OPTIONS}
+                        value={housingUnitReasons[u]?.reason}
+                        customValue={housingUnitReasons[u]?.custom}
+                        onChange={(val) => setHousingUnitReasons(prev => ({
+                          ...prev,
+                          [u]: { reason: val, custom: val === 'Other' ? (prev[u]?.custom || '') : '' }
+                        }))}
+                        onCustomChange={(val) => setHousingUnitReasons(prev => ({
+                          ...prev,
+                          [u]: { reason: prev[u]?.reason || 'Other', custom: val }
+                        }))}
+                        onApplyAll={() => {
+                          const cur = housingUnitReasons[u];
+                          if (!cur?.reason) {
+                            toast.error(`Select a reason for Filter Housing ${u} first before applying to all.`);
+                            return;
+                          }
+                          const next = { ...housingUnitReasons };
+                          Array.from({ length: train.num_filter_housings }, (_, i) => i + 1).forEach((idx) => {
+                            const isDone = !!(housings[idx]?.inP && housings[idx]?.outP);
+                            if (!isDone) {
+                              next[idx] = { ...cur };
+                            }
+                          });
+                          setHousingUnitReasons(next);
+                          toast.success('Applied reason to all incomplete filter housings.');
+                        }}
+                        applyAllLabel="Apply reason to all incomplete filter housings"
+                      />
+                    )}
                   </div>
                 );
               })}
@@ -2101,22 +2460,47 @@ export function PretreatmentAndROLog() {
                 size="sm"
                 className="w-full bg-primary hover:bg-primary/90 text-primary-foreground gap-2"
                 onClick={() => {
-                  // Guard: EVERY configured housing must have BOTH Pressure In & Out filled.
                   const totalHousings = (train.num_cartridge_filters ?? 0) + (train.num_filter_housings ?? 0);
                   if (totalHousings > 0) {
-                    let filledHousings = 0;
+                    const unreasonedCartridges: number[] = [];
+                    const unreasonedFilters: number[] = [];
+                    let hasIncomplete = false;
+
                     Array.from({ length: train.num_cartridge_filters ?? 0 }, (_, i) => i + 1).forEach((u) => {
-                      if (cartridgeHousings[u]?.inP && cartridgeHousings[u]?.outP) filledHousings++;
+                      const isComplete = !!(cartridgeHousings[u]?.inP && cartridgeHousings[u]?.outP);
+                      if (!isComplete) {
+                        hasIncomplete = true;
+                        if (!getUnitReasonText(cartridgeUnitReasons[u])) {
+                          unreasonedCartridges.push(u);
+                        }
+                      }
                     });
+
                     Array.from({ length: train.num_filter_housings ?? 0 }, (_, i) => i + 1).forEach((u) => {
-                      if (housings[u]?.inP && housings[u]?.outP) filledHousings++;
+                      const isComplete = !!(housings[u]?.inP && housings[u]?.outP);
+                      if (!isComplete) {
+                        hasIncomplete = true;
+                        if (!getUnitReasonText(housingUnitReasons[u])) {
+                          unreasonedFilters.push(u);
+                        }
+                      }
                     });
-                    if (filledHousings < totalHousings && !housingIncompleteReason.trim()) {
+
+                    if (hasIncomplete) {
                       setHousingReasonNeeded(true);
-                      toast.error(
-                        `${filledHousings} of ${totalHousings} housing(s) complete. Fill in every field, or enter a reason below to proceed with missing values.`,
-                      );
-                      return;
+                      if (unreasonedCartridges.length > 0 || unreasonedFilters.length > 0) {
+                        const parts: string[] = [];
+                        if (unreasonedCartridges.length > 0) {
+                          parts.push(`Housing ${unreasonedCartridges.join(', ')}`);
+                        }
+                        if (unreasonedFilters.length > 0) {
+                          parts.push(`Filter Housing ${unreasonedFilters.join(', ')}`);
+                        }
+                        toast.error(
+                          `Missing reading for ${parts.join(' and ')}: please specify a reason for each incomplete unit.`,
+                        );
+                        return;
+                      }
                     }
                   }
                   setCartridgeSectionStarted(true);
@@ -2127,21 +2511,8 @@ export function PretreatmentAndROLog() {
               <p className="text-2xs text-muted-foreground text-center mt-1">
                 {(train.num_cartridge_filters ?? 0) + (train.num_filter_housings ?? 0) === 0
                   ? 'No housings configured — click to proceed to RO Vessels.'
-                  : 'Fill in In & Out pressure for every housing above to proceed.'}
+                  : 'Fill in In & Out pressure for every housing above, or provide a reason for incomplete units.'}
               </p>
-              {housingReasonNeeded && (
-                <div className="pt-1.5">
-                  <Label htmlFor="pretreat-reason-for-missing-value-s-required-to-proceed-3" className="text-xs text-warn">
-                    Reason for missing value(s) — required to proceed
-                  </Label>
-                  <Textarea
-                    value={housingIncompleteReason}
-                    onChange={(e) => setHousingIncompleteReason(e.target.value)}
-                    placeholder="e.g. Housing 2 gauge unreadable, being replaced"
-                    className="text-xs"
-                  id="pretreat-reason-for-missing-value-s-required-to-proceed-3"/>
-                </div>
-              )}
             </Card>
           )}
           </>
