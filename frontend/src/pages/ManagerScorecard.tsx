@@ -116,9 +116,7 @@ const WINDOW_OPTIONS: { label: string; value: number }[] = [
 
 function pctColor(pct: number | null): string {
   if (pct === null) return 'bg-muted-foreground/30';
-  if (pct >= 90) return 'bg-accent';
-  if (pct >= 75) return 'bg-warn';
-  return 'bg-destructive';
+  return getAppraisalTier(pct).dot;
 }
 
 function fmtPct(pct: number | null): string {
