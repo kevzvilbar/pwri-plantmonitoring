@@ -207,4 +207,14 @@ describe('formatDeviationMessage', () => {
     expect(escalating).toBe(notEscalating);
     expect(escalating).toContain('remark required before saving');
   });
+
+  it('formats backward / negative rate with multiplier & rollover warning', () => {
+    const r = classifyDeviation(-500, 50, 2.5);
+    expect(r.tier).toBe('critical');
+    expect(r.direction).toBe('low');
+    const msg = formatDeviationMessage('Product Meter 1', r, 'm3/hr', 10);
+    expect(msg).toContain('below previous');
+    expect(msg).toContain('multiplier');
+    expect(msg).toContain('remark required before saving');
+  });
 });

@@ -834,7 +834,7 @@ function LocatorRow({
   const hoursElapsedLoc = previousDt && reading
     ? (new Date(customDt).getTime() - new Date(previousDt).getTime()) / 3_600_000
     : null;
-  const currentFlowRateLoc = locInputMode === 'raw' ? computeRate(dailyVol, hoursElapsedLoc) : null;
+  const currentFlowRateLoc = locInputMode === 'raw' ? computeRate(dailyVol, hoursElapsedLoc, undefined, true) : null;
   const deviationLoc = locInputMode === 'raw'
     ? classifyDeviation(currentFlowRateLoc, avgVol, SPIKE_MULTIPLIER)
     : { tier: 'ok' as const, direction: null, rate: null, avgRate: null, deviationPct: null };

@@ -658,7 +658,7 @@ function WellRow({
   const hoursElapsedWell = previousDt && reading
     ? (new Date(customDt).getTime() - new Date(previousDt).getTime()) / 3_600_000
     : null;
-  const wellFlowRate = computeRate(dailyVol, hoursElapsedWell);
+  const wellFlowRate = computeRate(dailyVol, hoursElapsedWell, undefined, true);
   const deviationWell = classifyDeviation(wellFlowRate, avgVol, SPIKE_MULTIPLIER);
   const highVol = deviationWell.tier !== 'ok';
   const anomalyRemarkRequired = deviationWell.tier !== 'ok' && !isAnomalyRemarkValid(anomalyRemark);

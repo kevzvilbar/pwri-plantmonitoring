@@ -864,7 +864,7 @@ export function PowerForm() {
     // again after typing a remark proceeds.
     if (payload.daily_consumption_kwh != null && prevRow?.reading_datetime) {
       const hoursElapsed = (new Date(dt).getTime() - new Date(prevRow.reading_datetime).getTime()) / 3_600_000;
-      const rate = computeRate(payload.daily_consumption_kwh, hoursElapsed);
+      const rate = computeRate(payload.daily_consumption_kwh, hoursElapsed, undefined, true);
       const result = classifyDeviation(rate, avgPowerRate, ALERTS.power_spike_multiplier);
       if (result.tier !== 'ok' && !isAnomalyRemarkValid(anomalyRemark)) {
         setPowerAnomaly({ result, kind, idx });

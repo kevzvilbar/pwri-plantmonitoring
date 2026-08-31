@@ -152,9 +152,9 @@ export function getCurrentPosition(): Promise<GeolocationPosition> {
   });
 }
 
-export function fmtNum(n: number | null | undefined, digits = 0): string {
+export function fmtNum(n: number | null | undefined, digits = 0, maxDigits = 2): string {
   if (n === null || n === undefined || !Number.isFinite(n)) return '—';
-  return n.toLocaleString(undefined, { minimumFractionDigits: digits, maximumFractionDigits: digits });
+  return n.toLocaleString(undefined, { minimumFractionDigits: digits, maximumFractionDigits: Math.max(digits, maxDigits) });
 }
 
 export function nrwColor(pct: number | null): 'accent' | 'warn' | 'danger' {

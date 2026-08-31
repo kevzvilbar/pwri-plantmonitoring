@@ -578,7 +578,7 @@ function ProductMeterRow({
   const hoursElapsedProduct = latest?.reading_datetime && reading
     ? (new Date(customDt).getTime() - new Date(latest.reading_datetime).getTime()) / 3_600_000
     : null;
-  const productionRate = computeRate(productionVolume, hoursElapsedProduct);
+  const productionRate = computeRate(productionVolume, hoursElapsedProduct, undefined, true);
   const deviationProduct = classifyDeviation(productionRate, avgVol ?? null, ALERTS.product_spike_multiplier);
   const highVol = deviationProduct.tier !== 'ok';
   const anomalyRemarkRequired = highVol && !isAnomalyRemarkValid(anomalyRemark);
@@ -1422,15 +1422,15 @@ function ProductMeterHistoryDialog({ meter, plantId, onClose }: { meter: any; pl
                       </td>
                       {meter.is_derived ? (
                         <td className="px-3 py-1.5 text-right font-mono-num text-primary">
-                          {fmtNum(r.daily_volume ?? r.current_reading)}
+                          {fmtNum(r.daily_volume ?? r.current_reading, 1)}
                         </td>
                       ) : (
                         <>
-                          <td className="px-3 py-1.5 text-right font-mono-num">{fmtNum(r.current_reading)}</td>
+                          <td className="px-3 py-1.5 text-right font-mono-num">{fmtNum(r.current_reading, 1)}</td>
                           <td className="px-3 py-1.5 text-right font-mono-num text-primary">
                             {isMeterReplacement
-                              ? <span className="text-kpi-solar font-medium">0</span>
-                              : vol != null ? fmtNum(vol) : '—'
+                              ? <span className="text-kpi-solar font-medium">0.0</span>
+                              : vol != null ? fmtNum(vol, 1) : '—'
                             }
                           </td>
                         </>

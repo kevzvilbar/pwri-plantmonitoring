@@ -982,9 +982,9 @@ export function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: Dat
                   </tr>
                   <tr className="bg-primary-soft/60">
                     <td className="sticky left-0 z-30 bg-primary-soft/60 px-3 py-1.5 font-semibold text-primary whitespace-nowrap border-b border-r border-border text-2xs">TOTAL</td>
-                    <td className="px-3 py-1.5 text-right font-semibold font-mono-num text-primary border-b border-border tabular-nums">{totProd > 0 ? totProd.toLocaleString(undefined, { maximumFractionDigits: 1 }) : '—'}</td>
-                    <td className="px-3 py-1.5 text-right font-semibold font-mono-num text-highlight border-b border-border tabular-nums">{totCons > 0 ? totCons.toLocaleString(undefined, { maximumFractionDigits: 1 }) : '—'}</td>
-                    <td className={['px-3 py-1.5 text-right font-semibold font-mono-num border-b border-border tabular-nums', totBal >= 0 ? 'text-accent' : 'text-danger'].join(' ')}>{totBal !== 0 ? totBal.toLocaleString(undefined, { maximumFractionDigits: 1 }) : '—'}</td>
+                    <td className="px-3 py-1.5 text-right font-semibold font-mono-num text-primary border-b border-border tabular-nums">{totProd > 0 ? totProd.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 2 }) : '—'}</td>
+                    <td className="px-3 py-1.5 text-right font-semibold font-mono-num text-highlight border-b border-border tabular-nums">{totCons > 0 ? totCons.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 2 }) : '—'}</td>
+                    <td className={['px-3 py-1.5 text-right font-semibold font-mono-num border-b border-border tabular-nums', totBal >= 0 ? 'text-accent' : 'text-danger'].join(' ')}>{totBal !== 0 ? totBal.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 2 }) : '—'}</td>
                     <td className="sticky right-0 z-30 bg-primary-soft/60 px-3 py-1.5 text-right font-bold font-mono-num text-primary border-b border-l border-border tabular-nums">{totNRW != null ? `${totNRW}%` : '—'}</td>
                   </tr>
                 </thead>
@@ -994,9 +994,9 @@ export function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: Dat
                     return (
                       <tr key={date} className={isEven ? 'bg-background hover:bg-muted/20' : 'bg-muted/10 hover:bg-muted/30'}>
                         <td className={['sticky left-0 z-10 px-3 py-1.5 font-medium text-muted-foreground whitespace-nowrap border-r border-border', isEven ? 'bg-background' : 'bg-muted/10'].join(' ')}>{format(new Date(date + 'T12:00:00'), 'MMM d, yyyy')}</td>
-                        <td className="px-3 py-1.5 text-right font-mono-num tabular-nums text-primary">{prod > 0 ? prod.toLocaleString(undefined, { maximumFractionDigits: 1 }) : <span className="text-muted-foreground/40">—</span>}</td>
-                        <td className="px-3 py-1.5 text-right font-mono-num tabular-nums text-highlight">{cons > 0 ? cons.toLocaleString(undefined, { maximumFractionDigits: 1 }) : <span className="text-muted-foreground/40">—</span>}</td>
-                        <td className={['px-3 py-1.5 text-right font-mono-num tabular-nums', bal > 0 ? 'text-accent' : bal < 0 ? 'text-danger' : 'text-muted-foreground/40'].join(' ')}>{prod > 0 || cons > 0 ? bal.toLocaleString(undefined, { maximumFractionDigits: 1 }) : '—'}</td>
+                        <td className="px-3 py-1.5 text-right font-mono-num tabular-nums text-primary">{prod > 0 ? prod.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 2 }) : <span className="text-muted-foreground/40">—</span>}</td>
+                        <td className="px-3 py-1.5 text-right font-mono-num tabular-nums text-highlight">{cons > 0 ? cons.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 2 }) : <span className="text-muted-foreground/40">—</span>}</td>
+                        <td className={['px-3 py-1.5 text-right font-mono-num tabular-nums', bal > 0 ? 'text-accent' : bal < 0 ? 'text-danger' : 'text-muted-foreground/40'].join(' ')}>{prod > 0 || cons > 0 ? bal.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 2 }) : '—'}</td>
                         <td className={['sticky right-0 z-10 px-3 py-1.5 text-right font-semibold font-mono-num tabular-nums border-l border-border', isEven ? 'bg-background' : 'bg-muted/10', nrw != null && nrw > 10 ? 'text-danger' : nrw != null ? 'text-primary' : 'text-muted-foreground/40'].join(' ')}>{nrw != null ? `${nrw}%` : '—'}</td>
                       </tr>
                     );
@@ -1064,11 +1064,11 @@ export function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: Dat
                   </td>
                   {colTotals.map((tot, i) => (
                     <td key={entities[i].id} className="px-2 py-1.5 text-center font-semibold font-mono-num text-primary border-b border-border tabular-nums">
-                      {tot > 0 ? tot.toLocaleString(undefined, { maximumFractionDigits: 1 }) : <span className="text-muted-foreground/50">—</span>}
+                      {tot > 0 ? tot.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 2 }) : <span className="text-muted-foreground/50">—</span>}
                     </td>
                   ))}
                   <td className="sticky right-0 z-30 bg-primary-soft/60 px-3 py-1.5 text-right font-bold font-mono-num text-primary border-b border-l border-border tabular-nums">
-                    {grandTotal.toLocaleString(undefined, { maximumFractionDigits: 1 })}
+                    {grandTotal.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 2 })}
                   </td>
                 </tr>
               </thead>
@@ -1107,7 +1107,7 @@ export function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: Dat
                                 {isEst && (
                                   <span className="text-warn text-3xs font-bold leading-none" aria-label="estimated">~</span>
                                 )}
-                                {vol.toLocaleString(undefined, { maximumFractionDigits: 1 })}
+                                {vol.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 2 })}
                               </span>
                             ) : (
                               <span className="text-muted-foreground/40">—</span>
@@ -1120,7 +1120,7 @@ export function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: Dat
                         tab === 'consumption' ? 'text-highlight' : 'text-primary',
                         isEven ? 'bg-background' : 'bg-muted/10',
                       ].join(' ')}>
-                        {rowTot > 0 ? rowTot.toLocaleString(undefined, { maximumFractionDigits: 1 }) : '—'}
+                        {rowTot > 0 ? rowTot.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 2 }) : '—'}
                       </td>
                     </tr>
                   );

@@ -94,10 +94,12 @@ export function computeRate(
   volume: number | null,
   elapsed: number | null,
   minElapsed: number = MIN_ELAPSED_HOURS,
+  allowNegative: boolean = false,
 ): number | null {
   if (volume == null || elapsed == null) return null;
   if (!Number.isFinite(volume) || !Number.isFinite(elapsed)) return null;
-  if (volume <= 0 || elapsed < minElapsed) return null;
+  if (!allowNegative && volume <= 0) return null;
+  if (elapsed < minElapsed) return null;
   return volume / elapsed;
 }
 
@@ -129,7 +131,7 @@ export function computeRollingAverageRate(
   for (let i = 1; i < sorted.length; i++) {
     const volume = sorted[i].value - sorted[i - 1].value;
     const elapsed = (sorted[i].at.getTime() - sorted[i - 1].at.getTime()) / elapsedUnitMs;
-    const rate = computeRate(volume, elapsed, minElapsed);
+    const rate = computeRate(volume, elapsed, minElapsed, false);
     if (rate != null) rates.push(rate);
   }
   if (!rates.length) return null;
@@ -144,9 +146,10 @@ export interface VolumePoint {
 }
 
 /**
- * Rolling average rate for sources that store an already-computed period
- * volume (product_meter_readings.daily_volume, blending_events.volume_m3)
- * rather than a cumulative meter value — so there's no current-vs-previous
+ * Same as computeRollingAverageRate, for sources (product meters, locators)
+ * that persist a delta directly into the DB (`daily_volume`) rather than
+ * requiring a diff of cumulative meter readings. Each point is already a
+ * single period's volume, so unlike computeRollingAverageRate there is no
  * diff to take here, only an elapsed time to divide by.
  *
  * Each point's rate is volume ÷ (this point's timestamp − the PREVIOUS
@@ -172,7 +175,7 @@ export function computeRollingAverageRateFromDeltas(
   const rates: number[] = [];
   for (let i = 1; i < sorted.length; i++) {
     const elapsed = (sorted[i].at.getTime() - sorted[i - 1].at.getTime()) / elapsedUnitMs;
-    const rate = computeRate(sorted[i].volume, elapsed, minElapsed);
+    const rate = computeRate(sorted[i].volume, elapsed, minElapsed, false);
     if (rate != null) rates.push(rate);
   }
   if (!rates.length) return null;
@@ -195,7 +198,25 @@ export function classifyDeviation(
   avgRate: number | null,
   criticalMultiplier: number,
 ): DeviationResult {
-  if (rate == null || avgRate == null || avgRate <= 0) {
+  if (rate == null) {
+    return { tier: 'ok', direction: null, rate, avgRate, deviationPct: null };
+  }
+
+  // Handle backward / negative flow (e.g. entered 58,936 instead of 589,360 or meter rollover)
+  if (rate < 0) {
+    const devPct = avgRate != null && avgRate > 0
+      ? Math.round(Math.abs(rate / avgRate - 1) * 100)
+      : 100;
+    return {
+      tier: 'critical',
+      direction: 'low',
+      rate,
+      avgRate,
+      deviationPct: devPct,
+    };
+  }
+
+  if (avgRate == null || avgRate <= 0) {
     return { tier: 'ok', direction: null, rate, avgRate, deviationPct: null };
   }
 
@@ -242,11 +263,18 @@ export function formatDeviationMessage(
   windowDays: number,
   escalates: boolean = true,
 ): string {
-  if (result.tier === 'ok' || result.rate == null || result.avgRate == null || result.deviationPct == null) {
+  if (result.tier === 'ok' || result.rate == null || result.deviationPct == null) {
     return '';
   }
   const u = UNIT_LABEL[unit];
   const noun = unit === 'kwh/hr' ? 'rate' : 'flow rate';
+
+  if (result.rate < 0) {
+    return `${label} reading is below previous (negative ${noun} ${result.rate.toFixed(1)} ${u}). If this meter requires a ×10 multiplier or experienced rollover/replacement, verify and explain — remark required before saving.`;
+  }
+
+  if (result.avgRate == null) return '';
+
   const verb = result.direction === 'high' ? 'above' : 'below';
   const base = `${label} ${noun} ${result.rate.toFixed(1)} ${u} is ${result.deviationPct}% ${verb} the ${windowDays}-day average (${result.avgRate.toFixed(1)} ${u})`;
   if (result.tier !== 'critical') return `${base} — remark required before saving.`;
