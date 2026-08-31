@@ -33,12 +33,14 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { useAppStore } from '@/store/appStore';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
-import { Droplet, Plug, Unplug, Save, RefreshCw, HelpCircle, PanelRightOpen, PanelRightClose, ZoomIn, ZoomOut, Maximize2, Move } from 'lucide-react';
-import { NodeType, CustomColumn, buildColSequence, buildColXMap, TopoNode, TopoLink, NodePositionOverride, DragItem, PaletteItem, TopologyState, NODE_W, NODE_H, ROW_GAP, START_Y, COL_GAP, POWER_COLS, NODE_LABELS, COLORS, canConnect, saveLinks, loadCustomNodes, saveCustomNodes, loadCustomColumns, saveCustomColumns, loadPosOverrides, savePosOverrides, loadPaletteItems, savePaletteItems, loadColWidths, saveColWidths, useTopologyData, buildTopology, Zone, layoutNodes, cubicPath } from './plantTopology/shared';
+import { Droplet, Plug, Unplug, Save, RefreshCw, HelpCircle, PanelRightOpen, PanelRightClose, ZoomIn, ZoomOut, Maximize2, Move, Layers } from 'lucide-react';
+import { NodeType, CustomColumn, buildColSequence, buildColXMap, TopoNode, TopoLink, NodePositionOverride, DragItem, PaletteItem, TopologyState, NODE_W, NODE_H, ROW_GAP, START_Y, COL_GAP, POWER_COLS, NODE_LABELS, COLORS, canConnect, saveLinks, loadCustomNodes, saveCustomNodes, loadCustomColumns, saveCustomColumns, loadPosOverrides, savePosOverrides, loadPaletteItems, savePaletteItems, loadColWidths, saveColWidths, useTopologyData, buildTopology, Zone, layoutNodes, cubicPath, TOPO_FONT_SANS, TOPO_FONT_MONO, getNodeStatusInfo } from './plantTopology/shared';
 import { NodePalette } from './plantTopology/NodePalette';
 import { RenameModal } from './plantTopology/RenameModal';
 import { DragGhost } from './plantTopology/DragGhost';
 import { SidePanel } from './plantTopology/SidePanel';
+import { NodeInspector } from './plantTopology/NodeInspector';
+import { TopologyLegend } from './plantTopology/TopologyLegend';
 
 export default function PlantTopology() {
   const { isAdmin, isManager } = useAuth();
@@ -55,6 +57,7 @@ export default function PlantTopology() {
 
   const [editMode, setEditMode]       = useState<'connect' | 'disconnect' | null>(null);
   const [pendingFrom, setPendingFrom] = useState<{ id: string; type: NodeType } | null>(null);
+  const [inspectNode, setInspectNode] = useState<TopoNode | null>(null);
   const [hovered, setHovered]         = useState<string | null>(null);
   const [hoveredLink, setHoveredLink] = useState<number | null>(null);
   const [showHelp, setShowHelp]       = useState(false);
@@ -103,7 +106,13 @@ export default function PlantTopology() {
   }, [rawData, effectivePlantId, customNodes]);
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { setPendingFrom(null); setEditMode(null); } };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setPendingFrom(null);
+        setEditMode(null);
+        setInspectNode(null);
+      }
+    };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, []);
@@ -285,30 +294,36 @@ export default function PlantTopology() {
     setPendingRename(null);
   }, [effectivePlantId, customNodes, topoState]);
 
-  // ── Connection editing ────────────────────────────────────────────────────────
+  // ── Node interaction & Connection editing ───────────────────────────────────
 
-  function handleNodeClick(id: string, type: NodeType) {
-    if (!canEdit || !editMode || !topoState) return;
-    if (!pendingFrom) { setPendingFrom({ id, type }); return; }
-    if (pendingFrom.id === id) { setPendingFrom(null); return; }
-    if (!canConnect(pendingFrom.type, type)) {
-      toast.error(`Cannot ${editMode} ${NODE_LABELS[pendingFrom.type]} ↔ ${NODE_LABELS[type]}`);
+  function handleNodeClick(node: TopoNode) {
+    if (canEdit && editMode && topoState) {
+      const { id, type } = node;
+      if (!pendingFrom) { setPendingFrom({ id, type }); return; }
+      if (pendingFrom.id === id) { setPendingFrom(null); return; }
+      if (!canConnect(pendingFrom.type, type)) {
+        toast.error(`Cannot ${editMode} ${NODE_LABELS[pendingFrom.type]} ↔ ${NODE_LABELS[type]}`);
+        setPendingFrom(null);
+        return;
+      }
+      const newLinks = [...topoState.editLinks];
+      if (editMode === 'connect') {
+        if (!newLinks.some((l) => l.from === pendingFrom.id && l.to === id))
+          newLinks.push({ from: pendingFrom.id, to: id, editable: true });
+        else toast.info('Connection already exists');
+      } else {
+        const idx = newLinks.findIndex((l) =>
+          (l.from === pendingFrom.id && l.to === id) || (l.from === id && l.to === pendingFrom.id));
+        if (idx !== -1) newLinks.splice(idx, 1);
+        else toast.info('No connection to remove');
+      }
+      setTopoState({ ...topoState, editLinks: newLinks });
       setPendingFrom(null);
       return;
     }
-    const newLinks = [...topoState.editLinks];
-    if (editMode === 'connect') {
-      if (!newLinks.some((l) => l.from === pendingFrom.id && l.to === id))
-        newLinks.push({ from: pendingFrom.id, to: id, editable: true });
-      else toast.info('Connection already exists');
-    } else {
-      const idx = newLinks.findIndex((l) =>
-        (l.from === pendingFrom.id && l.to === id) || (l.from === id && l.to === pendingFrom.id));
-      if (idx !== -1) newLinks.splice(idx, 1);
-      else toast.info('No connection to remove');
-    }
-    setTopoState({ ...topoState, editLinks: newLinks });
-    setPendingFrom(null);
+
+    // Default inspection mode for ALL users (viewers & editors)
+    setInspectNode(node);
   }
 
   async function handleSave() {
@@ -395,12 +410,14 @@ export default function PlantTopology() {
     const c           = COLORS[node.type];
     const isPending   = pendingFrom?.id === node.id;
     const isHov       = hovered === node.id;
+    const isInspected = inspectNode?.id === node.id;
     const isClickable = canEdit && !!editMode;
     const isInactive  = node.status === 'Inactive';
     const connCount   = linkCounts[node.id] ?? 0;
     const isCustom    = node.custom;
     const hasDetail   = !!node.detail;
     const isBeingDragged = dragItem?.nodeId === node.id;
+    const statusInfo  = getNodeStatusInfo(node.status);
 
     // Taller node if it has a detail line
     const h = hasDetail ? NODE_H + 18 : NODE_H;
@@ -410,27 +427,30 @@ export default function PlantTopology() {
         key={node.id}
         transform={`translate(${pos.x},${pos.y})`}
         style={{
-          cursor: isClickable ? 'pointer' : 'default',
+          cursor: 'pointer',
           opacity: isBeingDragged ? 0.35 : 1,
           transition: 'opacity 0.15s',
         }}
-        onClick={() => !isBeingDragged && handleNodeClick(node.id, node.type)}
+        onClick={() => !isBeingDragged && handleNodeClick(node)}
         onMouseEnter={() => setHovered(node.id)}
         onMouseLeave={() => setHovered(null)}
       >
+        {/* Native browser fallback tooltip */}
+        <title>{`${node.label} [${NODE_LABELS[node.type]}]${node.detail ? ` (${node.detail})` : ''}${node.status ? ` · ${statusInfo.label}` : ''}`}</title>
+
         {/* Pulse ring for active nodes */}
-        {node.status === 'Active' && !isPending && (
+        {node.status === 'Active' && !isPending && !isInspected && (
           <rect x={-2} y={-2} width={NODE_W + 4} height={h + 4} rx={10}
             fill="none" stroke={c.accent} strokeWidth={1} opacity={isHov ? 0.4 : 0.15} />
         )}
 
-        {/* Selection / hover ring */}
-        {(isPending || (isHov && isClickable)) && (
+        {/* Selection / inspection / hover ring */}
+        {(isPending || isInspected || (isHov && isClickable)) && (
           <rect x={-4} y={-4} width={NODE_W + 8} height={h + 8} rx={11}
             fill="none"
-            stroke={isPending ? 'hsl(var(--warn))' : c.accent}
+            stroke={isPending ? 'hsl(var(--warn))' : isInspected ? 'hsl(var(--primary))' : c.accent}
             strokeWidth={2.5}
-            opacity={0.8}
+            opacity={0.85}
           />
         )}
 
@@ -441,8 +461,8 @@ export default function PlantTopology() {
         {/* Node body */}
         <rect width={NODE_W} height={h} rx={9}
           fill={isInactive ? 'hsl(var(--muted))' : c.bg}
-          stroke={isPending ? 'hsl(var(--warn))' : c.border}
-          strokeWidth={isPending ? 2 : isHov ? 2 : 1.5}
+          stroke={isPending ? 'hsl(var(--warn))' : isInspected ? 'hsl(var(--primary))' : isHov ? c.accent : c.border}
+          strokeWidth={isPending || isInspected ? 2 : isHov ? 2 : 1.5}
           opacity={isInactive ? 0.55 : 1}
         />
 
@@ -454,7 +474,7 @@ export default function PlantTopology() {
         {/* Type badge */}
         <text x={NODE_W / 2 + 4} y={17}
           textAnchor="middle" fill={c.accent}
-          fontSize={7.5} fontFamily="'JetBrains Mono', monospace"
+          fontSize={7.5} fontFamily={TOPO_FONT_MONO}
           fontWeight={700} letterSpacing={1.2} opacity={0.9}
         >
           {NODE_LABELS[node.type]}
@@ -464,7 +484,7 @@ export default function PlantTopology() {
         <text x={NODE_W / 2 + 4} y={35}
           textAnchor="middle"
           fill={isInactive ? 'hsl(var(--muted-foreground))' : c.text}
-          fontSize={11.5} fontFamily="'Inter', system-ui, sans-serif"
+          fontSize={11.5} fontFamily={TOPO_FONT_SANS}
           fontWeight={600}
         >
           {node.label.length > 16 ? node.label.slice(0, 15) + '…' : node.label}
@@ -476,20 +496,17 @@ export default function PlantTopology() {
             textAnchor="middle"
             fill={isInactive ? 'hsl(var(--muted-foreground))' : c.accent}
             fontSize={8.5}
-            fontFamily="'JetBrains Mono', monospace"
+            fontFamily={TOPO_FONT_MONO}
             opacity={0.85}
           >
             {(node.detail ?? '').length > 22 ? (node.detail ?? '').slice(0, 21) + '…' : node.detail}
           </text>
         )}
 
-        {/* Status dot */}
+        {/* Status dot with safe non-alarm fallback */}
         {node.status && (
           <circle cx={NODE_W - 10} cy={10} r={4}
-            fill={node.status === 'Active' ? 'hsl(var(--accent))'
-                  : node.status === 'Running' ? 'hsl(var(--accent))'
-                  : node.status === 'Maintenance' ? 'hsl(var(--warn))'
-                  : 'hsl(var(--danger))'}
+            fill={statusInfo.fill}
             stroke={c.bg} strokeWidth={1.2}
           />
         )}
@@ -501,7 +518,7 @@ export default function PlantTopology() {
               fill={c.accent} opacity={0.25} />
             <text x={17} y={h - 4}
               textAnchor="middle" fill={c.accent}
-              fontSize={5.5} fontWeight={700} fontFamily="'JetBrains Mono', monospace">
+              fontSize={5.5} fontWeight={700} fontFamily={TOPO_FONT_MONO}>
               CUSTOM
             </text>
           </>
@@ -708,14 +725,18 @@ export default function PlantTopology() {
             Solar Array → Solar Meter · Grid Utility → Grid Meter → Wells / RO Trains
           </span>
           <span>
+            <strong className="text-primary">Inspect:</strong>{' '}
+            Click any node to open full specifications, stream analysis, and operational deep-links.
+          </span>
+          <span>
             <strong className="text-primary">Edit:</strong>{' '}
             Use Connect/Disconnect below, click two compatible nodes, then Save.
           </span>
           <span>
             <strong className="text-primary">Navigate:</strong>{' '}
             {isMobile
-              ? 'Drag to pan · Use the +/− buttons below to zoom'
-              : 'Scroll (H+V) · Alt+drag or middle-click to pan · Ctrl+scroll to zoom'}
+              ? 'Drag / scroll to pan · Use floating +/− to zoom · Tap any node to inspect'
+              : 'Scroll to pan (H+V) · Alt+drag / middle-click · Ctrl+scroll to zoom · Click node to inspect'}
           </span>
         </div>
       )}
@@ -728,7 +749,7 @@ export default function PlantTopology() {
             onClick={() => { setEditMode(editMode === 'connect' ? null : 'connect'); setPendingFrom(null); }}
             className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium border transition-all ${
               editMode === 'connect'
-                ? 'bg-accent-soft border-accent text-accent'
+                ? 'bg-accent-soft border-accent text-accent shadow-2xs'
                 : 'border-border text-muted-foreground hover:border-accent/60 hover:text-accent/90'
             }`}
           >
@@ -739,32 +760,13 @@ export default function PlantTopology() {
             onClick={() => { setEditMode(editMode === 'disconnect' ? null : 'disconnect'); setPendingFrom(null); }}
             className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium border transition-all ${
               editMode === 'disconnect'
-                ? 'bg-danger-soft border-danger text-danger'
+                ? 'bg-danger-soft border-danger text-danger shadow-2xs'
                 : 'border-border text-muted-foreground hover:border-danger/60 hover:text-danger/90'
             }`}
           >
             <Unplug className="h-3.5 w-3.5" />
             {editMode === 'disconnect' ? (pendingFrom ? 'Pick 2nd node…' : 'Pick node…') : 'Disconnect'}
           </button>
-
-          <div className="flex items-center gap-1 ml-2 border-l border-border pl-2">
-            <button onClick={() => setZoom((z) => Math.min(2.5, z + 0.15))}
-              aria-label="Zoom in"
-              className="p-1 rounded border border-border text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors">
-              <ZoomIn className="h-3 w-3" />
-            </button>
-            <span className="text-2xs font-mono text-muted-foreground w-8 text-center">{Math.round(zoom * 100)}%</span>
-            <button onClick={() => setZoom((z) => Math.max(0.3, z - 0.15))}
-              aria-label="Zoom out"
-              className="p-1 rounded border border-border text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors">
-              <ZoomOut className="h-3 w-3" />
-            </button>
-            <button onClick={resetView}
-              aria-label="Reset view"
-              className="p-1 rounded border border-border text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors ml-0.5">
-              <Maximize2 className="h-3 w-3" />
-            </button>
-          </div>
 
           <Button
             size="sm"
@@ -808,244 +810,269 @@ export default function PlantTopology() {
             <span className="ml-auto text-3xs text-muted-foreground font-mono">
               {dragItem
                 ? '📌 Drop on any column to place node'
-                : isMobile ? 'Drag to pan · +/− to zoom' : 'Scroll to pan · Alt+drag · Ctrl+scroll to zoom'}
+                : isMobile ? 'Tap node to inspect · +/− to zoom' : 'Click node to inspect · Scroll / Alt+drag · Ctrl+scroll'}
             </span>
           </div>
 
-          {/* ── SVG canvas with BOTH scrollbars ────────────────────────────────── */}
-          <div
-            ref={canvasRef}
-            className={`flex-1 min-h-0 rounded-xl border bg-card shadow-sm transition-colors ${
-              dragItem && snapTarget ? 'border-primary/60 ring-2 ring-primary/20' : 'border-border'
-            }`}
-            style={{
-              overflow: 'auto',
-              scrollbarWidth: 'thin',
-              scrollbarColor: 'hsl(var(--border)) hsl(var(--muted))',
-              cursor: dragItem ? (snapTarget ? 'copy' : 'not-allowed') : undefined,
-            }}
-            onWheel={(e) => {
-              if (e.ctrlKey) {
-                e.preventDefault();
-                setZoom((z) => Math.min(2.5, Math.max(0.3, z - e.deltaY * 0.001)));
-              }
-            }}
-          >
-            <svg
-              width={Math.max(maxX * zoom, 200)}
-              height={Math.max((maxY + 24) * zoom, 200)}
-              style={{ display: 'block' }}
+          {/* ── SVG canvas container with relative positioning ─────────────────── */}
+          <div className="flex-1 min-h-0 relative overflow-hidden flex flex-col">
+            <div
+              ref={canvasRef}
+              className={`flex-1 min-h-0 rounded-xl border bg-card shadow-sm transition-colors ${
+                dragItem && snapTarget ? 'border-primary/60 ring-2 ring-primary/20' : 'border-border'
+              }`}
+              style={{
+                overflow: 'auto',
+                scrollbarWidth: 'thin',
+                scrollbarColor: 'hsl(var(--border)) hsl(var(--muted))',
+                cursor: dragItem ? (snapTarget ? 'copy' : 'not-allowed') : undefined,
+              }}
+              onWheel={(e) => {
+                if (e.ctrlKey) {
+                  e.preventDefault();
+                  setZoom((z) => Math.min(2.5, Math.max(0.3, z - e.deltaY * 0.001)));
+                }
+              }}
             >
-              <defs>
-                <marker id="arrow-main" markerWidth="7" markerHeight="7" refX="5" refY="3.5" orient="auto">
-                  <path d="M0,0 L0,7 L7,3.5 z" fill="hsl(var(--muted-foreground))" />
-                </marker>
-                <pattern id="dot-grid" width="24" height="24" patternUnits="userSpaceOnUse">
-                  <circle cx="1" cy="1" r="1" fill="hsl(var(--border))" />
-                </pattern>
-              </defs>
+              <svg
+                width={Math.max(maxX * zoom, 200)}
+                height={Math.max((maxY + 24) * zoom, 200)}
+                style={{ display: 'block' }}
+              >
+                <defs>
+                  <marker id="arrow-main" markerWidth="7" markerHeight="7" refX="5" refY="3.5" orient="auto">
+                    <path d="M0,0 L0,7 L7,3.5 z" fill="hsl(var(--muted-foreground))" />
+                  </marker>
+                  <pattern id="dot-grid" width="24" height="24" patternUnits="userSpaceOnUse">
+                    <circle cx="1" cy="1" r="1" fill="hsl(var(--border))" />
+                  </pattern>
+                </defs>
 
-              {/* Zoom transform wrapper */}
-              <g transform={`scale(${zoom})`}>
-                {/* Canvas bg */}
-                <rect width={maxX} height={maxY + 24} fill="hsl(var(--card))" />
-                <rect width={maxX} height={maxY + 24} fill="url(#dot-grid)" />
+                {/* Zoom transform wrapper */}
+                <g transform={`scale(${zoom})`}>
+                  {/* Canvas bg */}
+                  <rect width={maxX} height={maxY + 24} fill="hsl(var(--card))" />
+                  <rect width={maxX} height={maxY + 24} fill="url(#dot-grid)" />
 
-                {/* Column lane backgrounds — all columns in sequence order */}
-                {colSequence.map((slot) => {
-                  const x = colXMap[slot.key];
-                  if (x === undefined) return null;
-                  const laneColor = slot.isCustom
-                    ? COLORS.customNode.lane
-                    : COLORS[slot.type!].lane;
-                  return (
-                    <rect
-                      key={`lane-${slot.key}`}
-                      x={x - 10} y={24}
-                      width={NODE_W + 20}
-                      height={maxWaterY - 10}
-                      rx={6}
-                      fill={laneColor}
-                      opacity={0.55}
-                    />
-                  );
-                })}
-
-                {/* Column resize handles — drag right edge to widen/narrow */}
-                {colSequence.map((slot) => {
-                  const x = colXMap[slot.key];
-                  if (x === undefined) return null;
-                  const slotW = colWidths[slot.key] ?? COL_GAP;
-                  // Handle sits at the boundary between this col and the next
-                  const handleX = x + slotW - 8;
-                  const isActive = resizingCol?.key === slot.key || hoveredLaneResizer === slot.key;
-                  const laneColor = slot.isCustom ? COLORS.customNode.accent : COLORS[slot.type!].accent;
-                  return (
-                    <g key={`resize-${slot.key}`}>
-                      {/* Visual dotted line */}
-                      <line
-                        x1={handleX} y1={20} x2={handleX} y2={maxWaterY + 10}
-                        stroke={isActive ? laneColor : 'hsl(var(--border))'}
-                        strokeWidth={isActive ? 2 : 1}
-                        strokeDasharray={isActive ? undefined : '3,3'}
-                        opacity={isActive ? 0.8 : 0.4}
-                        style={{ pointerEvents: 'none' }}
-                      />
-                      {/* Grip pill icon */}
-                      {isActive && (
-                        <g transform={`translate(${handleX - 4}, ${(maxWaterY + 20) / 2 - 12})`}>
-                          <rect x={0} y={0} width={8} height={24} rx={4}
-                            fill={laneColor} opacity={0.15} />
-                          <rect x={2} y={5}  width={4} height={2} rx={1} fill={laneColor} opacity={0.7} />
-                          <rect x={2} y={10} width={4} height={2} rx={1} fill={laneColor} opacity={0.7} />
-                          <rect x={2} y={15} width={4} height={2} rx={1} fill={laneColor} opacity={0.7} />
-                        </g>
-                      )}
-                      {/* Wide invisible hit area for pointer events */}
+                  {/* Column lane backgrounds — all columns in sequence order */}
+                  {colSequence.map((slot) => {
+                    const x = colXMap[slot.key];
+                    if (x === undefined) return null;
+                    const laneColor = slot.isCustom
+                      ? COLORS.customNode.lane
+                      : COLORS[slot.type!].lane;
+                    return (
                       <rect
-                        x={handleX - 6} y={20}
-                        width={12} height={maxWaterY - 10}
-                        fill="transparent"
-                        style={{ cursor: 'col-resize' }}
-                        onPointerEnter={() => setHoveredLaneResizer(slot.key)}
-                        onPointerLeave={() => { if (resizingCol?.key !== slot.key) setHoveredLaneResizer(null); }}
-                        onPointerDown={(e) => {
-                          e.stopPropagation();
-                          (e.currentTarget as SVGRectElement).setPointerCapture(e.pointerId);
-                          const svgEl = (e.currentTarget as SVGElement).closest('svg')!;
-                          const svgRect = svgEl.getBoundingClientRect();
-                          const svgX = (e.clientX - svgRect.left) / zoom;
-                          setResizingCol({ key: slot.key, startSvgX: svgX, startWidth: slotW });
-                          setHoveredLaneResizer(slot.key);
-                        }}
-                        onPointerMove={(e) => {
-                          if (!resizingCol || resizingCol.key !== slot.key) return;
-                          const svgEl = (e.currentTarget as SVGElement).closest('svg')!;
-                          const svgRect = svgEl.getBoundingClientRect();
-                          const svgX = (e.clientX - svgRect.left) / zoom;
-                          const delta = svgX - resizingCol.startSvgX;
-                          const newW = Math.max(NODE_W + 20, resizingCol.startWidth + delta);
-                          const next = { ...colWidths, [slot.key]: newW };
-                          setColWidths(next);
-                          if (effectivePlantId) saveColWidths(effectivePlantId, next);
-                        }}
-                        onPointerUp={() => {
-                          setResizingCol(null);
-                          setHoveredLaneResizer(null);
-                        }}
+                        key={`lane-${slot.key}`}
+                        x={x - 10} y={24}
+                        width={NODE_W + 20}
+                        height={maxWaterY - 10}
+                        rx={6}
+                        fill={laneColor}
+                        opacity={0.55}
                       />
-                    </g>
-                  );
-                })}
+                    );
+                  })}
 
-                {/* Drag snap highlight — shows target column + row */}
-                {dragItem && snapTarget && (() => {
-                  const snapX = colXMap[snapTarget.colKey] ?? 0;
-                  const snapY = START_Y + snapTarget.rowIdx * ROW_GAP;
-                  const c = COLORS[dragItem.nodeType];
-                  return (
-                    <g>
-                      {/* Column highlight */}
-                      <rect
-                        x={snapX - 10} y={24}
-                        width={NODE_W + 20} height={maxWaterY - 10}
-                        rx={6} fill={c.accent} opacity={0.08}
-                        stroke={c.accent} strokeWidth={2} strokeDasharray="6,3"
-                      />
-                      {/* Row slot indicator */}
-                      <rect
-                        x={snapX} y={snapY}
-                        width={NODE_W} height={NODE_H}
-                        rx={9} fill={c.accent} opacity={0.12}
-                        stroke={c.accent} strokeWidth={2} strokeDasharray="5,3"
-                      />
-                      {/* Drop label */}
-                      <text x={snapX + NODE_W / 2} y={snapY + NODE_H / 2 + 4}
-                        textAnchor="middle" fill={c.accent}
-                        fontSize={9} fontFamily="'JetBrains Mono', monospace" fontWeight={700}>
-                        DROP HERE
+                  {/* Column resize handles — drag right edge to widen/narrow */}
+                  {colSequence.map((slot) => {
+                    const x = colXMap[slot.key];
+                    if (x === undefined) return null;
+                    const slotW = colWidths[slot.key] ?? COL_GAP;
+                    // Handle sits at the boundary between this col and the next
+                    const handleX = x + slotW - 8;
+                    const isActive = resizingCol?.key === slot.key || hoveredLaneResizer === slot.key;
+                    const laneColor = slot.isCustom ? COLORS.customNode.accent : COLORS[slot.type!].accent;
+                    return (
+                      <g key={`resize-${slot.key}`}>
+                        {/* Visual dotted line */}
+                        <line
+                          x1={handleX} y1={20} x2={handleX} y2={maxWaterY + 10}
+                          stroke={isActive ? laneColor : 'hsl(var(--border))'}
+                          strokeWidth={isActive ? 2 : 1}
+                          strokeDasharray={isActive ? undefined : '3,3'}
+                          opacity={isActive ? 0.8 : 0.4}
+                          style={{ pointerEvents: 'none' }}
+                        />
+                        {/* Grip pill icon */}
+                        {isActive && (
+                          <g transform={`translate(${handleX - 4}, ${(maxWaterY + 20) / 2 - 12})`}>
+                            <rect x={0} y={0} width={8} height={24} rx={4}
+                              fill={laneColor} opacity={0.15} />
+                            <rect x={2} y={5}  width={4} height={2} rx={1} fill={laneColor} opacity={0.7} />
+                            <rect x={2} y={10} width={4} height={2} rx={1} fill={laneColor} opacity={0.7} />
+                            <rect x={2} y={15} width={4} height={2} rx={1} fill={laneColor} opacity={0.7} />
+                          </g>
+                        )}
+                        {/* Wide invisible hit area for pointer events */}
+                        <rect
+                          x={handleX - 6} y={20}
+                          width={12} height={maxWaterY - 10}
+                          fill="transparent"
+                          style={{ cursor: 'col-resize' }}
+                          onPointerEnter={() => setHoveredLaneResizer(slot.key)}
+                          onPointerLeave={() => { if (resizingCol?.key !== slot.key) setHoveredLaneResizer(null); }}
+                          onPointerDown={(e) => {
+                            e.stopPropagation();
+                            (e.currentTarget as SVGRectElement).setPointerCapture(e.pointerId);
+                            const svgEl = (e.currentTarget as SVGElement).closest('svg')!;
+                            const svgRect = svgEl.getBoundingClientRect();
+                            const svgX = (e.clientX - svgRect.left) / zoom;
+                            setResizingCol({ key: slot.key, startSvgX: svgX, startWidth: slotW });
+                            setHoveredLaneResizer(slot.key);
+                          }}
+                          onPointerMove={(e) => {
+                            if (!resizingCol || resizingCol.key !== slot.key) return;
+                            const svgEl = (e.currentTarget as SVGElement).closest('svg')!;
+                            const svgRect = svgEl.getBoundingClientRect();
+                            const svgX = (e.clientX - svgRect.left) / zoom;
+                            const delta = svgX - resizingCol.startSvgX;
+                            const newW = Math.max(NODE_W + 20, resizingCol.startWidth + delta);
+                            const next = { ...colWidths, [slot.key]: newW };
+                            setColWidths(next);
+                            if (effectivePlantId) saveColWidths(effectivePlantId, next);
+                          }}
+                          onPointerUp={() => {
+                            setResizingCol(null);
+                            setHoveredLaneResizer(null);
+                          }}
+                        />
+                      </g>
+                    );
+                  })}
+
+                  {/* Drag snap highlight — shows target column + row */}
+                  {dragItem && snapTarget && (() => {
+                    const snapX = colXMap[snapTarget.colKey] ?? 0;
+                    const snapY = START_Y + snapTarget.rowIdx * ROW_GAP;
+                    const c = COLORS[dragItem.nodeType];
+                    return (
+                      <g>
+                        {/* Column highlight */}
+                        <rect
+                          x={snapX - 10} y={24}
+                          width={NODE_W + 20} height={maxWaterY - 10}
+                          rx={6} fill={c.accent} opacity={0.08}
+                          stroke={c.accent} strokeWidth={2} strokeDasharray="6,3"
+                        />
+                        {/* Row slot indicator */}
+                        <rect
+                          x={snapX} y={snapY}
+                          width={NODE_W} height={NODE_H}
+                          rx={9} fill={c.accent} opacity={0.12}
+                          stroke={c.accent} strokeWidth={2} strokeDasharray="5,3"
+                        />
+                        {/* Drop label */}
+                        <text x={snapX + NODE_W / 2} y={snapY + NODE_H / 2 + 4}
+                          textAnchor="middle" fill={c.accent}
+                          fontSize={9} fontFamily={TOPO_FONT_MONO} fontWeight={700}>
+                          DROP HERE
+                        </text>
+                      </g>
+                    );
+                  })()}
+
+                  {/* Power-zone divider */}
+                  {hasPowerNodes && (
+                    <>
+                      <line x1={0} y1={powerDividerY} x2={maxX} y2={powerDividerY}
+                        stroke="hsl(var(--border))" strokeWidth={1} strokeDasharray="6,5" />
+                      <rect x={10} y={powerDividerY - 22} width={104} height={18} rx={9} fill="hsl(var(--muted))" />
+                      <text x={62} y={powerDividerY - 11} textAnchor="middle"
+                        fill="hsl(var(--muted-foreground))" fontSize={9}
+                        fontFamily={TOPO_FONT_MONO} fontWeight={600} letterSpacing={1.2}>
+                        POWER SUPPLY
                       </text>
-                    </g>
-                  );
-                })()}
+                      <rect x={10} y={START_Y - 26} width={88} height={18} rx={9} fill="hsl(var(--accent-soft))" />
+                      <text x={54} y={START_Y - 15} textAnchor="middle"
+                        fill="hsl(var(--accent))" fontSize={9}
+                        fontFamily={TOPO_FONT_MONO} fontWeight={600} letterSpacing={1.2}>
+                        WATER FLOW
+                      </text>
+                    </>
+                  )}
 
-                {/* Power-zone divider */}
-                {hasPowerNodes && (
-                  <>
-                    <line x1={0} y1={powerDividerY} x2={maxX} y2={powerDividerY}
-                      stroke="hsl(var(--border))" strokeWidth={1} strokeDasharray="6,5" />
-                    <rect x={10} y={powerDividerY - 22} width={104} height={18} rx={9} fill="hsl(var(--muted))" />
-                    <text x={62} y={powerDividerY - 11} textAnchor="middle"
-                      fill="hsl(var(--muted-foreground))" fontSize={9}
-                      fontFamily="'JetBrains Mono', monospace" fontWeight={600} letterSpacing={1.2}>
-                      POWER SUPPLY
+                  {/* Column header labels — all columns in sequence order */}
+                  {colSequence.map((slot) => {
+                    const x = colXMap[slot.key];
+                    if (x === undefined) return null;
+                    return (
+                      <text key={`hdr-${slot.key}`} x={x + NODE_W / 2} y={16}
+                        textAnchor="middle"
+                        fill="hsl(var(--muted-foreground))"
+                        fontSize={8.5}
+                        fontFamily={TOPO_FONT_MONO} letterSpacing={1.5} fontWeight={700}>
+                        {slot.label.toUpperCase()}
+                      </text>
+                    );
+                  })}
+                  {hasPowerNodes && [
+                    { x: POWER_COLS.solarSource, label: 'SOURCE' },
+                    { x: POWER_COLS.solarMeter,  label: 'SOLAR / GRID METERS' },
+                  ].map(({ x, label }) => (
+                    <text key={`pwr-${label}`} x={x + NODE_W / 2} y={powerDividerY + 16}
+                      textAnchor="middle" fill="hsl(var(--warn))" fontSize={8}
+                      fontFamily={TOPO_FONT_MONO} letterSpacing={1.5} fontWeight={700}>
+                      {label}
                     </text>
-                    <rect x={10} y={START_Y - 26} width={88} height={18} rx={9} fill="hsl(var(--accent-soft))" />
-                    <text x={54} y={START_Y - 15} textAnchor="middle"
-                      fill="hsl(var(--accent))" fontSize={9}
-                      fontFamily="'JetBrains Mono', monospace" fontWeight={600} letterSpacing={1.2}>
-                      WATER FLOW
-                    </text>
-                  </>
-                )}
+                  ))}
 
-                {/* Column header labels — all columns in sequence order */}
-                {colSequence.map((slot) => {
-                  const x = colXMap[slot.key];
-                  if (x === undefined) return null;
-                  return (
-                    <text key={`hdr-${slot.key}`} x={x + NODE_W / 2} y={16}
-                      textAnchor="middle"
-                      fill="hsl(var(--muted-foreground))"
-                      fontSize={8.5}
-                      fontFamily="'JetBrains Mono', monospace" letterSpacing={1.5} fontWeight={700}>
-                      {slot.label.toUpperCase()}
-                    </text>
-                  );
-                })}
-                {hasPowerNodes && [
-                  { x: POWER_COLS.solarSource, label: 'SOURCE' },
-                  { x: POWER_COLS.solarMeter,  label: 'SOLAR / GRID METERS' },
-                ].map(({ x, label }) => (
-                  <text key={`pwr-${label}`} x={x + NODE_W / 2} y={powerDividerY + 16}
-                    textAnchor="middle" fill="hsl(var(--warn))" fontSize={8}
-                    fontFamily="'JetBrains Mono', monospace" letterSpacing={1.5} fontWeight={700}>
-                    {label}
-                  </text>
-                ))}
-
-                <g>{allLinks.map((l, i) => renderLink(l, i))}</g>
-                <g>{topoState.nodes.map(renderNode)}</g>
-              </g>
-            </svg>
-          </div>
-
-          {/* ── Legend ──────────────────────────────────────────────────────────── */}
-          <div className="mt-3 shrink-0 flex flex-wrap gap-x-4 gap-y-1.5 pt-3 border-t border-border">
-            {(Object.entries(COLORS) as [NodeType, (typeof COLORS)[NodeType]][])
-              .filter(([type]) => type !== 'customNode')
-              .map(([type, c]) => (
-              <div key={type} className="flex items-center gap-1.5">
-                <div className="w-3.5 h-3.5 rounded-sm border-[1.5px]"
-                  style={{ background: c.bg, borderColor: c.border }} />
-                <span className="text-2xs text-muted-foreground font-mono tracking-wide">
-                  {NODE_LABELS[type]}
-                </span>
-              </div>
-            ))}
-            <div className="flex items-center gap-1.5 ml-auto">
-              <div className="w-8 border-t-2 border-dashed border-border" />
-              <span className="text-2xs text-muted-foreground font-mono">Editable</span>
-              <div className="w-8 border-t-2 border-border ml-2" />
-              <span className="text-2xs text-muted-foreground font-mono">Fixed</span>
-              <div className="w-3.5 h-3.5 rounded-full bg-accent ml-2 border border-background" />
-              <span className="text-2xs text-muted-foreground font-mono">Active</span>
-              <div className="w-3.5 h-3.5 rounded-full bg-danger border border-background" />
-              <span className="text-2xs text-muted-foreground font-mono">Inactive</span>
-              <div className="w-3.5 h-3.5 rounded-full bg-warn border border-background" />
-              <span className="text-2xs text-muted-foreground font-mono">Maintenance</span>
+                  <g>{allLinks.map((l, i) => renderLink(l, i))}</g>
+                  <g>{topoState.nodes.map(renderNode)}</g>
+                </g>
+              </svg>
             </div>
+
+            {/* ── Canvas-Anchored Zoom Overlay (Unconditional for All Users) ── */}
+            <div className="absolute bottom-3 right-3 z-30 flex items-center gap-1 p-1 rounded-lg bg-card/90 backdrop-blur-md border border-border shadow-md select-none">
+              <button
+                onClick={() => setZoom((z) => Math.min(2.5, z + 0.15))}
+                aria-label="Zoom in"
+                title="Zoom In (+)"
+                className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <ZoomIn className="h-3.5 w-3.5" />
+              </button>
+              <span className="text-2xs font-mono font-bold text-foreground px-1.5 min-w-[38px] text-center">
+                {Math.round(zoom * 100)}%
+              </span>
+              <button
+                onClick={() => setZoom((z) => Math.max(0.3, z - 0.15))}
+                aria-label="Zoom out"
+                title="Zoom Out (-)"
+                className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <ZoomOut className="h-3.5 w-3.5" />
+              </button>
+              <button
+                onClick={resetView}
+                aria-label="Reset view"
+                title="Reset Zoom to 100%"
+                className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors border-l border-border/60 ml-0.5"
+              >
+                <Maximize2 className="h-3.5 w-3.5" />
+              </button>
+            </div>
+
+            {/* ── Node Inspector Overlay ── */}
+            {inspectNode && (
+              <NodeInspector
+                node={inspectNode}
+                onClose={() => setInspectNode(null)}
+                allNodes={topoState.nodes}
+                allLinks={allLinks}
+                plantId={effectivePlantId ?? undefined}
+                plantName={activePlant?.name}
+                onSelectNode={(nodeId) => {
+                  const target = topoState.nodes.find((n) => n.id === nodeId);
+                  if (target) setInspectNode(target);
+                }}
+              />
+            )}
           </div>
+
+          {/* ── Grouped Collapsible Legend ────────────────────────────────────────── */}
+          <TopologyLegend />
           </div>{/* end inner flex-col (zone label + canvas + legend) */}
         </div>{/* end outer flex-col (palette + inner) */}
 

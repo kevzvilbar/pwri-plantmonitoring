@@ -131,6 +131,33 @@ export const ROW_GAP = 90;   // vertical gap between rows
 export const START_Y = 52;
 export const COL_GAP = 164;  // horizontal gap between column centers
 
+// ── Typography constants ──
+export const TOPO_FONT_SANS = "var(--font-sans, 'Inter', system-ui, sans-serif)";
+export const TOPO_FONT_MONO = "var(--font-mono, 'JetBrains Mono', monospace)";
+
+// ── Safe status color helper (with non-alarm default fallback) ──
+export function getNodeStatusInfo(status?: string): {
+  fill: string;
+  tone: 'good' | 'warn' | 'danger' | 'muted';
+  label: string;
+} {
+  const s = status?.toLowerCase() || '';
+  if (s === 'active' || s === 'running' || s === 'online') {
+    return { fill: 'hsl(var(--accent))', tone: 'good', label: status || 'Active' };
+  }
+  if (s === 'maintenance' || s === 'standby' || s === 'warning') {
+    return { fill: 'hsl(var(--warn))', tone: 'warn', label: status || 'Maintenance' };
+  }
+  if (s === 'error' || s === 'alarm' || s === 'fault') {
+    return { fill: 'hsl(var(--danger))', tone: 'danger', label: status || 'Fault' };
+  }
+  if (s === 'inactive' || s === 'offline' || s === 'disabled') {
+    return { fill: 'hsl(var(--muted-foreground))', tone: 'muted', label: status || 'Inactive' };
+  }
+  // Safe default: neutral muted gray (never masquerades as an alarm!)
+  return { fill: 'hsl(var(--muted-foreground))', tone: 'muted', label: status || 'Unknown' };
+}
+
 export const POWER_COLS: Record<string, number> = {
   solarSource: 28,
   gridSource:  28,

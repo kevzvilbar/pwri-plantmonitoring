@@ -67,7 +67,7 @@ export function SidePanel({
       <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-muted/40 shrink-0">
         <div>
           <p className="text-3xs font-mono tracking-widest text-muted-foreground uppercase">Topology</p>
-          <h2 className="text-sm font-bold text-foreground">Node Panel</h2>
+          <h2 className="text-sm font-bold text-foreground">Node Manager</h2>
         </div>
         <button onClick={onClose} aria-label="Close node panel" className="p-1 rounded hover:bg-muted transition-colors text-muted-foreground">
           <PanelRightClose className="h-4 w-4" />
