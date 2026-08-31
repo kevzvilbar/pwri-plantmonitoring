@@ -10,7 +10,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import {
   Loader2, BarChart2, Download, Upload, Pencil, MessageSquarePlus, Trash2,
-  Calendar, ChevronLeft, ChevronRight, PowerOff, Wrench, AlertTriangle,
+  Calendar, ChevronLeft, ChevronRight, ChevronDown, PowerOff, Wrench, AlertTriangle,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { friendlyError } from '@/lib/supabaseErrors';
@@ -39,6 +39,9 @@ import {
 import {
   detectHourlyGaps, mergeGapsForDisplay, type FlaggedGap, type GapReason,
 } from '@/lib/hourlyGapDetection';
+import {
+  groupLogItemsWithOfflineSpans, formatSpanDuration, type OfflineSpan,
+} from '@/lib/downtimeRowMerger';
 import { ReasonDialog } from '@/components/ReasonDialog';
 import { reasonCategoryLabel } from '@/lib/reasonCodes';
 
@@ -155,6 +158,96 @@ function GapBadgeRow({ gap, existingReason, onClick, highlighted, rowRef }: {
   );
 }
 
+function OfflineSpanRow({
+  span,
+  isExpanded,
+  onToggleExpand,
+  children,
+}: {
+  span: OfflineSpan;
+  isExpanded: boolean;
+  onToggleExpand: () => void;
+  children?: React.ReactNode;
+}) {
+  const fmtPoint = (iso: string) => format(new Date(iso), 'MMM d, HH:mm');
+  const sameDay = format(new Date(span.startAt), 'MMM d') === format(new Date(span.endAt), 'MMM d');
+  const dateRangeDisplay = sameDay
+    ? `${format(new Date(span.startAt), 'MMM d, yyyy')} · ${format(new Date(span.startAt), 'HH:mm')} → ${format(new Date(span.endAt), 'HH:mm')}`
+    : `${fmtPoint(span.startAt)} → ${fmtPoint(span.endAt)}`;
+
+  return (
+    <>
+      <tr className="border-t bg-muted/40 hover:bg-muted/50 transition-colors">
+        <td className="px-3 py-2 whitespace-nowrap font-mono text-xs">
+          <div className="text-foreground font-semibold flex items-center gap-1.5">
+            <PowerOff className="h-3.5 w-3.5 text-danger shrink-0" />
+            <span>{dateRangeDisplay}</span>
+          </div>
+          <div className="text-muted-foreground text-3xs mt-0.5 flex items-center gap-1 font-sans">
+            <span>{formatSpanDuration(span.durationMs)}</span>
+            <span>·</span>
+            <span className="font-semibold text-foreground/80">{span.rows.length} check-ins</span>
+          </div>
+        </td>
+
+        <td className="px-2 py-2">
+          <div className="flex items-center gap-1.5">
+            <div className="flex -space-x-1.5 overflow-hidden">
+              {span.operators.map((op) => (
+                <span
+                  key={op.id}
+                  title={op.name}
+                  className="h-5 w-5 rounded-full bg-danger-soft text-danger border border-background text-3xs font-bold inline-flex items-center justify-center shrink-0"
+                >
+                  {op.initials}
+                </span>
+              ))}
+            </div>
+            <span className="text-xs font-medium truncate max-w-[100px]" title={span.operators.map((o) => o.name).join(', ')}>
+              {span.operators.map((o) => o.name).join(', ')}
+            </span>
+          </div>
+        </td>
+
+        <td colSpan={30} className="px-3 py-2">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="px-2 py-0.5 rounded text-3xs font-bold uppercase tracking-wider bg-danger-soft text-danger border border-danger/30 shrink-0">
+                Offline Span
+              </span>
+              <span className="text-xs text-foreground font-medium truncate" title={span.combinedReasonText}>
+                {span.combinedReasonText}
+              </span>
+            </div>
+
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={onToggleExpand}
+              className="h-6 text-xs px-2 py-0 gap-1 text-muted-foreground hover:text-foreground border-border/80"
+            >
+              {isExpanded ? (
+                <>
+                  <ChevronDown className="h-3 w-3" />
+                  <span>Hide {span.rows.length} rows</span>
+                </>
+              ) : (
+                <>
+                  <ChevronRight className="h-3 w-3" />
+                  <span>View {span.rows.length} records</span>
+                </>
+              )}
+            </Button>
+          </div>
+        </td>
+      </tr>
+
+      {isExpanded && children}
+    </>
+  );
+}
+
 export function TrainLogModal({ trainId, trainLabel, plantId, onClose, initialTab, highlightId }: TrainLogModalProps) {
   const qc = useQueryClient();
   const { isManager, isDataAnalyst, activeOperator, user } = useAuth();
@@ -167,6 +260,17 @@ export function TrainLogModal({ trainId, trainLabel, plantId, onClose, initialTa
   const [page, setPage]               = useState(0);
   const PAGE_SIZE = 20;
   const [togglingId, setTogglingId]   = useState<string | null>(null);
+  const [expandedSpanIds, setExpandedSpanIds] = useState<Set<string>>(new Set());
+
+  const toggleSpanExpand = (id: string) => {
+    setExpandedSpanIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
   // Reading id currently going through the granular "Replace Train Meter"
   // dialog. Checking Repl. opens this; unchecking still clears all three
   // granular flags (+ the shared flag, kept in sync by a DB trigger) directly.
@@ -560,15 +664,26 @@ export function TrainLogModal({ trainId, trainLabel, plantId, onClose, initialTa
     () => mergeSegmentsForDisplay(preLogs, bannerSegments, (r: any) => r.reading_datetime),
     [preLogs, bannerSegments],
   );
-  const roItems = useMemo(
+  const roItemsWithGaps = useMemo(
     () => mergeGapsForDisplay(roItemsWithBanners, roGaps, gapReasonsBySourceTable.ro_train_readings, (r: any) => r.reading_datetime),
     [roItemsWithBanners, roGaps, gapReasonsBySourceTable],
   );
-  const preItems = useMemo(
+  const preItemsWithGaps = useMemo(
     () => mergeGapsForDisplay(preItemsWithBanners, preGaps, gapReasonsBySourceTable.ro_pretreatment_readings, (r: any) => r.reading_datetime),
     [preItemsWithBanners, preGaps, gapReasonsBySourceTable],
   );
+
+  const roItems = useMemo(
+    () => groupLogItemsWithOfflineSpans(roItemsWithGaps as any, 2),
+    [roItemsWithGaps],
+  );
+  const preItems = useMemo(
+    () => groupLogItemsWithOfflineSpans(preItemsWithGaps as any, 2),
+    [preItemsWithGaps],
+  );
+
   const pageRoItems = roItems.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+  const pagePreItems = preItems.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
 
   // ── Deep-link highlight: jump to whichever page contains highlightId ──────
   // Indexed against roItems/preItems (not the raw logs/preLogs) so a banner
@@ -586,9 +701,17 @@ export function TrainLogModal({ trainId, trainLabel, plantId, onClose, initialTa
     const source = logTab === 'ro' ? roItems : preItems;
     if (!source.length) return; // still loading — wait for the next run
     const idx = highlightGapStartAt
-      ? source.findIndex((item) => item.kind === 'gap' && item.gap.gapStartAt === highlightGapStartAt)
-      : source.findIndex((item) => item.kind === 'reading' && (item.row as any).id === highlightId);
+      ? source.findIndex((item: any) => item.kind === 'gap' && item.gap.gapStartAt === highlightGapStartAt)
+      : source.findIndex((item: any) => {
+          if (item.kind === 'reading') return (item.row as any).id === highlightId;
+          if (item.kind === 'offline-span') return item.span.rows.some((r: any) => r.id === highlightId);
+          return false;
+        });
     if (idx === -1) { setHighlightJumped(true); return; } // not in range even at 90d — give up quietly
+    const targetItem: any = source[idx];
+    if (targetItem?.kind === 'offline-span') {
+      setExpandedSpanIds((prev) => new Set(prev).add(targetItem.span.id));
+    }
     setPage(Math.floor(idx / PAGE_SIZE));
     setHighlightJumped(true);
   }, [highlightId, highlightGapStartAt, highlightJumped, logTab, roItems, preItems]);
@@ -781,6 +904,76 @@ export function TrainLogModal({ trainId, trainLabel, plantId, onClose, initialTa
                           highlighted={isHighlighted}
                           rowRef={isHighlighted ? highlightRowRef : undefined}
                         />
+                      );
+                    }
+                    if (item.kind === 'offline-span') {
+                      const isExpanded = expandedSpanIds.has(item.span.id);
+                      return (
+                        <OfflineSpanRow
+                          key={item.span.id}
+                          span={item.span}
+                          isExpanded={isExpanded}
+                          onToggleExpand={() => toggleSpanExpand(item.span.id)}
+                        >
+                          {item.span.rows.map((r: any, childIdx: number) => {
+                            const isRepl     = !!r.is_meter_replacement;
+                            const opName     = r._operatorName ?? 'Unknown';
+                            const initials   = opName !== 'Unknown'
+                              ? opName.split(' ').map((n: string) => n[0]).slice(0, 2).join('').toUpperCase() : '?';
+                            const isHighlighted = highlightId != null && r.id === highlightId;
+                            return (
+                              <tr
+                                key={r.id ?? `nested-ro-${childIdx}`}
+                                ref={isHighlighted ? highlightRowRef : undefined}
+                                className={cn(
+                                  'border-t transition-colors bg-muted/20 hover:bg-muted/30 text-2xs',
+                                  isHighlighted && 'bg-danger-soft ring-1 ring-inset ring-danger',
+                                )}
+                              >
+                                <td className="px-3 py-1.5 whitespace-nowrap font-mono text-xs pl-6 border-l-2 border-l-danger/60">
+                                  <div className="text-foreground font-medium">{r.reading_datetime ? format(new Date(r.reading_datetime), 'MMM d, yyyy') : '—'}</div>
+                                  <div className="text-muted-foreground">{r.reading_datetime ? format(new Date(r.reading_datetime), 'HH:mm') : ''}</div>
+                                </td>
+                                <td className="px-2 py-1.5">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="h-4 w-4 rounded-full bg-primary-soft text-primary text-3xs font-bold inline-flex items-center justify-center shrink-0">{initials}</span>
+                                    <span className="text-xs font-medium leading-tight truncate max-w-[90px] block">{opName}</span>
+                                  </div>
+                                </td>
+                                <td colSpan={20} className="px-2 py-1.5 text-muted-foreground italic">
+                                  {r.incomplete_reason || 'Offline check-in (no production flow)'}
+                                </td>
+                                <td className="px-2 py-1.5 text-left text-muted-foreground truncate max-w-[120px]">
+                                  {r.remarks || '—'}
+                                </td>
+                                <td className="px-2 py-1.5 text-center">
+                                  <div className="flex items-center justify-center gap-1">
+                                    {canEditEntry(r, hasFullAccess, activeOperator?.id) && (
+                                      <button
+                                        type="button"
+                                        onClick={() => setEditingRoRow(r)}
+                                        className="p-1 rounded text-muted-foreground hover:text-foreground"
+                                        title="Edit entry"
+                                      >
+                                        <Pencil className="h-3 w-3" />
+                                      </button>
+                                    )}
+                                    {canEditEntry(r, hasFullAccess, activeOperator?.id, true) && (
+                                      <button
+                                        type="button"
+                                        onClick={() => setPendingDelete({ type: 'ro', row: r })}
+                                        className="p-1 rounded text-muted-foreground hover:text-danger"
+                                        title="Delete entry"
+                                      >
+                                        <Trash2 className="h-3 w-3" />
+                                      </button>
+                                    )}
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </OfflineSpanRow>
                       );
                     }
                     const r: any = item.row;
@@ -978,6 +1171,67 @@ export function TrainLogModal({ trainId, trainLabel, plantId, onClose, initialTa
                             highlighted={isHighlighted}
                             rowRef={isHighlighted ? highlightRowRef : undefined}
                           />
+                        );
+                      }
+                      if (item.kind === 'offline-span') {
+                        const isExpanded = expandedSpanIds.has(item.span.id);
+                        return (
+                          <OfflineSpanRow
+                            key={item.span.id}
+                            span={item.span}
+                            isExpanded={isExpanded}
+                            onToggleExpand={() => toggleSpanExpand(item.span.id)}
+                          >
+                            {item.span.rows.map((r: any, childIdx: number) => {
+                              const opName   = r._operatorName ?? 'Unknown';
+                              const initials = opName !== 'Unknown' ? opName.split(' ').map((n: string) => n[0]).slice(0, 2).join('').toUpperCase() : '?';
+                              const isHighlighted = highlightId != null && r.id === highlightId;
+                              return (
+                                <tr
+                                  key={r.id ?? `nested-pre-${childIdx}`}
+                                  ref={isHighlighted ? highlightRowRef : undefined}
+                                  className={cn(
+                                    'border-t transition-colors bg-muted/20 hover:bg-muted/30 text-2xs',
+                                    isHighlighted && 'bg-danger-soft ring-1 ring-inset ring-danger',
+                                  )}
+                                >
+                                  <td className="px-3 py-1.5 whitespace-nowrap font-mono text-xs pl-6 border-l-2 border-l-danger/60">
+                                    <div className="text-foreground font-medium">{r.reading_datetime ? format(new Date(r.reading_datetime), 'MMM d, yyyy') : '—'}</div>
+                                    <div className="text-muted-foreground">{r.reading_datetime ? format(new Date(r.reading_datetime), 'HH:mm') : ''}</div>
+                                  </td>
+                                  <td className="px-2 py-1.5">
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="h-4 w-4 rounded-full bg-primary-soft text-primary text-3xs font-bold inline-flex items-center justify-center shrink-0">{initials}</span>
+                                      <span className="text-xs font-medium leading-tight truncate max-w-[90px] block">{opName}</span>
+                                    </div>
+                                  </td>
+                                  <td colSpan={6} className="px-2 py-1.5 text-muted-foreground italic">
+                                    {r.incomplete_reason || 'Offline check-in (no active pre-treatment data)'}
+                                  </td>
+                                  <td className="px-2 py-1.5 text-left text-muted-foreground truncate max-w-[120px]">
+                                    {r.remarks || '—'}
+                                  </td>
+                                  <td className="px-2 py-1.5 text-center">
+                                    {canEditEntry(r, hasFullAccess, activeOperator?.id, true) ? (
+                                      <div className="flex items-center justify-center gap-0.5">
+                                        <button onClick={() => setEditingPretreatRow(r)} title="Edit reading" aria-label="Edit reading"
+                                          disabled={deletingId === r.id}
+                                          className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40">
+                                          <Pencil className="h-3 w-3" />
+                                        </button>
+                                        <button onClick={() => setPendingDelete({ type: 'pretreat', row: r })}
+                                          title="Delete reading" aria-label="Delete reading"
+                                          disabled={deletingId === r.id}
+                                          className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors disabled:opacity-40">
+                                          {deletingId === r.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
+                                        </button>
+                                      </div>
+                                    ) : null}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </OfflineSpanRow>
                         );
                       }
                       const r: any = item.row;
