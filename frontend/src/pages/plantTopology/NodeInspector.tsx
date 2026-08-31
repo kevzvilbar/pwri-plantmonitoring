@@ -2,7 +2,6 @@ import React, { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { X, ExternalLink, ArrowRight, ArrowLeft, Activity, Info, Wrench, ShieldAlert, Cpu } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { StatusPill } from '@/components/ui/StatusPill';
 import { Lamp } from '@/components/ui/Lamp';
 import {
   TopoNode,
@@ -43,19 +42,27 @@ export function NodeInspector({
   // Find upstream (nodes that point TO this node)
   const upstreamNodes = useMemo(() => {
     if (!node) return [];
-    const fromIds = allLinks.filter((l) => l.to === node.id).map((l) => ({ id: l.from, editable: l.editable }));
-    return fromIds
-      .map(({ id, editable }) => ({ node: nodeMap.get(id), editable }))
-      .filter((item): item is { node: TopoNode; editable?: boolean } => item.node !== undefined);
+    const results: { node: TopoNode; editable?: boolean }[] = [];
+    for (const l of allLinks) {
+      if (l.to === node.id) {
+        const found = nodeMap.get(l.from);
+        if (found) results.push({ node: found, editable: l.editable });
+      }
+    }
+    return results;
   }, [node, allLinks, nodeMap]);
 
   // Find downstream (nodes that point FROM this node)
   const downstreamNodes = useMemo(() => {
     if (!node) return [];
-    const toIds = allLinks.filter((l) => l.from === node.id).map((l) => ({ id: l.to, editable: l.editable }));
-    return toIds
-      .map(({ id, editable }) => ({ node: nodeMap.get(id), editable }))
-      .filter((item): item is { node: TopoNode; editable?: boolean } => item.node !== undefined);
+    const results: { node: TopoNode; editable?: boolean }[] = [];
+    for (const l of allLinks) {
+      if (l.from === node.id) {
+        const found = nodeMap.get(l.to);
+        if (found) results.push({ node: found, editable: l.editable });
+      }
+    }
+    return results;
   }, [node, allLinks, nodeMap]);
 
   if (!node) return null;
