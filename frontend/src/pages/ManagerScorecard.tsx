@@ -652,15 +652,14 @@ export default function ManagerScorecard() {
           {/* ── Desktop Table View (>=768px) ── */}
           <div className="hidden md:block overflow-x-auto">
             {viewBy === 'plant' ? (
-              <table className="w-full min-w-[760px] text-xs font-sans">
+              <table className="w-full min-w-[700px] text-xs font-sans">
                 <thead className="bg-muted/50 border-b">
                   <tr>
                     <th className="text-left px-3 py-2.5 font-bold text-xs">Plant Facility</th>
                     <th className="text-left px-3 py-2.5 font-bold text-xs">Manager(s)</th>
-                    <th className="text-center px-3 py-2.5 font-bold text-xs bg-muted/80 border-x border-border/60">
-                      Oversight Score &amp; Rating
+                    <th className="text-center px-3.5 py-2.5 font-bold text-xs bg-muted/80 border-x border-border/60">
+                      Oversight &amp; Completeness
                     </th>
-                    <th className="text-left px-3 py-2.5 font-bold text-xs">Completeness</th>
                     <th className="text-center px-3 py-2.5 font-bold text-xs">Correction Approvals</th>
                     <th className="text-center px-3 py-2.5 font-bold text-xs">Open Gaps</th>
                     <th className="text-center px-3 py-2.5 font-bold text-xs">Error Rate</th>
@@ -687,28 +686,21 @@ export default function ManagerScorecard() {
                           )}
                         </td>
 
-                        {/* Plant Oversight Score */}
-                        <td className="py-2.5 px-3 border-x border-border/60 bg-muted/10 text-center whitespace-nowrap">
-                          <div className="flex flex-col items-center gap-1">
-                            <AppraisalBadge score={plantOversight.score} tier={plantOversight.tier} size="sm" />
-                            <div className="w-24 h-1.5 rounded-full bg-muted overflow-hidden border border-border/50">
-                              <div
-                                className={cn('h-full transition-all', plantOversight.tier.dot)}
-                                style={{ width: `${plantOversight.score}%` }}
-                              />
+                        {/* Combined Oversight & Completeness */}
+                        <td className="py-2.5 px-3 border-x border-border/60 bg-muted/10 whitespace-nowrap">
+                          <div className="flex flex-col items-center gap-1.5 min-w-[170px]">
+                            <div className="flex items-center justify-between w-full gap-2">
+                              <AppraisalBadge score={plantOversight.score} tier={plantOversight.tier} size="sm" />
+                              <span className="text-xs font-bold text-foreground font-mono-num shrink-0" title="Telemetry Completeness">
+                                {fmtPct(r.overall_completeness_pct)}
+                              </span>
                             </div>
-                          </div>
-                        </td>
-
-                        <td className="px-3 py-2.5 min-w-[130px]">
-                          <div className="flex items-center gap-2">
-                            <div className="flex-1 bg-muted rounded-full h-1.5">
+                            <div className="w-full h-1.5 rounded-full bg-muted overflow-hidden border border-border/50">
                               <div
-                                className={cn('h-1.5 rounded-full', pctColor(r.overall_completeness_pct))}
+                                className={cn('h-full rounded-full transition-all', pctColor(r.overall_completeness_pct))}
                                 style={{ width: `${Math.max(2, r.overall_completeness_pct ?? 0)}%` }}
                               />
                             </div>
-                            <span className="tabular-nums font-semibold text-foreground shrink-0 font-mono-num">{fmtPct(r.overall_completeness_pct)}</span>
                           </div>
                         </td>
 
@@ -761,15 +753,14 @@ export default function ManagerScorecard() {
               </table>
             ) : (
               /* View by Manager Profile */
-              <table className="w-full min-w-[760px] text-xs font-sans">
+              <table className="w-full min-w-[700px] text-xs font-sans">
                 <thead className="bg-muted/50 border-b">
                   <tr>
                     <th className="text-left px-3 py-2.5 font-bold text-xs">Manager Name</th>
                     <th className="text-left px-3 py-2.5 font-bold text-xs">Assigned Facilities</th>
-                    <th className="text-center px-3 py-2.5 font-bold text-xs bg-muted/80 border-x border-border/60">
-                      Overall Oversight Score &amp; Appraisal Tier
+                    <th className="text-center px-3.5 py-2.5 font-bold text-xs bg-muted/80 border-x border-border/60">
+                      Oversight &amp; Completeness
                     </th>
-                    <th className="text-left px-3 py-2.5 font-bold text-xs">Avg Completeness</th>
                     <th className="text-center px-3 py-2.5 font-bold text-xs">Correction Approval Status</th>
                     <th className="text-center px-3 py-2.5 font-bold text-xs">Total Monitored Logs</th>
                     <th className="text-center px-3 py-2.5 font-bold text-xs">Open Exceptions</th>
@@ -795,28 +786,21 @@ export default function ManagerScorecard() {
                         </div>
                       </td>
 
-                      {/* Manager Oversight Score */}
-                      <td className="py-2.5 px-3 border-x border-border/60 bg-muted/10 text-center whitespace-nowrap">
-                        <div className="flex flex-col items-center gap-1">
-                          <AppraisalBadge score={m.oversightScore} tier={m.tier} size="sm" />
-                          <div className="w-28 h-1.5 rounded-full bg-muted overflow-hidden border border-border/50">
-                            <div
-                              className={cn('h-full transition-all', m.tier.dot)}
-                              style={{ width: `${m.oversightScore}%` }}
-                            />
+                      {/* Combined Manager Oversight & Completeness */}
+                      <td className="py-2.5 px-3 border-x border-border/60 bg-muted/10 whitespace-nowrap">
+                        <div className="flex flex-col items-center gap-1.5 min-w-[170px]">
+                          <div className="flex items-center justify-between w-full gap-2">
+                            <AppraisalBadge score={m.oversightScore} tier={m.tier} size="sm" />
+                            <span className="text-xs font-bold text-foreground font-mono-num shrink-0" title="Average Completeness">
+                              {fmtPct(m.avgCompleteness)}
+                            </span>
                           </div>
-                        </div>
-                      </td>
-
-                      <td className="px-3 py-2.5 min-w-[130px]">
-                        <div className="flex items-center gap-2">
-                          <div className="flex-1 bg-muted rounded-full h-1.5">
+                          <div className="w-full h-1.5 rounded-full bg-muted overflow-hidden border border-border/50">
                             <div
-                              className={cn('h-1.5 rounded-full', pctColor(m.avgCompleteness))}
+                              className={cn('h-full rounded-full transition-all', pctColor(m.avgCompleteness))}
                               style={{ width: `${Math.max(2, m.avgCompleteness ?? 0)}%` }}
                             />
                           </div>
-                          <span className="tabular-nums font-semibold text-foreground shrink-0 font-mono-num">{fmtPct(m.avgCompleteness)}</span>
                         </div>
                       </td>
 
