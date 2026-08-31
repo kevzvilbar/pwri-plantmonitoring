@@ -93,6 +93,8 @@ interface FlaggedRow {
    *  read access to the log — see reading_edit_audit_log's Admin/Manager-
    *  only SELECT policy, 20260717_reading_edit_audit_log.sql). */
   edit_reason?: { text: string; actor_label: string | null; logged_at: string } | null;
+  /** The value of this reading BEFORE it was edited/corrected (from reading_edit_audit_log or reading_normalizations) */
+  pre_edit_value?: number | null;
 }
 
 interface CorrectionRequest {
@@ -616,14 +618,30 @@ async function fetchPending(): Promise<{ rows: FlaggedRow[]; truncated: boolean 
     // the reduce keeps the most recent edit's reason per record.
     const { data: editReasonRows } = await (supabase
       .from('reading_edit_audit_log' as any)
-      .select('record_id, reason, actor_label, edited_at')
+      .select('record_id, reason, actor_label, edited_at, changes')
       .eq('table_name', table)
       .eq('action', 'update')
       .in('record_id', rowIds)
-      .not('reason', 'is', null)
       .order('edited_at', { ascending: true }) as any);
     const editReasonMap = (editReasonRows ?? []).reduce((acc: Record<string, any>, e: any) => {
-      acc[e.record_id] = { text: e.reason, actor_label: e.actor_label, logged_at: e.edited_at };
+      acc[e.record_id] = { text: e.reason, actor_label: e.actor_label, logged_at: e.edited_at, changes: e.changes };
+      return acc;
+    }, {} as Record<string, any>);
+
+    // Also fetch any prior reading_normalizations entries for these records
+    const { data: normRows } = await (supabase
+      .from('reading_normalizations' as any)
+      .select('source_id, original_value, adjusted_value, note, performed_at')
+      .eq('source_table', table)
+      .in('source_id', rowIds)
+      .order('performed_at', { ascending: true }) as any);
+    const normMap = (normRows ?? []).reduce((acc: Record<string, any>, n: any) => {
+      acc[n.source_id] = {
+        original_value: n.original_value != null ? Number(n.original_value) : null,
+        adjusted_value: n.adjusted_value != null ? Number(n.adjusted_value) : null,
+        note: n.note,
+        performed_at: n.performed_at,
+      };
       return acc;
     }, {} as Record<string, any>);
 
@@ -637,6 +655,23 @@ async function fetchPending(): Promise<{ rows: FlaggedRow[]; truncated: boolean 
       // Compare the two raw meter values directly instead, matching how
       // the DB trigger / SQL backfill audit both define "backward".
       const isBackward = r.previous_reading != null && Number(r.current_reading) < Number(r.previous_reading);
+
+      const editEntry = editReasonMap[r.id];
+      const normEntry = normMap[r.id];
+
+      // Extract pre-edit value from audit log changes or reading_normalizations
+      let preEditVal: number | null = null;
+      if (editEntry?.changes) {
+        const c = editEntry.changes;
+        const oldRaw = c.current_reading?.old ?? c.raw_meter_reading?.old ?? c.power_meter_reading?.old ?? c.meter_reading_kwh?.old;
+        if (oldRaw != null && !isNaN(Number(oldRaw))) {
+          preEditVal = Number(oldRaw);
+        }
+      }
+      if (preEditVal == null && normEntry?.original_value != null && !isNaN(Number(normEntry.original_value))) {
+        preEditVal = Number(normEntry.original_value);
+      }
+
       results.push({
         id: r.id,
         source_table: table,
@@ -652,7 +687,8 @@ async function fetchPending(): Promise<{ rows: FlaggedRow[]; truncated: boolean 
         flag_reason: isBackward ? 'backward' : 'spike',
         is_backward: isBackward,
         anomaly_remark: remarkMap[r.id] ?? null,
-        edit_reason: editReasonMap[r.id] ?? null,
+        edit_reason: editEntry ? { text: editEntry.text, actor_label: editEntry.actor_label, logged_at: editEntry.logged_at } : null,
+        pre_edit_value: preEditVal,
       });
     }
   }
@@ -1220,12 +1256,78 @@ function PendingReviewTab() {
                       </button>
                     </div>
 
-                    {/* Meter values */}
-                    <div className="grid grid-cols-3 gap-3 text-xs">
-                      <div><div className="text-muted-foreground">Previous</div><div className="font-mono font-medium">{fmtNum(row.previous_reading)}</div></div>
-                      <div><div className="text-muted-foreground">Current</div><div className="font-mono font-medium">{fmtNum(row.current_reading)}</div></div>
-                      <div><div className="text-muted-foreground">Delta</div><DeltaBadge vol={row.daily_volume} /></div>
-                    </div>
+                    {/* Meter values & Visual Diff */}
+                    {row.pre_edit_value != null && row.pre_edit_value !== row.current_reading ? (
+                      <div className="space-y-2">
+                        {/* High-visibility Before vs Corrected comparison banner */}
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-xs">
+                          <div>
+                            <div className="text-3xs uppercase font-bold text-muted-foreground tracking-wider">Value Before Correction</div>
+                            <div className="font-mono font-bold text-sm text-destructive line-through decoration-destructive/70 mt-0.5">
+                              {fmtNum(row.pre_edit_value)}
+                            </div>
+                            {row.previous_reading != null && (
+                              <div className="text-3xs text-muted-foreground mt-0.5">
+                                Old Δ: {fmtNum(row.pre_edit_value - row.previous_reading)} m³
+                              </div>
+                            )}
+                          </div>
+                          <div>
+                            <div className="text-3xs uppercase font-bold text-muted-foreground tracking-wider flex items-center gap-1">
+                              <ArrowRight className="h-3 w-3 text-accent" /> Corrected Reading (Current)
+                            </div>
+                            <div className="flex items-center gap-2 mt-0.5">
+                              <span className="font-mono font-bold text-sm text-accent">{fmtNum(row.current_reading)}</span>
+                              <span className={cn('text-3xs font-mono font-bold px-1.5 py-0.5 rounded',
+                                row.current_reading >= row.pre_edit_value
+                                  ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+                                  : 'bg-rose-500/15 text-rose-600 dark:text-rose-400'
+                              )}>
+                                {row.current_reading >= row.pre_edit_value
+                                  ? `+${fmtNum(row.current_reading - row.pre_edit_value)}`
+                                  : fmtNum(row.current_reading - row.pre_edit_value)}
+                              </span>
+                            </div>
+                            {row.daily_volume != null && (
+                              <div className="text-3xs text-accent font-medium mt-0.5">
+                                New Δ: <DeltaBadge vol={row.daily_volume} />
+                              </div>
+                            )}
+                          </div>
+                          <div>
+                            <div className="text-3xs uppercase font-bold text-muted-foreground tracking-wider">Preceding Baseline (Prev)</div>
+                            <div className="font-mono font-medium text-xs text-muted-foreground mt-0.5">{fmtNum(row.previous_reading)}</div>
+                          </div>
+                        </div>
+
+                        {/* 4-column breakdown grid */}
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs bg-muted/20 p-2 rounded-md">
+                          <div>
+                            <div className="text-muted-foreground text-2xs">Preceding Baseline</div>
+                            <div className="font-mono font-medium">{fmtNum(row.previous_reading)}</div>
+                          </div>
+                          <div>
+                            <div className="text-muted-foreground text-2xs">Before Correction</div>
+                            <div className="font-mono font-medium text-destructive line-through decoration-destructive/60">{fmtNum(row.pre_edit_value)}</div>
+                          </div>
+                          <div>
+                            <div className="text-muted-foreground text-2xs font-semibold text-accent">Corrected Current</div>
+                            <div className="font-mono font-bold text-accent">{fmtNum(row.current_reading)}</div>
+                          </div>
+                          <div>
+                            <div className="text-muted-foreground text-2xs">Calculated Delta</div>
+                            <DeltaBadge vol={row.daily_volume} />
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      /* Standard meter values grid */
+                      <div className="grid grid-cols-3 gap-3 text-xs">
+                        <div><div className="text-muted-foreground">Previous</div><div className="font-mono font-medium">{fmtNum(row.previous_reading)}</div></div>
+                        <div><div className="text-muted-foreground">Current</div><div className="font-mono font-medium">{fmtNum(row.current_reading)}</div></div>
+                        <div><div className="text-muted-foreground">Delta</div><DeltaBadge vol={row.daily_volume} /></div>
+                      </div>
+                    )}
 
                     {/* Operator's own remark (reading_anomaly_remarks, captured
                         at entry time by AnomalyRemarkBanner when this reading's
@@ -1248,18 +1350,22 @@ function PendingReviewTab() {
                           <span className="font-normal text-foreground/90">"{row.anomaly_remark.text}"</span>
                         </span>
                       </div>
-                    ) : row.edit_reason ? (
+                    ) : null}
+
+                    {row.edit_reason && (
                       <div className="flex items-start gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border bg-info-soft border-info/40 text-info">
                         <Pencil className="h-3.5 w-3.5 shrink-0 mt-0.5" />
                         <span>
                           <span className="font-medium">Edit reason: </span>
                           <span className="font-normal text-foreground/90">"{row.edit_reason.text}"</span>
                           {row.edit_reason.actor_label && (
-                            <span className="text-2xs text-muted-foreground"> — {row.edit_reason.actor_label}</span>
+                            <span className="text-2xs text-muted-foreground"> — by {row.edit_reason.actor_label}</span>
                           )}
                         </span>
                       </div>
-                    ) : (
+                    )}
+
+                    {!row.anomaly_remark && !row.edit_reason && (
                       <p className="text-2xs text-muted-foreground italic">No operator remark or edit reason on file for this reading.</p>
                     )}
 
