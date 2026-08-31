@@ -88,19 +88,18 @@ export function computeManagerOversightScore(
     return { score: 0, tier: APPRAISAL_TIERS[APPRAISAL_TIERS.length - 1] };
   }
 
-  // Completeness component (45% max)
-  const compScore = (Math.min(100, Math.max(0, completenessPct)) / 100) * 45;
+  // Base score driven by overall telemetry completeness (0–100%)
+  const baseComp = Math.min(100, Math.max(0, completenessPct));
 
-  // Quality / low error rate component (25% max)
+  // Deductions for data quality errors (error rate > 1% begins deducting)
   const errVal = errorRatePct ?? 0;
-  const qualityScore = Math.max(0, 100 - errVal * 10) * 0.25;
+  const errorDeduction = Math.max(0, errVal - 1) * 1.5;
 
-  // Responsiveness to exceptions & operator correction requests (30% max)
-  const exceptionPenalty = openExceptions * 1.5;
-  const correctionPenalty = pendingCorrections * 3;
-  const respScore = Math.max(0, 100 - exceptionPenalty - correctionPenalty) * 0.30;
+  // Deductions for unaddressed gap exceptions and pending correction backlogs
+  const exceptionDeduction = Math.min(15, openExceptions * 0.4);
+  const backlogDeduction = Math.min(20, pendingCorrections * 2.0);
 
-  const totalScore = Math.min(100, Math.max(0, Math.round(compScore + qualityScore + respScore)));
+  const totalScore = Math.min(100, Math.max(0, Math.round(baseComp - errorDeduction - exceptionDeduction - backlogDeduction)));
   return {
     score: totalScore,
     tier: getManagerAppraisalTier(totalScore),

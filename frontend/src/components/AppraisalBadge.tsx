@@ -63,6 +63,9 @@ export function AppraisalBadge({
         {showLamp && <Lamp tone={tier.tone} size={5} />}
         {showIcon && renderAppraisalIcon(tier.iconName, 'h-3 w-3 shrink-0')}
         <span className="truncate">{tier.shortLabel}</span>
+        {showScore && score != null && (
+          <span className="font-mono-num font-bold text-3xs opacity-90">({score}%)</span>
+        )}
       </span>
     );
   }
