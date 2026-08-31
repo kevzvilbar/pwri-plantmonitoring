@@ -1,12 +1,11 @@
 -- =============================================================================
 -- Migration: 20260831000002_security_hardening_search_paths.sql
 -- Security Hardening:
--- 1. Sets explicit search_path on database functions to prevent search_path
---    hijacking / injection (CWE-426 / CWE-427).
--- 2. Restricts sensitive administrative and sweep functions to authenticated users.
+-- Sets explicit search_path on public SECURITY DEFINER database functions to
+-- prevent search_path hijacking / injection (CWE-426 / CWE-427).
 -- =============================================================================
 
--- Ensure search_path is locked on public helper functions
+-- Ensure search_path is locked on public SECURITY DEFINER helper functions
 DO $$
 DECLARE
   func_record RECORD;
@@ -26,8 +25,8 @@ BEGIN
         func_record.args
       );
     EXCEPTION WHEN OTHERS THEN
-      -- Continue if specific signature cannot be altered dynamically
-      NULL;
+      RAISE NOTICE 'Skipping search_path update on %.%(%): %',
+        func_record.schema_name, func_record.func_name, func_record.args, SQLERRM;
     END;
   END LOOP;
 END $$;

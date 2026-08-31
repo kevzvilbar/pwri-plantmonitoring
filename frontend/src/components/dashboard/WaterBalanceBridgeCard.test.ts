@@ -51,7 +51,7 @@ describe('resolveDateWindow', () => {
     const w = resolveDateWindow('CUSTOM', '2026-07-01', '2026-07-31');
     expect(w.startKey).toBe('2026-07-01');
     expect(w.endKey).toBe('2026-07-31');
-    expect(w.startISO.startsWith('2026-07-01')).toBe(true);
+    expect(w.startISO).toBe(new Date('2026-07-01T00:00:00').toISOString());
   });
 
   it('resolves a preset range to N days ago through today', () => {

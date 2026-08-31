@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { computePivotFromReadingsNoCache } from './DataSummaryModal';
 
-const iso = (d: string) => new Date(d + 'T23:59:59Z').toISOString();
+const iso = (d: string) => `${d}T12:00:00`;
 
 describe('computePivotFromReadingsNoCache — HAMAS Production tab bug', () => {
   it(

@@ -1,24 +1,13 @@
 /**
- * data-analysis/index.ts  — Supabase Edge Function
- * ──────────────────────────────────────────────────
- * Replaces the Python FastAPI backend for the Data Analysis & Regression page.
+ * data-analysis/index.ts  — Supabase Edge Function (DORMANT / ARCHIVED)
+ * ───────────────────────────────────────────────────────────────────
+ * NOTE: This Edge Function is dormant and not deployed in production.
+ * All regression analysis and reading correction logic is handled client-side
+ * via `frontend/src/lib/regressionCorrection.ts` and transactional DB RPCs
+ * (`fn_cascade_reading_correction`).
  *
- * Routes handled (mirrors backend/server.py + regression_service.py):
- *   POST  /api/data-analysis/run-regression
- *   POST  /api/data-analysis/apply-regression
- *   POST  /api/data-analysis/retract-regression
- *   GET   /api/data-analysis/results
- *   POST  /api/data-analysis/edit-raw
- *   GET   /api/data-analysis/raw-edit-log
- *   GET   /api/data-analysis/tables
- *
- * Deploy with JWT verification enabled (the default):
- *   supabase functions deploy data-analysis
- *
- * Required Supabase secrets (set via dashboard or CLI):
- *   SUPABASE_URL              (auto-injected by Supabase)
- *   SUPABASE_ANON_KEY         (auto-injected)
- *   SUPABASE_SERVICE_ROLE_KEY (add manually — needed for writes that bypass RLS)
+ * Retained for reference and historical parity testing.
+ * If revived in the future, ensure ALLOWED_ORIGINS are restricted to production frontend domains.
  */
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';

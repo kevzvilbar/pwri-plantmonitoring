@@ -14,7 +14,7 @@ describe('OfflineBanner', () => {
   it('renders the offline message when navigator.onLine is false', () => {
     Object.defineProperty(window.navigator, 'onLine', { value: false, configurable: true });
     render(<OfflineBanner />);
-    expect(screen.getByText(/won't save until you reconnect/i)).toBeTruthy();
+    expect(screen.getByText(/Offline Mode Active/i)).toBeTruthy();
     expect(screen.getByRole('status')).toBeTruthy();
   });
 
@@ -24,9 +24,9 @@ describe('OfflineBanner', () => {
     expect(container.firstChild).toBeNull();
 
     act(() => { window.dispatchEvent(new Event('offline')); });
-    expect(screen.getByText(/won't save until you reconnect/i)).toBeTruthy();
+    expect(screen.getByText(/Offline Mode Active/i)).toBeTruthy();
 
     act(() => { window.dispatchEvent(new Event('online')); });
-    expect(screen.queryByText(/won't save until you reconnect/i)).toBeNull();
+    expect(screen.queryByText(/Offline Mode Active/i)).toBeNull();
   });
 });

@@ -13,7 +13,7 @@
 -- Self-contained: creates its own plants/well/user/event and cleans up via
 -- ROLLBACK.
 BEGIN;
-SELECT plan(2);
+SELECT plan(3);
 
 CREATE TEMP TABLE _fixture (
   plant_a uuid, plant_b uuid, well_b uuid,
@@ -54,6 +54,14 @@ GRANT SELECT ON _fixture TO authenticated;
 SET LOCAL role authenticated;
 SELECT set_config('request.jwt.claims',
   (SELECT json_build_object('sub', outsider, 'role', 'authenticated')::text FROM _fixture), true);
+
+-- Attempt the INSERT the stray policy used to allow -- should now throw an RLS error (42501).
+SELECT throws_ok(
+  format('INSERT INTO public.blending_events (plant_id, well_id, event_date, raw_meter_reading) VALUES (%L, %L, current_date, 50)', (SELECT plant_b FROM _fixture), (SELECT well_b FROM _fixture)),
+  '42501',
+  NULL,
+  'blending_events: outsider (no plant_b assignment) cannot INSERT into plant_b'
+);
 
 -- Attempt the UPDATE the stray policy used to allow -- should now be a no-op.
 UPDATE public.blending_events SET raw_meter_reading = 999 WHERE id = (SELECT event_b FROM _fixture);
