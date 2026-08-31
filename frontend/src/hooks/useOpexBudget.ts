@@ -12,6 +12,8 @@ export interface MonthlyOpex {
   powerActual: number;
   chemBudget: number;
   chemActual: number;
+  otherBudget: number;
+  otherActual: number;
   totalBudget: number;
   totalActual: number;
   /** null when no budget has been set for the month — not the same as 0% variance */
@@ -43,7 +45,7 @@ export function useMonthlyOpex(plantId: string, year: number) {
       const [{ data: budgets }, { data: costs }, { data: readings }, { data: tariff }] = await Promise.all([
         supabase.from('opex_budgets').select('*').eq('plant_id', plantId)
           .gte('budget_month', from).lte('budget_month', to),
-        supabase.from('production_costs').select('cost_date, chem_cost, power_cost').eq('plant_id', plantId)
+        supabase.from('production_costs').select('cost_date, chem_cost, power_cost, filter_cost').eq('plant_id', plantId)
           .gte('cost_date', from).lte('cost_date', to),
         supabase.from('power_readings').select('reading_datetime, daily_solar_kwh, daily_grid_kwh').eq('plant_id', plantId)
           .gte('reading_datetime', from).lte('reading_datetime', `${to} 23:59:59`),
@@ -53,16 +55,20 @@ export function useMonthlyOpex(plantId: string, year: number) {
 
       const rate = +(tariff?.rate_per_kwh ?? 0);
 
-      type MonthAgg = { chem: number; power: number; solar: number; grid: number };
+      type MonthAgg = { chem: number; power: number; other: number; solar: number; grid: number };
       const byMonth = new Map<string, MonthAgg>();
       for (let m = 1; m <= 12; m++) {
-        byMonth.set(`${year}-${String(m).padStart(2, '0')}-01`, { chem: 0, power: 0, solar: 0, grid: 0 });
+        byMonth.set(`${year}-${String(m).padStart(2, '0')}-01`, { chem: 0, power: 0, other: 0, solar: 0, grid: 0 });
       }
 
       (costs ?? []).forEach((c: any) => {
         const key = `${String(c.cost_date).slice(0, 7)}-01`;
         const agg = byMonth.get(key);
-        if (agg) { agg.chem += +c.chem_cost || 0; agg.power += +c.power_cost || 0; }
+        if (agg) {
+          agg.chem += +c.chem_cost || 0;
+          agg.power += +c.power_cost || 0;
+          agg.other += +c.filter_cost || 0;
+        }
       });
       (readings ?? []).forEach((r: any) => {
         const key = `${String(r.reading_datetime).slice(0, 7)}-01`;
@@ -75,8 +81,9 @@ export function useMonthlyOpex(plantId: string, year: number) {
         const budget = budgetByMonth.get(month) as any;
         const powerBudget = +(budget?.power_budget ?? 0);
         const chemBudget = +(budget?.chem_budget ?? 0);
-        const totalBudget = powerBudget + chemBudget;
-        const totalActual = agg.power + agg.chem;
+        const otherBudget = 0;
+        const totalBudget = powerBudget + chemBudget + otherBudget;
+        const totalActual = agg.power + agg.chem + agg.other;
         const totalKwh = agg.solar + agg.grid;
         return {
           month,
@@ -84,6 +91,7 @@ export function useMonthlyOpex(plantId: string, year: number) {
           budgetId: budget?.id ?? null,
           powerBudget, powerActual: agg.power,
           chemBudget, chemActual: agg.chem,
+          otherBudget, otherActual: agg.other,
           totalBudget, totalActual,
           variancePct: budget && totalBudget > 0 ? ((totalActual - totalBudget) / totalBudget) * 100 : null,
           solarOffset: agg.solar * rate,

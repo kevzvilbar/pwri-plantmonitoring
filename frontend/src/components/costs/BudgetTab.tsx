@@ -111,30 +111,44 @@ export function BudgetTab() {
     actual: metric === 'power' ? r.powerActual : metric === 'chem' ? r.chemActual : r.totalActual,
   }));
 
-  // ── Waterfall YTD data ───────────────────────────────────────────────────────
-  const [waterfallMode, setWaterfallMode] = useState<'category' | 'monthly'>('category');
+  // ── Waterfall selection & calculation ─────────────────────────────────────────
+  const [selectedMonth, setSelectedMonth] = useState<string>('YTD');
+  const [waterfallMode, setWaterfallMode] = useState<'cost-breakdown' | 'monthly-steps'>('cost-breakdown');
+
+  const activeMonths = useMemo(() => {
+    return (rows ?? []).filter((r) => r.totalBudget > 0 || r.totalActual > 0);
+  }, [rows]);
 
   const waterfallRows = useMemo(() => {
     if (!rows || rows.length === 0) return [];
 
-    const activeMonths = rows.filter((r) => {
-      const b = metric === 'power' ? r.powerBudget : metric === 'chem' ? r.chemBudget : r.totalBudget;
-      const a = metric === 'power' ? r.powerActual : metric === 'chem' ? r.chemActual : r.totalActual;
-      return b > 0 || a > 0;
-    });
+    // Mode A: Cost Breakdown (Monthly Budget -> Power -> Chemicals -> Other -> Total Actual -> Variance)
+    if (waterfallMode === 'cost-breakdown') {
+      let b = 0;
+      let p = 0;
+      let c = 0;
+      let o = 0;
+      let a = 0;
+      let titlePrefix = selectedMonth === 'YTD' ? 'YTD' : rows.find((r) => r.month === selectedMonth)?.label.split(' ')[0] ?? '';
 
-    const totalB = activeMonths.reduce((sum, r) => sum + (metric === 'power' ? r.powerBudget : metric === 'chem' ? r.chemBudget : r.totalBudget), 0);
-    const totalA = activeMonths.reduce((sum, r) => sum + (metric === 'power' ? r.powerActual : metric === 'chem' ? r.chemActual : r.totalActual), 0);
+      if (selectedMonth === 'YTD') {
+        b = activeMonths.reduce((sum, r) => sum + (metric === 'power' ? r.powerBudget : metric === 'chem' ? r.chemBudget : r.totalBudget), 0);
+        p = activeMonths.reduce((sum, r) => sum + r.powerActual, 0);
+        c = activeMonths.reduce((sum, r) => sum + r.chemActual, 0);
+        o = activeMonths.reduce((sum, r) => sum + r.otherActual, 0);
+        a = metric === 'power' ? p : metric === 'chem' ? c : p + c + o;
+      } else {
+        const target = rows.find((r) => r.month === selectedMonth);
+        if (target) {
+          b = metric === 'power' ? target.powerBudget : metric === 'chem' ? target.chemBudget : target.totalBudget;
+          p = target.powerActual;
+          c = target.chemActual;
+          o = target.otherActual;
+          a = metric === 'power' ? p : metric === 'chem' ? c : target.totalActual;
+        }
+      }
 
-    // 1. Category Bridge Mode (Budget YTD → Power Delta → Chem Delta → Actual YTD)
-    if (metric === 'total' && waterfallMode === 'category') {
-      const powerB = activeMonths.reduce((s, r) => s + r.powerBudget, 0);
-      const powerA = activeMonths.reduce((s, r) => s + r.powerActual, 0);
-      const chemB = activeMonths.reduce((s, r) => s + r.chemBudget, 0);
-      const chemA = activeMonths.reduce((s, r) => s + r.chemActual, 0);
-
-      const powerDelta = powerA - powerB;
-      const chemDelta = chemA - chemB;
+      const variance = a - b;
 
       const items: Array<{
         name: string;
@@ -145,71 +159,113 @@ export function BudgetTab() {
         rawAmount: number;
         budget: number;
         actual: number;
-        kind: 'start' | 'delta' | 'end';
+        kind: 'start' | 'delta' | 'end' | 'variance';
       }> = [];
 
-      // Starting Pillar
+      // 1. Budget Baseline (Pillar)
       items.push({
-        name: 'Budget YTD',
+        name: `${titlePrefix} Budget`,
         base: 0,
-        height: totalB,
+        height: b,
         fill: '#00b4d8', // Cyan
-        deltaLabel: `₱${fmtNum(totalB, 0)}`,
-        rawAmount: totalB,
-        budget: totalB,
+        deltaLabel: `₱${fmtNum(b, 0)}`,
+        rawAmount: b,
+        budget: b,
         actual: 0,
         kind: 'start',
       });
 
-      let current = totalB;
+      // When viewing 'total', show Power, Chemicals, and Other (if > 0)
+      if (metric === 'total') {
+        // 2. Power Cost Step
+        items.push({
+          name: 'Power Cost',
+          base: 0,
+          height: p,
+          fill: '#f59e0b', // Amber
+          deltaLabel: `+₱${fmtNum(p, 0)}`,
+          rawAmount: p,
+          budget: selectedMonth === 'YTD' ? totals.powerBudget : (rows.find((r) => r.month === selectedMonth)?.powerBudget ?? 0),
+          actual: p,
+          kind: 'delta',
+        });
 
-      // Power Variance Step
-      const nextPower = current + powerDelta;
-      items.push({
-        name: 'Power variance',
-        base: Math.min(current, nextPower),
-        height: Math.max(Math.abs(powerDelta), 1),
-        fill: powerDelta > 0 ? '#f59e0b' : '#10b981', // Amber for over-budget, Emerald for savings
-        deltaLabel: `${powerDelta >= 0 ? '+' : '−'}₱${fmtNum(Math.abs(powerDelta), 0)}`,
-        rawAmount: powerDelta,
-        budget: powerB,
-        actual: powerA,
-        kind: 'delta',
-      });
-      current = nextPower;
+        // 3. Chemical Cost Step
+        items.push({
+          name: 'Chemical Cost',
+          base: p,
+          height: c,
+          fill: '#8b5cf6', // Purple
+          deltaLabel: `+₱${fmtNum(c, 0)}`,
+          rawAmount: c,
+          budget: selectedMonth === 'YTD' ? totals.chemBudget : (rows.find((r) => r.month === selectedMonth)?.chemBudget ?? 0),
+          actual: c,
+          kind: 'delta',
+        });
 
-      // Chem Variance Step
-      const nextChem = current + chemDelta;
-      items.push({
-        name: 'Chemicals variance',
-        base: Math.min(current, nextChem),
-        height: Math.max(Math.abs(chemDelta), 1),
-        fill: chemDelta > 0 ? '#f97316' : '#10b981', // Orange for over-budget, Emerald for savings
-        deltaLabel: `${chemDelta >= 0 ? '+' : '−'}₱${fmtNum(Math.abs(chemDelta), 0)}`,
-        rawAmount: chemDelta,
-        budget: chemB,
-        actual: chemA,
-        kind: 'delta',
-      });
-      current = nextChem;
+        // 4. Other Cost Step (Filters / Cartridges / Maintenance)
+        if (o > 0 || selectedMonth === 'YTD') {
+          items.push({
+            name: 'Other Cost',
+            base: p + c,
+            height: Math.max(o, 1),
+            fill: '#06b6d4', // Teal
+            deltaLabel: o > 0 ? `+₱${fmtNum(o, 0)}` : '₱0',
+            rawAmount: o,
+            budget: 0,
+            actual: o,
+            kind: 'delta',
+          });
+        }
+      }
 
-      // Ending Pillar
+      // 5. Total Actual (Pillar)
       items.push({
-        name: 'Actual YTD',
+        name: `${titlePrefix} Actual`,
         base: 0,
-        height: totalA,
+        height: a,
         fill: '#3b82f6', // Vibrant Blue
-        deltaLabel: `₱${fmtNum(totalA, 0)}`,
-        rawAmount: totalA,
-        budget: totalB,
-        actual: totalA,
+        deltaLabel: `₱${fmtNum(a, 0)}`,
+        rawAmount: a,
+        budget: b,
+        actual: a,
         kind: 'end',
       });
+
+      // 6. Variance Pillar / Step
+      if (b > 0) {
+        items.push({
+          name: 'Variance',
+          base: variance > 0 ? b : a,
+          height: Math.max(Math.abs(variance), 1),
+          fill: variance > 0 ? '#ef4444' : '#10b981', // Red if over budget, Emerald if savings
+          deltaLabel: `${variance >= 0 ? '+' : '−'}₱${fmtNum(Math.abs(variance), 0)}`,
+          rawAmount: variance,
+          budget: b,
+          actual: a,
+          kind: 'variance',
+        });
+      } else {
+        items.push({
+          name: 'Variance',
+          base: 0,
+          height: a,
+          fill: '#ef4444',
+          deltaLabel: 'Unbudgeted',
+          rawAmount: a,
+          budget: 0,
+          actual: a,
+          kind: 'variance',
+        });
+      }
 
       return items;
     }
 
-    // 2. Monthly Progression Bridge Mode
+    // Mode B: Monthly Progression Steps (Jan -> Feb -> Mar -> ... -> Actual YTD)
+    const totalB = activeMonths.reduce((sum, r) => sum + (metric === 'power' ? r.powerBudget : metric === 'chem' ? r.chemBudget : r.totalBudget), 0);
+    const totalA = activeMonths.reduce((sum, r) => sum + (metric === 'power' ? r.powerActual : metric === 'chem' ? r.chemActual : r.totalActual), 0);
+
     const items: Array<{
       name: string;
       base: number;
@@ -219,7 +275,7 @@ export function BudgetTab() {
       rawAmount: number;
       budget: number;
       actual: number;
-      kind: 'start' | 'delta' | 'end';
+      kind: 'start' | 'delta' | 'end' | 'variance';
     }> = [];
 
     items.push({
@@ -269,7 +325,7 @@ export function BudgetTab() {
     });
 
     return items;
-  }, [rows, metric, waterfallMode]);
+  }, [rows, metric, waterfallMode, selectedMonth, activeMonths, totals]);
 
   return (
     <div className="space-y-3">
@@ -319,7 +375,7 @@ export function BudgetTab() {
               accent="text-primary"
               label="Actual YTD"
               value={`₱${fmtNum(totals.actual, 0)}`}
-              subtext="Total power & chem expenses"
+              subtext="Total power, chem & other expenses"
             />
             <StatCard
               icon={Scale}
@@ -449,11 +505,13 @@ export function BudgetTab() {
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <h4 className="text-sm font-semibold text-foreground">
-                  {chartView === 'waterfall' ? 'Budget vs Actual Variance Waterfall (YTD)' : 'Budget vs Actual Variance Chart'}
+                  {chartView === 'waterfall' ? 'Budget vs Actual Variance Waterfall' : 'Budget vs Actual Variance Chart'}
                 </h4>
                 <p className="text-2xs text-muted-foreground">
                   {chartView === 'waterfall'
-                    ? 'Step-by-step bridge from Budget baseline to Actual spending via cost variances'
+                    ? waterfallMode === 'cost-breakdown'
+                      ? 'Monthly Budget, Power Cost, Chemical Cost, Other, and Net Variance bridge'
+                      : 'Monthly sequential build-up and variance progression'
                     : 'Monthly side-by-side expense comparisons'}
                 </p>
               </div>
@@ -471,7 +529,7 @@ export function BudgetTab() {
                     title="View Waterfall variance bridge"
                   >
                     <GitCommit className="h-3 w-3" />
-                    Waterfall (YTD)
+                    Waterfall
                   </button>
                   <button
                     className={`flex items-center gap-1.5 px-2.5 py-1 text-2xs font-medium rounded-md transition-all ${
@@ -487,26 +545,26 @@ export function BudgetTab() {
                   </button>
                 </div>
 
-                {/* Sub-mode switcher for Waterfall (Category vs Monthly) */}
-                {chartView === 'waterfall' && metric === 'total' && (
+                {/* Sub-mode switcher for Waterfall (Cost Breakdown vs Monthly Steps) */}
+                {chartView === 'waterfall' && (
                   <div className="flex items-center gap-1 bg-muted/40 p-0.5 rounded-lg border border-border/40">
                     <button
                       className={`px-2 py-0.5 text-3xs font-medium rounded transition-all ${
-                        waterfallMode === 'category'
+                        waterfallMode === 'cost-breakdown'
                           ? 'bg-background text-foreground shadow-2xs font-semibold'
                           : 'text-muted-foreground hover:text-foreground'
                       }`}
-                      onClick={() => setWaterfallMode('category')}
+                      onClick={() => setWaterfallMode('cost-breakdown')}
                     >
                       Cost Breakdown
                     </button>
                     <button
                       className={`px-2 py-0.5 text-3xs font-medium rounded transition-all ${
-                        waterfallMode === 'monthly'
+                        waterfallMode === 'monthly-steps'
                           ? 'bg-background text-foreground shadow-2xs font-semibold'
                           : 'text-muted-foreground hover:text-foreground'
                       }`}
-                      onClick={() => setWaterfallMode('monthly')}
+                      onClick={() => setWaterfallMode('monthly-steps')}
                     >
                       Monthly Steps
                     </button>
@@ -529,6 +587,42 @@ export function BudgetTab() {
                 </div>
               </div>
             </div>
+
+            {/* ── Interactive Month Selector Bar (for Cost Breakdown Mode) ── */}
+            {chartView === 'waterfall' && waterfallMode === 'cost-breakdown' && (
+              <div className="flex items-center gap-1 overflow-x-auto pb-1 pt-0.5 border-b border-border/40 text-2xs">
+                <span className="text-3xs uppercase font-semibold text-muted-foreground mr-1 shrink-0">Period:</span>
+                <button
+                  className={`px-2.5 py-1 rounded-md font-medium shrink-0 transition-all ${
+                    selectedMonth === 'YTD'
+                      ? 'bg-primary text-primary-foreground font-bold shadow-xs'
+                      : 'bg-muted/50 text-muted-foreground hover:text-foreground hover:bg-muted'
+                  }`}
+                  onClick={() => setSelectedMonth('YTD')}
+                >
+                  YTD Full Year
+                </button>
+                {(rows ?? []).map((r) => {
+                  const hasData = r.totalBudget > 0 || r.totalActual > 0;
+                  const isSel = selectedMonth === r.month;
+                  return (
+                    <button
+                      key={r.month}
+                      className={`px-2 py-1 rounded-md font-medium shrink-0 transition-all ${
+                        isSel
+                          ? 'bg-primary text-primary-foreground font-bold shadow-xs'
+                          : hasData
+                          ? 'bg-muted/40 text-foreground hover:bg-muted/80 font-medium'
+                          : 'bg-muted/20 text-muted-foreground/50 hover:text-muted-foreground'
+                      }`}
+                      onClick={() => setSelectedMonth(r.month)}
+                    >
+                      {r.label.split(' ')[0]}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
 
             {/* ── Chart Canvas ── */}
             <div className="h-72 pt-2">
@@ -557,28 +651,34 @@ export function BudgetTab() {
                         if (!data) return null;
 
                         return (
-                          <div className="p-3 rounded-xl bg-card/95 border border-border shadow-xl backdrop-blur-md text-xs space-y-1.5 min-w-[190px]">
+                          <div className="p-3 rounded-xl bg-card/95 border border-border shadow-xl backdrop-blur-md text-xs space-y-1.5 min-w-[200px]">
                             <div className="font-bold text-foreground border-b border-border/60 pb-1 flex items-center justify-between gap-2">
                               <span>{data.name}</span>
                               {data.kind === 'start' ? (
                                 <span className="text-3xs font-mono uppercase bg-muted px-1.5 py-0.5 rounded text-muted-foreground font-semibold">
-                                  Baseline Plan
+                                  Baseline Target
                                 </span>
                               ) : data.kind === 'end' ? (
                                 <span className="text-3xs font-mono uppercase bg-primary/10 text-primary px-1.5 py-0.5 rounded font-bold">
-                                  Total YTD Spent
+                                  Total Actual OPEX
                                 </span>
-                              ) : data.rawAmount > 0 ? (
-                                <span className="text-3xs font-mono uppercase bg-danger-soft text-danger px-1.5 py-0.5 rounded font-bold">
-                                  Over Budget
-                                </span>
-                              ) : data.rawAmount < 0 ? (
-                                <span className="text-3xs font-mono uppercase bg-accent-soft text-accent px-1.5 py-0.5 rounded font-bold">
-                                  Favorable Savings
-                                </span>
+                              ) : data.kind === 'variance' ? (
+                                data.rawAmount > 0 ? (
+                                  <span className="text-3xs font-mono uppercase bg-danger-soft text-danger px-1.5 py-0.5 rounded font-bold">
+                                    Over Budget (+Cost)
+                                  </span>
+                                ) : data.rawAmount < 0 ? (
+                                  <span className="text-3xs font-mono uppercase bg-accent-soft text-accent px-1.5 py-0.5 rounded font-bold">
+                                    Under Budget (Savings)
+                                  </span>
+                                ) : (
+                                  <span className="text-3xs font-mono uppercase bg-muted px-1.5 py-0.5 rounded text-muted-foreground">
+                                    On Target
+                                  </span>
+                                )
                               ) : (
-                                <span className="text-3xs font-mono uppercase bg-muted px-1.5 py-0.5 rounded text-muted-foreground">
-                                  On Plan
+                                <span className="text-3xs font-mono uppercase bg-muted/60 text-foreground px-1.5 py-0.5 rounded font-medium">
+                                  Cost Component
                                 </span>
                               )}
                             </div>
@@ -586,15 +686,30 @@ export function BudgetTab() {
                             {data.kind === 'start' && (
                               <div className="space-y-0.5">
                                 <div className="text-muted-foreground">
-                                  Planned Budget YTD: <strong className="text-foreground font-mono-num">₱{fmtNum(data.rawAmount, 0)}</strong>
+                                  Planned Budget: <strong className="text-foreground font-mono-num">₱{fmtNum(data.rawAmount, 0)}</strong>
                                 </div>
+                              </div>
+                            )}
+
+                            {data.kind === 'delta' && (
+                              <div className="space-y-1">
+                                <div className="flex justify-between text-muted-foreground">
+                                  <span>Expense Amount:</span>
+                                  <span className="font-mono-num font-bold text-foreground">₱{fmtNum(data.rawAmount, 0)}</span>
+                                </div>
+                                {data.budget > 0 && (
+                                  <div className="flex justify-between text-muted-foreground border-t border-border/40 pt-0.5">
+                                    <span>Allocated Plan:</span>
+                                    <span className="font-mono-num">₱{fmtNum(data.budget, 0)}</span>
+                                  </div>
+                                )}
                               </div>
                             )}
 
                             {data.kind === 'end' && (
                               <div className="space-y-1">
                                 <div className="text-muted-foreground">
-                                  Actual Spent YTD: <strong className="text-primary font-mono-num font-bold">₱{fmtNum(data.rawAmount, 0)}</strong>
+                                  Total Actual Spent: <strong className="text-primary font-mono-num font-bold">₱{fmtNum(data.rawAmount, 0)}</strong>
                                 </div>
                                 <div className="text-3xs text-muted-foreground border-t border-border/40 pt-1 flex justify-between">
                                   <span>Net Variance:</span>
@@ -606,18 +721,18 @@ export function BudgetTab() {
                               </div>
                             )}
 
-                            {data.kind === 'delta' && (
+                            {data.kind === 'variance' && (
                               <div className="space-y-1">
                                 <div className="flex justify-between text-muted-foreground">
-                                  <span>Planned Baseline:</span>
+                                  <span>Budget Baseline:</span>
                                   <span className="font-mono-num">₱{fmtNum(data.budget, 0)}</span>
                                 </div>
                                 <div className="flex justify-between text-muted-foreground">
-                                  <span>Actual Expenses:</span>
+                                  <span>Actual Incurred:</span>
                                   <span className="font-mono-num font-semibold text-foreground">₱{fmtNum(data.actual, 0)}</span>
                                 </div>
                                 <div className="flex justify-between border-t border-border/40 pt-1">
-                                  <span className="font-medium">Variance Impact:</span>
+                                  <span className="font-medium">Variance Delta:</span>
                                   <span
                                     className={cn(
                                       'font-mono-num font-bold',
@@ -700,19 +815,27 @@ export function BudgetTab() {
               <div className="flex flex-wrap items-center justify-center gap-4 pt-2 border-t border-border/40 text-2xs text-muted-foreground font-mono">
                 <div className="flex items-center gap-1.5">
                   <div className="w-3 h-3 rounded-xs bg-[#00b4d8]" />
-                  <span>Budget Baseline (YTD)</span>
+                  <span>Budget Target</span>
                 </div>
                 <div className="flex items-center gap-1.5">
                   <div className="w-3 h-3 rounded-xs bg-[#f59e0b]" />
-                  <span>Over Budget (+Cost Impact)</span>
+                  <span>Power Cost</span>
                 </div>
                 <div className="flex items-center gap-1.5">
-                  <div className="w-3 h-3 rounded-xs bg-[#10b981]" />
-                  <span>Under Budget (Savings)</span>
+                  <div className="w-3 h-3 rounded-xs bg-[#8b5cf6]" />
+                  <span>Chemical Cost</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <div className="w-3 h-3 rounded-xs bg-[#06b6d4]" />
+                  <span>Other (Filters)</span>
                 </div>
                 <div className="flex items-center gap-1.5">
                   <div className="w-3 h-3 rounded-xs bg-[#3b82f6]" />
-                  <span>Actual Spent (YTD)</span>
+                  <span>Total Actual</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <div className="w-3 h-3 rounded-xs bg-[#ef4444]" />
+                  <span>Variance (+Over / −Savings)</span>
                 </div>
               </div>
             )}
