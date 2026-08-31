@@ -9,6 +9,7 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { type Database } from '@/integrations/supabase/types';
 import { deriveTrainStatus, ROTrainHero } from '../ro-trains';
+import { loadThresholds } from '@/pages/Compliance';
 
 import { CIPLog } from './cip/CIPLog';
 import { ChemicalDosing } from './dosing/ChemicalDosing';
@@ -28,6 +29,12 @@ export default function ROTrains() {
   const { selectedPlantId } = useAppStore();
   const { data: plants } = usePlants();
   const currentPlant = plants?.find(p => p.id === selectedPlantId);
+
+  const { data: thresholds } = useQuery({
+    queryKey: ['thresholds', selectedPlantId || 'global'],
+    queryFn: () => loadThresholds(selectedPlantId || 'global'),
+    staleTime: 60_000,
+  });
 
   const { data: trains } = useQuery({
     queryKey: ['ro-hero-trains', selectedPlantId],
@@ -95,6 +102,8 @@ export default function ROTrains() {
         offlineCount={offlineCount}
         avgRecovery={avgRecovery}
         avgPermTDS={avgPermTDS}
+        permTdsLimit={thresholds?.permeate_tds_max}
+        recoveryMin={thresholds?.recovery_pct_min}
       />
       <Tabs value={tab} onValueChange={handleTabChange} className="space-y-3">
         <TabsList className="grid grid-cols-2 sm:grid-cols-4 w-full h-auto sm:h-10 p-1 rounded-xl bg-muted/50 border border-border/50 gap-1">

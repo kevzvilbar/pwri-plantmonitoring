@@ -12,6 +12,8 @@ export interface ROTrainHeroProps {
   offlineCount?: number;
   avgRecovery: string | null;
   avgPermTDS?: string | null;
+  permTdsLimit?: number;
+  recoveryMin?: number;
 }
 
 export function ROTrainHero({
@@ -22,6 +24,8 @@ export function ROTrainHero({
   offlineCount = 0,
   avgRecovery,
   avgPermTDS,
+  permTdsLimit,
+  recoveryMin,
 }: ROTrainHeroProps) {
   const [timeStr, setTimeStr] = useState('');
 
@@ -110,7 +114,7 @@ export function ROTrainHero({
               {avgRecovery && <span className="text-sm font-sans font-normal text-slate-300">%</span>}
             </div>
             <p className="text-3xs text-slate-400 font-mono">
-              Target: 65% &ndash; 75%
+              Target: {recoveryMin != null ? `${recoveryMin}% – 75%` : '65% – 75%'}
             </p>
           </div>
 
@@ -127,7 +131,7 @@ export function ROTrainHero({
               {avgPermTDS && <span className="text-xs font-sans font-normal text-slate-300">ppm</span>}
             </div>
             <p className="text-3xs text-slate-400 font-mono">
-              Limit: &le; 500 ppm
+              Limit: &le; {permTdsLimit ?? 500} ppm
             </p>
           </div>
 

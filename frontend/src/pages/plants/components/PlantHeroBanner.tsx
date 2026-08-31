@@ -5,6 +5,8 @@ import { ROTrainIcon } from '@/components/icons/water-icons';
 import { Button } from '@/components/ui/button';
 import { Lamp } from '@/components/ui/Lamp';
 import { fmtNum } from '@/lib/format';
+import { useQuery } from '@tanstack/react-query';
+import { loadThresholds } from '@/pages/Compliance';
 
 interface PlantHeroBannerProps {
   plant: any;
@@ -24,6 +26,13 @@ export function PlantHeroBanner({
   deleteButton,
 }: PlantHeroBannerProps) {
   const [timeStr, setTimeStr] = useState('');
+
+  const { data: thresholds } = useQuery({
+    queryKey: ['thresholds', plant?.id || 'global'],
+    queryFn: () => loadThresholds(plant?.id || 'global'),
+    enabled: !!plant?.id,
+    staleTime: 60_000,
+  });
 
   // Live PHT Clock ticking every second
   useEffect(() => {
@@ -176,11 +185,11 @@ export function PlantHeroBanner({
               </div>
               <div className="text-xs font-mono font-medium text-white flex items-center justify-between">
                 <span>Target Recovery:</span>
-                <span className="text-teal-300 font-bold">65% – 75%</span>
+                <span className="text-teal-300 font-bold">{thresholds?.recovery_pct_min != null ? `${thresholds.recovery_pct_min}% – 75%` : '65% – 75%'}</span>
               </div>
               <div className="text-xs font-mono font-medium text-white flex items-center justify-between">
                 <span>Permeate TDS:</span>
-                <span className="text-teal-300 font-bold">&le; 500 ppm</span>
+                <span className="text-teal-300 font-bold">&le; {thresholds?.permeate_tds_max ?? 500} ppm</span>
               </div>
             </div>
 

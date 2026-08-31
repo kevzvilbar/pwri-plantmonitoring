@@ -36,7 +36,8 @@ export type Thresholds = {
   permeate_tds_max: number;
   permeate_ph_min: number;
   permeate_ph_max: number;
-  raw_turbidity_max: number;
+  product_turbidity_max: number;
+  raw_turbidity_max?: number;
   dp_psi_max: number;
   recovery_pct_min: number;
   pv_ratio_max: number;
@@ -82,6 +83,7 @@ export const DEFAULT_THRESHOLDS: Thresholds = {
   permeate_tds_max:        500,
   permeate_ph_min:         6.5,
   permeate_ph_max:         8.5,
+  product_turbidity_max:     5,
   raw_turbidity_max:         5,
   dp_psi_max:               15,
   recovery_pct_min:         70,
@@ -122,7 +124,7 @@ const VIOLATION_COPY: Record<string, string> = {
   TDS_HIGH:       'Permeate TDS is elevated, which may indicate membrane degradation or bypass.',
   PH_LOW:         'Permeate pH is below the safe minimum — check chemical dosing.',
   PH_HIGH:        'Permeate pH is above the safe maximum — check chemical dosing.',
-  TURBIDITY_HIGH: 'Raw turbidity exceeds the threshold — inspect pre-treatment and coagulation stages.',
+  TURBIDITY_HIGH: 'Product turbidity exceeds the threshold (≤ 5 NTU) — inspect membrane integrity and filtration stages.',
   DP_HIGH:        'Differential pressure is too high — membranes may require cleaning or replacement.',
   RECOVERY_LOW:   'Recovery rate is below the minimum — review operational settings and feed conditions.',
   PV_RATIO_HIGH:  'Pressure-vessel ratio is outside range — inspect vessel loading balance.',
@@ -316,14 +318,15 @@ function TrendIndicator({ trend, improving }: { trend: Trend; improving: boolean
 
 /** Which direction is "improving" for each metric */
 const METRIC_IMPROVING_DIRECTION: Record<string, boolean> = {
-  nrw_pct:       false, // lower is better
-  downtime_hrs:  false,
-  permeate_tds:  false,
-  permeate_ph:   true,  // neutral/mid — we just show trend
-  raw_turbidity: false,
-  dp_psi:        false,
-  recovery_pct:  true,  // higher is better
-  pv_ratio:      false,
+  nrw_pct:           false, // lower is better
+  downtime_hrs:      false,
+  permeate_tds:      false,
+  permeate_ph:       true,  // neutral/mid — we just show trend
+  product_turbidity: false,
+  raw_turbidity:     false,
+  dp_psi:            false,
+  recovery_pct:      true,  // higher is better
+  pv_ratio:          false,
 };
 
 function computeTrend(current: number, previous: number, pctThreshold = 2): Trend {
@@ -427,15 +430,16 @@ export function computeViolations(
     });
   };
 
-  check('NRW_HIGH',       'nrw_pct',       metrics.nrw_pct,       t.nrw_pct_max,              '>', 'high');
-  check('DOWNTIME_HIGH',  'downtime_hrs',  metrics.downtime_hrs,  t.downtime_hrs_per_day_max,  '>', 'medium');
-  check('TDS_HIGH',       'permeate_tds',  metrics.permeate_tds,  t.permeate_tds_max,          '>', 'high');
-  check('PH_LOW',         'permeate_ph',   metrics.permeate_ph,   t.permeate_ph_min,           '<', 'medium');
-  check('PH_HIGH',        'permeate_ph',   metrics.permeate_ph,   t.permeate_ph_max,           '>', 'medium');
-  check('TURBIDITY_HIGH', 'raw_turbidity', metrics.raw_turbidity, t.raw_turbidity_max,         '>', 'medium');
-  check('DP_HIGH',        'dp_psi',        metrics.dp_psi,        t.dp_psi_max,                '>', 'high');
-  check('RECOVERY_LOW',   'recovery_pct',  metrics.recovery_pct,  t.recovery_pct_min,          '<', 'medium');
-  check('PV_RATIO_HIGH',  'pv_ratio',      metrics.pv_ratio,      t.pv_ratio_max,              '>', 'low');
+  check('NRW_HIGH',       'nrw_pct',           metrics.nrw_pct,           t.nrw_pct_max,                                     '>', 'high');
+  check('DOWNTIME_HIGH',  'downtime_hrs',      metrics.downtime_hrs,      t.downtime_hrs_per_day_max,                         '>', 'medium');
+  check('TDS_HIGH',       'permeate_tds',      metrics.permeate_tds,      t.permeate_tds_max,                                 '>', 'high');
+  check('PH_LOW',         'permeate_ph',       metrics.permeate_ph,       t.permeate_ph_min,                                  '<', 'medium');
+  check('PH_HIGH',        'permeate_ph',       metrics.permeate_ph,       t.permeate_ph_max,                                  '>', 'medium');
+  const turbMax = t.product_turbidity_max ?? t.raw_turbidity_max ?? 5;
+  check('TURBIDITY_HIGH', 'product_turbidity', metrics.product_turbidity ?? metrics.raw_turbidity, turbMax,                  '>', 'medium');
+  check('DP_HIGH',        'dp_psi',            metrics.dp_psi,            t.dp_psi_max,                                       '>', 'high');
+  check('RECOVERY_LOW',   'recovery_pct',      metrics.recovery_pct,      t.recovery_pct_min,                                 '<', 'medium');
+  check('PV_RATIO_HIGH',  'pv_ratio',          metrics.pv_ratio,          t.pv_ratio_max,                                     '>', 'low');
 
   // Chemical low-stock check — one violation per chemical projected to run
   // out inside the configured window. `days` is current_stock ÷ recent avg
@@ -543,14 +547,15 @@ export async function fetchPlantMetrics(
   return {
     rows,
     metrics: {
-      nrw_pct:       avg('nrw_pct') ?? avg('nrw_percentage'),
-      downtime_hrs:  rows.length ? sum('downtime_hrs') / rows.length : undefined,
-      permeate_tds:  avg('permeate_tds'),
-      permeate_ph:   avg('permeate_ph'),
-      raw_turbidity: avg('raw_turbidity'),
-      dp_psi:        avg('dp_psi'),
-      recovery_pct:  avg('recovery_pct'),
-      pv_ratio:      avg('pv_ratio'),
+      nrw_pct:           avg('nrw_pct') ?? avg('nrw_percentage'),
+      downtime_hrs:      rows.length ? sum('downtime_hrs') / rows.length : undefined,
+      permeate_tds:      avg('permeate_tds'),
+      permeate_ph:       avg('permeate_ph'),
+      product_turbidity: avg('turbidity_ntu') ?? avg('product_turbidity_ntu') ?? avg('raw_turbidity_ntu') ?? avg('raw_turbidity'),
+      raw_turbidity:     avg('raw_turbidity_ntu') ?? avg('raw_turbidity') ?? avg('turbidity_ntu'),
+      dp_psi:            avg('dp_psi'),
+      recovery_pct:      avg('recovery_pct'),
+      pv_ratio:          avg('pv_ratio'),
     },
   };
 }
@@ -638,14 +643,15 @@ async function fetchPreviousPeriodMetrics(
     rows.map((r) => r?.[k] ?? 0).reduce((a, b) => a + Number(b || 0), 0);
 
   return {
-    nrw_pct:       avg('nrw_pct') ?? avg('nrw_percentage'),
-    downtime_hrs:  rows.length ? sum('downtime_hrs') / rows.length : undefined,
-    permeate_tds:  avg('permeate_tds'),
-    permeate_ph:   avg('permeate_ph'),
-    raw_turbidity: avg('raw_turbidity'),
-    dp_psi:        avg('dp_psi'),
-    recovery_pct:  avg('recovery_pct'),
-    pv_ratio:      avg('pv_ratio'),
+    nrw_pct:           avg('nrw_pct') ?? avg('nrw_percentage'),
+    downtime_hrs:      rows.length ? sum('downtime_hrs') / rows.length : undefined,
+    permeate_tds:      avg('permeate_tds'),
+    permeate_ph:       avg('permeate_ph'),
+    product_turbidity: avg('turbidity_ntu') ?? avg('product_turbidity_ntu') ?? avg('raw_turbidity_ntu') ?? avg('raw_turbidity'),
+    raw_turbidity:     avg('raw_turbidity_ntu') ?? avg('raw_turbidity') ?? avg('turbidity_ntu'),
+    dp_psi:            avg('dp_psi'),
+    recovery_pct:      avg('recovery_pct'),
+    pv_ratio:          avg('pv_ratio'),
   };
 }
 
@@ -998,7 +1004,7 @@ export default function Compliance() {
       'NRW %',
       'Permeate TDS (ppm)',
       'Permeate pH',
-      'Raw Turbidity (NTU)',
+      'Product Turbidity (NTU)',
       'Differential Pressure (psi)',
       'Recovery %',
       'Downtime (hrs/day)',
@@ -1011,6 +1017,7 @@ export default function Compliance() {
       const medCount = p.violations.filter((v) => v.severity === 'medium').length;
       const lowCount = p.violations.filter((v) => v.severity === 'low').length;
       const chemLow = p.violations.filter((v) => v.code === 'CHEM_LOW').map((v) => `${v.metric} (${v.value}d)`).join('; ') || 'Normal';
+      const turbVal = p.metrics.product_turbidity ?? p.metrics.raw_turbidity;
 
       return [
         `"${p.plantName}"`,
@@ -1023,7 +1030,7 @@ export default function Compliance() {
         `"${p.metrics.nrw_pct !== undefined ? p.metrics.nrw_pct.toFixed(1) + '%' : '—'}"`,
         `"${p.metrics.permeate_tds !== undefined ? p.metrics.permeate_tds.toFixed(1) : '—'}"`,
         `"${p.metrics.permeate_ph !== undefined ? p.metrics.permeate_ph.toFixed(2) : '—'}"`,
-        `"${p.metrics.raw_turbidity !== undefined ? p.metrics.raw_turbidity.toFixed(2) : '—'}"`,
+        `"${turbVal !== undefined ? turbVal.toFixed(2) : '—'}"`,
         `"${p.metrics.dp_psi !== undefined ? p.metrics.dp_psi.toFixed(1) : '—'}"`,
         `"${p.metrics.recovery_pct !== undefined ? p.metrics.recovery_pct.toFixed(1) + '%' : '—'}"`,
         `"${p.metrics.downtime_hrs !== undefined ? p.metrics.downtime_hrs.toFixed(1) : '—'}"`,
@@ -1622,14 +1629,17 @@ export default function Compliance() {
                     />
                   </div>
                   <div>
-                    <Label htmlFor="raw_turbidity_max" className="text-2xs font-semibold text-muted-foreground">Raw Turbidity Max (NTU)</Label>
+                    <Label htmlFor="product_turbidity_max" className="text-2xs font-semibold text-muted-foreground">Product Turbidity Max (NTU)</Label>
                     <Input
-                      id="raw_turbidity_max"
+                      id="product_turbidity_max"
                       type="number"
                       step="0.1"
-                      value={local?.raw_turbidity_max ?? ''}
+                      value={local?.product_turbidity_max ?? local?.raw_turbidity_max ?? ''}
                       disabled={!editing}
-                      onChange={(e) => setLocal((l) => l ? ({ ...l, raw_turbidity_max: parseFloat(e.target.value) || 0 }) : l)}
+                      onChange={(e) => {
+                        const val = parseFloat(e.target.value) || 0;
+                        setLocal((l) => l ? ({ ...l, product_turbidity_max: val, raw_turbidity_max: val }) : l);
+                      }}
                       className="mt-1 font-mono text-xs"
                     />
                   </div>
@@ -1742,7 +1752,7 @@ export default function Compliance() {
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               {[
                 'nrw_pct', 'downtime_hrs', 'permeate_tds', 'permeate_ph',
-                'raw_turbidity', 'dp_psi', 'recovery_pct', 'pv_ratio',
+                'product_turbidity', 'dp_psi', 'recovery_pct', 'pv_ratio',
               ].map((k) => {
                 const fetched = previewMetrics?.[k];
                 return (

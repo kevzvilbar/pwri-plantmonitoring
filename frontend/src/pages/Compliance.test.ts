@@ -57,4 +57,17 @@ describe('computeViolations — chemical low-stock check', () => {
     expect(violations.some((v) => v.code === 'NRW_HIGH')).toBe(true);
     expect(violations.some((v) => v.code === 'CHEM_LOW')).toBe(true);
   });
+
+  it('flags product turbidity when exceeding configured product_turbidity_max (e.g. > 5 NTU)', () => {
+    const violations = computeViolations(
+      { product_turbidity: 6.2 },
+      { ...DEFAULT_THRESHOLDS, product_turbidity_max: 5 },
+      [],
+    );
+    const turbViolations = violations.filter((v) => v.code === 'TURBIDITY_HIGH');
+    expect(turbViolations).toHaveLength(1);
+    expect(turbViolations[0].metric).toBe('product_turbidity');
+    expect(turbViolations[0].value).toBe(6.2);
+    expect(turbViolations[0].threshold).toBe(5);
+  });
 });

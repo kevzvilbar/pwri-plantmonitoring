@@ -52,8 +52,11 @@ const AXES: {
     compute: (v, t) => (v == null || !t.downtime_hrs_per_day_max) ? null : (v / t.downtime_hrs_per_day_max) * 100 },
   { id: 'tds', label: 'Permeate TDS', metricKey: 'permeate_tds',
     compute: (v, t) => (v == null || !t.permeate_tds_max) ? null : (v / t.permeate_tds_max) * 100 },
-  { id: 'turbidity', label: 'Raw Turbidity', metricKey: 'raw_turbidity',
-    compute: (v, t) => (v == null || !t.raw_turbidity_max) ? null : (v / t.raw_turbidity_max) * 100 },
+  { id: 'turbidity', label: 'Product Turbidity', metricKey: 'product_turbidity',
+    compute: (v, t) => {
+      const max = t.product_turbidity_max ?? (t as any).raw_turbidity_max ?? 5;
+      return (v == null || !max) ? null : (v / max) * 100;
+    } },
   { id: 'dp', label: 'ΔP', metricKey: 'dp_psi',
     compute: (v, t) => (v == null || !t.dp_psi_max) ? null : (v / t.dp_psi_max) * 100 },
   { id: 'recovery', label: 'Recovery', metricKey: 'recovery_pct',
