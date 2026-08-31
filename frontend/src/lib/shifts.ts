@@ -91,8 +91,12 @@ export interface ShiftConfirmationRecord {
 
 const STORAGE_PREFIX = 'pwri_shift_confirmation_';
 
-export function getStoredShiftConfirmation(userId: string): ShiftConfirmationRecord | null {
+export function getStoredShiftConfirmation(userId: string, operatorId?: string): ShiftConfirmationRecord | null {
   try {
+    if (operatorId) {
+      const rawOp = localStorage.getItem(`${STORAGE_PREFIX}${userId}_${operatorId}`);
+      if (rawOp) return JSON.parse(rawOp);
+    }
     const raw = localStorage.getItem(`${STORAGE_PREFIX}${userId}`);
     return raw ? JSON.parse(raw) : null;
   } catch {
@@ -103,6 +107,9 @@ export function getStoredShiftConfirmation(userId: string): ShiftConfirmationRec
 export function saveShiftConfirmation(userId: string, record: ShiftConfirmationRecord): void {
   try {
     localStorage.setItem(`${STORAGE_PREFIX}${userId}`, JSON.stringify(record));
+    if (record.operatorId) {
+      localStorage.setItem(`${STORAGE_PREFIX}${userId}_${record.operatorId}`, JSON.stringify(record));
+    }
   } catch {
     /* ignore storage errors */
   }

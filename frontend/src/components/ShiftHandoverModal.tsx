@@ -42,6 +42,8 @@ export function ShiftHandoverModal() {
   const [loadingPeers, setLoadingPeers] = useState(false);
   const [switching, setSwitching] = useState(false);
 
+  const [searchTerm, setSearchTerm] = useState('');
+
   const currentOperator = activeOperator ?? profile;
   const currentOperatorId = activeOperatorId ?? user?.id ?? '';
 
@@ -53,7 +55,7 @@ export function ShiftHandoverModal() {
     }
 
     // Only apply handover checks for operator roles or active operator sessions
-    const isOperator = profile.designation === 'Operator' || activeOperatorId !== null;
+    const isOperator = profile.designation === 'Operator' || profile.designation === 'Technician' || activeOperatorId !== null;
     if (!isOperator) {
       setIsOpen(false);
       return;
@@ -64,12 +66,13 @@ export function ShiftHandoverModal() {
     const cycleKey = getShiftCycleKey(now);
     setCurrentShift(shift);
 
-    const stored = getStoredShiftConfirmation(user.id);
+    const stored = getStoredShiftConfirmation(user.id, currentOperatorId);
 
     // If no confirmation or cycle/operator changed, trigger the prompt
     if (!stored || stored.cycleKey !== cycleKey || stored.operatorId !== currentOperatorId) {
       setIsOpen(true);
       setShowSwitchPicker(false);
+      setSearchTerm('');
     } else {
       setIsOpen(false);
     }
@@ -101,34 +104,46 @@ export function ShiftHandoverModal() {
     setLoadingPeers(true);
     try {
       const plantAssignments = profile?.plant_assignments ?? (selectedPlantId ? [selectedPlantId] : []);
-      if (plantAssignments.length === 0) {
-        setPeerOperators([]);
-        return;
-      }
+      
+      let query = supabase
+        .from('user_profiles')
+        .select('*')
+        .eq('status', 'Active')
+        .in('designation', ['Operator', 'Technician'])
+        .order('first_name');
 
-      const results = await Promise.all(
-        plantAssignments.map((pid) =>
-          supabase
-            .from('user_profiles')
-            .select('*')
-            .eq('status', 'Active')
-            .eq('designation', 'Operator')
-            .contains('plant_assignments', [pid])
-            .order('first_name'),
-        ),
-      );
+      if (plantAssignments.length > 0) {
+        const results = await Promise.all(
+          plantAssignments.map((pid) =>
+            supabase
+              .from('user_profiles')
+              .select('*')
+              .eq('status', 'Active')
+              .in('designation', ['Operator', 'Technician'])
+              .contains('plant_assignments', [pid])
+              .order('first_name'),
+          ),
+        );
 
-      const seen = new Set<string>();
-      const merged: Profile[] = [];
-      for (const { data } of results) {
-        for (const row of data ?? []) {
-          if (!seen.has(row.id)) {
-            seen.add(row.id);
-            merged.push(row as Profile);
+        const seen = new Set<string>();
+        const merged: Profile[] = [];
+        for (const { data } of results) {
+          for (const row of data ?? []) {
+            if (!seen.has(row.id)) {
+              seen.add(row.id);
+              merged.push(row as Profile);
+            }
           }
         }
+        if (merged.length > 0) {
+          setPeerOperators(merged.sort((a, b) => (a.first_name ?? '').localeCompare(b.first_name ?? '')));
+          return;
+        }
       }
-      setPeerOperators(merged.sort((a, b) => (a.first_name ?? '').localeCompare(b.first_name ?? '')));
+
+      // Fallback: fetch all active operators/technicians
+      const { data } = await query;
+      setPeerOperators((data as Profile[]) ?? []);
     } catch (err) {
       console.error('[ShiftHandover] Failed to load peer operators:', err);
     } finally {
@@ -183,12 +198,16 @@ export function ShiftHandoverModal() {
 
       // Log switch event in Supabase audit
       if (sharedPlant) {
-        await supabase.from('operator_switch_log' as any).insert({
-          plant_id: sharedPlant,
-          from_operator_id: currentOperatorId,
-          to_operator_id: newOp.id,
-          switched_by: user.id,
-        });
+        try {
+          await supabase.from('operator_switch_log' as any).insert({
+            plant_id: sharedPlant,
+            from_operator_id: currentOperatorId,
+            to_operator_id: newOp.id,
+            switched_by: user.id,
+          });
+        } catch (auditErr) {
+          console.warn('[ShiftHandoverModal] Audit log write failed:', auditErr);
+        }
       }
 
       // Record shift confirmation for the new operator
@@ -209,6 +228,14 @@ export function ShiftHandoverModal() {
     }
   };
 
+  const filteredPeers = peerOperators.filter((p) => {
+    if (!searchTerm.trim()) return true;
+    const term = searchTerm.toLowerCase();
+    const name = fullName(p).toLowerCase();
+    const un = (p.username ?? '').toLowerCase();
+    return name.includes(term) || un.includes(term);
+  });
+
   if (!isOpen) return null;
 
   return (
@@ -227,7 +254,7 @@ export function ShiftHandoverModal() {
               <span className="text-3xs font-medium opacity-80">({currentShift.timeRange})</span>
             </div>
             <span className="text-3xs font-bold uppercase tracking-wider text-muted-foreground px-2 py-0.5 bg-muted rounded">
-              Shift Boundary
+              8-Hr Shift Check
             </span>
           </div>
 
@@ -236,37 +263,43 @@ export function ShiftHandoverModal() {
           </DialogTitle>
 
           <DialogDescription className="text-xs text-muted-foreground leading-relaxed">
-            The system detected a shift change. Please verify the active operator account for telemetry logging and traceability.
+            A shift transition has occurred. If multiple operators share this terminal account, please confirm who is actively on-duty so all readings and telemetry are correctly attributed.
           </DialogDescription>
         </DialogHeader>
 
         {/* Current Active Account Box */}
-        <div className="my-2 p-3.5 rounded-xl bg-muted/40 border border-border/70 flex items-center gap-3">
-          <Avatar className="h-10 w-10 shrink-0 border border-border">
-            <AvatarFallback className="bg-primary/20 text-primary font-bold text-sm">
-              {initials(currentOperator)}
-            </AvatarFallback>
-          </Avatar>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-1.5">
-              <p className="text-xs font-bold text-foreground truncate">
-                {fullName(currentOperator)}
-              </p>
-              <span className="text-3xs font-semibold px-1.5 py-0.2 rounded bg-primary-soft text-primary">
-                {currentOperator?.designation ?? 'Operator'}
-              </span>
-            </div>
-            <p className="text-2xs text-muted-foreground truncate">
-              {currentOperator?.username ? `@${currentOperator.username}` : user?.email}
-            </p>
+        <div className="my-2 p-3.5 rounded-xl bg-muted/40 border border-border/70 space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-3xs font-bold uppercase tracking-wider text-muted-foreground">Current Active Operator</span>
+            <span className="text-3xs text-muted-foreground/80 truncate max-w-[180px]">Shared Login: {user?.email}</span>
           </div>
-          <ShieldCheck className="h-5 w-5 text-accent shrink-0" />
+          <div className="flex items-center gap-3">
+            <Avatar className="h-10 w-10 shrink-0 border border-border">
+              <AvatarFallback className="bg-primary/20 text-primary font-bold text-sm">
+                {initials(currentOperator)}
+              </AvatarFallback>
+            </Avatar>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-1.5">
+                <p className="text-sm font-bold text-foreground truncate">
+                  {fullName(currentOperator)}
+                </p>
+                <span className="text-3xs font-semibold px-1.5 py-0.2 rounded bg-primary-soft text-primary">
+                  {currentOperator?.designation ?? 'Operator'}
+                </span>
+              </div>
+              <p className="text-xs text-accent font-medium truncate">
+                {currentOperator?.username ? `@${currentOperator.username}` : 'Terminal Profile'}
+              </p>
+            </div>
+            <ShieldCheck className="h-5 w-5 text-accent shrink-0" />
+          </div>
         </div>
 
         {!showSwitchPicker ? (
           <div className="space-y-4 pt-1">
-            <p className="text-xs font-semibold text-foreground text-center px-2 py-1 rounded-lg bg-accent-soft/40 border border-accent/20">
-              “Confirm: Are you the same operator continuing this shift, or a different person taking over?”
+            <p className="text-xs font-semibold text-foreground text-center px-3 py-2 rounded-lg bg-accent-soft/40 border border-accent/20">
+              “Are you still <strong>{fullName(currentOperator)}</strong> for this shift, or is another operator taking over?”
             </p>
 
             <div className="flex flex-col gap-2.5">
@@ -276,7 +309,7 @@ export function ShiftHandoverModal() {
                 className="w-full h-11 text-xs font-bold bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm rounded-xl gap-2 justify-center"
               >
                 <UserCheck className="h-4 w-4" />
-                I am the same operator continuing this shift
+                I am still {fullName(currentOperator)} (Continue Shift)
               </Button>
 
               {/* Option 2: Different Person Taking Over */}
@@ -286,7 +319,7 @@ export function ShiftHandoverModal() {
                 className="w-full h-11 text-xs font-bold border-warn/60 bg-warn-soft/20 hover:bg-warn-soft/40 text-warn-foreground hover:text-warn rounded-xl gap-2 justify-center"
               >
                 <Users className="h-4 w-4 text-warn" />
-                Different person taking over (Switch Operator)
+                Different operator taking over (Switch Profile)
               </Button>
             </div>
           </div>
@@ -294,7 +327,7 @@ export function ShiftHandoverModal() {
           /* Handover / Peer Operator Switcher View */
           <div className="space-y-3 pt-1">
             <div className="flex items-center justify-between">
-              <p className="text-xs font-bold text-foreground">Select New On-Duty Operator</p>
+              <p className="text-xs font-bold text-foreground">Select Your Operator Profile</p>
               <button
                 onClick={() => setShowSwitchPicker(false)}
                 className="text-2xs text-muted-foreground hover:text-foreground underline"
@@ -303,16 +336,27 @@ export function ShiftHandoverModal() {
               </button>
             </div>
 
+            {/* Quick Search */}
+            {peerOperators.length > 3 && (
+              <input
+                type="text"
+                placeholder="Search operator name or @handle..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full px-3 py-1.5 text-xs rounded-lg bg-muted/60 border border-border/70 focus:outline-none focus:ring-1 focus:ring-primary"
+              />
+            )}
+
             <div className="max-h-48 overflow-y-auto space-y-1.5 pr-1">
               {loadingPeers ? (
                 <p className="text-xs text-muted-foreground text-center py-4">Loading active operators...</p>
-              ) : peerOperators.length === 0 ? (
+              ) : filteredPeers.length === 0 ? (
                 <div className="text-center py-4 space-y-1">
                   <AlertCircle className="h-5 w-5 text-muted-foreground mx-auto" />
-                  <p className="text-xs text-muted-foreground">No peer operators found for this plant.</p>
+                  <p className="text-xs text-muted-foreground">No matching operator profiles found.</p>
                 </div>
               ) : (
-                peerOperators.map((p) => {
+                filteredPeers.map((p) => {
                   const isCurrent = p.id === currentOperatorId;
                   return (
                     <button
@@ -349,7 +393,7 @@ export function ShiftHandoverModal() {
 
             {/* Alternative: Full Sign Out */}
             <div className="pt-2 border-t border-border/50 flex items-center justify-between">
-              <span className="text-2xs text-muted-foreground">Not in this list?</span>
+              <span className="text-2xs text-muted-foreground">Need a different login?</span>
               <Button
                 variant="ghost"
                 size="sm"
@@ -357,7 +401,7 @@ export function ShiftHandoverModal() {
                 className="text-xs text-destructive hover:text-destructive hover:bg-destructive/10 gap-1.5 h-8 px-2.5"
               >
                 <LogOut className="h-3.5 w-3.5" />
-                Sign in with another account
+                Sign in with another email
               </Button>
             </div>
           </div>
