@@ -63,6 +63,15 @@ const ROLE_AVATAR: Record<string, string> = {
   'No role':       'bg-muted text-muted-foreground',
 };
 
+const ROLE_PILL: Record<string, string> = {
+  Admin:          'bg-role-admin/15 text-role-admin border-role-admin/30',
+  'Data Analyst': 'bg-role-analyst/15 text-role-analyst border-role-analyst/30',
+  Manager:        'bg-role-manager/15 text-role-manager border-role-manager/30',
+  Technician:     'bg-role-technician/15 text-role-technician border-role-technician/30',
+  Operator:       'bg-muted text-muted-foreground border-border/60',
+  'No role':      'bg-muted text-muted-foreground border-border/60',
+};
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function initials(first?: string, last?: string, username?: string): string {
