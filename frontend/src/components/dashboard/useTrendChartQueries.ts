@@ -185,7 +185,7 @@ export function useTrendChartQueries({
       if (!locatorIds.length) return [];
       const { data, error } = await supabase
         .from('locator_readings')
-        .select('locator_id,daily_volume,current_reading,previous_reading,reading_datetime,is_meter_replacement')
+        .select('locator_id,daily_volume,current_reading,previous_reading,reading_datetime,is_meter_replacement,norm_status')
         .in('locator_id', locatorIds)
         .gte('reading_datetime', startISO)
         .lte('reading_datetime', endISO)
@@ -211,14 +211,14 @@ export function useTrendChartQueries({
       const { data, error } = await (supabase.from('product_meter_readings' as never) as any)
         // Bug fix: include daily_volume so computeEntityDeltas can use it directly,
         // matching how locator_readings are handled (avoids boundary-read delta = 0).
-        .select('meter_id,daily_volume,current_reading,previous_reading,reading_datetime,is_meter_replacement,plant_id')
+        .select('meter_id,daily_volume,current_reading,previous_reading,reading_datetime,is_meter_replacement,plant_id,norm_status')
         .in('plant_id', plantIds)
         .gte('reading_datetime', startISO)
         .lte('reading_datetime', endISO);
       if (error) {
         if (error.message?.includes('is_meter_replacement')) {
           const { data: d2, error: e2 } = await (supabase.from('product_meter_readings' as never) as any)
-            .select('meter_id,daily_volume,current_reading,previous_reading,reading_datetime,plant_id')
+            .select('meter_id,daily_volume,current_reading,previous_reading,reading_datetime,plant_id,norm_status')
             .in('plant_id', plantIds)
             .gte('reading_datetime', startISO)
             .lte('reading_datetime', endISO);
@@ -246,7 +246,7 @@ export function useTrendChartQueries({
     queryKey: ['trend-well', metric, startKey, endKey, plantIds],
     queryFn: () => supaSelect<any>(
       'well_readings',
-      'well_id,current_reading,previous_reading,daily_volume,reading_datetime,is_meter_replacement,plant_id',
+      'well_id,current_reading,previous_reading,daily_volume,reading_datetime,is_meter_replacement,plant_id,norm_status',
     ),
     enabled: plantIds.length > 0 && needsWellReadings,
     staleTime: 0,

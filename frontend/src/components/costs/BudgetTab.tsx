@@ -136,7 +136,7 @@ export function BudgetTab() {
       let c = 0;
       let o = 0;
       let a = 0;
-      let titlePrefix = selectedMonth === 'YTD' ? 'YTD' : rows.find((r) => r.month === selectedMonth)?.label.split(' ')[0] ?? '';
+      const titlePrefix = selectedMonth === 'YTD' ? 'YTD' : rows.find((r) => r.month === selectedMonth)?.label.split(' ')[0] ?? '';
 
       if (selectedMonth === 'YTD') {
         b = activeMonths.reduce((sum, r) => sum + (metric === 'power' ? r.powerBudget : metric === 'chem' ? r.chemBudget : r.totalBudget), 0);

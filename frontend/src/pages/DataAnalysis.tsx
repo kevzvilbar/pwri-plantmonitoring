@@ -310,6 +310,10 @@ export default function DataAnalysis() {
     }
   };
 
+  const latestRun = regressionResults[0] ?? null;
+  const totalOutliers = useMemo(() => regressionResults.reduce((acc, r) => acc + (r.outlier_count || 0), 0), [regressionResults]);
+  const pendingCount = useMemo(() => regressionResults.filter(r => r.status === 'pending').length, [regressionResults]);
+
   if (!canView) {
     return (
       <Card className="p-8 text-center space-y-2 max-w-md mx-auto mt-12">
@@ -321,10 +325,6 @@ export default function DataAnalysis() {
       </Card>
     );
   }
-
-  const latestRun = regressionResults[0] ?? null;
-  const totalOutliers = useMemo(() => regressionResults.reduce((acc, r) => acc + (r.outlier_count || 0), 0), [regressionResults]);
-  const pendingCount = useMemo(() => regressionResults.filter(r => r.status === 'pending').length, [regressionResults]);
 
   const applyPreset = (days: number | null) => {
     if (!days) {

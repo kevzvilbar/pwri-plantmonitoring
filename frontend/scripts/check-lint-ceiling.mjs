@@ -47,6 +47,7 @@ function runEslintJson() {
       cwd: frontendRoot,
       encoding: 'utf8',
       maxBuffer: 1024 * 1024 * 64,
+      shell: true,
     });
   } catch (err) {
     // execFileSync throws when the child exits non-zero, but ESLint's JSON

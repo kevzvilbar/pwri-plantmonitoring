@@ -81,4 +81,14 @@ describe('computeEntityDeltas', () => {
     // Without the self-heal this would be 10 + 20 + 30 = 60 (cumulative-looking).
     expect(out.map((o) => o.delta)).toEqual([10, 10, 10]);
   });
+
+  it('excludes retracted readings from the delta sequence and volume calculations', () => {
+    const readings = [
+      { well_id: 'w1', reading_datetime: iso('2026-07-01'), current_reading: 1000, previous_reading: 900 },
+      { well_id: 'w1', reading_datetime: iso('2026-07-02'), current_reading: 1500, norm_status: 'retracted' },
+      { well_id: 'w1', reading_datetime: iso('2026-07-03'), current_reading: 1100 },
+    ];
+    const out = computeEntityDeltas(readings, 'well_id', null);
+    expect(out.map((o) => o.delta)).toEqual([100, 100]);
+  });
 });

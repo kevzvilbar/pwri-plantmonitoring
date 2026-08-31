@@ -105,7 +105,7 @@ export function ShiftHandoverModal() {
     try {
       const plantAssignments = profile?.plant_assignments ?? (selectedPlantId ? [selectedPlantId] : []);
       
-      let query = supabase
+      const query = supabase
         .from('user_profiles')
         .select('*')
         .eq('status', 'Active')

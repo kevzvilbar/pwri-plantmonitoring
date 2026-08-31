@@ -1051,7 +1051,17 @@ export function PretreatmentAndROLog() {
       .insert(roPayload)
       .select('id,permeate_meter_delta,feed_meter_delta')
       .single() as any);
-    if (roError) { toast.error(friendlyError(roError)); return; }
+    if (roError) {
+      if (roError.code === '23505') {
+        toast.error(
+          `${train?.name ?? `Train ${train?.train_number ?? ''}`}: a reading was already submitted for this exact timestamp. Check the log before resubmitting.`,
+          { duration: 8000 },
+        );
+      } else {
+        toast.error(friendlyError(roError));
+      }
+      return;
+    }
 
     // Surface the meter spike immediately — both a toast for the operator
     // who just saved it, and a PlantAlert pushed straight into the store so

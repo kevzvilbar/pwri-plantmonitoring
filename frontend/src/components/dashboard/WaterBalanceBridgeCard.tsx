@@ -224,7 +224,7 @@ function useWaterBalancePeriodTotals(plantIds: string[]) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('well_readings')
-        .select('well_id,current_reading,previous_reading,daily_volume,reading_datetime,is_meter_replacement,plant_id')
+        .select('well_id,current_reading,previous_reading,daily_volume,reading_datetime,is_meter_replacement,plant_id,norm_status')
         .in('plant_id', plantIds).gte('reading_datetime', startISO).lte('reading_datetime', endISO);
       if (error) throw error;
       return data ?? [];
@@ -236,8 +236,8 @@ function useWaterBalancePeriodTotals(plantIds: string[]) {
   const { data: productReadings, isFetching: fProduct, error: eProduct } = useQuery({
     queryKey: ['wb-product-readings', plantIds, startKey, endKey],
     queryFn: async () => {
-      const FULL = 'meter_id,daily_volume,current_reading,previous_reading,reading_datetime,is_meter_replacement,plant_id';
-      const LEGACY = 'meter_id,daily_volume,current_reading,previous_reading,reading_datetime,plant_id';
+      const FULL = 'meter_id,daily_volume,current_reading,previous_reading,reading_datetime,is_meter_replacement,plant_id,norm_status';
+      const LEGACY = 'meter_id,daily_volume,current_reading,previous_reading,reading_datetime,plant_id,norm_status';
       const { data, error } = await (supabase.from('product_meter_readings' as never) as any)
         .select(FULL).in('plant_id', plantIds).gte('reading_datetime', startISO).lte('reading_datetime', endISO);
       if (error) {
@@ -259,8 +259,8 @@ function useWaterBalancePeriodTotals(plantIds: string[]) {
     queryKey: ['wb-ro-readings', plantIds, startKey, endKey, trainIds],
     queryFn: async () => {
       if (!trainIds.length) return [];
-      const FULL = 'train_id,permeate_meter,permeate_meter_prev,permeate_meter_delta,reading_datetime,is_meter_replacement';
-      const LEGACY = 'train_id,permeate_meter,reading_datetime,is_meter_replacement';
+      const FULL = 'train_id,permeate_meter,permeate_meter_prev,permeate_meter_delta,reading_datetime,is_meter_replacement,norm_status';
+      const LEGACY = 'train_id,permeate_meter,reading_datetime,is_meter_replacement,norm_status';
       const { data, error } = await (supabase.from('ro_train_readings' as never) as any)
         .select(FULL).in('train_id', trainIds).gte('reading_datetime', startISO).lte('reading_datetime', endISO);
       if (error) {
@@ -281,7 +281,7 @@ function useWaterBalancePeriodTotals(plantIds: string[]) {
       if (!locatorIds.length) return [];
       const { data, error } = await supabase
         .from('locator_readings')
-        .select('locator_id,daily_volume,current_reading,previous_reading,reading_datetime,is_meter_replacement')
+        .select('locator_id,daily_volume,current_reading,previous_reading,reading_datetime,is_meter_replacement,norm_status')
         .in('locator_id', locatorIds).gte('reading_datetime', startISO).lte('reading_datetime', endISO);
       if (error) throw error;
       return data ?? [];

@@ -249,6 +249,8 @@ export async function insertROTrainReadings(
         const e2 = await doWrite(corePayload);
         if (e2) errors.push(e2.message);
         else    { count++; affectedTrainIds.add(trainId); }
+      } else if ((error as any).code === '23505') {
+        errors.push(`Row at ${dt} skipped: a reading was already submitted for train ${r.train_number ?? trainId} at this timestamp.`);
       } else {
         errors.push(error.message);
       }
