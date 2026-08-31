@@ -111,10 +111,11 @@ export function BudgetTab() {
   }));
 
   // ── Waterfall YTD data ───────────────────────────────────────────────────────
-  const waterfallData = useMemo(() => {
+  const [waterfallMode, setWaterfallMode] = useState<'category' | 'monthly'>('category');
+
+  const waterfallRows = useMemo(() => {
     if (!rows || rows.length === 0) return [];
 
-    // Filter to active months with budget or actual activity
     const activeMonths = rows.filter((r) => {
       const b = metric === 'power' ? r.powerBudget : metric === 'chem' ? r.chemBudget : r.totalBudget;
       const a = metric === 'power' ? r.powerActual : metric === 'chem' ? r.chemActual : r.totalActual;
@@ -124,99 +125,150 @@ export function BudgetTab() {
     const totalB = activeMonths.reduce((sum, r) => sum + (metric === 'power' ? r.powerBudget : metric === 'chem' ? r.chemBudget : r.totalBudget), 0);
     const totalA = activeMonths.reduce((sum, r) => sum + (metric === 'power' ? r.powerActual : metric === 'chem' ? r.chemActual : r.totalActual), 0);
 
+    // 1. Category Bridge Mode (Budget YTD → Power Delta → Chem Delta → Actual YTD)
+    if (metric === 'total' && waterfallMode === 'category') {
+      const powerB = activeMonths.reduce((s, r) => s + r.powerBudget, 0);
+      const powerA = activeMonths.reduce((s, r) => s + r.powerActual, 0);
+      const chemB = activeMonths.reduce((s, r) => s + r.chemBudget, 0);
+      const chemA = activeMonths.reduce((s, r) => s + r.chemActual, 0);
+
+      const powerDelta = powerA - powerB;
+      const chemDelta = chemA - chemB;
+
+      const items: Array<{
+        name: string;
+        base: number;
+        height: number;
+        fill: string;
+        deltaLabel: string;
+        rawAmount: number;
+        budget: number;
+        actual: number;
+        kind: 'start' | 'delta' | 'end';
+      }> = [];
+
+      // Starting Pillar
+      items.push({
+        name: 'Budget YTD',
+        base: 0,
+        height: totalB,
+        fill: '#00b4d8', // Cyan
+        deltaLabel: `₱${fmtNum(totalB, 0)}`,
+        rawAmount: totalB,
+        budget: totalB,
+        actual: 0,
+        kind: 'start',
+      });
+
+      let current = totalB;
+
+      // Power Variance Step
+      const nextPower = current + powerDelta;
+      items.push({
+        name: 'Power variance',
+        base: Math.min(current, nextPower),
+        height: Math.max(Math.abs(powerDelta), 1),
+        fill: powerDelta > 0 ? '#f59e0b' : '#10b981', // Amber for over-budget, Emerald for savings
+        deltaLabel: `${powerDelta >= 0 ? '+' : '−'}₱${fmtNum(Math.abs(powerDelta), 0)}`,
+        rawAmount: powerDelta,
+        budget: powerB,
+        actual: powerA,
+        kind: 'delta',
+      });
+      current = nextPower;
+
+      // Chem Variance Step
+      const nextChem = current + chemDelta;
+      items.push({
+        name: 'Chemicals variance',
+        base: Math.min(current, nextChem),
+        height: Math.max(Math.abs(chemDelta), 1),
+        fill: chemDelta > 0 ? '#f97316' : '#10b981', // Orange for over-budget, Emerald for savings
+        deltaLabel: `${chemDelta >= 0 ? '+' : '−'}₱${fmtNum(Math.abs(chemDelta), 0)}`,
+        rawAmount: chemDelta,
+        budget: chemB,
+        actual: chemA,
+        kind: 'delta',
+      });
+      current = nextChem;
+
+      // Ending Pillar
+      items.push({
+        name: 'Actual YTD',
+        base: 0,
+        height: totalA,
+        fill: '#3b82f6', // Vibrant Blue
+        deltaLabel: `₱${fmtNum(totalA, 0)}`,
+        rawAmount: totalA,
+        budget: totalB,
+        actual: totalA,
+        kind: 'end',
+      });
+
+      return items;
+    }
+
+    // 2. Monthly Progression Bridge Mode
     const items: Array<{
       name: string;
       base: number;
-      delta: number;
-      rawDelta: number;
-      runningTotal: number;
+      height: number;
+      fill: string;
+      deltaLabel: string;
+      rawAmount: number;
       budget: number;
       actual: number;
-      type: 'start' | 'increase' | 'decrease' | 'neutral' | 'end';
-      fill: string;
+      kind: 'start' | 'delta' | 'end';
     }> = [];
 
-    // 1. Initial Start Pillar: Budget YTD
     items.push({
       name: 'Budget YTD',
       base: 0,
-      delta: totalB,
-      rawDelta: totalB,
-      runningTotal: totalB,
+      height: totalB,
+      fill: '#00b4d8',
+      deltaLabel: `₱${fmtNum(totalB, 0)}`,
+      rawAmount: totalB,
       budget: totalB,
       actual: 0,
-      type: 'start',
-      fill: 'hsl(var(--muted-foreground))',
+      kind: 'start',
     });
 
-    let currentRunning = totalB;
-
-    // 2. Intermediate Monthly Variance Steps
+    let current = totalB;
     for (const r of activeMonths) {
       const monthName = r.label.split(' ')[0];
       const b = metric === 'power' ? r.powerBudget : metric === 'chem' ? r.chemBudget : r.totalBudget;
       const a = metric === 'power' ? r.powerActual : metric === 'chem' ? r.chemActual : r.totalActual;
-      const variance = a - b;
+      const diff = a - b;
+      const next = current + diff;
 
-      if (variance > 0) {
-        // Over Budget (Expense Increase)
-        items.push({
-          name: monthName,
-          base: currentRunning,
-          delta: variance,
-          rawDelta: variance,
-          runningTotal: currentRunning + variance,
-          budget: b,
-          actual: a,
-          type: 'increase',
-          fill: 'hsl(var(--danger))',
-        });
-        currentRunning += variance;
-      } else if (variance < 0) {
-        // Under Budget (Favorable Savings)
-        const absVar = Math.abs(variance);
-        items.push({
-          name: monthName,
-          base: Math.max(0, currentRunning - absVar),
-          delta: absVar,
-          rawDelta: variance,
-          runningTotal: currentRunning - absVar,
-          budget: b,
-          actual: a,
-          type: 'decrease',
-          fill: 'hsl(var(--accent))',
-        });
-        currentRunning -= absVar;
-      } else {
-        items.push({
-          name: monthName,
-          base: currentRunning,
-          delta: 0,
-          rawDelta: 0,
-          runningTotal: currentRunning,
-          budget: b,
-          actual: a,
-          type: 'neutral',
-          fill: 'hsl(var(--muted-foreground))',
-        });
-      }
+      items.push({
+        name: monthName,
+        base: Math.min(current, next),
+        height: Math.max(Math.abs(diff), 1),
+        fill: diff > 0 ? '#f59e0b' : diff < 0 ? '#10b981' : 'hsl(var(--muted-foreground))',
+        deltaLabel: diff === 0 ? '₱0' : `${diff > 0 ? '+' : '−'}₱${fmtNum(Math.abs(diff), 0)}`,
+        rawAmount: diff,
+        budget: b,
+        actual: a,
+        kind: 'delta',
+      });
+      current = next;
     }
 
-    // 3. Final Ending Pillar: Actual YTD
     items.push({
       name: 'Actual YTD',
       base: 0,
-      delta: totalA,
-      rawDelta: totalA,
-      runningTotal: totalA,
+      height: totalA,
+      fill: '#3b82f6',
+      deltaLabel: `₱${fmtNum(totalA, 0)}`,
+      rawAmount: totalA,
       budget: totalB,
       actual: totalA,
-      type: 'end',
-      fill: 'hsl(var(--primary))',
+      kind: 'end',
     });
 
     return items;
-  }, [rows, metric]);
+  }, [rows, metric, waterfallMode]);
 
   return (
     <div className="space-y-3">
@@ -400,7 +452,7 @@ export function BudgetTab() {
                 </h4>
                 <p className="text-2xs text-muted-foreground">
                   {chartView === 'waterfall'
-                    ? 'Step-by-step bridge from Budget baseline to Actual spending via monthly variances'
+                    ? 'Step-by-step bridge from Budget baseline to Actual spending via cost variances'
                     : 'Monthly side-by-side expense comparisons'}
                 </p>
               </div>
@@ -434,6 +486,32 @@ export function BudgetTab() {
                   </button>
                 </div>
 
+                {/* Sub-mode switcher for Waterfall (Category vs Monthly) */}
+                {chartView === 'waterfall' && metric === 'total' && (
+                  <div className="flex items-center gap-1 bg-muted/40 p-0.5 rounded-lg border border-border/40">
+                    <button
+                      className={`px-2 py-0.5 text-3xs font-medium rounded transition-all ${
+                        waterfallMode === 'category'
+                          ? 'bg-background text-foreground shadow-2xs font-semibold'
+                          : 'text-muted-foreground hover:text-foreground'
+                      }`}
+                      onClick={() => setWaterfallMode('category')}
+                    >
+                      Cost Breakdown
+                    </button>
+                    <button
+                      className={`px-2 py-0.5 text-3xs font-medium rounded transition-all ${
+                        waterfallMode === 'monthly'
+                          ? 'bg-background text-foreground shadow-2xs font-semibold'
+                          : 'text-muted-foreground hover:text-foreground'
+                      }`}
+                      onClick={() => setWaterfallMode('monthly')}
+                    >
+                      Monthly Steps
+                    </button>
+                  </div>
+                )}
+
                 {/* Metric Selector: Total, Power, Chemicals */}
                 <div className="flex items-center gap-1 bg-muted/40 p-0.5 rounded-lg border border-border/40">
                   {(['total', 'power', 'chem'] as Metric[]).map((m) => (
@@ -455,19 +533,21 @@ export function BudgetTab() {
             <div className="h-72 pt-2">
               <ResponsiveContainer width="100%" height="100%">
                 {chartView === 'waterfall' ? (
-                  <BarChart data={waterfallData} margin={{ top: 12, right: 16, left: 4, bottom: 4 }}>
+                  <BarChart data={waterfallRows} margin={{ top: 20, right: 16, left: 4, bottom: 4 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} opacity={0.4} />
                     <XAxis
                       dataKey="name"
-                      tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }}
+                      tick={{ fontSize: 11, fontWeight: 500, fill: 'hsl(var(--muted-foreground))' }}
                       axisLine={false}
                       tickLine={false}
+                      interval={0}
                     />
                     <YAxis
-                      tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }}
-                      tickFormatter={(v: number) => `₱${(v / 1000).toFixed(0)}k`}
+                      tick={{ fontSize: 10.5, fill: 'hsl(var(--muted-foreground))' }}
+                      tickFormatter={(v: number) => (Math.abs(v) >= 1000 ? `₱${(v / 1000).toFixed(0)}k` : `₱${v}`)}
                       axisLine={false}
                       tickLine={false}
+                      width={55}
                     />
                     <Tooltip
                       content={({ active, payload }) => {
@@ -479,19 +559,19 @@ export function BudgetTab() {
                           <div className="p-3 rounded-xl bg-card/95 border border-border shadow-xl backdrop-blur-md text-xs space-y-1.5 min-w-[190px]">
                             <div className="font-bold text-foreground border-b border-border/60 pb-1 flex items-center justify-between gap-2">
                               <span>{data.name}</span>
-                              {data.type === 'start' ? (
+                              {data.kind === 'start' ? (
                                 <span className="text-3xs font-mono uppercase bg-muted px-1.5 py-0.5 rounded text-muted-foreground font-semibold">
                                   Baseline Plan
                                 </span>
-                              ) : data.type === 'end' ? (
+                              ) : data.kind === 'end' ? (
                                 <span className="text-3xs font-mono uppercase bg-primary/10 text-primary px-1.5 py-0.5 rounded font-bold">
                                   Total YTD Spent
                                 </span>
-                              ) : data.rawDelta > 0 ? (
+                              ) : data.rawAmount > 0 ? (
                                 <span className="text-3xs font-mono uppercase bg-danger-soft text-danger px-1.5 py-0.5 rounded font-bold">
                                   Over Budget
                                 </span>
-                              ) : data.rawDelta < 0 ? (
+                              ) : data.rawAmount < 0 ? (
                                 <span className="text-3xs font-mono uppercase bg-accent-soft text-accent px-1.5 py-0.5 rounded font-bold">
                                   Favorable Savings
                                 </span>
@@ -502,53 +582,49 @@ export function BudgetTab() {
                               )}
                             </div>
 
-                            {data.type === 'start' && (
+                            {data.kind === 'start' && (
                               <div className="space-y-0.5">
                                 <div className="text-muted-foreground">
-                                  Planned Budget YTD: <strong className="text-foreground font-mono-num">₱{fmtNum(data.delta, 0)}</strong>
+                                  Planned Budget YTD: <strong className="text-foreground font-mono-num">₱{fmtNum(data.rawAmount, 0)}</strong>
                                 </div>
                               </div>
                             )}
 
-                            {data.type === 'end' && (
+                            {data.kind === 'end' && (
                               <div className="space-y-1">
                                 <div className="text-muted-foreground">
-                                  Actual Spent YTD: <strong className="text-primary font-mono-num font-bold">₱{fmtNum(data.delta, 0)}</strong>
+                                  Actual Spent YTD: <strong className="text-primary font-mono-num font-bold">₱{fmtNum(data.rawAmount, 0)}</strong>
                                 </div>
                                 <div className="text-3xs text-muted-foreground border-t border-border/40 pt-1 flex justify-between">
                                   <span>Net Variance:</span>
-                                  <span className={cn('font-mono-num font-bold', data.delta > data.budget ? 'text-danger' : 'text-accent')}>
-                                    {data.delta >= data.budget ? '+' : ''}₱{fmtNum(data.delta - data.budget, 0)} (
-                                    {(((data.delta - data.budget) / (data.budget || 1)) * 100).toFixed(1)}%)
+                                  <span className={cn('font-mono-num font-bold', data.rawAmount > data.budget ? 'text-danger' : 'text-accent')}>
+                                    {data.rawAmount >= data.budget ? '+' : ''}₱{fmtNum(data.rawAmount - data.budget, 0)} (
+                                    {(((data.rawAmount - data.budget) / (data.budget || 1)) * 100).toFixed(1)}%)
                                   </span>
                                 </div>
                               </div>
                             )}
 
-                            {data.type !== 'start' && data.type !== 'end' && (
+                            {data.kind === 'delta' && (
                               <div className="space-y-1">
                                 <div className="flex justify-between text-muted-foreground">
-                                  <span>Monthly Budget:</span>
+                                  <span>Planned Baseline:</span>
                                   <span className="font-mono-num">₱{fmtNum(data.budget, 0)}</span>
                                 </div>
                                 <div className="flex justify-between text-muted-foreground">
-                                  <span>Monthly Actual:</span>
+                                  <span>Actual Expenses:</span>
                                   <span className="font-mono-num font-semibold text-foreground">₱{fmtNum(data.actual, 0)}</span>
                                 </div>
                                 <div className="flex justify-between border-t border-border/40 pt-1">
-                                  <span className="font-medium">Variance:</span>
+                                  <span className="font-medium">Variance Impact:</span>
                                   <span
                                     className={cn(
                                       'font-mono-num font-bold',
-                                      data.rawDelta > 0 ? 'text-danger' : data.rawDelta < 0 ? 'text-accent' : 'text-muted-foreground'
+                                      data.rawAmount > 0 ? 'text-danger' : data.rawAmount < 0 ? 'text-accent' : 'text-muted-foreground'
                                     )}
                                   >
-                                    {data.rawDelta > 0 ? '+' : ''}₱{fmtNum(data.rawDelta, 0)}
+                                    {data.rawAmount > 0 ? '+' : ''}₱{fmtNum(data.rawAmount, 0)}
                                   </span>
-                                </div>
-                                <div className="flex justify-between text-3xs text-muted-foreground pt-0.5">
-                                  <span>Bridge Level:</span>
-                                  <span className="font-mono-num font-medium text-foreground">₱{fmtNum(data.runningTotal, 0)}</span>
                                 </div>
                               </div>
                             )}
@@ -556,18 +632,28 @@ export function BudgetTab() {
                         );
                       }}
                     />
-                    {/* Transparent Base Bar for stacking */}
-                    <Bar dataKey="base" stackId="waterfall" fill="transparent" isAnimationActive={false} />
-                    {/* Floating Delta Bar */}
-                    <Bar
-                      dataKey="delta"
-                      stackId="waterfall"
-                      radius={[4, 4, 4, 4]}
-                      maxBarSize={32}
-                    >
-                      {waterfallData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.fill} />
+                    {/* Transparent Base Bar (with individual transparent Cells to avoid Recharts fallback fill bug) */}
+                    <Bar dataKey="base" stackId="bridge" isAnimationActive={false}>
+                      {waterfallRows.map((r, i) => (
+                        <Cell key={`base-${r.name}-${i}`} fill="transparent" />
                       ))}
+                    </Bar>
+                    {/* Floating Delta / Total Bar */}
+                    <Bar
+                      dataKey="height"
+                      stackId="bridge"
+                      radius={[4, 4, 4, 4]}
+                      isAnimationActive={false}
+                    >
+                      {waterfallRows.map((r, i) => (
+                        <Cell key={`bar-${r.name}-${i}`} fill={r.fill} />
+                      ))}
+                      <LabelList
+                        dataKey="deltaLabel"
+                        position="top"
+                        style={{ fontSize: 10.5, fontWeight: 600, fontFamily: 'monospace' }}
+                        fill="hsl(var(--foreground))"
+                      />
                     </Bar>
                   </BarChart>
                 ) : (
@@ -608,23 +694,23 @@ export function BudgetTab() {
               </ResponsiveContainer>
             </div>
 
-            {/* ── Waterfall Legend / Key (Visible in Waterfall View) ── */}
+            {/* ── Waterfall Legend (Visible in Waterfall View) ── */}
             {chartView === 'waterfall' && (
               <div className="flex flex-wrap items-center justify-center gap-4 pt-2 border-t border-border/40 text-2xs text-muted-foreground font-mono">
                 <div className="flex items-center gap-1.5">
-                  <div className="w-3 h-3 rounded-xs bg-muted-foreground opacity-80" />
+                  <div className="w-3 h-3 rounded-xs bg-[#00b4d8]" />
                   <span>Budget Baseline (YTD)</span>
                 </div>
                 <div className="flex items-center gap-1.5">
-                  <div className="w-3 h-3 rounded-xs bg-danger" />
-                  <span>Over Budget (+Cost)</span>
+                  <div className="w-3 h-3 rounded-xs bg-[#f59e0b]" />
+                  <span>Over Budget (+Cost Impact)</span>
                 </div>
                 <div className="flex items-center gap-1.5">
-                  <div className="w-3 h-3 rounded-xs bg-accent" />
+                  <div className="w-3 h-3 rounded-xs bg-[#10b981]" />
                   <span>Under Budget (Savings)</span>
                 </div>
                 <div className="flex items-center gap-1.5">
-                  <div className="w-3 h-3 rounded-xs bg-primary" />
+                  <div className="w-3 h-3 rounded-xs bg-[#3b82f6]" />
                   <span>Actual Spent (YTD)</span>
                 </div>
               </div>
