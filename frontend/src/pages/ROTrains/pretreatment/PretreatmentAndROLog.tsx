@@ -25,7 +25,7 @@ import { format } from 'date-fns';
 import { ComputedInput } from '@/components/ComputedInput';
 import { DateTimePicker } from '@/components/ui/date-picker';
 import { ExportButton } from '@/components/ExportButton';
-import { Upload, AlertCircle, AlertTriangle, Loader2, Building2, Gauge, Power, ShieldAlert, Lock, CheckCircle2, Clock } from 'lucide-react';
+import { Upload, AlertCircle, AlertTriangle, Loader2, Building2, Gauge, Power, ShieldAlert, Lock, CheckCircle2, Clock, User } from 'lucide-react';
 import { RawWaterIcon, PermeateIcon, RejectIcon } from '@/components/icons/water-icons';
 import { cn } from '@/lib/utils';
 import { ImportROReadingsDialog } from '../../ro-trains';
@@ -57,6 +57,20 @@ const BOOSTER_REASON_OPTIONS = [
   'Under maintenance / isolated',
   'Pressure transmitter offline',
   'Other',
+];
+
+const STANDARD_OFFLINE_REASONS = [
+  'Scheduled Maintenance',
+  'Membrane Replacement',
+  'CIP In Progress',
+  'Power Outage',
+  'High Pressure Trip',
+  'Low Feed Flow',
+  'Instrumentation Fault',
+  'Pump Failure',
+  'Feedwater Quality Issue',
+  'Operator Shutdown',
+  'Peak/Off-Peak Program',
 ];
 
 const HPP_REASON_OPTIONS = [
@@ -439,6 +453,42 @@ export function PretreatmentAndROLog() {
   const prevRejMeter:  number | null = prevRO?.reject_meter   ?? null;
   const prevPowerMeter: number | null = prevRO?.power_meter_reading_kwh ?? null;
 
+  // ── Unclosed Offline Record & User Accountability ──────────────────────────
+  // Queries the most recent event from train_status_log to maintain context,
+  // visibility of reason & start time, and display who previously set the train offline.
+  const { data: latestStatusLog } = useQuery({
+    queryKey: ['train-latest-status-log', trainId],
+    enabled: !!trainId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('train_status_log')
+        .select('id, train_id, plant_id, status, reason, confirmed_by, confirmed_at')
+        .eq('train_id', trainId)
+        .order('confirmed_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (error || !data) return null;
+
+      let operatorInfo: { username?: string | null; full_name?: string | null } | null = null;
+      if (data.confirmed_by) {
+        const { data: profile } = await supabase
+          .from('user_profiles')
+          .select('username, first_name, last_name')
+          .eq('id', data.confirmed_by)
+          .maybeSingle();
+        if (profile) {
+          const fn = [profile.first_name, profile.last_name].filter(Boolean).join(' ');
+          operatorInfo = {
+            username: profile.username ? `@${profile.username}` : null,
+            full_name: fn || profile.username || 'Operator',
+          };
+        }
+      }
+      return { ...data, operator: operatorInfo };
+    },
+    staleTime: 10_000,
+  });
+
   // ── Section-step gating: AFM/MMF must be opened before Booster Pumps ────────
   // Operators must interact with (not necessarily complete) AFM/MMF before they
   // can access Booster Pumps, and Booster Pumps before the rest of the form.
@@ -541,31 +591,13 @@ export function PretreatmentAndROLog() {
     });
   }, [trainId]);
 
-  // ── Sync trainOnline to the train's real DB status, once per fresh load ──
-  // trainOnline used to hardcode `true` for every train switch regardless of
-  // what ro_trains.status actually said (see the reset above). That meant an
-  // auto-flagged-Offline train (useTrainAutoOffline.ts) — or one a manager
-  // set Offline/Maintenance from the roster page — showed "Online" checked
-  // here until the operator happened to notice otherwise. Submitting a
-  // normal reading in that state silently closed the offline period via
-  // handleSave's "coming online" branch below, with no deliberate
-  // confirmation behind it — exactly the kind of implicit, unintended
-  // status change train_status_log is supposed to rule out.
-  //
-  // Guarded by a ref rather than running on every `train` change: this
-  // should only fire once per genuinely fresh train load, not on every
-  // background refetch of the *same* train's data (window focus, polling,
-  // a save's own invalidateQueries) — otherwise a refetch mid-edit could
-  // silently overwrite an operator's in-progress offline declaration.
+  // ── Sync trainOnline to the train's real DB status & unclosed offline record ──
   const statusSyncedForRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!train || train.id !== trainId) return; // still loading this train, or stale from the previous one
-    if (statusSyncedForRef.current === train.id) return; // already synced this load
+    if (!train || train.id !== trainId) return;
+    if (statusSyncedForRef.current === train.id) return;
     statusSyncedForRef.current = train.id;
 
-    // An in-progress sessionStorage-restored offline declaration (see the
-    // reset effect above) takes precedence — don't stomp fields the
-    // operator hasn't finished filling in yet.
     let hasRestoredOffline = false;
     try { hasRestoredOffline = !!sessionStorage.getItem(`pretreat:offline:${trainId}`); } catch { /* ignore */ }
     if (hasRestoredOffline) return;
@@ -573,10 +605,28 @@ export function PretreatmentAndROLog() {
     setTrainOnline(train.status !== 'Offline');
   }, [train, trainId]);
 
+  // ── Sync unclosed offline event details from database ───────────────────────
+  // If the train is currently offline, ensure the reason and start time remain
+  // visible on the interface to prevent loss of context.
+  useEffect(() => {
+    if (!trainId || !latestStatusLog) return;
+    if (latestStatusLog.status === 'Offline') {
+      setTrainOnline(false);
+      setOfflineStart((prev) => prev || (latestStatusLog.confirmed_at ? format(new Date(latestStatusLog.confirmed_at), "yyyy-MM-dd'T'HH:mm") : ''));
+      if (latestStatusLog.reason) {
+        setOfflineReason((prev) => {
+          if (prev) return prev;
+          if (STANDARD_OFFLINE_REASONS.includes(latestStatusLog.reason!)) {
+            return latestStatusLog.reason!;
+          }
+          setOfflineReasonOther(latestStatusLog.reason!);
+          return 'Other';
+        });
+      }
+    }
+  }, [trainId, latestStatusLog]);
+
   // ── Persist offline state to sessionStorage so it survives train-switching ──
-  // Written any time the operator is in offline mode with a start date / reason.
-  // The entry is keyed by trainId so multiple trains can each have their own
-  // pending offline period stored simultaneously.
   useEffect(() => {
     if (!trainId) return;
     if (!trainOnline && offlineStart) {
@@ -1354,6 +1404,8 @@ export function PretreatmentAndROLog() {
     qc.invalidateQueries({ queryKey: ['ro-spark'] });
     qc.invalidateQueries({ queryKey: ['ro-prev'] });
     qc.invalidateQueries({ queryKey: ['train-hourly-gaps'] });
+    qc.invalidateQueries({ queryKey: ['train-latest-status-log', trainId] });
+    qc.invalidateQueries({ queryKey: ['train-status-log', trainId] });
     qc.invalidateQueries({ queryKey: ['trains'] });
     // Dashboard stat-cards
     qc.invalidateQueries({ queryKey: ['dash-ro-recent'] });
@@ -1632,6 +1684,28 @@ export function PretreatmentAndROLog() {
               <span className="text-3xs font-medium text-danger/80">Required to register downtime</span>
             </div>
 
+            {/* User Accountability Banner — trace who previously set train offline */}
+            {latestStatusLog?.status === 'Offline' && (
+              <div className="flex items-center gap-2.5 px-3 py-2 rounded-lg bg-background/90 border border-danger/30 text-xs shadow-2xs">
+                <div className="h-6 w-6 rounded-full bg-danger/10 text-danger flex items-center justify-center shrink-0">
+                  <User className="h-3.5 w-3.5" />
+                </div>
+                <div className="flex-1 min-w-0 flex items-center justify-between flex-wrap gap-1">
+                  <div>
+                    <span className="text-muted-foreground">Previously set to Offline by: </span>
+                    <span className="font-bold text-danger">
+                      {latestStatusLog.operator?.username ?? latestStatusLog.operator?.full_name ?? 'Unknown Operator'}
+                    </span>
+                  </div>
+                  {latestStatusLog.confirmed_at && (
+                    <span className="text-2xs text-muted-foreground font-mono-num">
+                      ({format(new Date(latestStatusLog.confirmed_at), 'MMM dd, yyyy HH:mm')})
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* Reason dropdown */}
             <div className="space-y-1">
               <Label htmlFor="pretreat-reason-for-offline" className="text-xs font-medium text-foreground">
@@ -1642,17 +1716,9 @@ export function PretreatmentAndROLog() {
                   <SelectValue placeholder="Select downtime reason…" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Scheduled Maintenance">Scheduled Maintenance</SelectItem>
-                  <SelectItem value="Membrane Replacement">Membrane Replacement</SelectItem>
-                  <SelectItem value="CIP In Progress">CIP In Progress</SelectItem>
-                  <SelectItem value="Power Outage">Power Outage</SelectItem>
-                  <SelectItem value="High Pressure Trip">High Pressure Trip</SelectItem>
-                  <SelectItem value="Low Feed Flow">Low Feed Flow</SelectItem>
-                  <SelectItem value="Instrumentation Fault">Instrumentation Fault</SelectItem>
-                  <SelectItem value="Pump Failure">Pump Failure</SelectItem>
-                  <SelectItem value="Feedwater Quality Issue">Feedwater Quality Issue</SelectItem>
-                  <SelectItem value="Operator Shutdown">Operator Shutdown</SelectItem>
-                  <SelectItem value="Peak/Off-Peak Program">Peak/Off-Peak Program</SelectItem>
+                  {STANDARD_OFFLINE_REASONS.map((r) => (
+                    <SelectItem key={r} value={r}>{r}</SelectItem>
+                  ))}
                   <SelectItem value="Other">Other (specify below)</SelectItem>
                 </SelectContent>
               </Select>
@@ -1743,11 +1809,30 @@ export function PretreatmentAndROLog() {
                 <div className="h-9 w-9 rounded-full bg-danger/10 text-danger flex items-center justify-center shrink-0 border border-danger/20">
                   <Lock className="h-5 w-5" />
                 </div>
-                <div className="space-y-1">
-                  <p className="text-sm font-bold text-danger">RO Train is Currently Offline</p>
+                <div className="space-y-1.5 flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <p className="text-sm font-bold text-danger">RO Train is Currently Offline</p>
+                    {latestStatusLog?.status === 'Offline' && (
+                      <span className="text-2xs font-semibold text-danger/90 bg-danger/10 px-2 py-0.5 rounded-full border border-danger/20 flex items-center gap-1">
+                        <User className="h-3 w-3" />
+                        <span>Logged by {latestStatusLog.operator?.username ?? latestStatusLog.operator?.full_name ?? 'Operator'}</span>
+                      </span>
+                    )}
+                  </div>
                   <p className="text-xs text-danger/90 leading-relaxed">
                     Telemetry inputs are locked while the train is down. To record this offline session, click <strong>Save Offline Record</strong> below. If the train has resumed operation, specify the <em>Back Online At</em> timestamp above or toggle to <em>Operational / Running</em>.
                   </p>
+                  {(offlineReasonFinal || latestStatusLog?.reason) && (
+                    <div className="pt-1.5 text-2xs text-danger/80 border-t border-danger/20 flex items-center gap-1.5 flex-wrap">
+                      <span className="font-semibold">Reason for Offline:</span>
+                      <span className="italic font-medium">{offlineReasonFinal || latestStatusLog?.reason}</span>
+                      {offlineStart && (
+                        <span className="ml-auto font-mono-num">
+                          (Since {format(new Date(offlineStart), 'MMM dd, yyyy HH:mm')})
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             </Card>
