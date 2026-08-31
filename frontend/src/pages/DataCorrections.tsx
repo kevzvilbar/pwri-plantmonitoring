@@ -60,7 +60,7 @@ interface FlaggedRow {
   previous_reading: number | null;
   current_reading: number;
   daily_volume: number | null;
-  operator_email: string | null;
+  operator_username: string | null;
   norm_status: string;
   flag_reason?: string;
   /** True when current_reading < previous_reading — the real "backward jump"
@@ -95,6 +95,29 @@ interface FlaggedRow {
   edit_reason?: { text: string; actor_label: string | null; logged_at: string } | null;
   /** The value of this reading BEFORE it was edited/corrected (from reading_edit_audit_log or reading_normalizations) */
   pre_edit_value?: number | null;
+}
+
+function extractOldValueFromChanges(changes: any): number | null {
+  if (!changes || typeof changes !== 'object') return null;
+  const priorityKeys = [
+    'current_reading', 'raw_meter_reading', 'meter_reading_kwh',
+    'power_meter_reading', 'value', 'feed_meter_reading',
+    'permeate_meter_reading', 'reject_meter_reading',
+    'previous_reading', 'daily_volume'
+  ];
+  for (const k of priorityKeys) {
+    const val = changes[k];
+    if (val && typeof val === 'object' && val.old != null && !isNaN(Number(val.old))) {
+      return Number(val.old);
+    }
+  }
+  for (const key of Object.keys(changes)) {
+    const val = changes[key];
+    if (val && typeof val === 'object' && val.old != null && !isNaN(Number(val.old))) {
+      return Number(val.old);
+    }
+  }
+  return null;
 }
 
 interface CorrectionRequest {
@@ -579,13 +602,19 @@ async function fetchPending(): Promise<{ rows: FlaggedRow[]; truncated: boolean 
       .in('id', plantIds) as any);
     const plantMap = Object.fromEntries((plants ?? []).map((p: any) => [p.id, p.name]));
 
-    // Resolve emails from user_profiles
+    // Resolve usernames from user_profiles (avoiding shared plant emails)
     const userIds = [...new Set(rows.map((r: any) => r.recorded_by))].filter(Boolean) as string[];
     const { data: profiles } = await (supabase
       .from('user_profiles')
-      .select('id, email')
+      .select('id, username, first_name, last_name')
       .in('id', userIds) as any);
-    const emailMap = Object.fromEntries((profiles ?? []).map((p: any) => [p.id, p.email]));
+    const usernameMap = Object.fromEntries(
+      (profiles ?? []).map((p: any) => {
+        const full = [p.first_name, p.last_name].filter(Boolean).join(' ').trim();
+        const display = p.username ? `@${p.username}` : (full || '—');
+        return [p.id, display];
+      })
+    );
 
     // Resolve the operator's own anomaly remark for each row (AnomalyRemarkBanner
     // at entry time, reading_anomaly_remarks) — so the reviewer sees WHY the
@@ -613,14 +642,11 @@ async function fetchPending(): Promise<{ rows: FlaggedRow[]; truncated: boolean 
     // row with a genuine, mandatorily-collected edit reason still rendered
     // "No operator remark on file for this reading" — misleading, since a
     // populated audit trail did exist for it, just in a table this page
-    // never looked at. Only 'update' actions carry a reason (see
-    // 20260809_reading_edit_audit_log_reason.sql); ordered oldest→newest so
-    // the reduce keeps the most recent edit's reason per record.
+    // never looked at.
     const { data: editReasonRows } = await (supabase
       .from('reading_edit_audit_log' as any)
-      .select('record_id, reason, actor_label, edited_at, changes')
+      .select('record_id, reason, actor_label, edited_at, changes, action')
       .eq('table_name', table)
-      .eq('action', 'update')
       .in('record_id', rowIds)
       .order('edited_at', { ascending: true }) as any);
     const editReasonMap = (editReasonRows ?? []).reduce((acc: Record<string, any>, e: any) => {
@@ -662,11 +688,7 @@ async function fetchPending(): Promise<{ rows: FlaggedRow[]; truncated: boolean 
       // Extract pre-edit value from audit log changes or reading_normalizations
       let preEditVal: number | null = null;
       if (editEntry?.changes) {
-        const c = editEntry.changes;
-        const oldRaw = c.current_reading?.old ?? c.raw_meter_reading?.old ?? c.power_meter_reading?.old ?? c.meter_reading_kwh?.old;
-        if (oldRaw != null && !isNaN(Number(oldRaw))) {
-          preEditVal = Number(oldRaw);
-        }
+        preEditVal = extractOldValueFromChanges(editEntry.changes);
       }
       if (preEditVal == null && normEntry?.original_value != null && !isNaN(Number(normEntry.original_value))) {
         preEditVal = Number(normEntry.original_value);
@@ -682,7 +704,7 @@ async function fetchPending(): Promise<{ rows: FlaggedRow[]; truncated: boolean 
         previous_reading: r.previous_reading,
         current_reading: r.current_reading,
         daily_volume: vol,
-        operator_email: emailMap[r.recorded_by] ?? null,
+        operator_username: usernameMap[r.recorded_by] ?? null,
         norm_status: r.norm_status,
         flag_reason: isBackward ? 'backward' : 'spike',
         is_backward: isBackward,
@@ -807,7 +829,7 @@ function PendingReviewTab() {
     if (plantFilter !== 'all' && r.plant_name !== plantFilter) return false;
     if (searchQ) {
       const q = searchQ.toLowerCase();
-      return r.entity_name.toLowerCase().includes(q) || r.operator_email?.toLowerCase().includes(q) || false;
+      return r.entity_name.toLowerCase().includes(q) || r.operator_username?.toLowerCase().includes(q) || false;
     }
     return true;
   }), [rows, plantFilter, searchQ]);
@@ -1245,8 +1267,16 @@ function PendingReviewTab() {
                             {isBack ? '↓ backward' : '↑ spike'}
                           </span>
                         </div>
-                        <div className="text-xs text-muted-foreground mt-0.5">
-                          {fmtDt(row.reading_datetime)} · {row.operator_email ?? '—'}
+                        <div className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1.5 flex-wrap">
+                          <span>{fmtDt(row.reading_datetime)}</span>
+                          <span>·</span>
+                          <span>Submitted by <span className="font-medium text-foreground">{row.operator_username ?? '—'}</span></span>
+                          {row.edit_reason?.actor_label && (
+                            <>
+                              <span>·</span>
+                              <span className="text-accent font-medium">Corrected by {row.edit_reason.actor_label}</span>
+                            </>
+                          )}
                         </div>
                       </div>
                       <button onClick={() => setExpanded(isExp ? null : row.id)}
@@ -1491,8 +1521,17 @@ function CorrectionInboxTab() {
         const { data: plants } = await (supabase.from('plants').select('id,name').in('id', plantIds) as any);
         const plantMap = Object.fromEntries((plants ?? []).map((p: any) => [p.id, p.name]));
         const userIds = [...new Set(rows.map((r: any) => r.recorded_by))].filter(Boolean) as string[];
-        const { data: profiles } = await (supabase.from('user_profiles').select('id,email').in('id', userIds) as any);
-        const emailMap = Object.fromEntries((profiles ?? []).map((p: any) => [p.id, p.email]));
+        const { data: profiles } = await (supabase
+          .from('user_profiles')
+          .select('id, username, first_name, last_name')
+          .in('id', userIds) as any);
+        const usernameMap = Object.fromEntries(
+          (profiles ?? []).map((p: any) => {
+            const full = [p.first_name, p.last_name].filter(Boolean).join(' ').trim();
+            const display = p.username ? `@${p.username}` : (full || '—');
+            return [p.id, display];
+          })
+        );
 
         for (const r of rows) {
           if (plantFilter !== 'all' && plantMap[r.plant_id] !== plantFilter) continue;
@@ -1504,7 +1543,7 @@ function CorrectionInboxTab() {
             previous_reading: r.previous_reading,
             current_reading: r.current_reading,
             daily_volume: r.daily_volume,
-            operator_email: emailMap[r.recorded_by] ?? null,
+            operator_username: usernameMap[r.recorded_by] ?? null,
             norm_status: r.norm_status,
             flag_reason: 'backward (active)',
           });
@@ -1590,7 +1629,7 @@ function CorrectionInboxTab() {
                     <Badge variant="outline" className="text-2xs px-1.5 py-0">{row.plant_name}</Badge>
                     <Badge variant="outline" className="text-2xs px-1.5 py-0">{tableLabel[row.source_table]}</Badge>
                   </div>
-                  <div className="text-xs text-muted-foreground mt-0.5">{fmtDt(row.reading_datetime)} · {row.operator_email ?? '—'}</div>
+                  <div className="text-xs text-muted-foreground mt-0.5">{fmtDt(row.reading_datetime)} · Submitted by <span className="font-medium text-foreground">{row.operator_username ?? '—'}</span></div>
                 </div>
                 <button onClick={() => setExpanded(isExp ? null : row.id)} aria-label={isExp ? 'Collapse details' : 'Expand details'} className="text-muted-foreground hover:text-foreground p-0.5">
                   {isExp ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
@@ -1734,16 +1773,18 @@ function OperatorStatsTab() {
             <table className="w-full min-w-[640px]">
               <thead className="bg-muted/40">
                 <tr>
-                  {['Operator', 'Entries', 'Backward', 'Pending', 'Retracted', 'Error rate', 'Last entry'].map(h => (
+                  {['Operator (Username)', 'Entries', 'Backward', 'Pending', 'Retracted', 'Error rate', 'Last entry'].map(h => (
                     <th key={h} className="text-left px-3 py-2 font-medium text-muted-foreground text-2xs uppercase tracking-wide">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {stats.map((s, i) => (
+                {stats.map((s: any, i) => (
                   <tr key={i} className={cn('border-t', rateBg(s.error_rate_pct))}>
                     <td className="px-3 py-2.5 font-medium max-w-[180px]">
-                      <div className="truncate" title={s.operator_email}>{s.operator_email ?? '—'}</div>
+                      <div className="truncate" title={s.username ? `@${s.username}` : s.operator_email}>
+                        {s.username ? `@${s.username}` : (s.operator_email ?? '—')}
+                      </div>
                       {s.error_rate_pct >= 10 && (
                         <div className="text-2xs text-warn mt-0.5">Needs review</div>
                       )}
