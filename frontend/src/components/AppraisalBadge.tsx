@@ -18,7 +18,7 @@ export function AppraisalBadge({
   score,
   tier: providedTier,
   size = 'md',
-  showScore = true,
+  showScore = size !== 'sm',
   showIcon = true,
   showLamp = true,
   label,

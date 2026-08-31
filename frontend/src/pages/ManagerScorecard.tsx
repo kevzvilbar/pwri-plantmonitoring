@@ -77,32 +77,21 @@ export type ManagerAppraisalTier = AppraisalTier;
 export const MANAGER_APPRAISAL_TIERS = APPRAISAL_TIERS;
 export const getManagerAppraisalTier = getAppraisalTier;
 
-// Computes combined manager oversight score (0-100)
+// Computes manager oversight score directly matching the appraisal scale
 export function computeManagerOversightScore(
   completenessPct: number | null,
-  errorRatePct: number | null,
-  openExceptions: number,
-  pendingCorrections: number,
+  _errorRatePct?: number | null,
+  _openExceptions?: number,
+  _pendingCorrections?: number,
 ): { score: number; tier: AppraisalTier } {
   if (completenessPct === null) {
     return { score: 0, tier: APPRAISAL_TIERS[APPRAISAL_TIERS.length - 1] };
   }
 
-  // Base score driven by overall telemetry completeness (0–100%)
-  const baseComp = Math.min(100, Math.max(0, completenessPct));
-
-  // Deductions for data quality errors (error rate > 1% begins deducting)
-  const errVal = errorRatePct ?? 0;
-  const errorDeduction = Math.max(0, errVal - 1) * 1.5;
-
-  // Deductions for unaddressed gap exceptions and pending correction backlogs
-  const exceptionDeduction = Math.min(15, openExceptions * 0.4);
-  const backlogDeduction = Math.min(20, pendingCorrections * 2.0);
-
-  const totalScore = Math.min(100, Math.max(0, Math.round(baseComp - errorDeduction - exceptionDeduction - backlogDeduction)));
+  const score = Math.min(100, Math.max(0, Math.round(completenessPct)));
   return {
-    score: totalScore,
-    tier: getManagerAppraisalTier(totalScore),
+    score,
+    tier: getManagerAppraisalTier(score),
   };
 }
 
@@ -577,7 +566,7 @@ export default function ManagerScorecard() {
                     <div className="flex items-center justify-between gap-2 pt-1 border-t border-border/40">
                       <div className="flex items-center gap-2">
                         <span className="text-2xs text-muted-foreground font-semibold">Rating:</span>
-                        <AppraisalBadge score={plantOversight.score} tier={plantOversight.tier} size="sm" />
+                        <AppraisalBadge tier={plantOversight.tier} size="sm" showScore={false} />
                       </div>
                       <div className="text-right">
                         <span className="font-bold text-sm text-foreground font-mono-num">{fmtPct(r.overall_completeness_pct)}</span>
@@ -624,7 +613,7 @@ export default function ManagerScorecard() {
                         <p className="text-2xs text-muted-foreground">{m.plants.join(', ') || 'No facility assigned'}</p>
                       </div>
                     </div>
-                    <AppraisalBadge score={m.oversightScore} tier={m.tier} size="sm" />
+                    <AppraisalBadge tier={m.tier} size="sm" showScore={false} />
                   </div>
 
                   <div className="grid grid-cols-3 gap-2 pt-2 border-t border-border/40 text-center">
@@ -689,7 +678,7 @@ export default function ManagerScorecard() {
                         <td className="py-2.5 px-3 border-x border-border/60 bg-muted/10 whitespace-nowrap">
                           <div className="flex flex-col items-center gap-1.5 min-w-[170px]">
                             <div className="flex items-center justify-between w-full gap-2">
-                              <AppraisalBadge score={plantOversight.score} tier={plantOversight.tier} size="sm" />
+                              <AppraisalBadge tier={plantOversight.tier} size="sm" showScore={false} />
                               <span className="text-xs font-bold text-foreground font-mono-num shrink-0" title="Telemetry Completeness">
                                 {fmtPct(r.overall_completeness_pct)}
                               </span>
@@ -789,7 +778,7 @@ export default function ManagerScorecard() {
                       <td className="py-2.5 px-3 border-x border-border/60 bg-muted/10 whitespace-nowrap">
                         <div className="flex flex-col items-center gap-1.5 min-w-[170px]">
                           <div className="flex items-center justify-between w-full gap-2">
-                            <AppraisalBadge score={m.oversightScore} tier={m.tier} size="sm" />
+                            <AppraisalBadge tier={m.tier} size="sm" showScore={false} />
                             <span className="text-xs font-bold text-foreground font-mono-num shrink-0" title="Average Completeness">
                               {fmtPct(m.avgCompleteness)}
                             </span>
