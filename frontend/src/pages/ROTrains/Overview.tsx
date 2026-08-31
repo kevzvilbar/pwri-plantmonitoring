@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -15,13 +15,16 @@ import { PlantPicker } from './shared/PlantPicker';
 
 // ─── Overview Dashboard ───────────────────────────────────────────────────────
 export function Overview() {
-  const [plantId, setPlantId] = useState('');
+  const { selectedPlantId, addAlerts, removeAlerts } = useAppStore();
+  const [plantId, setPlantId] = useState(selectedPlantId ?? '');
   const [statusFilter, setStatusFilter] = useState<'All' | 'Running' | 'Maintenance' | 'Offline'>('All');
   const [search, setSearch] = useState('');
-  const { selectedPlantId, addAlerts, removeAlerts } = useAppStore();
-
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { if (selectedPlantId && !plantId) setPlantId(selectedPlantId); }, [selectedPlantId]);
+  const lastSyncedPlantRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!selectedPlantId || selectedPlantId === lastSyncedPlantRef.current) return;
+    lastSyncedPlantRef.current = selectedPlantId;
+    setPlantId(selectedPlantId);
+  }, [selectedPlantId]);
 
   // ── Deep-link from an alert: /ro-trains?tab=overview&plant=<id>&train=<id>&log=1&logTab=ro|pretreat&highlight=<readingId> ──
   const [searchParams, setSearchParams] = useSearchParams();

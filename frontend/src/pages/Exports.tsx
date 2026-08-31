@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Download, Building2, Activity, Waves, FlaskConical,
@@ -379,9 +379,16 @@ function CategorySection({
 export default function Exports() {
   const navigate = useNavigate();
   const canView = usePermission('data_exports', 'view');
-  const { selectedPlantId } = useAppStore();
+  const { selectedPlantId, setSelectedPlantId } = useAppStore();
   const { data: plants } = usePlants();
   const [plantId, setPlantId] = useState(selectedPlantId ?? 'all');
+
+  const lastSyncedPlantRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (selectedPlantId === lastSyncedPlantRef.current) return;
+    lastSyncedPlantRef.current = selectedPlantId;
+    setPlantId(selectedPlantId ?? 'all');
+  }, [selectedPlantId]);
   const [from, setFrom]       = useState(format(subDays(new Date(), 30), 'yyyy-MM-dd'));
   const [to, setTo]           = useState(format(new Date(), 'yyyy-MM-dd'));
   const [activePreset, setActivePreset] = useState<number | null>(30);
@@ -561,7 +568,14 @@ export default function Exports() {
           {/* Plant */}
           <div className="space-y-1">
             <Label htmlFor="exports-plant" className="text-xs font-semibold">Plant Facility</Label>
-            <Select value={plantId} onValueChange={setPlantId}>
+            <Select
+              value={plantId}
+              onValueChange={(v) => {
+                lastSyncedPlantRef.current = v === 'all' ? null : v;
+                setPlantId(v);
+                setSelectedPlantId(v === 'all' ? null : v);
+              }}
+            >
               <SelectTrigger className="h-8 text-xs font-medium" id="exports-plant">
                 <SelectValue />
               </SelectTrigger>

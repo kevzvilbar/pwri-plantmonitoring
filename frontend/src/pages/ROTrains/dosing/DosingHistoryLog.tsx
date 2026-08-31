@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -26,7 +26,7 @@ import { resolveReason, isReasonComplete } from '@/lib/correctionReasons';
 export function DosingHistoryLog() {
   const qc = useQueryClient();
   const { isManager, activeOperator, user } = useAuth();
-  const { selectedPlantId } = useAppStore();
+  const { selectedPlantId, setSelectedPlantId } = useAppStore();
   const { data: plants } = usePlants();
 
   // ── Filters ────────────────────────────────────────────────────────────────
@@ -36,8 +36,11 @@ export function DosingHistoryLog() {
   const [customTo, setCustomTo]   = useState('');
 
   // Sync global plant selector
+  const lastSyncedPlantRef = useRef<string | null>(null);
   useEffect(() => {
-    if (selectedPlantId && !filterPlantId) setFilterPlantId(selectedPlantId);
+    if (!selectedPlantId || selectedPlantId === lastSyncedPlantRef.current) return;
+    lastSyncedPlantRef.current = selectedPlantId;
+    setFilterPlantId(selectedPlantId);
   }, [selectedPlantId]);
 
   const { from, to } = useMemo(() => {
@@ -236,10 +239,17 @@ export function DosingHistoryLog() {
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-          {/* Plant filter */}
           <div>
             <Label htmlFor="dosinghistorylog-plant" className="text-xs text-muted-foreground">Plant</Label>
-            <Select value={filterPlantId || '__all__'} onValueChange={(v) => setFilterPlantId(v === '__all__' ? '' : v)}>
+            <Select
+              value={filterPlantId || '__all__'}
+              onValueChange={(v) => {
+                const nextId = v === '__all__' ? '' : v;
+                lastSyncedPlantRef.current = nextId || null;
+                setFilterPlantId(nextId);
+                setSelectedPlantId(nextId || null);
+              }}
+            >
               <SelectTrigger className="h-8 text-xs" id="dosinghistorylog-plant"><SelectValue placeholder="All plants" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="__all__">All plants</SelectItem>

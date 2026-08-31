@@ -49,12 +49,12 @@ export function PretreatmentAndROLog() {
   // selected on the operator-picker screen or switched via OperatorSwitcher.
   const { activeOperator, isManager } = useAuth();
   const [showImport, setShowImport] = useState(false);
-  const { selectedPlantId, addAlerts } = useAppStore();
+  const { selectedPlantId, setSelectedPlantId, addAlerts } = useAppStore();
   const { data: plants } = usePlants();
 
   // Persist plant + train selection across tab switches / browser-focus changes
   const [plantId, setPlantIdState] = useState<string>(() => {
-    try { return sessionStorage.getItem('pretreat:plantId') ?? ''; } catch { return ''; }
+    try { return selectedPlantId || sessionStorage.getItem('pretreat:plantId') || ''; } catch { return ''; }
   });
   const setPlantId = (v: string) => {
     try { sessionStorage.setItem('pretreat:plantId', v); } catch { /* ignore */ }
@@ -121,12 +121,16 @@ export function PretreatmentAndROLog() {
     power_meter_curr: '',
   });
 
-  // One-shot seed: when the global selectedPlantId resolves and this
-  // page hasn't picked a plant yet, default to it. Re-seeding on
-  // plantId change is undesirable (would clobber the user's choice),
-  // so plantId is intentionally omitted from deps.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { if (selectedPlantId && !plantId) setPlantId(selectedPlantId); }, [selectedPlantId]);
+  // ── Sync with global plant selector (TopBar) ───────────────────────────────
+  // Whenever selectedPlantId in the TopBar changes, immediately switch this page's
+  // active plant and clear train selection so the page reflects the new plant.
+  const lastSyncedPlantRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!selectedPlantId || selectedPlantId === lastSyncedPlantRef.current) return;
+    lastSyncedPlantRef.current = selectedPlantId;
+    setPlantId(selectedPlantId);
+    setTrainId('');
+  }, [selectedPlantId]);
 
   // ── Deep-link from an alert/notification: /ro-trains?tab=pretreat-ro&plant=<id>&train=<id> ──
   // Takes priority over both sessionStorage and selectedPlantId — clicking an
@@ -1278,7 +1282,15 @@ export function PretreatmentAndROLog() {
             <Label htmlFor="pretreat-plant" className="text-xs font-semibold flex items-center gap-1.5 text-foreground">
               <Building2 className="h-3.5 w-3.5 text-primary" /> Plant
             </Label>
-            <Select value={plantId} onValueChange={(v) => { setPlantId(v); setTrainId(''); }}>
+            <Select
+              value={plantId}
+              onValueChange={(v) => {
+                lastSyncedPlantRef.current = v;
+                setPlantId(v);
+                setTrainId('');
+                setSelectedPlantId(v);
+              }}
+            >
               <SelectTrigger className="h-9 font-medium" id="pretreat-plant">
                 <SelectValue placeholder="Select Plant" />
               </SelectTrigger>
@@ -1324,7 +1336,7 @@ export function PretreatmentAndROLog() {
               onChange={isManager ? (val) => setDt(val) : undefined}
               disabled={!isManager}
               placeholder="Select reading timestamp..."
-              size="md"
+              size="default"
               className={cn(
                 "w-full font-mono-num",
                 !isManager && "cursor-not-allowed opacity-80 bg-muted/30"
