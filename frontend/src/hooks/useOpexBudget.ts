@@ -45,16 +45,16 @@ export function useMonthlyOpex(plantId: string, year: number) {
       const [{ data: budgets }, { data: costs }, { data: readings }, { data: tariff }] = await Promise.all([
         supabase.from('opex_budgets').select('*').eq('plant_id', plantId)
           .gte('budget_month', from).lte('budget_month', to)
-          .catch(() => ({ data: null, error: null })),
+          .then((r) => r, () => ({ data: null, error: null })),
         supabase.from('production_costs').select('cost_date, chem_cost, power_cost, filter_cost').eq('plant_id', plantId)
           .gte('cost_date', from).lte('cost_date', to)
-          .catch(() => ({ data: null, error: null })),
+          .then((r) => r, () => ({ data: null, error: null })),
         supabase.from('power_readings').select('reading_datetime, daily_solar_kwh, daily_grid_kwh').eq('plant_id', plantId)
           .gte('reading_datetime', from).lte('reading_datetime', `${to} 23:59:59`)
-          .catch(() => ({ data: null, error: null })),
+          .then((r) => r, () => ({ data: null, error: null })),
         supabase.from('power_tariffs').select('rate_per_kwh').eq('plant_id', plantId)
           .order('effective_date', { ascending: false }).limit(1).maybeSingle()
-          .catch(() => ({ data: null, error: null })),
+          .then((r) => r, () => ({ data: null, error: null })),
       ]);
 
       const rate = +(tariff?.rate_per_kwh ?? 0);
