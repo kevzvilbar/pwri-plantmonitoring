@@ -83,6 +83,11 @@ export default {
           foreground: "hsl(var(--highlight-foreground))",
           soft: "hsl(var(--highlight-soft))",
         },
+        elevated: {
+          DEFAULT: "hsl(var(--elevated))",
+          foreground: "hsl(var(--elevated-foreground))",
+          soft: "hsl(var(--elevated-soft))",
+        },
         // KPI / data-series palette (see index.css "Design System v2" comment
         // for the color language). Previously only available as the seven
         // fixed `.kpi-*` border-top-color helper classes in index.css —

@@ -97,18 +97,55 @@ export default function Admin() {
   const tabCount = canViewUsers ? 5 : 2;
 
   return (
-    <div className="space-y-4 animate-fade-in" data-testid="admin-page">
+    <div className="space-y-3.5 animate-fade-in font-sans" data-testid="admin-page">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <PageHeader
-          title="Admin & Governance Console"
-          titleIcon={<Server className="h-5 w-5 text-primary" />}
-          subtitle="Enterprise governance hub — manage user profiles, plant topology, role RBAC policies, deletion audit trail, and schema migrations."
-        />
-        <div className="flex items-center gap-2 flex-wrap">
+        <div>
+          <PageHeader
+            title="Admin & Governance Console"
+            titleIcon={<Server className="h-5 w-5 text-primary" />}
+            subtitle="Enterprise governance hub — manage user profiles, plant topology, role RBAC policies, deletion audit trail, and schema migrations."
+          />
+          <div className="flex items-center gap-2 mt-1.5 flex-wrap text-xs">
+            <span className="text-2xs font-bold uppercase tracking-wider text-muted-foreground">Utilities:</span>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 px-2 text-2xs font-semibold hover:bg-muted"
+              onClick={() => navigate('/data-corrections')}
+            >
+              <ClipboardCheck className="h-3 w-3 mr-1 text-primary" />
+              Data Corrections &rarr;
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 px-2 text-2xs font-semibold hover:bg-muted"
+              onClick={() => navigate('/compliance')}
+            >
+              <ShieldCheck className="h-3 w-3 mr-1 text-accent" />
+              Compliance Radar &rarr;
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 px-2 text-2xs font-semibold hover:bg-muted"
+              onClick={() => navigate('/manager-scorecard')}
+            >
+              <Activity className="h-3 w-3 mr-1 text-elevated" />
+              Manager Scorecard &rarr;
+            </Button>
+            <div className="text-2xs text-muted-foreground inline-flex items-center gap-1 font-mono-num ml-1 pl-2 border-l border-border/60">
+              <span className="h-1.5 w-1.5 rounded-full bg-accent animate-pulse" />
+              <span>PostgreSQL · RLS Active</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 flex-wrap shrink-0">
           <Button
             size="sm"
             variant="outline"
-            className="h-8 px-2.5 text-2xs gap-1.5 font-semibold bg-background"
+            className="h-8 px-2.5 text-xs gap-1.5 font-semibold bg-background border-border/80 hover:bg-muted"
             onClick={() => navigate('/exports')}
           >
             <Download className="h-3.5 w-3.5 text-primary" />
@@ -117,52 +154,12 @@ export default function Admin() {
           <Button
             size="sm"
             variant="outline"
-            className="h-8 px-2.5 text-2xs gap-1.5 font-semibold bg-background"
+            className="h-8 px-2.5 text-xs gap-1.5 font-semibold bg-background border-border/80 hover:bg-muted"
             onClick={() => navigate('/import')}
           >
             <Upload className="h-3.5 w-3.5 text-primary" />
             <span>Smart Import</span>
           </Button>
-        </div>
-      </div>
-
-
-
-      {/* Quick Navigation Utility Ribbon */}
-      <div className="flex flex-wrap items-center justify-between gap-2.5 p-2.5 rounded-xl bg-muted/30 border border-border/60 text-xs">
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-3xs font-bold uppercase tracking-wider text-muted-foreground">Admin Utilities:</span>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 px-2 text-2xs font-semibold hover:bg-background"
-            onClick={() => navigate('/data-corrections')}
-          >
-            <ClipboardCheck className="h-3.5 w-3.5 mr-1 text-primary" />
-            Data Corrections Hub &rarr;
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 px-2 text-2xs font-semibold hover:bg-background"
-            onClick={() => navigate('/compliance')}
-          >
-            <ShieldCheck className="h-3.5 w-3.5 mr-1 text-accent" />
-            Compliance Radar &rarr;
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 px-2 text-2xs font-semibold hover:bg-background"
-            onClick={() => navigate('/manager-scorecard')}
-          >
-            <Activity className="h-3.5 w-3.5 mr-1 text-kpi-ro" />
-            Manager Scorecard &rarr;
-          </Button>
-        </div>
-        <div className="text-3xs text-muted-foreground flex items-center gap-1 font-mono">
-          <span className="h-2 w-2 rounded-full bg-accent animate-pulse" />
-          <span>PostgreSQL · RLS Active</span>
         </div>
       </div>
 

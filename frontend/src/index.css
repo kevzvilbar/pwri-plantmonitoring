@@ -71,6 +71,11 @@
     --info:                199 89% 48%;
     --info-soft:           199 80% 93%;
 
+    /* ── Semantic: Elevated / Special / Privileged ──────────────── */
+    --elevated:            258 90% 66%;
+    --elevated-foreground: 0 0% 100%;
+    --elevated-soft:       258 85% 94%;
+
     /* ── Chrome ─────────────────────────────────────────────────── */
     --border:              215 20% 88%;
     --input:               215 20% 86%;
@@ -333,6 +338,9 @@
     --destructive-foreground: 0 0% 100%;
     --info:                199 95% 60%;   /* #38BDF8 Sky */
     --info-soft:           199 50% 14%;
+    --elevated:            258 90% 66%;   /* Violet — elevated/privileged access */
+    --elevated-foreground: 0 0% 100%;
+    --elevated-soft:       258 45% 18%;
     --border:              210 20% 15%;   /* Hairline rgba(255,255,255,0.07) */
     --input:               210 20% 18%;
     --ring:                189 94% 53.3%; /* Signal Cyan */

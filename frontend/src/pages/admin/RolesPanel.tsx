@@ -145,14 +145,14 @@ export function RolesPanel() {
             onClick={() => setSelection({ kind: 'system', role: r })}
             data-testid={`role-tab-system-${r}`}
             className={cn(
-              'px-3 py-2 rounded-lg border text-left transition-colors min-w-[92px]',
+              'px-3.5 py-2 rounded-xl border text-left transition-all min-w-[100px] shadow-2xs',
               selection.kind === 'system' && selection.role === r
-                ? 'border-primary bg-primary-soft text-primary'
-                : 'border-border bg-card hover:bg-muted',
+                ? 'border-primary bg-primary-soft text-primary font-semibold ring-1 ring-primary/30'
+                : 'border-border/80 bg-card hover:bg-muted/70 text-foreground',
             )}
           >
-            <div className="text-sm font-medium">{r}</div>
-            <div className="text-2xs text-muted-foreground">System</div>
+            <div className="text-xs font-bold leading-tight">{r}</div>
+            <div className="text-3xs text-muted-foreground uppercase font-semibold tracking-wider mt-0.5">System</div>
           </button>
         ))}
 
@@ -162,38 +162,38 @@ export function RolesPanel() {
             onClick={() => setSelection({ kind: 'custom', id: cr.id })}
             data-testid={`role-tab-custom-${cr.id}`}
             className={cn(
-              'px-3 py-2 rounded-lg border text-left transition-colors min-w-[92px]',
+              'px-3.5 py-2 rounded-xl border text-left transition-all min-w-[100px] shadow-2xs',
               selection.kind === 'custom' && selection.id === cr.id
-                ? 'border-primary bg-primary-soft text-primary'
-                : 'border-border bg-card hover:bg-muted',
+                ? 'border-primary bg-primary-soft text-primary font-semibold ring-1 ring-primary/30'
+                : 'border-border/80 bg-card hover:bg-muted/70 text-foreground',
             )}
           >
-            <div className="text-sm font-medium">{cr.name}</div>
-            <div className="text-2xs text-muted-foreground">Custom</div>
+            <div className="text-xs font-bold leading-tight">{cr.name}</div>
+            <div className="text-3xs text-muted-foreground uppercase font-semibold tracking-wider mt-0.5">Custom</div>
           </button>
         ))}
 
         <Button
           variant="outline"
           size="sm"
-          className="h-[52px]"
+          className="h-[46px] rounded-xl border-dashed border-border/90 px-3.5 text-xs font-semibold hover:bg-muted"
           onClick={() => { setCreateBaseRole(baseRole); setCreateOpen(true); }}
           data-testid="role-new-btn"
         >
-          <Plus className="h-3.5 w-3.5 mr-1" /> New role
+          <Plus className="h-3.5 w-3.5 mr-1 text-primary" /> New role
         </Button>
       </div>
 
       {/* ── Context banner ── */}
       {isCustom ? (
-        <div className="flex items-center justify-between gap-3 px-3 py-2.5 bg-primary-soft border border-primary rounded-lg text-xs">
-          <span className="flex items-center gap-1.5 text-primary">
-            <GitBranch className="h-3.5 w-3.5" />
-            Based on <strong>{baseRole}</strong> · {overrideCount} override{overrideCount === 1 ? '' : 's'} from base
+        <div className="flex items-center justify-between gap-3 px-3.5 py-2.5 bg-primary-soft border border-primary/40 rounded-xl text-xs shadow-2xs">
+          <span className="flex items-center gap-1.5 text-primary font-medium">
+            <GitBranch className="h-3.5 w-3.5 shrink-0" />
+            <span>Based on <strong>{baseRole}</strong> · {overrideCount} override{overrideCount === 1 ? '' : 's'} from base</span>
           </span>
           <AlertDialog>
             <AlertDialogTrigger asChild>
-              <button className="text-danger hover:underline flex items-center gap-1 shrink-0" data-testid="role-delete-btn">
+              <button className="text-danger font-semibold hover:underline flex items-center gap-1 shrink-0 text-xs" data-testid="role-delete-btn">
                 <Trash2 className="h-3.5 w-3.5" /> Delete role
               </button>
             </AlertDialogTrigger>
@@ -218,12 +218,12 @@ export function RolesPanel() {
           </AlertDialog>
         </div>
       ) : (
-        <div className="flex items-center justify-between gap-3 px-3 py-2.5 bg-muted border border-border rounded-lg text-xs">
+        <div className="flex items-center justify-between gap-3 px-3.5 py-2.5 bg-muted/60 border border-border/80 rounded-xl text-xs shadow-2xs">
           <span className="text-muted-foreground">
             System role — permissions are fixed here. Create a custom role to adjust individual modules.
           </span>
           <button
-            className="text-primary hover:underline flex items-center gap-1 shrink-0"
+            className="text-primary font-semibold hover:underline flex items-center gap-1 shrink-0 text-xs"
             onClick={() => { setCreateBaseRole(baseRole); setCreateOpen(true); }}
             data-testid="role-duplicate-btn"
           >
@@ -233,8 +233,9 @@ export function RolesPanel() {
       )}
 
       {/* ── Permission table ── */}
-      <Card className="overflow-hidden">
-        <table className="w-full text-sm">
+      <Card className="overflow-hidden border border-border/80 shadow-2xs">
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[550px] text-xs">
           <thead>
             <tr className="border-b bg-muted/50 text-xs text-muted-foreground">
               <th className="text-left font-medium px-4 py-2.5">Module</th>
@@ -289,6 +290,7 @@ export function RolesPanel() {
             })}
           </tbody>
         </table>
+        </div>
       </Card>
 
       {/* ── Footer actions (custom roles only) ── */}

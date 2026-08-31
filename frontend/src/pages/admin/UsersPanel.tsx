@@ -491,7 +491,7 @@ function UserCard({ s, userRoles, ...shared }: { s: any; userRoles: string[] } &
     <div
       className={cn(
         'group relative flex flex-col rounded-xl border bg-card text-card-foreground transition-all duration-150',
-        expanded ? 'shadow-md border-kpi-ro' : 'hover:shadow-sm hover:border-border',
+        expanded ? 'shadow-md border-elevated/50 ring-1 ring-elevated/20' : 'hover:shadow-sm hover:border-border',
       )}
       data-testid={`admin-user-card-${s.id}`}
     >
@@ -506,7 +506,7 @@ function UserCard({ s, userRoles, ...shared }: { s: any; userRoles: string[] } &
             <div className="flex items-center gap-1.5 flex-wrap">
               <span className="text-xs font-medium leading-tight truncate max-w-[110px]">{name}</span>
               {access.label === 'Elevated' && (
-                <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-3xs font-medium bg-kpi-ro/15 text-kpi-ro shrink-0 border border-kpi-ro">
+                <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-2xs font-semibold bg-elevated/15 text-elevated shrink-0 border border-elevated/40">
                   <Zap className="w-2.5 h-2.5" /> Elevated
                 </span>
               )}
@@ -561,31 +561,31 @@ function UserCard({ s, userRoles, ...shared }: { s: any; userRoles: string[] } &
           {/* Role toggle */}
           <button
             className={cn(
-              'h-7 w-7 flex items-center justify-center rounded-md border transition-colors shrink-0',
+              'h-8 w-8 sm:h-7 sm:w-7 flex items-center justify-center rounded-md border transition-colors shrink-0',
               expanded
-                ? 'bg-kpi-ro/15 border-kpi-ro text-kpi-ro'
+                ? 'bg-elevated/15 border-elevated text-elevated'
                 : 'border-border/60 text-muted-foreground hover:bg-muted hover:text-foreground',
             )}
             title="Change role"
             aria-label="Change role"
             onClick={() => setExpanded((v) => !v)}
           >
-            <ShieldCheck className="w-3 h-3" />
+            <ShieldCheck className="w-3.5 h-3.5 sm:w-3 sm:h-3" />
           </button>
 
           {/* Change password */}
           <button
-            className="h-7 w-7 flex items-center justify-center rounded-md border border-border/60 text-muted-foreground hover:bg-warn-soft hover:border-warn/90 hover:text-warn/90 transition-colors shrink-0"
+            className="h-8 w-8 sm:h-7 sm:w-7 flex items-center justify-center rounded-md border border-border/60 text-muted-foreground hover:bg-warn-soft hover:border-warn/90 hover:text-warn/90 transition-colors shrink-0"
             title="Change password"
             aria-label="Change password"
             onClick={() => shared.onChangePassword(s.id, label)}
           >
-            <KeyRound className="w-3 h-3" />
+            <KeyRound className="w-3.5 h-3.5 sm:w-3 sm:h-3" />
           </button>
 
           {/* Change email */}
           <button
-            className="h-7 w-7 flex items-center justify-center rounded-md border border-border/60 text-muted-foreground hover:bg-info-soft hover:border-info/90 hover:text-info/90 transition-colors shrink-0"
+            className="h-8 w-8 sm:h-7 sm:w-7 flex items-center justify-center rounded-md border border-border/60 text-muted-foreground hover:bg-info-soft hover:border-info/90 hover:text-info/90 transition-colors shrink-0"
             title="Change email"
             aria-label="Change email"
             onClick={() => shared.onChangeEmail({
@@ -595,7 +595,7 @@ function UserCard({ s, userRoles, ...shared }: { s: any; userRoles: string[] } &
               displayName: label,
             })}
           >
-            <Mail className="w-3 h-3" />
+            <Mail className="w-3.5 h-3.5 sm:w-3 sm:h-3" />
           </button>
 
           {/* Edit plants */}
@@ -607,11 +607,11 @@ function UserCard({ s, userRoles, ...shared }: { s: any; userRoles: string[] } &
             invalidateKeys={[['admin-users'], ['staff']]}
             trigger={
               <button
-                className="h-7 w-7 flex items-center justify-center rounded-md border border-border/60 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors shrink-0"
+                className="h-8 w-8 sm:h-7 sm:w-7 flex items-center justify-center rounded-md border border-border/60 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors shrink-0"
                 title="Edit plants"
                 aria-label="Edit plants"
               >
-                <Building2 className="w-3 h-3" />
+                <Building2 className="w-3.5 h-3.5 sm:w-3 sm:h-3" />
               </button>
             }
           />
@@ -624,11 +624,11 @@ function UserCard({ s, userRoles, ...shared }: { s: any; userRoles: string[] } &
             compact
             trigger={
               <button
-                className="h-7 w-7 flex items-center justify-center rounded-md border border-border/60 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors shrink-0"
+                className="h-8 w-8 sm:h-7 sm:w-7 flex items-center justify-center rounded-md border border-border/60 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors shrink-0"
                 title="More options"
                 aria-label="More options"
               >
-                <MoreVertical className="w-3 h-3" />
+                <MoreVertical className="w-3.5 h-3.5 sm:w-3 sm:h-3" />
               </button>
             }
           />
@@ -636,9 +636,9 @@ function UserCard({ s, userRoles, ...shared }: { s: any; userRoles: string[] } &
 
         {/* Role expand panel */}
         {expanded && (
-          <div className="border-t border-kpi-ro bg-kpi-ro/50 px-3 py-2">
+          <div className="border-t border-elevated/40 bg-elevated/10 px-3 py-2">
             <div className="flex items-center justify-between gap-2">
-              <span className="text-2xs font-semibold text-kpi-ro flex items-center gap-1 shrink-0">
+              <span className="text-2xs font-semibold text-elevated flex items-center gap-1 shrink-0">
                 <ShieldCheck className="w-3 h-3" /> Role
               </span>
               <RoleSelector userId={s.id} currentRoles={userRoles} onChanged={shared.invalidate} />
@@ -669,7 +669,7 @@ function UserTableRow({ s, userRoles, ...shared }: { s: any; userRoles: string[]
       <tr
         className={cn(
           'border-b border-border/50 transition-colors last:border-0',
-          roleOpen ? 'bg-kpi-ro/40' : 'hover:bg-muted/30',
+          roleOpen ? 'bg-elevated/10' : 'hover:bg-muted/30',
         )}
         data-testid={`admin-user-row-${s.id}`}
       >
@@ -683,8 +683,8 @@ function UserTableRow({ s, userRoles, ...shared }: { s: any; userRoles: string[]
               <div className="flex items-center gap-1.5">
                 <span className="text-xs font-medium leading-tight truncate">{name}</span>
                 {access.label === 'Elevated' && (
-                  <span className="inline-flex items-center gap-0.5 px-1 py-0.5 rounded-full text-3xs font-medium bg-kpi-ro/15 text-kpi-ro border border-kpi-ro shrink-0">
-                    <Zap className="w-2 h-2" /> Elevated
+                  <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-3xs font-semibold bg-elevated/15 text-elevated border border-elevated/40 shrink-0">
+                    <Zap className="w-2.5 h-2.5" /> Elevated
                   </span>
                 )}
               </div>
@@ -712,30 +712,31 @@ function UserTableRow({ s, userRoles, ...shared }: { s: any; userRoles: string[]
           </div>
         </td>
 
-        {/* Designation */}
-        <td className="py-2.5 px-2 hidden sm:table-cell">
-          <span className="text-xs text-muted-foreground truncate max-w-[120px] block" title={s.designation ?? ''}>
-            {s.designation || <span className="italic opacity-40">—</span>}
-          </span>
+        {/* Roles */}
+        <td className="py-2.5 px-2">
+          <div className="flex flex-wrap gap-1">
+            {userRoles.map((r) => (
+              <span
+                key={r}
+                className={cn('inline-flex items-center px-1.5 py-0.5 rounded text-2xs font-medium border', ROLE_PILL[r as AppRole] ?? 'bg-muted text-muted-foreground border-border/60')}
+              >
+                {r}
+              </span>
+            ))}
+            {userRoles.length === 0 && (
+              <Badge variant="secondary" className="text-3xs">No role</Badge>
+            )}
+          </div>
         </td>
 
         {/* Status */}
         <td className="py-2.5 px-2">
-          <div className="flex items-center gap-1.5">
-            <StatusDot status={s.status} />
-            <span className={cn(
-              'text-xs',
-              s.status === 'Active'    ? 'text-accent' :
-              s.status === 'Suspended' ? 'text-danger'     : 'text-warn',
-            )}>
-              {s.status ?? 'Pending'}
-            </span>
-          </div>
+          <StatusDot status={s.status} />
         </td>
 
         {/* Actions */}
-        <td className="py-2.5 pl-2 pr-4">
-          <div className="flex items-center justify-end gap-1.5">
+        <td className="py-2.5 pr-4 pl-2 text-right">
+          <div className="inline-flex items-center gap-1">
             {awaiting && (
               <Button
                 size="sm"
@@ -750,31 +751,31 @@ function UserTableRow({ s, userRoles, ...shared }: { s: any; userRoles: string[]
             {/* Role toggle */}
             <button
               className={cn(
-                'h-7 w-7 flex items-center justify-center rounded-md border transition-colors shrink-0',
+                'h-8 w-8 sm:h-7 sm:w-7 flex items-center justify-center rounded-md border transition-colors shrink-0',
                 roleOpen
-                  ? 'bg-kpi-ro/15 border-kpi-ro text-kpi-ro'
+                  ? 'bg-elevated/15 border-elevated text-elevated'
                   : 'border-border/60 text-muted-foreground hover:bg-muted hover:text-foreground',
               )}
               title="Change role"
               aria-label="Change role"
               onClick={() => setRoleOpen((v) => !v)}
             >
-              <ShieldCheck className="w-3 h-3" />
+              <ShieldCheck className="w-3.5 h-3.5 sm:w-3 sm:h-3" />
             </button>
 
             {/* Change password */}
             <button
-              className="h-7 w-7 flex items-center justify-center rounded-md border border-border/60 text-muted-foreground hover:bg-warn-soft hover:border-warn/90 hover:text-warn/90 transition-colors shrink-0"
+              className="h-8 w-8 sm:h-7 sm:w-7 flex items-center justify-center rounded-md border border-border/60 text-muted-foreground hover:bg-warn-soft hover:border-warn/90 hover:text-warn/90 transition-colors shrink-0"
               title="Change password"
               aria-label="Change password"
               onClick={() => shared.onChangePassword(s.id, label)}
             >
-              <KeyRound className="w-3 h-3" />
+              <KeyRound className="w-3.5 h-3.5 sm:w-3 sm:h-3" />
             </button>
 
             {/* Change email */}
             <button
-              className="h-7 w-7 flex items-center justify-center rounded-md border border-border/60 text-muted-foreground hover:bg-info-soft hover:border-info/90 hover:text-info/90 transition-colors shrink-0"
+              className="h-8 w-8 sm:h-7 sm:w-7 flex items-center justify-center rounded-md border border-border/60 text-muted-foreground hover:bg-info-soft hover:border-info/90 hover:text-info/90 transition-colors shrink-0"
               title="Change email"
               aria-label="Change email"
               onClick={() => shared.onChangeEmail({
@@ -784,7 +785,7 @@ function UserTableRow({ s, userRoles, ...shared }: { s: any; userRoles: string[]
                 displayName: label,
               })}
             >
-              <Mail className="w-3 h-3" />
+              <Mail className="w-3.5 h-3.5 sm:w-3 sm:h-3" />
             </button>
 
             {/* Edit plants */}
@@ -796,11 +797,11 @@ function UserTableRow({ s, userRoles, ...shared }: { s: any; userRoles: string[]
               invalidateKeys={[['admin-users'], ['staff']]}
               trigger={
                 <button
-                  className="h-7 w-7 flex items-center justify-center rounded-md border border-border/60 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors shrink-0"
+                  className="h-8 w-8 sm:h-7 sm:w-7 flex items-center justify-center rounded-md border border-border/60 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors shrink-0"
                   title="Edit plants"
                   aria-label="Edit plants"
                 >
-                  <Building2 className="w-3 h-3" />
+                  <Building2 className="w-3.5 h-3.5 sm:w-3 sm:h-3" />
                 </button>
               }
             />
@@ -813,11 +814,11 @@ function UserTableRow({ s, userRoles, ...shared }: { s: any; userRoles: string[]
               compact
               trigger={
                 <button
-                  className="h-7 w-7 flex items-center justify-center rounded-md border border-border/60 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors shrink-0"
+                  className="h-8 w-8 sm:h-7 sm:w-7 flex items-center justify-center rounded-md border border-border/60 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors shrink-0"
                   title="More options"
                   aria-label="More options"
                 >
-                  <MoreVertical className="w-3 h-3" />
+                  <MoreVertical className="w-3.5 h-3.5 sm:w-3 sm:h-3" />
                 </button>
               }
             />
@@ -827,10 +828,10 @@ function UserTableRow({ s, userRoles, ...shared }: { s: any; userRoles: string[]
 
       {/* Inline role panel */}
       {roleOpen && (
-        <tr className="border-b border-kpi-ro bg-kpi-ro/50">
+        <tr className="border-b border-elevated/40 bg-elevated/10">
           <td colSpan={5} className="px-4 py-2">
             <div className="flex items-center gap-2">
-              <span className="text-2xs font-semibold text-kpi-ro flex items-center gap-1">
+              <span className="text-2xs font-semibold text-elevated flex items-center gap-1">
                 <ShieldCheck className="w-3 h-3" /> Change role
               </span>
               <RoleSelector userId={s.id} currentRoles={userRoles} onChanged={shared.invalidate} />
@@ -1064,9 +1065,9 @@ export function UsersPanel() {
           Pending
           {pendingCount > 0 && (
             <span className={cn(
-              'ml-1 px-1.5 py-0.5 rounded-full text-2xs font-medium leading-none',
+              'ml-1 px-1.5 py-0.5 rounded-full text-2xs font-semibold leading-none font-mono-num',
               pendingOnly
-                ? 'bg-white/20 text-white'
+                ? 'bg-primary-foreground/20 text-primary-foreground'
                 : 'bg-warn-soft text-warn',
             )}>
               {pendingCount}

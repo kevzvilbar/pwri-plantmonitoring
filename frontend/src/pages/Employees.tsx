@@ -2095,25 +2095,25 @@ function KpiTab({ staff, roles, plants }: { staff: StaffMember[]; roles: any[]; 
           <div className="flex rounded-lg border bg-background overflow-hidden p-0.5 shadow-2xs">
             <button
               className={cn(
-                'flex items-center gap-1 px-2.5 py-1 text-2xs font-bold rounded-md transition-all',
+                'flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-md transition-all',
                 viewMode === 'team'
-                  ? 'bg-kpi-ro text-white shadow-xs'
+                  ? 'bg-primary text-primary-foreground shadow-xs'
                   : 'text-muted-foreground hover:text-foreground hover:bg-muted/50',
               )}
               onClick={() => setViewMode('team')}
             >
-              <Building2 className="h-3 w-3" /> Team Coverage
+              <Building2 className="h-3.5 w-3.5" /> Team Coverage
             </button>
             <button
               className={cn(
-                'flex items-center gap-1 px-2.5 py-1 text-2xs font-bold rounded-md transition-all',
+                'flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-md transition-all',
                 viewMode === 'individual'
-                  ? 'bg-kpi-ro text-white shadow-xs'
+                  ? 'bg-primary text-primary-foreground shadow-xs'
                   : 'text-muted-foreground hover:text-foreground hover:bg-muted/50',
               )}
               onClick={() => setViewMode('individual')}
             >
-              <User className="h-3 w-3" /> Individual Activity
+              <User className="h-3.5 w-3.5" /> Individual Activity
             </button>
           </div>
         </div>
