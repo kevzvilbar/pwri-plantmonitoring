@@ -96,10 +96,17 @@ export function BudgetTab() {
     const chem = parseFloat(editV.chem) || 0;
     if (power < 0 || chem < 0) { toast.error('Budget amounts must be 0 or more'); return; }
     setSaving(true);
-    const { error } = await saveOpexBudget({ plantId, month, powerBudget: power, chemBudget: chem, userId: user?.id });
+    const { error, savedLocally } = await saveOpexBudget({ plantId, month, powerBudget: power, chemBudget: chem, userId: user?.id });
     setSaving(false);
-    if (error) { toast.error(friendlyError(error)); return; }
-    toast.success('Budget saved');
+    if (error && !savedLocally) {
+      toast.error(friendlyError(error));
+      return;
+    }
+    if (savedLocally) {
+      toast.success('Budget saved (Stored in app cache)');
+    } else {
+      toast.success('Budget saved');
+    }
     setEditMonth(null);
     qc.invalidateQueries({ queryKey: ['opex-monthly', plantId, year] });
   };

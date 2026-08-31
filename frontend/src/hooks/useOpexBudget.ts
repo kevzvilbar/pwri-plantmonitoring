@@ -44,13 +44,17 @@ export function useMonthlyOpex(plantId: string, year: number) {
 
       const [{ data: budgets }, { data: costs }, { data: readings }, { data: tariff }] = await Promise.all([
         supabase.from('opex_budgets').select('*').eq('plant_id', plantId)
-          .gte('budget_month', from).lte('budget_month', to),
+          .gte('budget_month', from).lte('budget_month', to)
+          .catch(() => ({ data: null, error: null })),
         supabase.from('production_costs').select('cost_date, chem_cost, power_cost, filter_cost').eq('plant_id', plantId)
-          .gte('cost_date', from).lte('cost_date', to),
+          .gte('cost_date', from).lte('cost_date', to)
+          .catch(() => ({ data: null, error: null })),
         supabase.from('power_readings').select('reading_datetime, daily_solar_kwh, daily_grid_kwh').eq('plant_id', plantId)
-          .gte('reading_datetime', from).lte('reading_datetime', `${to} 23:59:59`),
+          .gte('reading_datetime', from).lte('reading_datetime', `${to} 23:59:59`)
+          .catch(() => ({ data: null, error: null })),
         supabase.from('power_tariffs').select('rate_per_kwh').eq('plant_id', plantId)
-          .order('effective_date', { ascending: false }).limit(1).maybeSingle(),
+          .order('effective_date', { ascending: false }).limit(1).maybeSingle()
+          .catch(() => ({ data: null, error: null })),
       ]);
 
       const rate = +(tariff?.rate_per_kwh ?? 0);
@@ -75,12 +79,24 @@ export function useMonthlyOpex(plantId: string, year: number) {
         const agg = byMonth.get(key);
         if (agg) { agg.solar += +r.daily_solar_kwh || 0; agg.grid += +r.daily_grid_kwh || 0; }
       });
+
+      // Combine Supabase budgets with local fallback (if DB table isn't created yet)
+      let localBudgets: Record<string, { power_budget: number; chem_budget: number }> = {};
+      try {
+        const stored = localStorage.getItem(`local_opex_budgets_${plantId}_${year}`);
+        if (stored) localBudgets = JSON.parse(stored);
+      } catch {
+        // ignore
+      }
+
       const budgetByMonth = new Map((budgets ?? []).map((b: any) => [b.budget_month, b]));
 
       return Array.from(byMonth.entries()).map(([month, agg]) => {
-        const budget = budgetByMonth.get(month) as any;
-        const powerBudget = +(budget?.power_budget ?? 0);
-        const chemBudget = +(budget?.chem_budget ?? 0);
+        const dbBudget = budgetByMonth.get(month) as any;
+        const localBudget = localBudgets[month];
+        const powerBudget = +(dbBudget?.power_budget ?? localBudget?.power_budget ?? 0);
+        const chemBudget = +(dbBudget?.chem_budget ?? localBudget?.chem_budget ?? 0);
+        const hasBudget = !!(dbBudget || localBudget);
         const otherBudget = 0;
         const totalBudget = powerBudget + chemBudget + otherBudget;
         const totalActual = agg.power + agg.chem + agg.other;
@@ -88,12 +104,12 @@ export function useMonthlyOpex(plantId: string, year: number) {
         return {
           month,
           label: monthLabel(month),
-          budgetId: budget?.id ?? null,
+          budgetId: dbBudget?.id ?? (localBudget ? 'local' : null),
           powerBudget, powerActual: agg.power,
           chemBudget, chemActual: agg.chem,
           otherBudget, otherActual: agg.other,
           totalBudget, totalActual,
-          variancePct: budget && totalBudget > 0 ? ((totalActual - totalBudget) / totalBudget) * 100 : null,
+          variancePct: hasBudget && totalBudget > 0 ? ((totalActual - totalBudget) / totalBudget) * 100 : null,
           solarOffset: agg.solar * rate,
           solarSharePct: totalKwh > 0 ? (agg.solar / totalKwh) * 100 : null,
         };
@@ -111,18 +127,55 @@ export function opexVarianceTone(pct: number | null): 'accent' | 'warn' | 'dange
   return 'accent';
 }
 
-/** Create or update a month's power/chem budget for a plant. */
+/** Create or update a month's power/chem budget for a plant with localStorage fallback. */
 export async function saveOpexBudget(params: {
   plantId: string; month: string; powerBudget: number; chemBudget: number; userId?: string | null;
-}) {
-  return supabase.from('opex_budgets').upsert(
-    {
-      plant_id: params.plantId,
-      budget_month: params.month,
+}): Promise<{ error?: any; savedLocally?: boolean }> {
+  try {
+    const res = await supabase.from('opex_budgets').upsert(
+      {
+        plant_id: params.plantId,
+        budget_month: params.month,
+        power_budget: params.powerBudget,
+        chem_budget: params.chemBudget,
+        updated_by: params.userId ?? null,
+      },
+      { onConflict: 'plant_id,budget_month' },
+    );
+
+    if (res.error) {
+      // Fallback to local storage if DB table is missing
+      const year = params.month.slice(0, 4);
+      const key = `local_opex_budgets_${params.plantId}_${year}`;
+      let existing: Record<string, { power_budget: number; chem_budget: number }> = {};
+      try {
+        existing = JSON.parse(localStorage.getItem(key) || '{}');
+      } catch {
+        existing = {};
+      }
+      existing[params.month] = {
+        power_budget: params.powerBudget,
+        chem_budget: params.chemBudget,
+      };
+      localStorage.setItem(key, JSON.stringify(existing));
+      return { savedLocally: true };
+    }
+
+    return { error: null };
+  } catch {
+    const year = params.month.slice(0, 4);
+    const key = `local_opex_budgets_${params.plantId}_${year}`;
+    let existing: Record<string, { power_budget: number; chem_budget: number }> = {};
+    try {
+      existing = JSON.parse(localStorage.getItem(key) || '{}');
+    } catch {
+      existing = {};
+    }
+    existing[params.month] = {
       power_budget: params.powerBudget,
       chem_budget: params.chemBudget,
-      updated_by: params.userId ?? null,
-    },
-    { onConflict: 'plant_id,budget_month' },
-  );
+    };
+    localStorage.setItem(key, JSON.stringify(existing));
+    return { savedLocally: true };
+  }
 }
