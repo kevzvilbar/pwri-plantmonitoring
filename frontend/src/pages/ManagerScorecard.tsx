@@ -29,6 +29,12 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { AppraisalBadge } from '@/components/AppraisalBadge';
+import {
+  type AppraisalTier,
+  APPRAISAL_TIERS,
+  getAppraisalTier,
+} from '@/lib/appraisal';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -67,29 +73,9 @@ interface CorrectionRequestRow {
   resolved_at: string | null;
 }
 
-export type ManagerAppraisalTier = {
-  tier: string;
-  badge: string;
-  dot: string;
-  icon: string;
-  minScore: number;
-  description: string;
-};
-
-export const MANAGER_APPRAISAL_TIERS: ManagerAppraisalTier[] = [
-  { tier: 'Exemplary Oversight', badge: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/40', dot: 'bg-emerald-500', icon: '🏆', minScore: 90, description: 'Outstanding data completeness and prompt approvals' },
-  { tier: 'Active Oversight', badge: 'bg-teal-500/15 text-teal-700 dark:text-teal-300 border-teal-500/40', dot: 'bg-teal-500', icon: '⭐', minScore: 80, description: 'High data quality and regular review resolution' },
-  { tier: 'Meets Standards', badge: 'bg-sky-500/15 text-sky-700 dark:text-sky-300 border-sky-500/40', dot: 'bg-sky-500', icon: '✓', minScore: 70, description: 'Satisfactory oversight with minor review delays' },
-  { tier: 'Attention Required', badge: 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/40', dot: 'bg-amber-500', icon: '⚠️', minScore: 50, description: 'Backlog in correction approvals or lower completeness' },
-  { tier: 'Critical Oversight Gap', badge: 'bg-rose-500/15 text-rose-700 dark:text-rose-300 border-rose-500/40', dot: 'bg-rose-500', icon: '❌', minScore: 0, description: 'Unassigned manager or persistent unreviewed anomalies' },
-];
-
-export function getManagerAppraisalTier(scorePct: number): ManagerAppraisalTier {
-  for (const t of MANAGER_APPRAISAL_TIERS) {
-    if (scorePct >= t.minScore) return t;
-  }
-  return MANAGER_APPRAISAL_TIERS[MANAGER_APPRAISAL_TIERS.length - 1];
-}
+export type ManagerAppraisalTier = AppraisalTier;
+export const MANAGER_APPRAISAL_TIERS = APPRAISAL_TIERS;
+export const getManagerAppraisalTier = getAppraisalTier;
 
 // Computes combined manager oversight score (0-100)
 export function computeManagerOversightScore(
@@ -97,9 +83,9 @@ export function computeManagerOversightScore(
   errorRatePct: number | null,
   openExceptions: number,
   pendingCorrections: number,
-): { score: number; tier: ManagerAppraisalTier } {
+): { score: number; tier: AppraisalTier } {
   if (completenessPct === null) {
-    return { score: 0, tier: MANAGER_APPRAISAL_TIERS[MANAGER_APPRAISAL_TIERS.length - 1] };
+    return { score: 0, tier: APPRAISAL_TIERS[APPRAISAL_TIERS.length - 1] };
   }
 
   // Completeness component (45% max)
@@ -393,39 +379,44 @@ export default function ManagerScorecard() {
       />
 
       {/* ── Executive Oversight & Appraisal Strip ── */}
-      <div className="p-3.5 rounded-xl border border-border/70 bg-card/80 backdrop-blur-sm space-y-3 shadow-2xs">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="flex items-center gap-2.5">
-            <div className="h-9 w-9 rounded-xl bg-primary-soft text-primary flex items-center justify-center shrink-0">
+      <div className="p-4 rounded-xl border border-border/80 bg-card shadow-xs space-y-3.5">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-xl bg-primary-soft text-primary flex items-center justify-center shrink-0 shadow-2xs">
               <UserCheck className="h-5 w-5" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                <h3 className="text-xs font-bold text-foreground">Management Oversight Index</h3>
-                <span className={cn('text-3xs font-bold px-2 py-0.5 rounded-full border', summary.fleetTier.badge)}>
-                  {summary.fleetTier.icon} Fleet Rating: {summary.fleetOversightScore}% ({summary.fleetTier.tier})
-                </span>
+              <div className="flex items-center gap-2.5 flex-wrap">
+                <h2 className="text-sm font-bold text-foreground tracking-tight">Management Oversight Index</h2>
+                <AppraisalBadge
+                  score={summary.fleetOversightScore}
+                  tier={summary.fleetTier}
+                  size="md"
+                  label="Fleet Rating"
+                />
               </div>
-              <p className="text-3xs text-muted-foreground">Tracks completeness, operator input error rates, and requested correction approval velocity</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Evaluates telemetry completeness, operator error rates, and correction approval velocity across all facilities.
+              </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-1.5 flex-wrap">
+          <div className="flex items-center gap-2 flex-wrap shrink-0">
             <Button
               size="sm"
               variant="outline"
-              className="h-8 px-2.5 text-2xs gap-1.5 font-semibold bg-background"
+              className="h-8 px-3 text-xs gap-1.5 font-semibold bg-background border-border/80 hover:bg-muted"
               onClick={exportManagerScorecardCsv}
               title="Download full manager oversight evaluation matrix in CSV"
             >
               <FileDown className="h-3.5 w-3.5 text-primary" />
-              <span>Export Manager Scorecard (.csv)</span>
+              <span>Export CSV</span>
             </Button>
             <Button
               size="sm"
               variant="outline"
               disabled={isFetching}
-              className="h-8 px-2.5 text-2xs gap-1.5"
+              className="h-8 px-3 text-xs gap-1.5 bg-background border-border/80 hover:bg-muted font-medium"
               onClick={handleRefresh}
             >
               {isFetching ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
@@ -435,26 +426,35 @@ export default function ManagerScorecard() {
         </div>
 
         {/* Oversight breakdown pills */}
-        <div className="flex items-center gap-2 flex-wrap pt-2 border-t border-border/40 text-2xs">
-          <span className="text-3xs uppercase font-bold text-muted-foreground tracking-wider">Manager Appraisal Tiers:</span>
+        <div className="flex items-center gap-2 flex-wrap pt-3 border-t border-border/40 text-xs font-sans">
+          <span className="text-2xs uppercase font-bold text-muted-foreground tracking-wider mr-1">Appraisal Scale:</span>
           {MANAGER_APPRAISAL_TIERS.map((tier) => (
-            <span key={tier.tier} className={cn('inline-flex items-center gap-1 px-2 py-0.5 rounded-full border font-bold text-3xs', tier.badge)}>
-              {tier.icon} {tier.tier} (≥{tier.minScore}%)
+            <span
+              key={tier.id}
+              className={cn(
+                'inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-xs font-semibold select-none',
+                tier.badge
+              )}
+              title={`${tier.tier} (≥${tier.minScore}%) — ${tier.description}`}
+            >
+              <span className={cn('h-1.5 w-1.5 rounded-full', tier.dot)} />
+              <span>{tier.shortLabel}</span>
+              <span className="text-2xs opacity-75 font-mono-num font-normal">(≥{tier.minScore}%)</span>
             </span>
           ))}
         </div>
       </div>
 
       {/* ── Controls (Period & View Mode) ── */}
-      <div className="flex flex-wrap items-center justify-between gap-2.5 p-2 rounded-xl bg-muted/40 border border-border/60">
-        <div className="flex items-center gap-1.5 flex-wrap">
+      <div className="flex flex-wrap items-center justify-between gap-2.5 p-2 rounded-xl bg-muted/40 border border-border/60 font-sans">
+        <div className="flex items-center gap-2 flex-wrap">
           {/* Time range selector */}
-          <div className="flex rounded-lg border bg-background overflow-hidden p-0.5 shadow-2xs">
+          <div className="flex rounded-lg border border-border/70 bg-background overflow-hidden p-0.5 shadow-2xs">
             {WINDOW_OPTIONS.map(({ label, value }) => (
               <button
                 key={String(value)}
                 className={cn(
-                  'px-2.5 py-1 text-2xs font-bold rounded-md transition-all',
+                  'px-2.5 py-1 text-xs font-semibold rounded-md transition-all',
                   days === value
                     ? 'bg-primary text-primary-foreground shadow-xs'
                     : 'text-muted-foreground hover:text-foreground hover:bg-muted/50',
@@ -467,28 +467,28 @@ export default function ManagerScorecard() {
           </div>
 
           {/* View Mode */}
-          <div className="flex rounded-lg border bg-background overflow-hidden p-0.5 shadow-2xs">
+          <div className="flex rounded-lg border border-border/70 bg-background overflow-hidden p-0.5 shadow-2xs">
             <button
               className={cn(
-                'flex items-center gap-1 px-2.5 py-1 text-2xs font-bold rounded-md transition-all',
+                'flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-md transition-all',
                 viewBy === 'plant'
-                  ? 'bg-kpi-ro text-white shadow-xs'
+                  ? 'bg-primary text-primary-foreground shadow-xs'
                   : 'text-muted-foreground hover:text-foreground hover:bg-muted/50',
               )}
               onClick={() => setViewBy('plant')}
             >
-              <Building2 className="h-3 w-3" /> View by Plant
+              <Building2 className="h-3.5 w-3.5" /> View by Plant
             </button>
             <button
               className={cn(
-                'flex items-center gap-1 px-2.5 py-1 text-2xs font-bold rounded-md transition-all',
+                'flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-md transition-all',
                 viewBy === 'manager'
-                  ? 'bg-kpi-ro text-white shadow-xs'
+                  ? 'bg-primary text-primary-foreground shadow-xs'
                   : 'text-muted-foreground hover:text-foreground hover:bg-muted/50',
               )}
               onClick={() => setViewBy('manager')}
             >
-              <Users className="h-3 w-3" /> View by Manager
+              <Users className="h-3.5 w-3.5" /> View by Manager
             </button>
           </div>
         </div>
@@ -549,9 +549,110 @@ export default function ManagerScorecard() {
           emptyTitle="No plants or managers to show"
           onRetry={handleRefresh}
         >
-          <div className="overflow-x-auto">
+          {/* ── Mobile / Tablet Card View (<768px) ── */}
+          <div className="md:hidden p-3 space-y-3 font-sans">
             {viewBy === 'plant' ? (
-              <table className="w-full min-w-[760px] text-xs">
+              sorted.map((r) => {
+                const meta = STATUS_META[r.status];
+                const StatusIcon = meta.icon;
+                const oldestOpenDays = Math.max(r.open_pending_review_oldest_days, r.open_correction_oldest_days);
+                const openCount = r.unexplained_gaps_in_window + r.open_pending_review_count + r.open_correction_count;
+                const corr = plantCorrMap[r.plant_id] ?? { pending: 0, approved: 0, rejected: 0, total: 0, oldestPendingHours: 0 };
+                const plantOversight = computeManagerOversightScore(r.overall_completeness_pct, r.error_rate_pct, openCount, corr.pending);
+
+                return (
+                  <div key={r.plant_id} className="p-3.5 rounded-xl border border-border/70 bg-card shadow-2xs space-y-2.5">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <h3 className="font-bold text-sm text-foreground leading-snug">{r.plant_name}</h3>
+                        <p className="text-2xs text-muted-foreground mt-0.5">
+                          Manager: {r.manager_names.length ? r.manager_names.join(', ') : <span className="text-destructive font-semibold">Unassigned</span>}
+                        </p>
+                      </div>
+                      <StatusPill tone={meta.tone}>
+                        <StatusIcon className="h-3 w-3" />
+                        {meta.label}
+                      </StatusPill>
+                    </div>
+
+                    <div className="flex items-center justify-between gap-2 pt-1 border-t border-border/40">
+                      <div className="flex items-center gap-2">
+                        <span className="text-2xs text-muted-foreground font-semibold">Rating:</span>
+                        <AppraisalBadge score={plantOversight.score} tier={plantOversight.tier} size="sm" />
+                      </div>
+                      <div className="text-right">
+                        <span className="font-bold text-sm text-foreground font-mono-num">{fmtPct(r.overall_completeness_pct)}</span>
+                        <span className="text-3xs text-muted-foreground block">Completeness</span>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 pt-1.5 border-t border-border/40 text-xs">
+                      <div className="p-2 rounded-lg bg-muted/40 border border-border/40 space-y-0.5">
+                        <span className="text-3xs text-muted-foreground uppercase font-bold tracking-wide">Corrections</span>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {corr.pending > 0 ? (
+                            <StatusPill tone="warn">{corr.pending} pending ({corr.oldestPendingHours}h)</StatusPill>
+                          ) : (
+                            <span className="text-2xs text-muted-foreground">0 pending</span>
+                          )}
+                          <span className="text-2xs text-accent font-semibold inline-flex items-center gap-0.5">
+                            <CheckCircle2 className="h-3 w-3" /> {corr.approved}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="p-2 rounded-lg bg-muted/40 border border-border/40 space-y-0.5">
+                        <span className="text-3xs text-muted-foreground uppercase font-bold tracking-wide">Exceptions &amp; Error</span>
+                        <div className="flex items-center justify-between text-2xs">
+                          <span>Gaps: <strong className={openCount > 0 ? 'text-warn' : 'text-foreground'}>{openCount}</strong></span>
+                          <span>Err: <strong className={(r.error_rate_pct ?? 0) >= 5 ? 'text-destructive' : 'text-foreground'}>{r.error_rate_pct === null ? '—' : `${r.error_rate_pct.toFixed(1)}%`}</strong></span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
+            ) : (
+              managerRollup.map((m) => (
+                <div key={m.name} className="p-3.5 rounded-xl border border-border/70 bg-card shadow-2xs space-y-2.5">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <div className="h-8 w-8 rounded-lg bg-primary-soft text-primary flex items-center justify-center shrink-0">
+                        <UserCheck className="h-4 w-4" />
+                      </div>
+                      <div>
+                        <h3 className="font-bold text-sm text-foreground">{m.name}</h3>
+                        <p className="text-2xs text-muted-foreground">{m.plants.join(', ') || 'No facility assigned'}</p>
+                      </div>
+                    </div>
+                    <AppraisalBadge score={m.oversightScore} tier={m.tier} size="sm" />
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-2 pt-2 border-t border-border/40 text-center">
+                    <div className="p-1.5 rounded-lg bg-muted/40">
+                      <div className="font-mono-num font-bold text-xs text-foreground">{fmtPct(m.avgCompleteness)}</div>
+                      <div className="text-3xs text-muted-foreground">Completeness</div>
+                    </div>
+                    <div className="p-1.5 rounded-lg bg-muted/40">
+                      <div className="font-mono-num font-bold text-xs text-foreground">
+                        {m.pendingCorrections > 0 ? <span className="text-warn">{m.pendingCorrections} pend</span> : <span className="text-accent">0 pend</span>}
+                      </div>
+                      <div className="text-3xs text-muted-foreground">Approvals</div>
+                    </div>
+                    <div className="p-1.5 rounded-lg bg-muted/40">
+                      <div className="font-mono-num font-bold text-xs text-foreground">{m.openExceptions}</div>
+                      <div className="text-3xs text-muted-foreground">Exceptions</div>
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* ── Desktop Table View (>=768px) ── */}
+          <div className="hidden md:block overflow-x-auto">
+            {viewBy === 'plant' ? (
+              <table className="w-full min-w-[760px] text-xs font-sans">
                 <thead className="bg-muted/50 border-b">
                   <tr>
                     <th className="text-left px-3 py-2.5 font-bold text-xs">Plant Facility</th>
@@ -587,14 +688,9 @@ export default function ManagerScorecard() {
                         </td>
 
                         {/* Plant Oversight Score */}
-                        <td className="py-2 px-3 border-x border-border/60 bg-muted/10 text-center whitespace-nowrap">
-                          <div className="flex flex-col items-center gap-0.5">
-                            <div className="flex items-center gap-1.5">
-                              <span className="font-extrabold text-xs text-foreground">{plantOversight.score}%</span>
-                              <span className={cn('text-3xs px-1.5 py-0.2 rounded-full border font-bold', plantOversight.tier.badge)}>
-                                {plantOversight.tier.icon} {plantOversight.tier.tier}
-                              </span>
-                            </div>
+                        <td className="py-2.5 px-3 border-x border-border/60 bg-muted/10 text-center whitespace-nowrap">
+                          <div className="flex flex-col items-center gap-1">
+                            <AppraisalBadge score={plantOversight.score} tier={plantOversight.tier} size="sm" />
                             <div className="w-24 h-1.5 rounded-full bg-muted overflow-hidden border border-border/50">
                               <div
                                 className={cn('h-full transition-all', plantOversight.tier.dot)}
@@ -612,42 +708,42 @@ export default function ManagerScorecard() {
                                 style={{ width: `${Math.max(2, r.overall_completeness_pct ?? 0)}%` }}
                               />
                             </div>
-                            <span className="tabular-nums font-semibold text-foreground shrink-0">{fmtPct(r.overall_completeness_pct)}</span>
+                            <span className="tabular-nums font-semibold text-foreground shrink-0 font-mono-num">{fmtPct(r.overall_completeness_pct)}</span>
                           </div>
                         </td>
 
                         {/* Correction Approvals Monitoring */}
                         <td className="px-3 py-2.5 text-center whitespace-nowrap">
-                          <div className="flex items-center justify-center gap-1.5">
+                          <div className="flex items-center justify-center gap-1.5 text-2xs">
                             {corr.pending > 0 ? (
-                              <span className="px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-700 dark:text-amber-300 font-bold text-3xs border border-amber-500/30">
+                              <StatusPill tone="warn">
                                 {corr.pending} pending ({corr.oldestPendingHours}h)
-                              </span>
+                              </StatusPill>
                             ) : (
-                              <span className="text-3xs text-muted-foreground">0 pending</span>
+                              <span className="text-muted-foreground font-medium">0 pending</span>
                             )}
-                            <span className="text-3xs text-muted-foreground">·</span>
-                            <span className="text-3xs text-emerald-600 dark:text-emerald-400 font-medium">
-                              ✓ {corr.approved} app
+                            <span className="text-muted-foreground/60">·</span>
+                            <span className="text-accent font-semibold inline-flex items-center gap-1">
+                              <CheckCircle2 className="h-3 w-3" /> {corr.approved} app
                             </span>
                           </div>
                         </td>
 
                         <td className="px-3 py-2.5 text-center whitespace-nowrap">
                           {openCount > 0 ? (
-                            <span title="Unexplained gaps + pending reviews" className="font-semibold text-warn">
+                            <span title="Unexplained gaps + pending reviews" className="font-semibold text-warn font-mono-num">
                               {openCount}
                               {oldestOpenDays > 0 && (
                                 <span className="text-muted-foreground font-normal text-3xs"> ({oldestOpenDays}d old)</span>
                               )}
                             </span>
                           ) : (
-                            <span className="text-muted-foreground">0</span>
+                            <span className="text-muted-foreground font-mono-num">0</span>
                           )}
                         </td>
 
                         <td className="px-3 py-2.5 text-center whitespace-nowrap">
-                          <span className={cn('font-mono font-medium', (r.error_rate_pct ?? 0) >= 5 ? 'text-destructive font-bold' : 'text-muted-foreground')}>
+                          <span className={cn('font-mono-num font-medium', (r.error_rate_pct ?? 0) >= 5 ? 'text-destructive font-bold' : 'text-muted-foreground')}>
                             {r.error_rate_pct === null ? '—' : `${r.error_rate_pct.toFixed(1)}%`}
                           </span>
                         </td>
@@ -665,7 +761,7 @@ export default function ManagerScorecard() {
               </table>
             ) : (
               /* View by Manager Profile */
-              <table className="w-full min-w-[760px] text-xs">
+              <table className="w-full min-w-[760px] text-xs font-sans">
                 <thead className="bg-muted/50 border-b">
                   <tr>
                     <th className="text-left px-3 py-2.5 font-bold text-xs">Manager Name</th>
@@ -683,7 +779,7 @@ export default function ManagerScorecard() {
                   {managerRollup.map((m) => (
                     <tr key={m.name} className="border-b hover:bg-muted/20 transition-colors">
                       <td className="px-3 py-2.5 whitespace-nowrap font-bold text-foreground">
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex items-center gap-2">
                           <UserCheck className="h-4 w-4 text-primary shrink-0" />
                           <span>{m.name}</span>
                         </div>
@@ -692,7 +788,7 @@ export default function ManagerScorecard() {
                       <td className="px-3 py-2.5">
                         <div className="flex flex-wrap gap-1 max-w-[200px]">
                           {m.plants.map((p) => (
-                            <span key={p} className="px-1.5 py-0.2 rounded bg-muted text-3xs font-semibold text-foreground border border-border/60">
+                            <span key={p} className="px-1.5 py-0.5 rounded bg-muted text-2xs font-semibold text-foreground border border-border/60">
                               {p}
                             </span>
                           ))}
@@ -700,14 +796,9 @@ export default function ManagerScorecard() {
                       </td>
 
                       {/* Manager Oversight Score */}
-                      <td className="py-2 px-3 border-x border-border/60 bg-muted/10 text-center whitespace-nowrap">
-                        <div className="flex flex-col items-center gap-0.5">
-                          <div className="flex items-center gap-1.5">
-                            <span className="font-extrabold text-xs text-foreground">{m.oversightScore}%</span>
-                            <span className={cn('text-3xs px-2 py-0.5 rounded-full border font-bold', m.tier.badge)}>
-                              {m.tier.icon} {m.tier.tier}
-                            </span>
-                          </div>
+                      <td className="py-2.5 px-3 border-x border-border/60 bg-muted/10 text-center whitespace-nowrap">
+                        <div className="flex flex-col items-center gap-1">
+                          <AppraisalBadge score={m.oversightScore} tier={m.tier} size="sm" />
                           <div className="w-28 h-1.5 rounded-full bg-muted overflow-hidden border border-border/50">
                             <div
                               className={cn('h-full transition-all', m.tier.dot)}
@@ -725,33 +816,35 @@ export default function ManagerScorecard() {
                               style={{ width: `${Math.max(2, m.avgCompleteness ?? 0)}%` }}
                             />
                           </div>
-                          <span className="tabular-nums font-semibold text-foreground shrink-0">{fmtPct(m.avgCompleteness)}</span>
+                          <span className="tabular-nums font-semibold text-foreground shrink-0 font-mono-num">{fmtPct(m.avgCompleteness)}</span>
                         </div>
                       </td>
 
                       {/* Manager's Correction Approvals */}
                       <td className="px-3 py-2.5 text-center whitespace-nowrap">
-                        <div className="flex items-center justify-center gap-1.5">
+                        <div className="flex items-center justify-center gap-1.5 text-2xs">
                           {m.pendingCorrections > 0 ? (
-                            <span className="px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-700 dark:text-amber-300 font-bold text-3xs border border-amber-500/30">
+                            <StatusPill tone="warn">
                               {m.pendingCorrections} pending
-                            </span>
+                            </StatusPill>
                           ) : (
-                            <span className="text-3xs text-emerald-600 font-bold">0 pending backlog</span>
+                            <span className="text-accent font-semibold inline-flex items-center gap-0.5">
+                              <CheckCircle2 className="h-3 w-3" /> 0 pending
+                            </span>
                           )}
-                          <span className="text-3xs text-muted-foreground">·</span>
-                          <span className="text-3xs text-muted-foreground">
+                          <span className="text-muted-foreground/60">·</span>
+                          <span className="text-muted-foreground font-mono-num">
                             ✓ {m.approvedCorrections} / ✗ {m.rejectedCorrections}
                           </span>
                         </div>
                       </td>
 
-                      <td className="px-3 py-2.5 text-center whitespace-nowrap font-mono font-medium text-foreground">
+                      <td className="px-3 py-2.5 text-center whitespace-nowrap font-mono-num font-medium text-foreground">
                         {m.totalReadings.toLocaleString()}
                       </td>
 
                       <td className="px-3 py-2.5 text-center whitespace-nowrap">
-                        <span className={cn('font-semibold', m.openExceptions > 0 ? 'text-warn' : 'text-muted-foreground')}>
+                        <span className={cn('font-semibold font-mono-num', m.openExceptions > 0 ? 'text-warn' : 'text-muted-foreground')}>
                           {m.openExceptions}
                         </span>
                       </td>
