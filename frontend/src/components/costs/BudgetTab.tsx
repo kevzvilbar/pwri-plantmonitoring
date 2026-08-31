@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/useAuth';
 import { useAppStore } from '@/store/appStore';
@@ -14,12 +14,38 @@ import { PlantPicker } from '@/components/costs/PlantPicker';
 import { fmtNum } from '@/lib/calculations';
 import { toast } from 'sonner';
 import { friendlyError } from '@/lib/supabaseErrors';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid } from 'recharts';
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+  CartesianGrid,
+  Cell,
+  ReferenceLine,
+} from 'recharts';
 import { useMonthlyOpex, opexVarianceTone, saveOpexBudget, type MonthlyOpex } from '@/hooks/useOpexBudget';
 import { StatCard } from '@/components/dashboard/StatCard';
-import { Calculator, Banknote, Scale, TrendingUp, Sun, Pencil, Check, X, Loader2 } from 'lucide-react';
+import {
+  Calculator,
+  Banknote,
+  Scale,
+  TrendingUp,
+  Sun,
+  Pencil,
+  Check,
+  X,
+  Loader2,
+  BarChart3,
+  GitCommit,
+  Layers,
+} from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 type Metric = 'total' | 'power' | 'chem';
+type ChartView = 'waterfall' | 'comparison';
 
 const toneTextClass = (tone: ReturnType<typeof opexVarianceTone>) =>
   tone === 'danger' ? 'text-danger' : tone === 'warn' ? 'text-warn-foreground' : tone === 'accent' ? 'text-accent' : '';
@@ -33,6 +59,7 @@ export function BudgetTab() {
   const [plantId, setPlantId] = useState(selectedPlantId ?? '');
   const [year, setYear] = useState(new Date().getFullYear());
   const [metric, setMetric] = useState<Metric>('total');
+  const [chartView, setChartView] = useState<ChartView>('waterfall');
   const [editMonth, setEditMonth] = useState<string | null>(null);
   const [editV, setEditV] = useState({ power: '', chem: '' });
   const [saving, setSaving] = useState(false);
@@ -42,11 +69,17 @@ export function BudgetTab() {
 
   const totals = (rows ?? []).reduce(
     (acc, r) => {
-      acc.budget += r.totalBudget; acc.actual += r.totalActual; acc.solar += r.solarOffset;
+      acc.budget += r.totalBudget;
+      acc.actual += r.totalActual;
+      acc.powerBudget += r.powerBudget;
+      acc.powerActual += r.powerActual;
+      acc.chemBudget += r.chemBudget;
+      acc.chemActual += r.chemActual;
+      acc.solar += r.solarOffset;
       if (r.budgetId) acc.hasBudget = true;
       return acc;
     },
-    { budget: 0, actual: 0, solar: 0, hasBudget: false },
+    { budget: 0, actual: 0, powerBudget: 0, powerActual: 0, chemBudget: 0, chemActual: 0, solar: 0, hasBudget: false },
   );
   const totalVariancePct = totals.hasBudget && totals.budget > 0 ? ((totals.actual - totals.budget) / totals.budget) * 100 : null;
   const totalTone = opexVarianceTone(totalVariancePct);
@@ -70,11 +103,120 @@ export function BudgetTab() {
     qc.invalidateQueries({ queryKey: ['opex-monthly', plantId, year] });
   };
 
-  const chartData = (rows ?? []).map((r) => ({
+  // ── Monthly comparison data ──────────────────────────────────────────────────
+  const comparisonData = (rows ?? []).map((r) => ({
     month: r.label.split(' ')[0],
     budget: metric === 'power' ? r.powerBudget : metric === 'chem' ? r.chemBudget : r.totalBudget,
     actual: metric === 'power' ? r.powerActual : metric === 'chem' ? r.chemActual : r.totalActual,
   }));
+
+  // ── Waterfall YTD data ───────────────────────────────────────────────────────
+  const waterfallData = useMemo(() => {
+    if (!rows || rows.length === 0) return [];
+
+    // Filter to active months with budget or actual activity
+    const activeMonths = rows.filter((r) => {
+      const b = metric === 'power' ? r.powerBudget : metric === 'chem' ? r.chemBudget : r.totalBudget;
+      const a = metric === 'power' ? r.powerActual : metric === 'chem' ? r.chemActual : r.totalActual;
+      return b > 0 || a > 0;
+    });
+
+    const totalB = activeMonths.reduce((sum, r) => sum + (metric === 'power' ? r.powerBudget : metric === 'chem' ? r.chemBudget : r.totalBudget), 0);
+    const totalA = activeMonths.reduce((sum, r) => sum + (metric === 'power' ? r.powerActual : metric === 'chem' ? r.chemActual : r.totalActual), 0);
+
+    const items: Array<{
+      name: string;
+      base: number;
+      delta: number;
+      rawDelta: number;
+      runningTotal: number;
+      budget: number;
+      actual: number;
+      type: 'start' | 'increase' | 'decrease' | 'neutral' | 'end';
+      fill: string;
+    }> = [];
+
+    // 1. Initial Start Pillar: Budget YTD
+    items.push({
+      name: 'Budget YTD',
+      base: 0,
+      delta: totalB,
+      rawDelta: totalB,
+      runningTotal: totalB,
+      budget: totalB,
+      actual: 0,
+      type: 'start',
+      fill: 'hsl(var(--muted-foreground))',
+    });
+
+    let currentRunning = totalB;
+
+    // 2. Intermediate Monthly Variance Steps
+    for (const r of activeMonths) {
+      const monthName = r.label.split(' ')[0];
+      const b = metric === 'power' ? r.powerBudget : metric === 'chem' ? r.chemBudget : r.totalBudget;
+      const a = metric === 'power' ? r.powerActual : metric === 'chem' ? r.chemActual : r.totalActual;
+      const variance = a - b;
+
+      if (variance > 0) {
+        // Over Budget (Expense Increase)
+        items.push({
+          name: monthName,
+          base: currentRunning,
+          delta: variance,
+          rawDelta: variance,
+          runningTotal: currentRunning + variance,
+          budget: b,
+          actual: a,
+          type: 'increase',
+          fill: 'hsl(var(--danger))',
+        });
+        currentRunning += variance;
+      } else if (variance < 0) {
+        // Under Budget (Favorable Savings)
+        const absVar = Math.abs(variance);
+        items.push({
+          name: monthName,
+          base: Math.max(0, currentRunning - absVar),
+          delta: absVar,
+          rawDelta: variance,
+          runningTotal: currentRunning - absVar,
+          budget: b,
+          actual: a,
+          type: 'decrease',
+          fill: 'hsl(var(--accent))',
+        });
+        currentRunning -= absVar;
+      } else {
+        items.push({
+          name: monthName,
+          base: currentRunning,
+          delta: 0,
+          rawDelta: 0,
+          runningTotal: currentRunning,
+          budget: b,
+          actual: a,
+          type: 'neutral',
+          fill: 'hsl(var(--muted-foreground))',
+        });
+      }
+    }
+
+    // 3. Final Ending Pillar: Actual YTD
+    items.push({
+      name: 'Actual YTD',
+      base: 0,
+      delta: totalA,
+      rawDelta: totalA,
+      runningTotal: totalA,
+      budget: totalB,
+      actual: totalA,
+      type: 'end',
+      fill: 'hsl(var(--primary))',
+    });
+
+    return items;
+  }, [rows, metric]);
 
   return (
     <div className="space-y-3">
@@ -249,53 +391,248 @@ export function BudgetTab() {
             )}
           </Card>
 
-          {/* ── Visual Comparison Chart ── */}
+          {/* ── Visual Comparison & Waterfall Variance Chart ── */}
           <Card className="p-4 space-y-3 border-border/60 shadow-2xs">
-            <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <h4 className="text-sm font-semibold text-foreground">Budget vs Actual Variance Chart</h4>
-                <p className="text-2xs text-muted-foreground">Monthly expense comparisons</p>
+                <h4 className="text-sm font-semibold text-foreground">
+                  {chartView === 'waterfall' ? 'Budget vs Actual Variance Waterfall (YTD)' : 'Budget vs Actual Variance Chart'}
+                </h4>
+                <p className="text-2xs text-muted-foreground">
+                  {chartView === 'waterfall'
+                    ? 'Step-by-step bridge from Budget baseline to Actual spending via monthly variances'
+                    : 'Monthly side-by-side expense comparisons'}
+                </p>
               </div>
-              <div className="flex items-center gap-1 bg-muted/40 p-0.5 rounded-lg border border-border/40">
-                {(['total', 'power', 'chem'] as Metric[]).map((m) => (
+
+              <div className="flex flex-wrap items-center gap-2">
+                {/* View Switcher: Waterfall (Default) vs Monthly Bars */}
+                <div className="flex items-center gap-1 bg-muted/60 p-0.5 rounded-lg border border-border/60">
                   <button
-                    key={m}
-                    className={`px-2.5 py-1 text-2xs font-medium rounded-md transition-all ${
-                      metric === m ? 'bg-background text-foreground shadow-xs font-semibold' : 'text-muted-foreground hover:text-foreground'
+                    className={`flex items-center gap-1.5 px-2.5 py-1 text-2xs font-medium rounded-md transition-all ${
+                      chartView === 'waterfall'
+                        ? 'bg-background text-primary shadow-xs font-bold border border-border/60'
+                        : 'text-muted-foreground hover:text-foreground'
                     }`}
-                    onClick={() => setMetric(m)}
+                    onClick={() => setChartView('waterfall')}
+                    title="View Waterfall variance bridge"
                   >
-                    {m === 'total' ? 'Total' : m === 'power' ? 'Power' : 'Chemicals'}
+                    <GitCommit className="h-3 w-3" />
+                    Waterfall (YTD)
                   </button>
-                ))}
+                  <button
+                    className={`flex items-center gap-1.5 px-2.5 py-1 text-2xs font-medium rounded-md transition-all ${
+                      chartView === 'comparison'
+                        ? 'bg-background text-primary shadow-xs font-bold border border-border/60'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                    onClick={() => setChartView('comparison')}
+                    title="View side-by-side monthly comparison"
+                  >
+                    <BarChart3 className="h-3 w-3" />
+                    Monthly Bars
+                  </button>
+                </div>
+
+                {/* Metric Selector: Total, Power, Chemicals */}
+                <div className="flex items-center gap-1 bg-muted/40 p-0.5 rounded-lg border border-border/40">
+                  {(['total', 'power', 'chem'] as Metric[]).map((m) => (
+                    <button
+                      key={m}
+                      className={`px-2.5 py-1 text-2xs font-medium rounded-md transition-all ${
+                        metric === m ? 'bg-background text-foreground shadow-xs font-semibold' : 'text-muted-foreground hover:text-foreground'
+                      }`}
+                      onClick={() => setMetric(m)}
+                    >
+                      {m === 'total' ? 'Total' : m === 'power' ? 'Power' : 'Chemicals'}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
-            <div className="h-64 pt-2">
+
+            {/* ── Chart Canvas ── */}
+            <div className="h-72 pt-2">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={chartData} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="budgetFill" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="hsl(var(--muted-foreground))" stopOpacity={0.7} />
-                      <stop offset="100%" stopColor="hsl(var(--muted-foreground))" stopOpacity={0.3} />
-                    </linearGradient>
-                    <linearGradient id="actualFill" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.95} />
-                      <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity={0.55} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} opacity={0.4} />
-                  <XAxis dataKey="month" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fontSize: 11 }} tickFormatter={(v: number) => `₱${(v / 1000).toFixed(0)}k`} axisLine={false} tickLine={false} />
-                  <Tooltip contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 10, fontSize: 12, boxShadow: 'var(--shadow-elev)', backdropFilter: 'blur(8px)' }} />
-                  <Legend wrapperStyle={{ fontSize: 12 }} />
-                  <Bar dataKey="budget" fill="url(#budgetFill)" name="Budget (₱)" radius={[4, 4, 0, 0]} maxBarSize={28} />
-                  <Bar dataKey="actual" fill="url(#actualFill)" name="Actual (₱)" radius={[4, 4, 0, 0]} maxBarSize={28} />
-                </BarChart>
+                {chartView === 'waterfall' ? (
+                  <BarChart data={waterfallData} margin={{ top: 12, right: 16, left: 4, bottom: 4 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} opacity={0.4} />
+                    <XAxis
+                      dataKey="name"
+                      tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }}
+                      axisLine={false}
+                      tickLine={false}
+                    />
+                    <YAxis
+                      tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }}
+                      tickFormatter={(v: number) => `₱${(v / 1000).toFixed(0)}k`}
+                      axisLine={false}
+                      tickLine={false}
+                    />
+                    <Tooltip
+                      content={({ active, payload }) => {
+                        if (!active || !payload || !payload.length) return null;
+                        const data = payload[0]?.payload;
+                        if (!data) return null;
+
+                        return (
+                          <div className="p-3 rounded-xl bg-card/95 border border-border shadow-xl backdrop-blur-md text-xs space-y-1.5 min-w-[190px]">
+                            <div className="font-bold text-foreground border-b border-border/60 pb-1 flex items-center justify-between gap-2">
+                              <span>{data.name}</span>
+                              {data.type === 'start' ? (
+                                <span className="text-3xs font-mono uppercase bg-muted px-1.5 py-0.5 rounded text-muted-foreground font-semibold">
+                                  Baseline Plan
+                                </span>
+                              ) : data.type === 'end' ? (
+                                <span className="text-3xs font-mono uppercase bg-primary/10 text-primary px-1.5 py-0.5 rounded font-bold">
+                                  Total YTD Spent
+                                </span>
+                              ) : data.rawDelta > 0 ? (
+                                <span className="text-3xs font-mono uppercase bg-danger-soft text-danger px-1.5 py-0.5 rounded font-bold">
+                                  Over Budget
+                                </span>
+                              ) : data.rawDelta < 0 ? (
+                                <span className="text-3xs font-mono uppercase bg-accent-soft text-accent px-1.5 py-0.5 rounded font-bold">
+                                  Favorable Savings
+                                </span>
+                              ) : (
+                                <span className="text-3xs font-mono uppercase bg-muted px-1.5 py-0.5 rounded text-muted-foreground">
+                                  On Plan
+                                </span>
+                              )}
+                            </div>
+
+                            {data.type === 'start' && (
+                              <div className="space-y-0.5">
+                                <div className="text-muted-foreground">
+                                  Planned Budget YTD: <strong className="text-foreground font-mono-num">₱{fmtNum(data.delta, 0)}</strong>
+                                </div>
+                              </div>
+                            )}
+
+                            {data.type === 'end' && (
+                              <div className="space-y-1">
+                                <div className="text-muted-foreground">
+                                  Actual Spent YTD: <strong className="text-primary font-mono-num font-bold">₱{fmtNum(data.delta, 0)}</strong>
+                                </div>
+                                <div className="text-3xs text-muted-foreground border-t border-border/40 pt-1 flex justify-between">
+                                  <span>Net Variance:</span>
+                                  <span className={cn('font-mono-num font-bold', data.delta > data.budget ? 'text-danger' : 'text-accent')}>
+                                    {data.delta >= data.budget ? '+' : ''}₱{fmtNum(data.delta - data.budget, 0)} (
+                                    {(((data.delta - data.budget) / (data.budget || 1)) * 100).toFixed(1)}%)
+                                  </span>
+                                </div>
+                              </div>
+                            )}
+
+                            {data.type !== 'start' && data.type !== 'end' && (
+                              <div className="space-y-1">
+                                <div className="flex justify-between text-muted-foreground">
+                                  <span>Monthly Budget:</span>
+                                  <span className="font-mono-num">₱{fmtNum(data.budget, 0)}</span>
+                                </div>
+                                <div className="flex justify-between text-muted-foreground">
+                                  <span>Monthly Actual:</span>
+                                  <span className="font-mono-num font-semibold text-foreground">₱{fmtNum(data.actual, 0)}</span>
+                                </div>
+                                <div className="flex justify-between border-t border-border/40 pt-1">
+                                  <span className="font-medium">Variance:</span>
+                                  <span
+                                    className={cn(
+                                      'font-mono-num font-bold',
+                                      data.rawDelta > 0 ? 'text-danger' : data.rawDelta < 0 ? 'text-accent' : 'text-muted-foreground'
+                                    )}
+                                  >
+                                    {data.rawDelta > 0 ? '+' : ''}₱{fmtNum(data.rawDelta, 0)}
+                                  </span>
+                                </div>
+                                <div className="flex justify-between text-3xs text-muted-foreground pt-0.5">
+                                  <span>Bridge Level:</span>
+                                  <span className="font-mono-num font-medium text-foreground">₱{fmtNum(data.runningTotal, 0)}</span>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      }}
+                    />
+                    {/* Transparent Base Bar for stacking */}
+                    <Bar dataKey="base" stackId="waterfall" fill="transparent" isAnimationActive={false} />
+                    {/* Floating Delta Bar */}
+                    <Bar
+                      dataKey="delta"
+                      stackId="waterfall"
+                      radius={[4, 4, 4, 4]}
+                      maxBarSize={32}
+                    >
+                      {waterfallData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.fill} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                ) : (
+                  <BarChart data={comparisonData} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="budgetFill" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="hsl(var(--muted-foreground))" stopOpacity={0.7} />
+                        <stop offset="100%" stopColor="hsl(var(--muted-foreground))" stopOpacity={0.3} />
+                      </linearGradient>
+                      <linearGradient id="actualFill" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.95} />
+                        <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity={0.55} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} opacity={0.4} />
+                    <XAxis dataKey="month" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
+                    <YAxis
+                      tick={{ fontSize: 11 }}
+                      tickFormatter={(v: number) => `₱${(v / 1000).toFixed(0)}k`}
+                      axisLine={false}
+                      tickLine={false}
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        background: 'hsl(var(--card))',
+                        border: '1px solid hsl(var(--border))',
+                        borderRadius: 10,
+                        fontSize: 12,
+                        boxShadow: 'var(--shadow-elev)',
+                        backdropFilter: 'blur(8px)',
+                      }}
+                    />
+                    <Legend wrapperStyle={{ fontSize: 12 }} />
+                    <Bar dataKey="budget" fill="url(#budgetFill)" name="Budget (₱)" radius={[4, 4, 0, 0]} maxBarSize={28} />
+                    <Bar dataKey="actual" fill="url(#actualFill)" name="Actual (₱)" radius={[4, 4, 0, 0]} maxBarSize={28} />
+                  </BarChart>
+                )}
               </ResponsiveContainer>
             </div>
+
+            {/* ── Waterfall Legend / Key (Visible in Waterfall View) ── */}
+            {chartView === 'waterfall' && (
+              <div className="flex flex-wrap items-center justify-center gap-4 pt-2 border-t border-border/40 text-2xs text-muted-foreground font-mono">
+                <div className="flex items-center gap-1.5">
+                  <div className="w-3 h-3 rounded-xs bg-muted-foreground opacity-80" />
+                  <span>Budget Baseline (YTD)</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <div className="w-3 h-3 rounded-xs bg-danger" />
+                  <span>Over Budget (+Cost)</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <div className="w-3 h-3 rounded-xs bg-accent" />
+                  <span>Under Budget (Savings)</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <div className="w-3 h-3 rounded-xs bg-primary" />
+                  <span>Actual Spent (YTD)</span>
+                </div>
+              </div>
+            )}
           </Card>
         </>
       )}
     </div>
   );
 }
+
