@@ -631,27 +631,29 @@ export default function PlantTopology() {
     <div className="flex flex-col h-full bg-background text-foreground overflow-hidden animate-fade-in" data-testid="network-topology-page">
 
       {/* ── SCADA Header ── */}
-      <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-border bg-card shrink-0">
-        <div className="flex items-center gap-4 min-w-0">
+      <div className="flex items-center justify-between gap-4 px-5 py-2.5 border-b border-border bg-card shrink-0">
+        <div className="flex items-center gap-3.5 min-w-0">
           <div className="shrink-0 space-y-0.5">
-            <h1 className="text-lg font-semibold tracking-tight text-foreground leading-tight">Network Topology</h1>
-            <p className="text-2xs text-muted-foreground hidden sm:block">
-              Process flow wiring diagram showing raw well water extraction, treatment trains, product meters, and power distribution
+            <h1 className="text-base font-bold tracking-tight text-foreground leading-tight">Network Topology</h1>
+            <p className="text-2xs text-muted-foreground hidden xl:block">
+              P&amp;ID process flow &amp; power distribution
             </p>
           </div>
 
-          {/* Plant selector pills */}
-          <div className="flex gap-1.5 flex-wrap">
+          <div className="h-5 w-px bg-border/80 hidden sm:block shrink-0" />
+
+          {/* Plant selector segmented bar (guaranteed single row) */}
+          <div className="flex items-center gap-1 p-1 rounded-lg bg-muted/60 border border-border shrink-0 flex-nowrap overflow-x-auto">
             {plants.map((p) => {
               const isActive = effectivePlantId === p.id;
               return (
                 <button
                   key={p.id}
                   onClick={() => { setActivePlantId(p.id); setPendingFrom(null); setEditMode(null); }}
-                  className={`px-3 py-1 rounded-full text-xs font-semibold transition-all border ${
+                  className={`px-3 py-1 rounded-md text-xs font-semibold whitespace-nowrap transition-all ${
                     isActive
-                      ? 'bg-primary text-primary-foreground border-primary shadow-sm'
-                      : 'border-border text-muted-foreground bg-background hover:border-primary/50 hover:text-foreground'
+                      ? 'bg-primary text-primary-foreground shadow-xs font-bold'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
                   }`}
                 >
                   {p.name}
@@ -662,7 +664,7 @@ export default function PlantTopology() {
         </div>
 
         <div className="flex items-center gap-3 shrink-0">
-          <div className="hidden sm:flex items-center gap-2 text-2xs font-mono text-muted-foreground">
+          <div className="hidden lg:flex items-center gap-2 text-2xs font-mono text-muted-foreground">
             <span className="flex items-center gap-1 bg-muted px-2 py-0.5 rounded border border-border">
               <Droplet className="h-3 w-3 text-primary" />
               <span>{waterNodesCount} Nodes</span>
