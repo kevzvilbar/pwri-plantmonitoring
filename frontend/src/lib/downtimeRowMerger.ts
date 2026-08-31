@@ -33,7 +33,9 @@ export type LogDisplayItem<T = any> =
  * Determines whether a given reading row represents an offline/empty check-in.
  * A row is considered offline/empty if:
  * 1. `incomplete_reason` starts with 'offline' or contains offline keywords, OR
- * 2. All active production flows (feed_flow, permeate_flow, reject_flow) are null/0
+ * 2. For Pre-Treatment rows: HPP, AFM/MMF backwash/pressures, Boosters, and Filter Housings
+ *    are all unrecorded/empty.
+ * 3. For RO rows: All active production flows (feed_flow, permeate_flow, reject_flow) are null/0
  *    AND major operational sensors (pressures, TDS) are null/unrecorded.
  */
 export function isOfflineReadingRow(row: any): boolean {
@@ -42,6 +44,77 @@ export function isOfflineReadingRow(row: any): boolean {
   const reason = (row.incomplete_reason ?? '').trim().toLowerCase();
   if (reason.startsWith('offline')) return true;
 
+  // Check whether this is a Pre-treatment row (has pretreatment-specific properties)
+  const isPretreatRow =
+    'hpp_target_pressure_psi' in row ||
+    'afm_units' in row ||
+    'booster_pumps' in row ||
+    'filter_housings' in row ||
+    'cartridge_filter_housings' in row ||
+    'bag_filters_changed' in row ||
+    'mmf_readings' in row;
+
+  if (isPretreatRow) {
+    const hasHpp = row.hpp_target_pressure_psi != null && row.hpp_target_pressure_psi !== '';
+    const hasBagFilters = row.bag_filters_changed != null && row.bag_filters_changed !== '';
+
+    let hasAfmData = false;
+    if (Array.isArray(row.afm_units)) {
+      hasAfmData = row.afm_units.some((u: any) =>
+        (u?.pressureIn != null && u?.pressureIn !== '') ||
+        (u?.pressureOut != null && u?.pressureOut !== '') ||
+        (u?.in_psi != null && u?.in_psi !== '') ||
+        (u?.out_psi != null && u?.out_psi !== '') ||
+        (u?.dp_psi != null && u?.dp_psi !== '') ||
+        u?.bw === true ||
+        u?.backwash_on === true ||
+        (u?.meterStart != null && u?.meterStart !== '') ||
+        (u?.meterEnd != null && u?.meterEnd !== '')
+      );
+    }
+
+    let hasBoosterData = false;
+    if (row.booster_pumps && typeof row.booster_pumps === 'object') {
+      const boosterValues = Array.isArray(row.booster_pumps) ? row.booster_pumps : Object.values(row.booster_pumps);
+      hasBoosterData = boosterValues.some((b: any) =>
+        (b?.hz != null && b?.hz !== '' && b?.hz !== 0) ||
+        (b?.amp != null && b?.amp !== '' && b?.amp !== 0) ||
+        (b?.target != null && b?.target !== '' && b?.target !== 0) ||
+        (b?.amperage != null && b?.amperage !== '' && b?.amperage !== 0) ||
+        (b?.target_hz != null && b?.target_hz !== '' && b?.target_hz !== 0) ||
+        (b?.target_pressure_psi != null && b?.target_pressure_psi !== '' && b?.target_pressure_psi !== 0)
+      );
+    }
+
+    let hasHousingData = false;
+    const housings = row.cartridge_filter_housings || row.filter_housings;
+    if (housings && typeof housings === 'object') {
+      const housingValues = Array.isArray(housings) ? housings : Object.values(housings);
+      hasHousingData = housingValues.some((h: any) =>
+        (h?.inP != null && h?.inP !== '') ||
+        (h?.outP != null && h?.outP !== '') ||
+        (h?.in_psi != null && h?.in_psi !== '') ||
+        (h?.out_psi != null && h?.out_psi !== '') ||
+        (h?.deltaP != null && h?.deltaP !== '') ||
+        (h?.dp_psi != null && h?.dp_psi !== '')
+      );
+    }
+
+    let hasMmfData = false;
+    if (Array.isArray(row.mmf_readings) && row.mmf_readings.length > 0) {
+      hasMmfData = row.mmf_readings.some((m: any) =>
+        m?.meter_start != null || m?.meter_end != null || m?.delta != null
+      );
+    }
+
+    if (hasHpp || hasBagFilters || hasAfmData || hasBoosterData || hasHousingData || hasMmfData) {
+      return false;
+    }
+
+    return true;
+  }
+
+  // RO train readings:
   // Check if all production flows are missing/zero
   const hasNoFlow =
     (row.feed_flow == null || row.feed_flow === 0) &&
