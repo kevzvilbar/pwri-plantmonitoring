@@ -567,10 +567,12 @@ function ProductMeterRow({
 
   const previous = latest?.current_reading ?? null;
   const cur = +reading || 0;
-  const productionVolume = previous != null && reading ? cur - previous : null;
-  // Required whenever the flow rate falls outside ±50% of the 10-day average
+  const readingChanged = reading !== '' && (previous == null || cur !== previous);
+  const productionVolume = previous != null && readingChanged ? cur - previous : null;
+  // Required whenever the flow rate falls outside ±75% of the 10-day average
   // (see flowRateGuards.ts) — cleared after every successful save.
   const [anomalyRemark, setAnomalyRemark] = useState('');
+  const [showAnomalyBanner, setShowAnomalyBanner] = useState(false);
   // Q = V / t: avgVol (from ProductSection's avgByMeter, now a true rolling-
   // average rate, not a naive average of raw daily_volume — see
   // computeRollingAverageRateFromDeltas in flowRateGuards.ts) is m³/hr, so
@@ -601,8 +603,18 @@ function ProductMeterRow({
     // guard PretreatmentAndROLog.tsx's submit() uses.
     if (saving) return;
     if (!reading) { toast.error(`${meter.name}: enter a reading`); return; }
+
+    // Redundancy Guard (12 hours): identical odometer reading within 12h cannot be saved
+    if (previous != null && cur === previous && !meterReplacePending) {
+      if (hoursElapsedProduct != null && hoursElapsedProduct < 12) {
+        toast.error(`${meter.name}: this odometer reading (${fmtNum(cur, 1)}) was already recorded within the last 12 hours.`);
+        return;
+      }
+    }
+
     if (anomalyRemarkRequired) {
-      toast.error(`${meter.name}: this reading is outside the normal range — add a remark before saving.`);
+      setShowAnomalyBanner(true);
+      toast.error(`${meter.name}: this reading is outside the normal range (±75%) — add a remark before saving.`);
       return;
     }
     setSaving(true);
@@ -848,8 +860,13 @@ function ProductMeterRow({
           />
           <div className="flex items-center gap-2">
             <Button
-              onClick={save} disabled={saving || !reading || anomalyRemarkRequired}
-              className="flex-1 h-11 rounded-full text-sm font-semibold bg-primary hover:bg-primary/90 active:scale-[0.98] text-primary-foreground shadow-sm transition-all"
+              onClick={save} disabled={saving || !readingChanged || (showAnomalyBanner && anomalyRemarkRequired)}
+              className={cn(
+                'flex-1 h-11 rounded-full text-sm font-semibold shadow-sm transition-all',
+                readingChanged
+                  ? 'bg-primary hover:bg-primary/90 active:scale-[0.98] text-primary-foreground'
+                  : 'bg-muted text-muted-foreground/60 border border-border/40 hover:bg-muted cursor-not-allowed',
+              )}
               data-testid={`product-meter-save-${meter.id}`}
             >
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Save reading'}
@@ -874,7 +891,7 @@ function ProductMeterRow({
             <Input
               type="number" step="any" inputMode="decimal"
               value={reading}
-              onChange={(e) => setReading(e.target.value)}
+              onChange={(e) => { setReading(e.target.value); setShowAnomalyBanner(false); }}
               placeholder="Product Reading"
               className="h-11 pl-9 w-full rounded-xl border-primary/30 focus-visible:ring-primary bg-primary-soft/30 font-mono-num font-medium"
               data-testid={`product-meter-input-${meter.id}`}
@@ -882,8 +899,13 @@ function ProductMeterRow({
           </div>
           <Button
             onClick={save}
-            disabled={saving || !reading || anomalyRemarkRequired}
-            className="h-11 px-6 rounded-full text-sm font-semibold shrink-0 bg-primary hover:bg-primary/90 active:scale-[0.98] text-primary-foreground shadow-sm transition-all"
+            disabled={saving || !readingChanged || (showAnomalyBanner && anomalyRemarkRequired)}
+            className={cn(
+              'h-11 px-6 rounded-full text-sm font-semibold shrink-0 shadow-sm transition-all',
+              readingChanged
+                ? 'bg-primary hover:bg-primary/90 active:scale-[0.98] text-primary-foreground'
+                : 'bg-muted text-muted-foreground/60 border border-border/40 hover:bg-muted cursor-not-allowed',
+            )}
             data-testid={`product-meter-save-${meter.id}`}
           >
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Save reading'}
@@ -930,7 +952,7 @@ function ProductMeterRow({
         </div>
       )}
 
-      {productionVolume != null && productionVolume >= 0 && highVol && (
+      {productionVolume != null && productionVolume >= 0 && highVol && (showAnomalyBanner || anomalyRemark.trim().length > 0) && (
         <AnomalyRemarkBanner
           result={deviationProduct}
           label={meter.name}

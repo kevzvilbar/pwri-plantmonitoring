@@ -581,9 +581,10 @@ function WellRow({
   const [savingNtu, setSavingNtu]               = useState(false);
   const [savingPressure, setSavingPressure]     = useState(false);
   const [savingPower, setSavingPower]           = useState(false);
-  // Required whenever the flow rate falls outside ±50% of the 10-day average
+  // Required whenever the flow rate falls outside ±75% of the 10-day average
   // (see flowRateGuards.ts) — cleared after every successful save.
   const [anomalyRemark, setAnomalyRemark] = useState('');
+  const [showAnomalyBanner, setShowAnomalyBanner] = useState(false);
   const [sharedPowerReading, setSharedPowerReading] = useState('');
   const [savingSharedPower, setSavingSharedPower]   = useState(false);
   const [showHistory, setShowHistory]           = useState(false);
@@ -591,27 +592,9 @@ function WellRow({
   const dtInputRef = useRef<HTMLInputElement>(null);
   const [gapDialogOpen, setGapDialogOpen]       = useState(false);
   const [gapSaving, setGapSaving]               = useState(false);
-  // D4 fix: lets the operator mark a backward reading as a genuine meter
-  // rollover (odometer wrapped, e.g. 99999 -> 00012) instead of it either
-  // being silently sent for pending_review as a suspected data-entry error,
-  // or a raw negative-clamped-to-zero delta polluting daily_volume.
-  // Gap-2 fix: previously always hardcoded '99999' regardless of this well's
-  // actual register size (e.g. Well 9 is a 6-digit meter that wraps at
-  // 999999.99, not 99999.99), which the operator had to know to overtype by
-  // hand under pressure during a live reading. Now reads
-  // wells.meter_rollover_max (see 20260806143000_wells_meter_rollover_max_config.sql)
-  // when the well has been configured, falling back to the old literal only
-  // when it hasn't.
   const defaultRolloverMax = well.meter_rollover_max != null ? String(well.meter_rollover_max) : '99999';
   const [isRollover, setIsRollover]             = useState(false);
   const [rolloverMax, setRolloverMax]           = useState(defaultRolloverMax);
-  // "Meter replaced" — two-way wiring companion to the Reading History dialog's
-  // own Repl. checkbox: that one only lets you flag a replacement AFTER a
-  // reading is already saved (edit-time / one-way). This lets the operator
-  // flag it live, at entry time, opening the same required ReplaceMeterDialog
-  // (old final reading, new initial reading, date changed). On success we
-  // prefill the reading input with the new meter's initial value and remember
-  // the replacement record's id so it can be linked to this reading once saved.
   const [showReplaceMeter, setShowReplaceMeter] = useState(false);
   const [meterReplacePending, setMeterReplacePending] = useState<{ newInitialReading: number | null; replacementId: string | null } | null>(null);
 
@@ -639,22 +622,6 @@ function WellRow({
   const meterChanged = reading !== '' && (previousMeter == null || cur !== previousMeter);
   const dailyVol   = meterChanged && previousMeter != null ? cur - previousMeter : null;
   const belowPrev  = previousMeter != null && cur > 0 && cur < previousMeter;
-  // Q = V / t: compare current flow rate against 10-day average flow rate (m³/hr).
-  // Same shared classifier as LocatorSection, same SPIKE_MULTIPLIER — see
-  // flowRateGuards.ts / readingGuards.ts.
-  //
-  // FINDING (2026-08-07, found while wiring this): the comment on the save()
-  // payload below claims "previous_reading: owned by DB trigger
-  // fn_well_reading_integrity()" but no such trigger exists anywhere in
-  // supabase/migrations — unlike locator_readings (fn_locator_reading_integrity,
-  // confirmed present), well_readings has NO insert-time trigger at all. That
-  // means norm_status='pending_review' for a well spike is never actually
-  // persisted server-side; evaluateReadingGuard()'s 'pending_review' result
-  // only ever produces a toast, and the DB always keeps whatever default
-  // norm_status the row was inserted with. Left as-is here — this is a
-  // pre-existing server-side gap, not something to silently patch as a side
-  // effect of a client-side flow-rate fix — but worth a second look
-  // independent of this change.
   const hoursElapsedWell = previousDt && reading
     ? (new Date(customDt).getTime() - new Date(previousDt).getTime()) / 3_600_000
     : null;
@@ -668,13 +635,11 @@ function WellRow({
   const showDedicatedPower = well.has_power_meter && !isInSharedPowerGroup;
 
   // ── Alert state for water-meter odometer drum (mobile) ───────────────────
-  // An acknowledged rollover (isRollover checked) is an expected, not
-  // anomalous, backward reading — don't leave the ring showing warn once
-  // the operator has flagged it as such.
-  const wellOdometerAlert: OdometerAlertState =
+  const odometerAlert: OdometerAlertState =
     !meterChanged ? 'neutral' :
-    belowPrev && !isRollover ? 'warn' :
+    belowPrev     ? 'warn'    :
     highVol       ? 'warn'    :
+    (+reading < 0) ? 'error'  :
     'ok';
 
   // ── Main water (+ optional dedicated power) save ──
@@ -686,8 +651,18 @@ function WellRow({
     if (saving) return;
     if (!reading) { toast.error(`${well.name}: enter a meter reading`); return; }
     if (atLimit) { toast.error(`${well.name}: max ${WELL_MAX_READINGS_PER_DAY} readings/day reached`); return; }
+
+    // Redundancy Guard (12 hours): identical odometer reading within 12h cannot be saved
+    if (!editingId && previousMeter != null && cur === previousMeter && !meterReplacePending) {
+      if (hoursElapsedWell != null && hoursElapsedWell < 12) {
+        toast.error(`${well.name}: this odometer reading (${fmtNum(cur, 1)}) was already recorded within the last 12 hours.`);
+        return;
+      }
+    }
+
     if (anomalyRemarkRequired) {
-      toast.error(`${well.name}: this reading is outside the normal range — add a remark before saving.`);
+      setShowAnomalyBanner(true);
+      toast.error(`${well.name}: this reading is outside the normal range (±75%) — add a remark before saving.`);
       return;
     }
 
@@ -1111,7 +1086,7 @@ function WellRow({
               <OdometerRollerInput
                 value={reading}
                 onChange={(v) => { setReading(v); setDraftWell({ value: v }); }}
-                alertState={wellOdometerAlert}
+                alertState={odometerAlert}
                 disabled={saving || atLimit}
                 testId={`well-meter-input-${well.id}`}
               />
@@ -1129,8 +1104,13 @@ function WellRow({
                 )}
               </div>
               <Button
-                onClick={save} disabled={saving || !meterChanged || atLimit || anomalyRemarkRequired}
-                className="w-full h-11 text-sm font-bold bg-primary hover:bg-primary/90 active:bg-primary text-primary-foreground shadow-sm rounded-xl"
+                onClick={save} disabled={saving || !meterChanged || atLimit || (showAnomalyBanner && anomalyRemarkRequired)}
+                className={cn(
+                  'w-full h-11 text-sm font-bold shadow-sm rounded-xl transition-all',
+                  meterChanged
+                    ? 'bg-primary hover:bg-primary/90 active:bg-primary text-primary-foreground'
+                    : 'bg-muted text-muted-foreground/60 border border-border/40 hover:bg-muted cursor-not-allowed',
+                )}
                 title="Save water meter reading">
                 {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : editingId ? 'Update Meter' : 'Save Water Meter'}
               </Button>
@@ -1140,15 +1120,20 @@ function WellRow({
               <p className="text-2xs font-bold text-muted-foreground w-24 shrink-0">Water Meter</p>
               <Input
                 type="number" step="any" inputMode="decimal"
-                value={reading} onChange={e => setReading(e.target.value)}
+                value={reading} onChange={e => { setReading(e.target.value); setShowAnomalyBanner(false); }}
                 placeholder={previousMeter != null ? `Prev: ${fmtNum(previousMeter)}` : 'Enter reading'}
                 className="h-8 flex-1 min-w-0 text-xs border-border/70 bg-background focus-visible:ring-ring/30 font-mono-num placeholder:text-muted-foreground/50"
                 data-testid={`well-meter-input-${well.id}`}
               />
               <Button
-                onClick={save} disabled={saving || !meterChanged || atLimit || anomalyRemarkRequired}
+                onClick={save} disabled={saving || !meterChanged || atLimit || (showAnomalyBanner && anomalyRemarkRequired)}
                 size="sm"
-                className="h-8 px-3.5 shrink-0 bg-primary hover:bg-primary/90 active:bg-primary text-primary-foreground text-xs font-semibold shadow-sm"
+                className={cn(
+                  'h-8 px-3.5 shrink-0 text-xs font-semibold shadow-sm transition-all',
+                  meterChanged
+                    ? 'bg-primary hover:bg-primary/90 active:bg-primary text-primary-foreground'
+                    : 'bg-muted text-muted-foreground/60 border border-border/40 hover:bg-muted cursor-not-allowed',
+                )}
                 title="Save water meter reading">
                 {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : editingId ? 'Update' : 'Save'}
               </Button>
@@ -1327,7 +1312,7 @@ function WellRow({
         </div>
       )}
 
-      {reading && !belowPrev && highVol && (
+      {reading && !belowPrev && highVol && (showAnomalyBanner || anomalyRemark.trim().length > 0) && (
         <AnomalyRemarkBanner
           result={deviationWell}
           label={well.name}

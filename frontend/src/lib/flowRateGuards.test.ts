@@ -126,10 +126,10 @@ describe('computeRollingAverageRateFromDeltas', () => {
 });
 
 describe('classifyDeviation', () => {
-  it('is ok within the ±50% band', () => {
+  it('is ok within the ±75% band', () => {
     expect(classifyDeviation(12, 10, 2.5).tier).toBe('ok'); // +20%
-    expect(classifyDeviation(6, 10, 2.5).tier).toBe('ok');  // -40%
-    expect(classifyDeviation(15, 10, 2.5).tier).toBe('ok'); // exactly +50%, inclusive
+    expect(classifyDeviation(4, 10, 2.5).tier).toBe('ok');  // -60%
+    expect(classifyDeviation(17.5, 10, 2.5).tier).toBe('ok'); // exactly +75%, inclusive
   });
 
   it('requires a remark just outside the band on the high side, below the critical multiplier', () => {

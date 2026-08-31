@@ -816,9 +816,31 @@ function LocatorRow({
     }
   }, [previous, locInputMode, editingId, reading]);
 
+  // Warning prompt only appears when user hits Save on an anomalous reading
+  const [showAnomalyBanner, setShowAnomalyBanner] = useState(false);
+
+  const startEdit = (readingRow: any) => {
+    if (!readingRow) return;
+    setEditingId(readingRow.id);
+    setReading(String(readingRow.current_reading));
+    if (readingRow.reading_datetime) {
+      setCustomDt(new Date(readingRow.reading_datetime).toISOString().slice(0, 16));
+    }
+    setAnomalyRemark(readingRow.anomaly_remark ?? '');
+    setShowAnomalyBanner(false);
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setReading(previous != null ? previous.toFixed(2) : '');
+    setCustomDt(new Date().toISOString().slice(0, 16));
+    setAnomalyRemark('');
+    setShowAnomalyBanner(false);
+  };
+
   const cur      = +reading || 0;
   // A reading that exactly equals previous is the pre-filled baseline, not a new entry.
-  const readingChanged = reading !== '' && (previous == null || cur !== previous);
+  const readingChanged = reading !== '' && (previous == null || cur !== previous || editingId != null);
   const dailyVol = locInputMode === 'direct'
     ? (reading ? +reading : null)                      // entered value IS the delta
     : (readingChanged && previous != null ? cur - previous : null);
@@ -877,8 +899,18 @@ function LocatorRow({
     if (!reading) { toast.error(`${locator.name}: enter a reading`); return; }
     if (atLimit) { toast.error(`${locator.name}: max ${maxReadingsPerDay} readings/day reached`); return; }
     if (locInputMode === 'direct' && +reading <= 0) { toast.error(`${locator.name}: enter a positive volume`); return; }
+
+    // Redundancy Guard (12 hours): identical odometer reading within 12h cannot be saved
+    if (!editingId && locInputMode === 'raw' && previous != null && cur === previous && !meterReplacePending) {
+      if (hoursElapsedLoc != null && hoursElapsedLoc < 12) {
+        toast.error(`${locator.name}: this odometer reading (${fmtNum(cur, 1)}) was already recorded within the last 12 hours.`);
+        return;
+      }
+    }
+
     if (anomalyRemarkRequired) {
-      toast.error(`${locator.name}: this reading is outside the normal range — add a remark before saving.`);
+      setShowAnomalyBanner(true);
+      toast.error(`${locator.name}: this reading is outside the normal range (±75%) — add a remark before saving.`);
       return;
     }
 
@@ -1473,16 +1505,41 @@ function LocatorRow({
 
           {/* Save + action buttons */}
           <div className="flex items-center gap-2">
-            <Button
-              onClick={save} disabled={saving || !readingChanged || atLimit || anomalyRemarkRequired}
-              style={{ '--confirm-glow': 'hsl(var(--kpi-locator, 175 84% 32%) / 0.5)' } as React.CSSProperties}
-              className={cn(
-                'flex-1 h-11 rounded-full text-sm font-semibold bg-kpi-locator hover:bg-kpi-locator/90 active:scale-[0.98] text-white shadow-sm transition-all',
-                justSaved && 'animate-gauge-confirm',
-              )}
-            >
-              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : editingId ? 'Update reading' : 'Save reading'}
-            </Button>
+            {atLimit ? (
+              <Button
+                onClick={() => lastToday && startEdit(lastToday)}
+                variant="outline"
+                className="flex-1 h-11 rounded-full text-sm font-semibold border-primary/40 text-primary hover:bg-primary/10 transition-all"
+                data-testid={`loc-edit-${locator.id}`}
+              >
+                <Pencil className="h-4 w-4 mr-1.5" /> Edit reading
+              </Button>
+            ) : (
+              <Button
+                onClick={save} disabled={saving || !readingChanged || (showAnomalyBanner && anomalyRemarkRequired)}
+                style={{ '--confirm-glow': 'hsl(var(--kpi-locator, 175 84% 32%) / 0.5)' } as React.CSSProperties}
+                className={cn(
+                  'flex-1 h-11 rounded-full text-sm font-semibold shadow-sm transition-all',
+                  readingChanged
+                    ? 'bg-kpi-locator hover:bg-kpi-locator/90 active:scale-[0.98] text-white'
+                    : 'bg-muted text-muted-foreground/60 border border-border/40 hover:bg-muted cursor-not-allowed',
+                  justSaved && 'animate-gauge-confirm',
+                )}
+                data-testid={`loc-save-${locator.id}`}
+              >
+                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : editingId ? 'Update reading' : 'Save reading'}
+              </Button>
+            )}
+            {editingId && (
+              <Button
+                onClick={cancelEdit}
+                variant="ghost"
+                size="sm"
+                className="h-11 px-3 rounded-full text-xs text-muted-foreground hover:text-foreground"
+              >
+                Cancel
+              </Button>
+            )}
             {ActionButtons}
           </div>
         </div>
@@ -1493,21 +1550,46 @@ function LocatorRow({
             <Droplet className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-kpi-locator pointer-events-none" />
             <Input
               type="number" step="any" inputMode="decimal"
-              value={reading} onChange={(e) => { setReading(e.target.value); setDraftReading({ value: e.target.value }); }}
+              value={reading} onChange={(e) => { setReading(e.target.value); setDraftReading({ value: e.target.value }); setShowAnomalyBanner(false); }}
               placeholder={locInputMode === 'direct' ? 'Daily volume (m³)' : 'Meter reading'}
               className="pl-9 h-11 rounded-xl bg-kpi-locator/5 border-kpi-locator/30 focus-visible:ring-kpi-locator/30 font-mono-num font-medium"
             />
           </div>
-          <Button
-            onClick={save} disabled={saving || !readingChanged || atLimit || anomalyRemarkRequired}
-            style={{ '--confirm-glow': 'hsl(var(--kpi-locator, 175 84% 32%) / 0.5)' } as React.CSSProperties}
-            className={cn(
-              'h-11 px-6 rounded-full text-sm font-semibold shrink-0 bg-kpi-locator hover:bg-kpi-locator/90 active:scale-[0.98] text-white shadow-sm transition-all',
-              justSaved && 'animate-gauge-confirm',
-            )}
-          >
-            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : editingId ? 'Update reading' : 'Save reading'}
-          </Button>
+          {atLimit ? (
+            <Button
+              onClick={() => lastToday && startEdit(lastToday)}
+              variant="outline"
+              className="h-11 px-5 rounded-full text-sm font-semibold shrink-0 border-primary/40 text-primary hover:bg-primary/10 transition-all"
+              data-testid={`loc-edit-${locator.id}`}
+            >
+              <Pencil className="h-4 w-4 mr-1.5" /> Edit reading
+            </Button>
+          ) : (
+            <Button
+              onClick={save} disabled={saving || !readingChanged || (showAnomalyBanner && anomalyRemarkRequired)}
+              style={{ '--confirm-glow': 'hsl(var(--kpi-locator, 175 84% 32%) / 0.5)' } as React.CSSProperties}
+              className={cn(
+                'h-11 px-6 rounded-full text-sm font-semibold shrink-0 shadow-sm transition-all',
+                readingChanged
+                  ? 'bg-kpi-locator hover:bg-kpi-locator/90 active:scale-[0.98] text-white'
+                  : 'bg-muted text-muted-foreground/60 border border-border/40 hover:bg-muted cursor-not-allowed',
+                justSaved && 'animate-gauge-confirm',
+              )}
+              data-testid={`loc-save-${locator.id}`}
+            >
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : editingId ? 'Update reading' : 'Save reading'}
+            </Button>
+          )}
+          {editingId && (
+            <Button
+              onClick={cancelEdit}
+              variant="ghost"
+              size="sm"
+              className="h-11 px-3 rounded-full text-xs text-muted-foreground hover:text-foreground shrink-0"
+            >
+              Cancel
+            </Button>
+          )}
           {ActionButtons}
         </div>
       )}
@@ -1584,7 +1666,7 @@ function LocatorRow({
         </div>
       )}
 
-      {reading && !belowPrev && highVol && !lastSavePending && (
+      {reading && !belowPrev && highVol && !lastSavePending && (showAnomalyBanner || anomalyRemark.trim().length > 0) && (
         <AnomalyRemarkBanner
           result={deviationLoc}
           label={locator.name}

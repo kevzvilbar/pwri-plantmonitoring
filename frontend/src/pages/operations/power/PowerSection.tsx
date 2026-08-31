@@ -738,6 +738,17 @@ export function PowerForm() {
     const val = kind === 'solar' ? (solarMeterReadings[idx] ?? '') : (gridMeterReadings[idx] ?? '');
     if (!val) { toast.error(`Enter a reading for ${kind === 'solar' ? getSolarLabel(idx) : getGridLabel(idx)}`); return; }
 
+    // Redundancy Guard (12 hours): identical odometer reading within 12h cannot be saved
+    if (kind === 'grid' && idx === 0 && prevGrid != null && +val === prevGrid) {
+      const hoursElapsed = prevRow?.reading_datetime
+        ? (new Date(dt).getTime() - new Date(prevRow.reading_datetime).getTime()) / 3_600_000
+        : null;
+      if (hoursElapsed != null && hoursElapsed < 12) {
+        toast.error(`Grid meter: this odometer reading (${fmtNum(+val, 1)}) was already recorded within the last 12 hours.`);
+        return;
+      }
+    }
+
     setSavingMeter(meterKey);
 
     // FIX (multi-meter collision): use a local `rowId` so we can resolve an existing

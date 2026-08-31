@@ -737,9 +737,10 @@ function BlendingRow({
   const blendRate = computeRate(deltaRaw, daysElapsedBlend, MIN_ELAPSED_DAYS);
   const deviationBlend = classifyDeviation(blendRate, avgVol ?? null, ALERTS.blending_spike_multiplier);
   const blendHighVol = deviationBlend.tier !== 'ok';
-  // Required whenever the rate falls outside ±50% of the rolling average
+  // Required whenever the rate falls outside ±75% of the rolling average
   // (see flowRateGuards.ts) — cleared after every successful save.
   const [anomalyRemark, setAnomalyRemark] = useState('');
+  const [showAnomalyBanner, setShowAnomalyBanner] = useState(false);
   const anomalyRemarkRequired = blendHighVol && !isAnomalyRemarkValid(anomalyRemark);
 
   // ── Status chip: "Not logged" → "Ready to save" → "Logged today" ──────────
@@ -761,8 +762,15 @@ function BlendingRow({
   }
 
   const save = async () => {
+    // Redundancy Guard (12 hours): identical odometer reading cannot be saved
+    if (prevCumulative != null && +volume === prevCumulative) {
+      toast.error(`${well.name}: this odometer reading (${fmtNum(+volume, 1)}) is identical to the previous reading. Same reading within 12 hours cannot be saved.`);
+      return;
+    }
+
     if (anomalyRemarkRequired) {
-      toast.error(`${well.name}: this reading is outside the normal range — add a remark before saving.`);
+      setShowAnomalyBanner(true);
+      toast.error(`${well.name}: this reading is outside the normal range (±75%) — add a remark before saving.`);
       return;
     }
     // Client-side preview/guard only — mirrors deltaRaw when a previous
@@ -1032,10 +1040,13 @@ function BlendingRow({
       )}
 
       {/* Save button */}
-      <Button onClick={save} disabled={saving || !volumeChanged || anomalyRemarkRequired || (isBackdated && backdatedContextLoading)}
+      <Button onClick={save} disabled={saving || !volumeChanged || (showAnomalyBanner && anomalyRemarkRequired) || (isBackdated && backdatedContextLoading)}
         style={{ '--confirm-glow': 'hsl(var(--kpi-ro, 271 81% 56%) / 0.5)' } as React.CSSProperties}
         className={cn(
-          'w-full sm:w-auto h-11 px-6 rounded-full text-sm font-semibold bg-kpi-ro hover:bg-kpi-ro/90 active:scale-[0.98] text-white shadow-sm transition-all',
+          'w-full sm:w-auto h-11 px-6 rounded-full text-sm font-semibold shadow-sm transition-all',
+          volumeChanged
+            ? 'bg-kpi-ro hover:bg-kpi-ro/90 active:scale-[0.98] text-white'
+            : 'bg-muted text-muted-foreground/60 border border-border/40 hover:bg-muted cursor-not-allowed',
           justSaved && 'animate-gauge-confirm',
         )}
         data-testid={`blending-save-${well.id}`}
@@ -1056,7 +1067,7 @@ function BlendingRow({
         </div>
       )}
 
-      {volume !== '' && !blendBelowPrev && blendHighVol && (
+      {volume !== '' && !blendBelowPrev && blendHighVol && (showAnomalyBanner || anomalyRemark.trim().length > 0) && (
         <AnomalyRemarkBanner
           result={deviationBlend}
           label={well.name}

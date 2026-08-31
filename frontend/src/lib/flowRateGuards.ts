@@ -53,9 +53,9 @@ export type AnomalyTier = 'ok' | 'needs_remark' | 'critical';
 export type AnomalyDirection = 'high' | 'low' | null;
 export type RateUnit = 'm3/hr' | 'm3/day' | 'kwh/hr';
 
-/** ±50% around the average rate is normal variance. Beyond it, in either
+/** ±75% around the average rate is normal variance. Beyond it, in either
  *  direction, the operator must explain why before saving. */
-export const ANOMALY_REMARK_BAND_PCT = 50;
+export const ANOMALY_REMARK_BAND_PCT = 75;
 
 /** Minimum elapsed time before a rate is trusted at all. Two readings taken
  *  closer together than this produce a rate whose denominator is close to

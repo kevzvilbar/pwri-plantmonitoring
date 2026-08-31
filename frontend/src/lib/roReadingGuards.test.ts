@@ -57,13 +57,10 @@ describe('evaluateROMeterSpike', () => {
     expect(r.rate).toBeCloseTo(409_096.71, 1);
   });
 
-  it('needs_remark for a deviation between the ±50% band and the critical multiplier', () => {
-    // 8 m3/hr vs 4 m3/hr avg = 2x deviation in the classifyDeviation sense
-    // (100% above), under the 2.0x multiplier boundary used by classifyDeviation
-    // (which compares avg*multiplier, i.e. 8 m3/hr is exactly at 2.0x -> critical
-    // territory at 2.0 itself is inclusive per classifyDeviation's own contract;
-    // use 7 m3/hr instead to land cleanly inside needs_remark).
-    const r = evaluateROMeterSpike('permeate', 70, 10, 4); // 7 m3/hr vs 4 -> 75% above, <2.0x
+  it('needs_remark for a deviation between the ±75% band and the critical multiplier', () => {
+    // 7.5 m3/hr vs 4 m3/hr avg = 87.5% deviation above average (outside ±75%),
+    // under the 2.0x multiplier boundary (8.0 m3/hr).
+    const r = evaluateROMeterSpike('permeate', 75, 10, 4); // 7.5 m3/hr vs 4 -> 87.5% above, <2.0x
     expect(r.tier).toBe('needs_remark');
     expect(r.detail).toContain('remark required before saving');
   });
@@ -79,16 +76,12 @@ describe('evaluateROMeterSpike', () => {
   });
 
   it('respects a custom multiplier override instead of the ALERTS default', () => {
-    // avg=4 m3/hr. 7 m3/hr is +75% (outside the ±50% ok-band either way).
-    //   - custom multiplier 1.7x -> threshold 6.8 m3/hr -> 7.0 clears it -> critical
-    //   - ALERTS default 2.0x -> threshold 8.0 m3/hr -> 7.0 stays under it -> needs_remark
-    // (A multiplier below 1.5x can never surface as 'critical' at all, since
-    // the ±50% ok-band is checked first and swallows anything under 1.5x avg
-    // regardless of multiplier — not exercised here, but worth knowing before
-    // tuning ALERTS.ro_meter_spike_multiplier below 1.5 and expecting it to bite.)
-    const strict = evaluateROMeterSpike('feed', 70, 10, 4, 1.7);
+    // avg=4 m3/hr. 7.5 m3/hr is +87.5% (outside the ±75% ok-band).
+    //   - custom multiplier 1.7x -> threshold 6.8 m3/hr -> 7.5 clears it -> critical
+    //   - ALERTS default 2.0x -> threshold 8.0 m3/hr -> 7.5 stays under it -> needs_remark
+    const strict = evaluateROMeterSpike('feed', 75, 10, 4, 1.7);
     expect(strict.tier).toBe('critical');
-    const relaxed = evaluateROMeterSpike('feed', 70, 10, 4, ALERTS.ro_meter_spike_multiplier);
+    const relaxed = evaluateROMeterSpike('feed', 75, 10, 4, ALERTS.ro_meter_spike_multiplier);
     expect(relaxed.tier).toBe('needs_remark');
   });
 
