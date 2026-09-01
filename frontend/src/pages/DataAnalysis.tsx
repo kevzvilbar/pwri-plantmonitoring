@@ -17,6 +17,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { DateRangePicker } from '@/components/ui/date-picker';
 import { toast } from 'sonner';
 import { friendlyError } from '@/lib/supabaseErrors';
+import { cn } from '@/lib/utils';
 import { FlaskConical, Play, ShieldAlert, TrendingUp, Database, AlertCircle, RefreshCw, Clock, Eye } from 'lucide-react';
 import { SOURCE_TABLES, TABLES_WITHOUT_NORM_STATUS, TABLE_LABELS, ENTITY_CONFIG, POWER_SOURCE_OPTIONS, RegressionResult, Plant, EntityOption, ROW_LIMIT } from './dataAnalysis/shared';
 import { detectGaps } from '@/lib/gapDetection';
