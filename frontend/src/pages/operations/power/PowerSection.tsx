@@ -577,7 +577,7 @@ export function PowerForm() {
       // First try with all optional columns
       const { data, error } = await supabase
         .from('power_readings')
-        .select('id,plant_id,reading_datetime,meter_reading_kwh,grid_meter_readings,daily_consumption_kwh,daily_solar_kwh,daily_grid_kwh,solar_meter_reading,is_meter_replacement,recorded_by')
+        .select('id,plant_id,reading_datetime,meter_reading_kwh,grid_meter_readings,daily_consumption_kwh,daily_solar_kwh,daily_grid_kwh,solar_meter_reading,is_meter_replacement,is_estimated,recorded_by')
         .eq('plant_id', plantId)
         .order('reading_datetime', { ascending: false })
         .limit(8);
@@ -585,7 +585,7 @@ export function PowerForm() {
       // Optional columns not yet in DB — retry with base columns only
       const { data: fallback, error: fallbackErr } = await supabase
         .from('power_readings')
-        .select('id,plant_id,reading_datetime,meter_reading_kwh,daily_consumption_kwh,is_meter_replacement,recorded_by')
+        .select('id,plant_id,reading_datetime,meter_reading_kwh,daily_consumption_kwh,is_meter_replacement,is_estimated,recorded_by')
         .eq('plant_id', plantId)
         .order('reading_datetime', { ascending: false })
         .limit(8);
@@ -1103,6 +1103,14 @@ export function PowerForm() {
               <MessageCircleOff className="h-3.5 w-3.5" />
               {gapReasonToday ? 'Reason logged' : 'No reading today?'}
             </Button>
+          )}
+          {prevRow?.is_estimated && (
+            <span
+              className="inline-flex items-center gap-1 text-2xs font-semibold px-2.5 py-1 rounded-full bg-warn-soft text-warn border border-warn/40"
+              title="Latest power reading is system-generated / backfilled — entering a reading overrides it with verified human data."
+            >
+              Estimated
+            </span>
           )}
           {(isAdmin || isManager || isDataAnalyst) && plantId && (
             <Button

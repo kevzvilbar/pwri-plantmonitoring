@@ -984,6 +984,11 @@ function WellRow({
                 onClick: () => setGapDialogOpen(true),
                 testId: `well-gap-reason-btn-${well.id}`,
               },
+              lastToday?.is_estimated && {
+                tone: 'warn',
+                label: 'Estimated',
+                title: 'Auto-backfilled reading — no manual operator entry on file.',
+              },
               editingId && {
                 tone: 'primary',
                 label: 'Editing',

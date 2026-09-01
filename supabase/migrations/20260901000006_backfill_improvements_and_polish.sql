@@ -4,10 +4,10 @@
 -- Purpose:
 --   1. Hardens RLS on `backfill_sweep_log` to authenticated-only read/write.
 --   2. Updates `fn_backfill_missing_readings` with:
---      • Real rate-aware regression flowrate curve for gaps 6-14 days.
+--      • Real rate-aware regression flowrate curve for gaps 6-14 days across
+--        ALL 6 modules (locators, wells, product, blending, power, ro_train).
 --      • Even split for gaps <= 5 days.
 --      • Explicit `is_meter_rollover` check alongside `is_meter_replacement`.
---      • Full coverage of all 6 reading tables including `ro_train_readings`.
 --      • Retraction / cleanup of stale `is_estimated=true` rows when an operator
 --        subsequently logs a `reading_gap_reasons` entry for that date.
 --   3. Explicit schema reload notification (`NOTIFY pgrst, 'reload schema'`).
@@ -102,7 +102,6 @@ BEGIN
            AND NOT COALESCE(r_reading_b.is_meter_rollover, false) THEN
           v_diff := r_reading_b.current_reading - r_reading_a.current_reading;
           IF v_diff >= 0 THEN
-            -- Check historical operating rate for gaps > 5 days
             v_hist_rate := NULL;
             IF v_gap_days > 5 THEN
               SELECT (r_reading_a.current_reading - MIN(current_reading)) / NULLIF(r_reading_a.r_date - MIN(reading_datetime::date), 0)
@@ -447,8 +446,30 @@ BEGIN
         IF v_gap_days >= 1 AND v_gap_days <= 14 AND NOT COALESCE(r_reading_b.is_meter_replacement, false) THEN
           v_diff := r_reading_b.raw_meter_reading - r_reading_a.raw_meter_reading;
           IF v_diff >= 0 THEN
-            v_method := CASE WHEN v_gap_days <= 5 THEN 'even_split' ELSE 'regression_flowrate' END;
-            v_step := v_diff / (v_gap_days + 1);
+            v_hist_rate := NULL;
+            IF v_gap_days > 5 THEN
+              SELECT (r_reading_a.raw_meter_reading - MIN(raw_meter_reading)) / NULLIF(r_reading_a.r_date - MIN(event_date), 0)
+              INTO v_hist_rate
+              FROM (
+                SELECT raw_meter_reading, event_date
+                FROM public.blending_events
+                WHERE well_id = r_entity.id
+                  AND event_date < r_reading_a.r_date
+                  AND event_date >= (r_reading_a.r_date - interval '14 days')::date
+                ORDER BY event_date DESC
+                LIMIT 7
+              ) sub;
+            END IF;
+
+            IF v_gap_days <= 5 OR v_hist_rate IS NULL OR v_hist_rate <= 0 THEN
+              v_method := 'even_split';
+              v_step := v_diff / (v_gap_days + 1);
+            ELSE
+              v_method := 'regression_flowrate';
+              v_dpre := LEAST(GREATEST(v_hist_rate * (v_gap_days + 1), v_diff * 0.2), v_diff * 1.8);
+              v_curvature := v_diff - v_dpre;
+            END IF;
+
             FOR k IN 1..v_gap_days LOOP
               v_cur_date := r_reading_a.r_date + k;
               IF v_cur_date >= v_target_start AND v_cur_date <= v_target_end THEN
@@ -469,8 +490,15 @@ BEGIN
                   END IF;
                   v_skipped_count := v_skipped_count + 1;
                 ELSE
-                  v_val := ROUND(r_reading_a.raw_meter_reading + (v_step * k), 2);
-                  v_daily_vol := ROUND(v_step, 2);
+                  IF v_method = 'even_split' THEN
+                    v_val := ROUND(r_reading_a.raw_meter_reading + (v_step * k), 2);
+                    v_daily_vol := ROUND(v_step, 2);
+                  ELSE
+                    v_u := k::numeric / (v_gap_days + 1)::numeric;
+                    v_val := ROUND(r_reading_a.raw_meter_reading + (v_u * v_dpre) + (v_u * v_u * v_curvature), 2);
+                    v_daily_vol := ROUND(v_diff / (v_gap_days + 1), 2);
+                  END IF;
+
                   v_dt_iso := (v_cur_date::text || ' 12:00:00+08')::timestamptz;
 
                   IF NOT FOUND THEN
@@ -532,8 +560,30 @@ BEGIN
         IF v_gap_days >= 1 AND v_gap_days <= 14 AND NOT COALESCE(r_reading_b.is_meter_replacement, false) THEN
           v_diff := r_reading_b.meter_reading_kwh - r_reading_a.meter_reading_kwh;
           IF v_diff >= 0 THEN
-            v_method := CASE WHEN v_gap_days <= 5 THEN 'even_split' ELSE 'regression_flowrate' END;
-            v_step := v_diff / (v_gap_days + 1);
+            v_hist_rate := NULL;
+            IF v_gap_days > 5 THEN
+              SELECT (r_reading_a.meter_reading_kwh - MIN(meter_reading_kwh)) / NULLIF(r_reading_a.r_date - MIN(reading_datetime::date), 0)
+              INTO v_hist_rate
+              FROM (
+                SELECT meter_reading_kwh, reading_datetime
+                FROM public.power_readings
+                WHERE plant_id = r_entity.plant_id
+                  AND reading_datetime::date < r_reading_a.r_date
+                  AND reading_datetime::date >= (r_reading_a.r_date - interval '14 days')
+                ORDER BY reading_datetime DESC
+                LIMIT 7
+              ) sub;
+            END IF;
+
+            IF v_gap_days <= 5 OR v_hist_rate IS NULL OR v_hist_rate <= 0 THEN
+              v_method := 'even_split';
+              v_step := v_diff / (v_gap_days + 1);
+            ELSE
+              v_method := 'regression_flowrate';
+              v_dpre := LEAST(GREATEST(v_hist_rate * (v_gap_days + 1), v_diff * 0.2), v_diff * 1.8);
+              v_curvature := v_diff - v_dpre;
+            END IF;
+
             FOR k IN 1..v_gap_days LOOP
               v_cur_date := r_reading_a.r_date + k;
               IF v_cur_date >= v_target_start AND v_cur_date <= v_target_end THEN
@@ -554,8 +604,15 @@ BEGIN
                   END IF;
                   v_skipped_count := v_skipped_count + 1;
                 ELSE
-                  v_val := ROUND(r_reading_a.meter_reading_kwh + (v_step * k), 2);
-                  v_daily_vol := ROUND(v_step, 2);
+                  IF v_method = 'even_split' THEN
+                    v_val := ROUND(r_reading_a.meter_reading_kwh + (v_step * k), 2);
+                    v_daily_vol := ROUND(v_step, 2);
+                  ELSE
+                    v_u := k::numeric / (v_gap_days + 1)::numeric;
+                    v_val := ROUND(r_reading_a.meter_reading_kwh + (v_u * v_dpre) + (v_u * v_u * v_curvature), 2);
+                    v_daily_vol := ROUND(v_diff / (v_gap_days + 1), 2);
+                  END IF;
+
                   v_dt_iso := (v_cur_date::text || ' 12:00:00+08')::timestamptz;
 
                   IF NOT FOUND THEN
@@ -621,8 +678,31 @@ BEGIN
            AND NOT COALESCE(r_reading_b.is_permeate_meter_replacement, false) THEN
           v_diff := r_reading_b.permeate_meter - r_reading_a.permeate_meter;
           IF v_diff >= 0 THEN
-            v_method := CASE WHEN v_gap_days <= 5 THEN 'even_split' ELSE 'regression_flowrate' END;
-            v_step := v_diff / (v_gap_days + 1);
+            v_hist_rate := NULL;
+            IF v_gap_days > 5 THEN
+              SELECT (r_reading_a.permeate_meter - MIN(permeate_meter)) / NULLIF(r_reading_a.r_date - MIN(reading_datetime::date), 0)
+              INTO v_hist_rate
+              FROM (
+                SELECT permeate_meter, reading_datetime
+                FROM public.ro_train_readings
+                WHERE train_id = r_entity.id
+                  AND reading_datetime::date < r_reading_a.r_date
+                  AND reading_datetime::date >= (r_reading_a.r_date - interval '14 days')
+                  AND permeate_meter IS NOT NULL
+                ORDER BY reading_datetime DESC
+                LIMIT 7
+              ) sub;
+            END IF;
+
+            IF v_gap_days <= 5 OR v_hist_rate IS NULL OR v_hist_rate <= 0 THEN
+              v_method := 'even_split';
+              v_step := v_diff / (v_gap_days + 1);
+            ELSE
+              v_method := 'regression_flowrate';
+              v_dpre := LEAST(GREATEST(v_hist_rate * (v_gap_days + 1), v_diff * 0.2), v_diff * 1.8);
+              v_curvature := v_diff - v_dpre;
+            END IF;
+
             FOR k IN 1..v_gap_days LOOP
               v_cur_date := r_reading_a.r_date + k;
               IF v_cur_date >= v_target_start AND v_cur_date <= v_target_end THEN
@@ -643,8 +723,15 @@ BEGIN
                   END IF;
                   v_skipped_count := v_skipped_count + 1;
                 ELSE
-                  v_val := ROUND(r_reading_a.permeate_meter + (v_step * k), 2);
-                  v_daily_vol := ROUND(v_step, 2);
+                  IF v_method = 'even_split' THEN
+                    v_val := ROUND(r_reading_a.permeate_meter + (v_step * k), 2);
+                    v_daily_vol := ROUND(v_step, 2);
+                  ELSE
+                    v_u := k::numeric / (v_gap_days + 1)::numeric;
+                    v_val := ROUND(r_reading_a.permeate_meter + (v_u * v_dpre) + (v_u * v_u * v_curvature), 2);
+                    v_daily_vol := ROUND(v_diff / (v_gap_days + 1), 2);
+                  END IF;
+
                   v_dt_iso := (v_cur_date::text || ' 12:00:00+08')::timestamptz;
 
                   IF NOT FOUND THEN

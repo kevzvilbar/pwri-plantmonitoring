@@ -380,7 +380,7 @@ export function BlendingForm() {
     queryFn: async () => {
       if (!plantId) return [];
       const { data } = await (supabase.from('blending_events' as any) as any)
-        .select('well_id, raw_meter_reading, event_date')
+        .select('well_id, raw_meter_reading, event_date, is_estimated')
         .eq('plant_id', plantId)
         .not('raw_meter_reading', 'is', null)
         .order('event_date', { ascending: false })
@@ -397,9 +397,9 @@ export function BlendingForm() {
   });
 
   const latestRawByWell = useMemo(() => {
-    const m: Record<string, { reading: number; date: string } | null> = {};
+    const m: Record<string, { reading: number; date: string; is_estimated?: boolean } | null> = {};
     for (const r of latestRawData ?? [])
-      m[r.well_id] = { reading: r.raw_meter_reading, date: r.event_date };
+      m[r.well_id] = { reading: r.raw_meter_reading, date: r.event_date, is_estimated: r.is_estimated };
     return m;
   }, [latestRawData]);
 
@@ -577,7 +577,7 @@ function BlendingRow({
   well: any; plantId: string; plantName?: string;
   todayVolume: number; previousVolume: number | null; previousDate: string | null;
   avgVol?: number | null;
-  dbLatestRaw?: { reading: number; date: string } | null;
+  dbLatestRaw?: { reading: number; date: string; is_estimated?: boolean } | null;
   userId?: string | null;
   gapReason?: any | null;
   onGapReasonSaved?: () => void;
@@ -670,14 +670,14 @@ function BlendingRow({
     enabled: isBackdated,
     queryFn: async () => {
       const { data, error } = await (supabase.from('blending_events' as any) as any)
-        .select('raw_meter_reading, event_date')
+        .select('raw_meter_reading, event_date, is_estimated')
         .eq('well_id', well.id)
         .lte('event_date', eventDate)
         .not('raw_meter_reading', 'is', null)
         .order('event_date', { ascending: false })
         .limit(2);
       if (error) return { existingForDate: null, predecessor: null };
-      return resolveBlendingDateContext((data ?? []) as { raw_meter_reading: number; event_date: string }[], eventDate);
+      return resolveBlendingDateContext((data ?? []) as { raw_meter_reading: number; event_date: string; is_estimated?: boolean }[], eventDate);
     },
     staleTime: 15_000,
   });
@@ -929,6 +929,11 @@ function BlendingRow({
                 label: effectiveGapReason ? reasonCategoryLabel(effectiveGapReason.reason_category) : (isBackdated ? `Log gap (${eventDate})` : 'Log gap reason'),
                 onClick: () => setGapDialogOpen(true),
                 testId: `blending-gap-reason-btn-${well.id}`,
+              },
+              ((isBackdated ? backdatedContext?.existingForDate?.is_estimated : dbLatestRaw?.is_estimated) ?? false) && {
+                tone: 'warn',
+                label: 'Estimated',
+                title: 'Auto-backfilled reading — no manual operator entry on file.',
               },
               chipState === 'logged' && {
                 tone: 'accent',

@@ -165,15 +165,30 @@ export function detectGaps(
       const gapDays = daysDiff - 1;
       if (gapDays > maxGapDays) continue; // exceeds allowed auto-gap threshold
 
-      // Compute trailing historical daily rate if available (from preceding readings of rowA)
+      // Compute trailing historical daily rate (scanning up to 7 readings within 14 days prior to rowA, matching SQL)
       let histRate: number | null = null;
       if (i > 0) {
-        const prevRow = rows[Math.max(0, i - 3)];
-        const prevVal = prevRow[column] != null ? Number(prevRow[column]) : null;
-        if (prevVal != null && valA > prevVal) {
-          const prevMs = new Date(fmtIsoDate(prevRow.reading_datetime)).getTime();
-          const histDays = Math.max(1, Math.round((msA - prevMs) / 86_400_000));
-          histRate = (valA - prevVal) / histDays;
+        const windowStartMs = msA - 14 * 86_400_000;
+        let oldestPrecedingRow: RawReading | null = null;
+        let count = 0;
+        for (let j = i - 1; j >= 0 && count < 7; j--) {
+          const r = rows[j];
+          const rDateMs = new Date(fmtIsoDate(r.reading_datetime)).getTime();
+          if (rDateMs < windowStartMs) break;
+          const rVal = r[column] != null ? Number(r[column]) : null;
+          if (rVal != null) {
+            oldestPrecedingRow = r;
+            count++;
+          }
+        }
+
+        if (oldestPrecedingRow) {
+          const oldestVal = oldestPrecedingRow[column] != null ? Number(oldestPrecedingRow[column]) : null;
+          if (oldestVal != null && valA > oldestVal) {
+            const oldestMs = new Date(fmtIsoDate(oldestPrecedingRow.reading_datetime)).getTime();
+            const histDays = Math.max(1, Math.round((msA - oldestMs) / 86_400_000));
+            histRate = (valA - oldestVal) / histDays;
+          }
         }
       }
 

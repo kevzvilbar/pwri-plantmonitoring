@@ -19,11 +19,12 @@
 export interface BlendingRawRow {
   raw_meter_reading: number;
   event_date: string;
+  is_estimated?: boolean;
 }
 
 export interface BlendingDateContext {
   /** A reading already logged exactly ON eventDate, if any. */
-  existingForDate: { reading: number } | null;
+  existingForDate: { reading: number; is_estimated?: boolean } | null;
   /** The most recent reading strictly BEFORE eventDate, if any. */
   predecessor: { reading: number; date: string } | null;
 }
@@ -52,7 +53,9 @@ export function resolveBlendingDateContext(
   // ISO YYYY-MM-DD strings compare correctly with a plain "<".
   const predecessorRow = rows.find(r => r.event_date < eventDate) ?? null;
   return {
-    existingForDate: existingRow ? { reading: existingRow.raw_meter_reading } : null,
+    existingForDate: existingRow
+      ? { reading: existingRow.raw_meter_reading, is_estimated: existingRow.is_estimated }
+      : null,
     predecessor: predecessorRow
       ? { reading: predecessorRow.raw_meter_reading, date: predecessorRow.event_date }
       : null,
