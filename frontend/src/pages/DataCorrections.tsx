@@ -1352,10 +1352,19 @@ function PendingReviewTab() {
                       </div>
                     ) : (
                       /* Standard meter values grid */
-                      <div className="grid grid-cols-3 gap-3 text-xs">
-                        <div><div className="text-muted-foreground">Previous</div><div className="font-mono font-medium">{fmtNum(row.previous_reading)}</div></div>
-                        <div><div className="text-muted-foreground">Current</div><div className="font-mono font-medium">{fmtNum(row.current_reading)}</div></div>
-                        <div><div className="text-muted-foreground">Delta</div><DeltaBadge vol={row.daily_volume} /></div>
+                      <div className="grid grid-cols-3 gap-3 text-xs bg-muted/15 p-2 rounded-md border border-border/40">
+                        <div>
+                          <div className="text-muted-foreground text-2xs font-semibold">Preceding Reading</div>
+                          <div className="font-mono font-medium">{fmtNum(row.previous_reading)}</div>
+                        </div>
+                        <div>
+                          <div className="text-muted-foreground text-2xs font-semibold">Logged Reading</div>
+                          <div className="font-mono font-bold text-foreground">{fmtNum(row.current_reading)}</div>
+                        </div>
+                        <div>
+                          <div className="text-muted-foreground text-2xs font-semibold">Calculated Delta</div>
+                          <DeltaBadge vol={row.daily_volume} />
+                        </div>
                       </div>
                     )}
 
