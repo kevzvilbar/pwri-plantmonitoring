@@ -1,8 +1,22 @@
 import { describe, it, expect } from 'vitest';
-import { detectGaps, calculateEvenSplitValues, GAP_FILL_PREFIX } from './gapDetection';
+import {
+  detectGaps,
+  calculateEvenSplitValues,
+  calculateRegressionFlowRateValues,
+  GAP_FILL_PREFIX,
+  EVEN_SPLIT_THRESHOLD_DAYS,
+  MAX_GAP_BACKFILL_DAYS,
+} from './gapDetection';
 import { RawReading } from './regressionCorrection';
 
 describe('gapDetection', () => {
+  describe('constants', () => {
+    it('has agreed shared constants', () => {
+      expect(EVEN_SPLIT_THRESHOLD_DAYS).toBe(5);
+      expect(MAX_GAP_BACKFILL_DAYS).toBe(14);
+    });
+  });
+
   describe('calculateEvenSplitValues', () => {
     it('calculates exact even split matching the worked example (23 delta over 3 steps)', () => {
       // Anchor: Aug 19 = 9020.6
@@ -16,6 +30,27 @@ describe('gapDetection', () => {
 
     it('returns empty array if gapDays <= 0', () => {
       expect(calculateEvenSplitValues(100, 200, 0)).toEqual([]);
+    });
+  });
+
+  describe('calculateRegressionFlowRateValues', () => {
+    it('calculates smooth rate-aware curve distinct from even-split when historical daily rate differs', () => {
+      // 6-day gap from 1000 to 1070 (Δ = 70 over 7 steps).
+      // Even-split would be: [1010, 1020, 1030, 1040, 1050, 1060]
+      // With historical daily rate = 12.0:
+      const evenSplit = calculateEvenSplitValues(1000, 1070, 6, 2);
+      const flowRateValues = calculateRegressionFlowRateValues(1000, 1070, 6, 12.0, 2);
+
+      expect(evenSplit).toEqual([1010, 1020, 1030, 1040, 1050, 1060]);
+      expect(flowRateValues).toEqual([1011.71, 1022.86, 1033.43, 1043.43, 1052.86, 1061.71]);
+      // Values are monotonic and strictly distinct from even-split
+      expect(flowRateValues[0]).toBeGreaterThan(evenSplit[0]);
+    });
+
+    it('falls back to even-split if historical rate is null or zero', () => {
+      const evenSplit = calculateEvenSplitValues(1000, 1070, 6, 2);
+      const fallback = calculateRegressionFlowRateValues(1000, 1070, 6, null, 2);
+      expect(fallback).toEqual(evenSplit);
     });
   });
 
@@ -54,8 +89,15 @@ describe('gapDetection', () => {
       expect(fills[1].corrected_value).toBe(9035.93);
     });
 
-    it('tags regression_flowrate method for longer gaps (> 5 days)', () => {
+    it('computes regression_flowrate with distinct values when historical rate is present for long gaps', () => {
       const readings: RawReading[] = [
+        {
+          id: '0',
+          locator_id: 'loc-1',
+          plant_id: 'plant-1',
+          reading_datetime: '2026-07-31T08:00:00+08:00',
+          current_reading: 988, // 1 day prior: rate = (1000 - 988)/1 = 12/day
+        },
         {
           id: '1',
           locator_id: 'loc-1',
@@ -74,8 +116,12 @@ describe('gapDetection', () => {
 
       const fills = detectGaps(readings, 'current_reading', 'locator_readings', mockFkLookup);
 
-      expect(fills).toHaveLength(6); // 6 missing days between Aug 1 and Aug 8
+      expect(fills).toHaveLength(6); // 6 missing days
       expect(fills[0].note).toContain('"method":"regression_flowrate"');
+      // Assert actual non-linear calculated values
+      expect(fills[0].corrected_value).toBe(1011.71);
+      expect(fills[1].corrected_value).toBe(1022.86);
+      expect(fills[5].corrected_value).toBe(1061.71);
     });
 
     it('exempts remarked gap dates from being filled', () => {

@@ -161,6 +161,7 @@ export type Database = {
         Row: {
           event_date: string
           id: string
+          is_estimated: boolean | null
           is_meter_replacement: boolean | null
           noted_at: string
           plant_id: string
@@ -175,6 +176,7 @@ export type Database = {
         Insert: {
           event_date: string
           id?: string
+          is_estimated?: boolean | null
           is_meter_replacement?: boolean | null
           noted_at?: string
           plant_id: string
@@ -189,6 +191,7 @@ export type Database = {
         Update: {
           event_date?: string
           id?: string
+          is_estimated?: boolean | null
           is_meter_replacement?: boolean | null
           noted_at?: string
           plant_id?: string
@@ -2752,6 +2755,7 @@ export type Database = {
           daily_solar_kwh: number | null
           grid_meter_readings: Json | null
           id: string
+          is_estimated: boolean | null
           is_meter_replacement: boolean | null
           meter_multiplier: number | null
           meter_reading_kwh: number
@@ -2769,6 +2773,7 @@ export type Database = {
           daily_solar_kwh?: number | null
           grid_meter_readings?: Json | null
           id?: string
+          is_estimated?: boolean | null
           is_meter_replacement?: boolean | null
           meter_multiplier?: number | null
           meter_reading_kwh: number
@@ -2786,6 +2791,7 @@ export type Database = {
           daily_solar_kwh?: number | null
           grid_meter_readings?: Json | null
           id?: string
+          is_estimated?: boolean | null
           is_meter_replacement?: boolean | null
           meter_multiplier?: number | null
           meter_reading_kwh?: number
@@ -3873,6 +3879,7 @@ export type Database = {
           feed_tds: number | null
           id: string
           incomplete_reason: string | null
+          is_estimated: boolean | null
           is_feed_meter_replacement: boolean
           is_meter_replacement: boolean | null
           is_permeate_meter_replacement: boolean
@@ -3922,6 +3929,7 @@ export type Database = {
           feed_tds?: number | null
           id?: string
           incomplete_reason?: string | null
+          is_estimated?: boolean | null
           is_feed_meter_replacement?: boolean
           is_meter_replacement?: boolean | null
           is_permeate_meter_replacement?: boolean
@@ -3971,6 +3979,7 @@ export type Database = {
           feed_tds?: number | null
           id?: string
           incomplete_reason?: string | null
+          is_estimated?: boolean | null
           is_feed_meter_replacement?: boolean
           is_meter_replacement?: boolean | null
           is_permeate_meter_replacement?: boolean
@@ -4593,6 +4602,7 @@ export type Database = {
           gps_lat: number | null
           gps_lng: number | null
           id: string
+          is_estimated: boolean | null
           is_meter_replacement: boolean | null
           is_meter_rollover: boolean
           locked_at: string | null
@@ -4618,6 +4628,7 @@ export type Database = {
           gps_lat?: number | null
           gps_lng?: number | null
           id?: string
+          is_estimated?: boolean | null
           is_meter_replacement?: boolean | null
           is_meter_rollover?: boolean
           locked_at?: string | null
@@ -4643,6 +4654,7 @@ export type Database = {
           gps_lat?: number | null
           gps_lng?: number | null
           id?: string
+          is_estimated?: boolean | null
           is_meter_replacement?: boolean | null
           is_meter_rollover?: boolean
           locked_at?: string | null

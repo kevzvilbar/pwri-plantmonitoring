@@ -1,7 +1,8 @@
 name: Backfill Missing Readings Sweep
 
-# Sweeps reading tables (locator, well, product, blending, power) and backfills
-# missing bounded date gaps using even delta distribution and trend flow-rate.
+# Sweeps reading tables (locator, well, product, blending, power, ro_train) and backfills
+# missing bounded date gaps using even delta distribution (<= 5 days) and
+# rate-aware regression flow-rate curves (6-14 days).
 #
 # Runs on a routine schedule and supports manual workflow_dispatch.
 # Skips dates with logged gap reasons (reading_gap_reasons) and never overwrites

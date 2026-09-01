@@ -2,10 +2,12 @@
 -- Migration: 20260901000006_backfill_improvements_and_polish.sql
 --
 -- Purpose:
---   1. Hardens RLS on `backfill_sweep_log`.
+--   1. Hardens RLS on `backfill_sweep_log` to authenticated-only read/write.
 --   2. Updates `fn_backfill_missing_readings` with:
+--      • Real rate-aware regression flowrate curve for gaps 6-14 days.
+--      • Even split for gaps <= 5 days.
 --      • Explicit `is_meter_rollover` check alongside `is_meter_replacement`.
---      • Multi-gap / long-gap (6-14 days) `regression_flowrate` method fallback.
+--      • Full coverage of all 6 reading tables including `ro_train_readings`.
 --      • Retraction / cleanup of stale `is_estimated=true` rows when an operator
 --        subsequently logs a `reading_gap_reasons` entry for that date.
 --   3. Explicit schema reload notification (`NOTIFY pgrst, 'reload schema'`).
@@ -14,6 +16,8 @@
 -- 1. Tighten RLS on backfill_sweep_log
 DROP POLICY IF EXISTS "backfill_sweep_log_anon" ON public.backfill_sweep_log;
 DROP POLICY IF EXISTS "backfill_sweep_log_auth" ON public.backfill_sweep_log;
+DROP POLICY IF EXISTS "backfill_sweep_log_select_auth" ON public.backfill_sweep_log;
+DROP POLICY IF EXISTS "backfill_sweep_log_insert_auth" ON public.backfill_sweep_log;
 
 -- Authenticated users can read audit logs
 CREATE POLICY "backfill_sweep_log_select_auth"
@@ -40,29 +44,33 @@ SECURITY DEFINER
 SET search_path TO 'public'
 AS $function$
 DECLARE
-  v_lookback      integer := LEAST(GREATEST(COALESCE(p_lookback_days, 7), 1), 30);
-  v_target_end    date := p_date;
-  v_target_start  date := p_date - (v_lookback || ' days')::interval;
-  v_swept_count   integer := 0;
-  v_skipped_count integer := 0;
+  v_lookback        integer := LEAST(GREATEST(COALESCE(p_lookback_days, 7), 1), 30);
+  v_target_end      date := p_date;
+  v_target_start    date := p_date - (v_lookback || ' days')::interval;
+  v_swept_count     integer := 0;
+  v_skipped_count   integer := 0;
   v_retracted_count integer := 0;
 
   -- Iteration variables
-  r_entity        RECORD;
-  r_reading_a     RECORD;
-  r_reading_b     RECORD;
-  v_gap_days      integer;
-  v_step          numeric;
-  v_val           numeric;
-  v_daily_vol     numeric;
-  v_cur_date      date;
-  v_dt_iso        timestamptz;
-  v_has_reason    boolean;
-  v_existing_id   uuid;
-  v_is_est        boolean;
-  v_old_val       numeric;
-  v_diff          numeric;
-  v_method        text;
+  r_entity          RECORD;
+  r_reading_a       RECORD;
+  r_reading_b       RECORD;
+  v_gap_days        integer;
+  v_step            numeric;
+  v_val             numeric;
+  v_daily_vol       numeric;
+  v_cur_date        date;
+  v_dt_iso          timestamptz;
+  v_has_reason      boolean;
+  v_existing_id     uuid;
+  v_is_est          boolean;
+  v_old_val         numeric;
+  v_diff            numeric;
+  v_method          text;
+  v_hist_rate       numeric;
+  v_dpre            numeric;
+  v_u               numeric;
+  v_curvature       numeric;
 BEGIN
 
   -- ───────────────────────────────────────────────────────────────────────────
@@ -89,45 +97,70 @@ BEGIN
 
       IF FOUND THEN
         v_gap_days := (r_reading_b.r_date - r_reading_a.r_date) - 1;
-        -- Guard against resets / replacements
         IF v_gap_days >= 1 AND v_gap_days <= 14 
            AND NOT COALESCE(r_reading_b.is_meter_replacement, false)
            AND NOT COALESCE(r_reading_b.is_meter_rollover, false) THEN
           v_diff := r_reading_b.current_reading - r_reading_a.current_reading;
           IF v_diff >= 0 THEN
-            v_method := CASE WHEN v_gap_days <= 5 THEN 'even_split' ELSE 'regression_flowrate' END;
-            v_step := v_diff / (v_gap_days + 1);
+            -- Check historical operating rate for gaps > 5 days
+            v_hist_rate := NULL;
+            IF v_gap_days > 5 THEN
+              SELECT (r_reading_a.current_reading - MIN(current_reading)) / NULLIF(r_reading_a.r_date - MIN(reading_datetime::date), 0)
+              INTO v_hist_rate
+              FROM (
+                SELECT current_reading, reading_datetime
+                FROM public.locator_readings
+                WHERE locator_id = r_entity.id
+                  AND reading_datetime::date < r_reading_a.r_date
+                  AND reading_datetime::date >= (r_reading_a.r_date - interval '14 days')
+                ORDER BY reading_datetime DESC
+                LIMIT 7
+              ) sub;
+            END IF;
+
+            IF v_gap_days <= 5 OR v_hist_rate IS NULL OR v_hist_rate <= 0 THEN
+              v_method := 'even_split';
+              v_step := v_diff / (v_gap_days + 1);
+            ELSE
+              v_method := 'regression_flowrate';
+              v_dpre := LEAST(GREATEST(v_hist_rate * (v_gap_days + 1), v_diff * 0.2), v_diff * 1.8);
+              v_curvature := v_diff - v_dpre;
+            END IF;
+
             FOR k IN 1..v_gap_days LOOP
               v_cur_date := r_reading_a.r_date + k;
               IF v_cur_date >= v_target_start AND v_cur_date <= v_target_end THEN
-                -- Check remarks exemption
                 SELECT EXISTS (
                   SELECT 1 FROM public.reading_gap_reasons
                   WHERE entity_type = 'locator' AND entity_id = r_entity.id AND gap_date = v_cur_date
                 ) INTO v_has_reason;
 
-                -- Check existing row
                 SELECT id, is_estimated, current_reading INTO v_existing_id, v_is_est, v_old_val
                 FROM public.locator_readings
                 WHERE locator_id = r_entity.id AND reading_datetime::date = v_cur_date
                 LIMIT 1;
 
                 IF v_has_reason THEN
-                  -- If an operator added a late remark for an already-estimated date, retract the estimate
                   IF FOUND AND v_is_est = true THEN
                     DELETE FROM public.locator_readings WHERE id = v_existing_id;
                     v_retracted_count := v_retracted_count + 1;
                   END IF;
                   v_skipped_count := v_skipped_count + 1;
                 ELSE
-                  v_val := ROUND(r_reading_a.current_reading + (v_step * k), 2);
+                  IF v_method = 'even_split' THEN
+                    v_val := ROUND(r_reading_a.current_reading + (v_step * k), 2);
+                  ELSE
+                    v_u := k::numeric / (v_gap_days + 1)::numeric;
+                    v_val := ROUND(r_reading_a.current_reading + (v_u * v_dpre) + (v_u * v_u * v_curvature), 2);
+                  END IF;
+
                   v_dt_iso := (v_cur_date::text || ' 12:00:00+08')::timestamptz;
 
                   IF NOT FOUND THEN
                     INSERT INTO public.locator_readings (
-                      locator_id, plant_id, reading_datetime, current_reading, previous_reading, is_estimated
+                      locator_id, plant_id, reading_datetime, current_reading, is_estimated
                     ) VALUES (
-                      r_entity.id, r_entity.plant_id, v_dt_iso, v_val, ROUND(r_reading_a.current_reading + (v_step * (k - 1)), 2), true
+                      r_entity.id, r_entity.plant_id, v_dt_iso, v_val, true
                     );
                     INSERT INTO public.backfill_sweep_log (
                       table_name, entity_fk_col, entity_fk_val, plant_id, date_key, method, old_value, new_value, changed
@@ -137,7 +170,7 @@ BEGIN
                     v_swept_count := v_swept_count + 1;
                   ELSIF v_is_est = true AND v_old_val <> v_val THEN
                     UPDATE public.locator_readings
-                    SET current_reading = v_val, previous_reading = ROUND(r_reading_a.current_reading + (v_step * (k - 1)), 2)
+                    SET current_reading = v_val
                     WHERE id = v_existing_id;
                     INSERT INTO public.backfill_sweep_log (
                       table_name, entity_fk_col, entity_fk_val, plant_id, date_key, method, old_value, new_value, changed
@@ -184,8 +217,30 @@ BEGIN
            AND NOT COALESCE(r_reading_b.is_meter_rollover, false) THEN
           v_diff := r_reading_b.current_reading - r_reading_a.current_reading;
           IF v_diff >= 0 THEN
-            v_method := CASE WHEN v_gap_days <= 5 THEN 'even_split' ELSE 'regression_flowrate' END;
-            v_step := v_diff / (v_gap_days + 1);
+            v_hist_rate := NULL;
+            IF v_gap_days > 5 THEN
+              SELECT (r_reading_a.current_reading - MIN(current_reading)) / NULLIF(r_reading_a.r_date - MIN(reading_datetime::date), 0)
+              INTO v_hist_rate
+              FROM (
+                SELECT current_reading, reading_datetime
+                FROM public.well_readings
+                WHERE well_id = r_entity.id
+                  AND reading_datetime::date < r_reading_a.r_date
+                  AND reading_datetime::date >= (r_reading_a.r_date - interval '14 days')
+                ORDER BY reading_datetime DESC
+                LIMIT 7
+              ) sub;
+            END IF;
+
+            IF v_gap_days <= 5 OR v_hist_rate IS NULL OR v_hist_rate <= 0 THEN
+              v_method := 'even_split';
+              v_step := v_diff / (v_gap_days + 1);
+            ELSE
+              v_method := 'regression_flowrate';
+              v_dpre := LEAST(GREATEST(v_hist_rate * (v_gap_days + 1), v_diff * 0.2), v_diff * 1.8);
+              v_curvature := v_diff - v_dpre;
+            END IF;
+
             FOR k IN 1..v_gap_days LOOP
               v_cur_date := r_reading_a.r_date + k;
               IF v_cur_date >= v_target_start AND v_cur_date <= v_target_end THEN
@@ -206,15 +261,22 @@ BEGIN
                   END IF;
                   v_skipped_count := v_skipped_count + 1;
                 ELSE
-                  v_val := ROUND(r_reading_a.current_reading + (v_step * k), 2);
-                  v_daily_vol := ROUND(v_step, 2);
+                  IF v_method = 'even_split' THEN
+                    v_val := ROUND(r_reading_a.current_reading + (v_step * k), 2);
+                    v_daily_vol := ROUND(v_step, 2);
+                  ELSE
+                    v_u := k::numeric / (v_gap_days + 1)::numeric;
+                    v_val := ROUND(r_reading_a.current_reading + (v_u * v_dpre) + (v_u * v_u * v_curvature), 2);
+                    v_daily_vol := ROUND(v_diff / (v_gap_days + 1), 2);
+                  END IF;
+
                   v_dt_iso := (v_cur_date::text || ' 12:00:00+08')::timestamptz;
 
                   IF NOT FOUND THEN
                     INSERT INTO public.well_readings (
-                      well_id, plant_id, reading_datetime, current_reading, previous_reading, daily_volume, is_estimated
+                      well_id, plant_id, reading_datetime, current_reading, daily_volume, is_estimated
                     ) VALUES (
-                      r_entity.id, r_entity.plant_id, v_dt_iso, v_val, ROUND(r_reading_a.current_reading + (v_step * (k - 1)), 2), v_daily_vol, true
+                      r_entity.id, r_entity.plant_id, v_dt_iso, v_val, v_daily_vol, true
                     );
                     INSERT INTO public.backfill_sweep_log (
                       table_name, entity_fk_col, entity_fk_val, plant_id, date_key, method, old_value, new_value, changed
@@ -224,7 +286,7 @@ BEGIN
                     v_swept_count := v_swept_count + 1;
                   ELSIF v_is_est = true AND v_old_val <> v_val THEN
                     UPDATE public.well_readings
-                    SET current_reading = v_val, previous_reading = ROUND(r_reading_a.current_reading + (v_step * (k - 1)), 2), daily_volume = v_daily_vol
+                    SET current_reading = v_val, daily_volume = v_daily_vol
                     WHERE id = v_existing_id;
                     INSERT INTO public.backfill_sweep_log (
                       table_name, entity_fk_col, entity_fk_val, plant_id, date_key, method, old_value, new_value, changed
@@ -271,8 +333,30 @@ BEGIN
            AND NOT COALESCE(r_reading_b.is_meter_rollover, false) THEN
           v_diff := r_reading_b.current_reading - r_reading_a.current_reading;
           IF v_diff >= 0 THEN
-            v_method := CASE WHEN v_gap_days <= 5 THEN 'even_split' ELSE 'regression_flowrate' END;
-            v_step := v_diff / (v_gap_days + 1);
+            v_hist_rate := NULL;
+            IF v_gap_days > 5 THEN
+              SELECT (r_reading_a.current_reading - MIN(current_reading)) / NULLIF(r_reading_a.r_date - MIN(reading_datetime::date), 0)
+              INTO v_hist_rate
+              FROM (
+                SELECT current_reading, reading_datetime
+                FROM public.product_meter_readings
+                WHERE meter_id = r_entity.id
+                  AND reading_datetime::date < r_reading_a.r_date
+                  AND reading_datetime::date >= (r_reading_a.r_date - interval '14 days')
+                ORDER BY reading_datetime DESC
+                LIMIT 7
+              ) sub;
+            END IF;
+
+            IF v_gap_days <= 5 OR v_hist_rate IS NULL OR v_hist_rate <= 0 THEN
+              v_method := 'even_split';
+              v_step := v_diff / (v_gap_days + 1);
+            ELSE
+              v_method := 'regression_flowrate';
+              v_dpre := LEAST(GREATEST(v_hist_rate * (v_gap_days + 1), v_diff * 0.2), v_diff * 1.8);
+              v_curvature := v_diff - v_dpre;
+            END IF;
+
             FOR k IN 1..v_gap_days LOOP
               v_cur_date := r_reading_a.r_date + k;
               IF v_cur_date >= v_target_start AND v_cur_date <= v_target_end THEN
@@ -293,15 +377,22 @@ BEGIN
                   END IF;
                   v_skipped_count := v_skipped_count + 1;
                 ELSE
-                  v_val := ROUND(r_reading_a.current_reading + (v_step * k), 2);
-                  v_daily_vol := ROUND(v_step, 2);
+                  IF v_method = 'even_split' THEN
+                    v_val := ROUND(r_reading_a.current_reading + (v_step * k), 2);
+                    v_daily_vol := ROUND(v_step, 2);
+                  ELSE
+                    v_u := k::numeric / (v_gap_days + 1)::numeric;
+                    v_val := ROUND(r_reading_a.current_reading + (v_u * v_dpre) + (v_u * v_u * v_curvature), 2);
+                    v_daily_vol := ROUND(v_diff / (v_gap_days + 1), 2);
+                  END IF;
+
                   v_dt_iso := (v_cur_date::text || ' 12:00:00+08')::timestamptz;
 
                   IF NOT FOUND THEN
                     INSERT INTO public.product_meter_readings (
-                      meter_id, plant_id, reading_datetime, current_reading, previous_reading, daily_volume, is_estimated
+                      meter_id, plant_id, reading_datetime, current_reading, daily_volume, is_estimated
                     ) VALUES (
-                      r_entity.id, r_entity.plant_id, v_dt_iso, v_val, ROUND(r_reading_a.current_reading + (v_step * (k - 1)), 2), v_daily_vol, true
+                      r_entity.id, r_entity.plant_id, v_dt_iso, v_val, v_daily_vol, true
                     );
                     INSERT INTO public.backfill_sweep_log (
                       table_name, entity_fk_col, entity_fk_val, plant_id, date_key, method, old_value, new_value, changed
@@ -311,7 +402,7 @@ BEGIN
                     v_swept_count := v_swept_count + 1;
                   ELSIF v_is_est = true AND v_old_val <> v_val THEN
                     UPDATE public.product_meter_readings
-                    SET current_reading = v_val, previous_reading = ROUND(r_reading_a.current_reading + (v_step * (k - 1)), 2), daily_volume = v_daily_vol
+                    SET current_reading = v_val, daily_volume = v_daily_vol
                     WHERE id = v_existing_id;
                     INSERT INTO public.backfill_sweep_log (
                       table_name, entity_fk_col, entity_fk_val, plant_id, date_key, method, old_value, new_value, changed
@@ -499,6 +590,95 @@ BEGIN
     END LOOP;
   END LOOP;
 
+  -- ───────────────────────────────────────────────────────────────────────────
+  -- MODULE 6: RO TRAINS (ro_train_readings)
+  -- ───────────────────────────────────────────────────────────────────────────
+  FOR r_entity IN
+    SELECT id, plant_id FROM public.ro_trains WHERE status = 'Active'
+  LOOP
+    FOR r_reading_a IN
+      SELECT id, permeate_meter, reading_datetime::date AS r_date
+      FROM public.ro_train_readings
+      WHERE train_id = r_entity.id
+        AND reading_datetime::date >= (v_target_start - interval '14 days')
+        AND reading_datetime::date <= v_target_end
+        AND permeate_meter IS NOT NULL
+      ORDER BY reading_datetime ASC
+    LOOP
+      SELECT id, permeate_meter, reading_datetime::date AS r_date, is_meter_replacement, is_permeate_meter_replacement
+      INTO r_reading_b
+      FROM public.ro_train_readings
+      WHERE train_id = r_entity.id
+        AND reading_datetime::date > r_reading_a.r_date
+        AND permeate_meter IS NOT NULL
+      ORDER BY reading_datetime ASC
+      LIMIT 1;
+
+      IF FOUND THEN
+        v_gap_days := (r_reading_b.r_date - r_reading_a.r_date) - 1;
+        IF v_gap_days >= 1 AND v_gap_days <= 14 
+           AND NOT COALESCE(r_reading_b.is_meter_replacement, false)
+           AND NOT COALESCE(r_reading_b.is_permeate_meter_replacement, false) THEN
+          v_diff := r_reading_b.permeate_meter - r_reading_a.permeate_meter;
+          IF v_diff >= 0 THEN
+            v_method := CASE WHEN v_gap_days <= 5 THEN 'even_split' ELSE 'regression_flowrate' END;
+            v_step := v_diff / (v_gap_days + 1);
+            FOR k IN 1..v_gap_days LOOP
+              v_cur_date := r_reading_a.r_date + k;
+              IF v_cur_date >= v_target_start AND v_cur_date <= v_target_end THEN
+                SELECT EXISTS (
+                  SELECT 1 FROM public.reading_gap_reasons
+                  WHERE entity_type = 'ro_train' AND entity_id = r_entity.id AND gap_date = v_cur_date
+                ) INTO v_has_reason;
+
+                SELECT id, is_estimated, permeate_meter INTO v_existing_id, v_is_est, v_old_val
+                FROM public.ro_train_readings
+                WHERE train_id = r_entity.id AND reading_datetime::date = v_cur_date
+                LIMIT 1;
+
+                IF v_has_reason THEN
+                  IF FOUND AND v_is_est = true THEN
+                    DELETE FROM public.ro_train_readings WHERE id = v_existing_id;
+                    v_retracted_count := v_retracted_count + 1;
+                  END IF;
+                  v_skipped_count := v_skipped_count + 1;
+                ELSE
+                  v_val := ROUND(r_reading_a.permeate_meter + (v_step * k), 2);
+                  v_daily_vol := ROUND(v_step, 2);
+                  v_dt_iso := (v_cur_date::text || ' 12:00:00+08')::timestamptz;
+
+                  IF NOT FOUND THEN
+                    INSERT INTO public.ro_train_readings (
+                      train_id, plant_id, reading_datetime, permeate_meter, permeate_meter_delta, is_estimated
+                    ) VALUES (
+                      r_entity.id, r_entity.plant_id, v_dt_iso, v_val, v_daily_vol, true
+                    );
+                    INSERT INTO public.backfill_sweep_log (
+                      table_name, entity_fk_col, entity_fk_val, plant_id, date_key, method, old_value, new_value, changed
+                    ) VALUES (
+                      'ro_train_readings', 'train_id', r_entity.id, r_entity.plant_id, v_cur_date, v_method, null, v_val, true
+                    );
+                    v_swept_count := v_swept_count + 1;
+                  ELSIF v_is_est = true AND v_old_val <> v_val THEN
+                    UPDATE public.ro_train_readings
+                    SET permeate_meter = v_val, permeate_meter_delta = v_daily_vol
+                    WHERE id = v_existing_id;
+                    INSERT INTO public.backfill_sweep_log (
+                      table_name, entity_fk_col, entity_fk_val, plant_id, date_key, method, old_value, new_value, changed
+                    ) VALUES (
+                      'ro_train_readings', 'train_id', r_entity.id, r_entity.plant_id, v_cur_date, v_method, v_old_val, v_val, true
+                    );
+                    v_swept_count := v_swept_count + 1;
+                  END IF;
+                END IF;
+              END IF;
+            END LOOP;
+          END IF;
+        END IF;
+      END IF;
+    END LOOP;
+  END LOOP;
+
   RETURN jsonb_build_object(
     'ok', true,
     'date', p_date,
@@ -512,4 +692,3 @@ $function$;
 
 -- Reload PostgREST schema cache immediately
 NOTIFY pgrst, 'reload schema';
-

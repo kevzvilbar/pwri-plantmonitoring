@@ -338,6 +338,28 @@ export default function DataAnalysis() {
     setDateTo(to);
   };
 
+  // Backfill Sweep state
+  const [sweepingBackfill, setSweepingBackfill] = useState(false);
+  const handleRunBackfillSweep = async () => {
+    setSweepingBackfill(true);
+    try {
+      const todayDateStr = new Date().toISOString().slice(0, 10);
+      const { data, error } = await (supabase.rpc as any)('fn_backfill_missing_readings', {
+        p_date: todayDateStr,
+        p_lookback_days: 14,
+      });
+      if (error) throw error;
+      toast.success(
+        `Backfill sweep complete: ${data?.swept_count ?? 0} reading(s) backfilled, ${data?.retracted_count ?? 0} retracted.`,
+      );
+      qc.invalidateQueries();
+    } catch (err: any) {
+      toast.error(friendlyError(err));
+    } finally {
+      setSweepingBackfill(false);
+    }
+  };
+
   return (
     <div className="space-y-4 animate-fade-in max-w-[1600px] mx-auto pb-10" data-testid="data-analysis-page">
       <PageHeader
@@ -353,11 +375,24 @@ export default function DataAnalysis() {
               </div>
             )}
             {canEdit && (
-              <Button
-                onClick={handleRunRegression}
-                disabled={running}
-                size="sm"
-                className="h-8 text-xs gap-1.5"
+              <>
+                <Button
+                  onClick={handleRunBackfillSweep}
+                  disabled={sweepingBackfill}
+                  size="sm"
+                  variant="outline"
+                  className="h-8 text-xs gap-1.5 border-primary/60 text-primary hover:bg-primary-soft"
+                  data-testid="run-backfill-sweep-btn"
+                  title="Scans all reading tables for bounded date gaps and auto-backfills missing readings"
+                >
+                  <RefreshCw className={cn("h-3.5 w-3.5", sweepingBackfill && "animate-spin")} />
+                  {sweepingBackfill ? 'Sweeping…' : 'Run Backfill Sweep'}
+                </Button>
+                <Button
+                  onClick={handleRunRegression}
+                  disabled={running}
+                  size="sm"
+                  className="h-8 text-xs gap-1.5"
               >
                 {running ? (
                   <>
@@ -370,7 +405,8 @@ export default function DataAnalysis() {
                     <span>Run Regression</span>
                   </>
                 )}
-              </Button>
+                </Button>
+              </>
             )}
           </div>
         }

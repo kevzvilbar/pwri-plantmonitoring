@@ -3,14 +3,21 @@
  * interpolated fill rows.
  *
  * Implements:
- *   1. Even Δ distribution for bounded gaps between real readings.
- *   2. Support for remarks exemption (dates with logged gap reasons are skipped).
- *   3. Reset / rollover / replacement awareness.
- *   4. Guard against forward projection without an anchor.
+ *   1. Even Δ distribution for bounded gaps <= 5 days between real readings.
+ *   2. Regression + average-flow-rate curve for longer gaps (6-14 days).
+ *   3. Support for remarks exemption (dates with logged gap reasons are skipped).
+ *   4. Reset / rollover / replacement awareness.
+ *   5. Guard against forward projection without an anchor.
  */
 
 import { fmtIsoDate } from '@/lib/format';
 import { RATE_COLUMNS, type RawReading, type CorrectionRow } from '@/lib/regressionCorrection';
+
+/** Maximum number of days in a bounded gap that automated sweep/preview will backfill */
+export const MAX_GAP_BACKFILL_DAYS = 14;
+
+/** Gaps at or below this length use even delta split; longer gaps use regression + flow-rate */
+export const EVEN_SPLIT_THRESHOLD_DAYS = 5;
 
 /** For each source table: which FK column identifies the sub-entity
  *  (well / locator / meter / train) readings belong to, so gaps are never
@@ -35,12 +42,12 @@ export interface GapFillMeta {
 export interface DetectGapsOptions {
   /** Dates (YYYY-MM-DD) that have logged remarks/gap reasons and must NOT be filled */
   exemptDateKeys?: Set<string>;
-  /** Maximum number of missing days to auto-fill (default: 5) */
+  /** Maximum number of missing days to auto-fill (default: 14) */
   maxGapDays?: number;
 }
 
 /**
- * Calculates equal daily increments across a bounded gap.
+ * Calculates equal daily increments across a short bounded gap (<= 5 days).
  * E.g., from 9020.6 to 9043.6 (delta = 23) across 2 missing days:
  * total steps = 2 + 1 = 3
  * daily step = 23 / 3 = 7.6667
@@ -63,12 +70,49 @@ export function calculateEvenSplitValues(
 }
 
 /**
+ * Calculates a smooth, rate-aware trajectory across longer gaps (6-14 days)
+ * by blending the pre-gap operating flow rate with the boundary anchor.
+ *
+ * Formula:
+ *   u = d / (N + 1)
+ *   D_pre = historicalDailyRate * (N + 1) clamped to [0.2 * Δ, 1.8 * Δ]
+ *   V(u) = fromVal + u * D_pre + u^2 * (Δ - D_pre)
+ */
+export function calculateRegressionFlowRateValues(
+  fromVal: number,
+  toVal: number,
+  gapDays: number,
+  historicalDailyRate: number | null,
+  decimalPlaces: number = 2,
+): number[] {
+  if (gapDays <= 0) return [];
+  const delta = toVal - fromVal;
+  if (delta < 0 || historicalDailyRate == null || historicalDailyRate <= 0) {
+    return calculateEvenSplitValues(fromVal, toVal, gapDays, decimalPlaces);
+  }
+
+  const totalSteps = gapDays + 1;
+  const rawDpre = historicalDailyRate * totalSteps;
+  // Monotonicity clamp: ensure the initial slope doesn't overshoot
+  const dPre = Math.max(delta * 0.2, Math.min(delta * 1.8, rawDpre));
+  const curvature = delta - dPre;
+
+  const result: number[] = [];
+  for (let d = 1; d <= gapDays; d++) {
+    const u = d / totalSteps;
+    const val = fromVal + u * dPre + u * u * curvature;
+    result.push(parseFloat(val.toFixed(decimalPlaces)));
+  }
+  return result;
+}
+
+/**
  * Scans readings (sorted ascending) for date gaps > 1 day within each
- * entity group (well / locator / meter / train).  For each missing day produces
+ * entity group (well / locator / meter / train). For each missing day produces
  * a CorrectionRow with:
  *   • reading_id       → `__gap__:{entityFkVal}:{YYYY-MM-DD}`
  *   • original_value   → null  (the source-table row does not yet exist)
- *   • corrected_value  → for cumulative meter/volume columns: linear interpolation
+ *   • corrected_value  → for cumulative meter/volume columns: linear or flow-rate interpolation
  *                        between the two boundary values; for rate/quality columns:
  *                        forward-fill from the preceding reading
  *   • note             → "[gap-fill] " + JSON-encoded GapFillMeta
@@ -82,7 +126,7 @@ export function detectGaps(
 ): CorrectionRow[] {
   const entityFkCol = getEntityFkColumn(sourceTable);
   const exemptDates = options?.exemptDateKeys ?? new Set<string>();
-  const maxGapDays  = options?.maxGapDays ?? 14;
+  const maxGapDays  = options?.maxGapDays ?? MAX_GAP_BACKFILL_DAYS;
 
   // Group by entity FK so we never interpolate across different wells / locators / etc.
   const groups = new Map<string, RawReading[]>();
@@ -107,7 +151,7 @@ export function detectGaps(
       const valB = rowB[column] != null ? Number(rowB[column]) : null;
       if (valA == null || valB == null) continue;
 
-      // Negative delta without rollover flag should not be linearly interpolated
+      // Negative delta without rollover flag should not be interpolated
       const isRateCol = RATE_COLUMNS.has(column);
       if (!isRateCol && valB < valA) continue;
 
@@ -121,6 +165,30 @@ export function detectGaps(
       const gapDays = daysDiff - 1;
       if (gapDays > maxGapDays) continue; // exceeds allowed auto-gap threshold
 
+      // Compute trailing historical daily rate if available (from preceding readings of rowA)
+      let histRate: number | null = null;
+      if (i > 0) {
+        const prevRow = rows[Math.max(0, i - 3)];
+        const prevVal = prevRow[column] != null ? Number(prevRow[column]) : null;
+        if (prevVal != null && valA > prevVal) {
+          const prevMs = new Date(fmtIsoDate(prevRow.reading_datetime)).getTime();
+          const histDays = Math.max(1, Math.round((msA - prevMs) / 86_400_000));
+          histRate = (valA - prevVal) / histDays;
+        }
+      }
+
+      const method: 'forward_fill' | 'even_split' | 'regression_flowrate' = isRateCol
+        ? 'forward_fill'
+        : gapDays <= EVEN_SPLIT_THRESHOLD_DAYS || histRate == null
+        ? 'even_split'
+        : 'regression_flowrate';
+
+      const interpolatedValues = isRateCol
+        ? Array(gapDays).fill(parseFloat(valA.toFixed(4)))
+        : method === 'regression_flowrate'
+        ? calculateRegressionFlowRateValues(valA, valB, gapDays, histRate, 2)
+        : calculateEvenSplitValues(valA, valB, gapDays, 2);
+
       const meta: GapFillMeta = {
         entity_fk_col: entityFkCol,
         entity_fk_val: groupKey === '__all__' || groupKey === '__none__' ? null : groupKey,
@@ -129,7 +197,7 @@ export function detectGaps(
         from_value:    valA,
         to_date:       dateStrB,
         to_value:      valB,
-        method:        isRateCol ? 'forward_fill' : (gapDays <= 5 ? 'even_split' : 'regression_flowrate'),
+        method,
       };
 
       for (let d = 1; d <= gapDays; d++) {
@@ -142,9 +210,7 @@ export function detectGaps(
           continue;
         }
 
-        const interpolated = isRateCol
-          ? parseFloat(valA.toFixed(4))
-          : parseFloat((valA + (valB - valA) * (d / daysDiff)).toFixed(2));
+        const interpolated = interpolatedValues[d - 1];
 
         fills.push({
           reading_id:       `${GAP_FILL_PREFIX}:${groupKey}:${missingDateStr}`,

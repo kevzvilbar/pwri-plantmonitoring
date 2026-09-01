@@ -1839,6 +1839,16 @@ function KpiTab({ staff, roles, plants }: { staff: StaffMember[]; roles: any[]; 
       chemMap[k] = (chemMap[k] ?? 0) + 1;
     });
 
+    blendingReadings.forEach((r) => {
+      const day = r.event_date;
+      if (!daySet.has(day)) return;
+      const tk = `${r.plant_id}:${day}`;
+      (twellMap[tk] = twellMap[tk] ?? new Set()).add(r.well_id);
+      if (!r.recorded_by) return;
+      const k = `${r.recorded_by}:${r.plant_id}:${day}`;
+      (wellMap[k] = wellMap[k] ?? new Set()).add(r.well_id);
+    });
+
     // ── Team coverage: one entry per plant ──
     plantsWithOps.forEach((plant) => {
       const plantId = plant.id;
@@ -1920,7 +1930,7 @@ function KpiTab({ staff, roles, plants }: { staff: StaffMember[]; roles: any[]; 
 
     return { individual: indiv, teamCoverage: team };
   }, [operators, plantsWithOps, days, todayStr, elapsedFraction, wellsPerPlant, locatorsPerPlant, trainsPerPlant, metersPerPlant, plantFlags, plantById,
-      wellReadings, locReadings, roReadings, meterReadings, powerReadings, chemReadings]);
+      wellReadings, locReadings, roReadings, meterReadings, powerReadings, chemReadings, blendingReadings]);
 
   const activeMatrix = viewMode === 'team' ? teamCoverage : individual;
 
