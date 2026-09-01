@@ -31,11 +31,12 @@ jobs:
     steps:
       - name: Call fn_backfill_missing_readings via Supabase REST
         env:
-          SUPABASE_URL:  ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_URL:          ${{ secrets.VITE_SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          TARGET_DATE:   ${{ inputs.date }}
-          LOOKBACK_DAYS: ${{ inputs.lookback_days }}
-          SCHEDULE:      ${{ github.event.schedule }}
+          SUPABASE_ANON:         ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+          TARGET_DATE:           ${{ inputs.date }}
+          LOOKBACK_DAYS:         ${{ inputs.lookback_days }}
+          SCHEDULE:              ${{ github.event.schedule }}
         run: |
           if [ -z "$TARGET_DATE" ]; then
             if [ "$SCHEDULE" = "45 15 * * *" ]; then
@@ -49,19 +50,38 @@ jobs:
             LOOKBACK_DAYS=7
           fi
 
+          if [ -z "$SUPABASE_URL" ]; then
+            echo "ERROR: SUPABASE_URL (secrets.VITE_SUPABASE_URL) is not configured in GitHub repository secrets."
+            exit 1
+          fi
+
+          API_KEY="${SUPABASE_SERVICE_ROLE:-$SUPABASE_ANON}"
+          if [ -z "$API_KEY" ]; then
+            echo "ERROR: Neither SUPABASE_SERVICE_ROLE_KEY nor VITE_SUPABASE_PUBLISHABLE_KEY is configured in GitHub repository secrets."
+            exit 1
+          fi
+
+          CLEAN_URL="${SUPABASE_URL%/}"
           echo "Running backfill sweep through: $TARGET_DATE (lookback ${LOOKBACK_DAYS}d)${SCHEDULE:+ [schedule: $SCHEDULE]}"
 
-          RESPONSE=$(curl -sf \
+          HTTP_STATUS=$(curl -s -w "%{http_code}" -o /tmp/backfill_resp.json \
             -X POST \
-            "${SUPABASE_URL}/rest/v1/rpc/fn_backfill_missing_readings" \
-            -H "apikey: ${SUPABASE_SERVICE_ROLE}" \
-            -H "Authorization: Bearer ${SUPABASE_SERVICE_ROLE}" \
+            "${CLEAN_URL}/rest/v1/rpc/fn_backfill_missing_readings" \
+            -H "apikey: ${API_KEY}" \
+            -H "Authorization: Bearer ${API_KEY}" \
             -H "Content-Type: application/json" \
             -d "{\"p_date\": \"${TARGET_DATE}\", \"p_lookback_days\": ${LOOKBACK_DAYS}}")
 
+          RESPONSE=$(cat /tmp/backfill_resp.json 2>/dev/null || echo "")
+          echo "HTTP Status: $HTTP_STATUS"
           echo "Response: $RESPONSE"
 
-          if ! printf '%s' "$RESPONSE" | jq -e '.ok == true' >/dev/null; then
+          if [ "$HTTP_STATUS" -lt 200 ] || [ "$HTTP_STATUS" -ge 300 ]; then
+            echo "ERROR: Supabase REST API returned HTTP $HTTP_STATUS: $RESPONSE"
+            exit 1
+          fi
+
+          if ! printf '%s' "$RESPONSE" | jq -e '.ok == true' >/dev/null 2>&1; then
             echo "ERROR: backfill sweep did not report ok:true — check the response above."
             exit 1
           fi

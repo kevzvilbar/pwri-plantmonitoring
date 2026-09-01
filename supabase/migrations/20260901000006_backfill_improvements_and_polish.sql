@@ -794,5 +794,7 @@ BEGIN
 END;
 $function$;
 
+GRANT EXECUTE ON FUNCTION public.fn_backfill_missing_readings(date, integer) TO authenticated, anon, service_role;
+
 -- Reload PostgREST schema cache immediately
 NOTIFY pgrst, 'reload schema';
