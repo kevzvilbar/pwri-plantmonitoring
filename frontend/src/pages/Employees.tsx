@@ -1731,9 +1731,21 @@ function KpiTab({ staff, roles, plants }: { staff: StaffMember[]; roles: any[]; 
     staleTime: 3 * 60_000,
   });
 
-  const isLoading = l1 || l2 || l3 || l4 || l5 || l6;
-  const kpiError = e1 || e2 || e3 || e4 || e5 || e6;
-  const retryKpiQueries = () => { r1(); r2(); r3(); r4(); r5(); r6(); };
+  const { data: blendingReadings = [], isLoading: l7, error: e7, refetch: r7 } = useQuery({
+    queryKey: ['kpi-r-blending', since, refreshKey],
+    queryFn: async () => {
+      const { data } = await supabase.from('blending_events')
+        .select('plant_id, well_id, event_date, recorded_by, is_estimated')
+        .gte('event_date', since.slice(0, 10));
+      return ((data ?? []) as any[])
+        .filter(r => !r.is_estimated && r.recorded_by != null) as { plant_id: string; well_id: string; event_date: string; recorded_by: string | null }[];
+    },
+    staleTime: 3 * 60_000,
+  });
+
+  const isLoading = l1 || l2 || l3 || l4 || l5 || l6 || l7;
+  const kpiError = e1 || e2 || e3 || e4 || e5 || e6 || e7;
+  const retryKpiQueries = () => { r1(); r2(); r3(); r4(); r5(); r6(); r7(); };
 
   // ── Matrices ────────────────────────────────────────────────────────────────
   // Built in a single pass over each reading array: `individual` keeps the

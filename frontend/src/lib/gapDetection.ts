@@ -129,7 +129,7 @@ export function detectGaps(
         from_value:    valA,
         to_date:       dateStrB,
         to_value:      valB,
-        method:        isRateCol ? 'forward_fill' : 'even_split',
+        method:        isRateCol ? 'forward_fill' : (gapDays <= 5 ? 'even_split' : 'regression_flowrate'),
       };
 
       for (let d = 1; d <= gapDays; d++) {

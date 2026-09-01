@@ -30,12 +30,13 @@ import { downloadCSV } from '@/lib/csv';
 import { toast } from 'sonner';
 import { friendlyError } from '@/lib/supabaseErrors';
 import { format } from 'date-fns';
-import { MapPin, Pencil, X, Droplet, Zap, Upload, Download, FileText, AlertCircle, Loader2, History, Gauge, FlaskConical, Keyboard, Sun, Lock, SquarePen } from 'lucide-react';
+import { MapPin, Pencil, X, Droplet, Zap, Upload, Download, FileText, AlertCircle, Loader2, History, Gauge, FlaskConical, Keyboard, Sun, Lock, SquarePen, MessageCircleOff } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 // High-voltage transmission tower icon — matches Plants.tsx grid icon exactly.
 
 import { OdometerRollerInput, MobileCarousel } from '@/components/OdometerRollerInput';
+import { ReasonDialog } from '@/components/ReasonDialog';
 import {
   parseCSVText, triggerTemplateDownload, normalizeDatetime,
   clearDupDecisions, clearBulkDupDecision, ImportReadingsDialog, resolveImportDuplicate,
@@ -643,6 +644,23 @@ export function PowerForm() {
   } | null>(null);
   const [anomalyRemark, setAnomalyRemark] = useState('');
 
+  // "No power reading today? — log why" (reading_gap_reasons)
+  const [gapDialogOpen, setGapDialogOpen] = useState(false);
+  const [gapSaving, setGapSaving] = useState(false);
+  const todayDateStr = format(new Date(), 'yyyy-MM-dd');
+  const { data: gapReasonToday } = useQuery({
+    queryKey: ['power-gap-reason-for-date', plantId, todayDateStr],
+    enabled: !!plantId,
+    queryFn: async () => {
+      const { data } = await (supabase.from('reading_gap_reasons' as any) as any)
+        .select('reason_category, reason_detail')
+        .eq('entity_type', 'power')
+        .eq('entity_id', plantId)
+        .eq('gap_date', todayDateStr)
+        .maybeSingle();
+      return data as { reason_category: string; reason_detail: string | null } | null;
+    },
+  });
 
   const prevRow    = history?.find((r: any) => r.id !== editingId) ?? null;
   // Combined/grid meter: previous meter_reading_kwh
@@ -1070,6 +1088,22 @@ export function PowerForm() {
             <Label htmlFor="powersection-plant" className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Plant</Label>
             <PlantSelector value={plantId} onChange={handlePlantChange} id="powersection-plant" />
           </div>
+          {plantId && (
+            <Button
+              size="sm"
+              variant="outline"
+              className={cn(
+                "shrink-0 gap-1.5 h-10 border-border/80 text-muted-foreground hover:text-foreground",
+                gapReasonToday && "border-warn/50 text-warn bg-warn-soft/20",
+              )}
+              onClick={() => setGapDialogOpen(true)}
+              data-testid="power-gap-reason-btn"
+              title={gapReasonToday ? `Reason logged: ${gapReasonToday.reason_category}` : 'No power reading today? Log reason'}
+            >
+              <MessageCircleOff className="h-3.5 w-3.5" />
+              {gapReasonToday ? 'Reason logged' : 'No reading today?'}
+            </Button>
+          )}
           {(isAdmin || isManager || isDataAnalyst) && plantId && (
             <Button
               size="sm" variant="outline"
@@ -1691,6 +1725,32 @@ export function PowerForm() {
           onClose={() => setReplaceMeterIdx(null)}
         />
       )}
+
+      <ReasonDialog
+        open={gapDialogOpen}
+        onOpenChange={setGapDialogOpen}
+        title="No power reading today — why?"
+        description="This explains the gap in Data Summary for today and exempts it from automated backfill. If a reading comes in later today, it takes priority over this note."
+        confirmLabel="Log reason"
+        busy={gapSaving}
+        onConfirm={async (category, detail) => {
+          setGapSaving(true);
+          const { error } = await supabase.from('reading_gap_reasons' as any).upsert(
+            [{
+              entity_type: 'power', entity_id: plantId, plant_id: plantId,
+              gap_date: todayDateStr, reason_category: category, reason_detail: detail || null,
+              logged_by: user?.id ?? null,
+            }] as any,
+            { onConflict: 'entity_type,entity_id,gap_date' },
+          );
+          setGapSaving(false);
+          if (error) { toast.error(friendlyError(error)); return; }
+          toast.success('Power: reason logged');
+          setGapDialogOpen(false);
+          qc.invalidateQueries({ queryKey: ['power-gap-reason-for-date', plantId, todayDateStr] });
+          qc.invalidateQueries({ queryKey: ['pivot-gap-reasons'] });
+        }}
+      />
     </div>
   );
 }
