@@ -15,6 +15,7 @@ import { BookReader } from '@/components/manual/BookReader';
 import { BOOK_PARTS } from '@/components/manual/bookChapters';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { usePresence } from '@/hooks/usePresence';
 import { usePlants } from '@/hooks/usePlants';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card } from '@/components/ui/card';
@@ -601,38 +602,7 @@ function Staff() {
   const [roleFilter, setRoleFilter] = useState<'all' | 'online' | 'leadership' | 'analyst' | 'operator'>('all');
   const [viewMode, setViewMode] = useState<'grid' | 'table' | 'grouped'>('grid');
 
-  useEffect(() => {
-    const operatorId = activeOperator?.id ?? user?.id;
-    if (!operatorId) return;
-    const heartbeat = async () => {
-      const now = new Date().toISOString();
-      await supabase.from('user_profiles').update({ updated_at: now }).eq('id', operatorId);
-      queryClient.setQueryData<StaffMember[]>(['staff'], (prev) =>
-        prev?.map((s) => s.id === operatorId ? { ...s, updated_at: now } : s) ?? prev
-      );
-    };
-    heartbeat();
-    const interval = setInterval(heartbeat, 2 * 60 * 1000);
-    return () => clearInterval(interval);
-  }, [activeOperator?.id, user?.id, queryClient]);
-
-  const [onlineIds, setOnlineIds] = useState<Set<string>>(new Set());
-
-  useEffect(() => {
-    const operatorId = activeOperator?.id ?? user?.id;
-    if (!operatorId) return;
-    const ch = supabase.channel('online-users', {
-      config: { presence: { key: operatorId } },
-    });
-    const syncIds = () => setOnlineIds(new Set<string>(Object.keys(ch.presenceState())));
-    ch.on('presence', { event: 'sync' },  syncIds)
-      .on('presence', { event: 'join' },  syncIds)
-      .on('presence', { event: 'leave' }, syncIds)
-      .subscribe(async (status) => {
-        if (status === 'SUBSCRIBED') await ch.track({ user_id: operatorId });
-      });
-    return () => { supabase.removeChannel(ch); };
-  }, [activeOperator?.id, user?.id]);
+  const { onlineUserIds: onlineIds } = usePresence();
 
   const { data: staff = [], refetch: refetchStaff } = useQuery<StaffMember[]>({
     queryKey: ['staff'],
@@ -2787,9 +2757,11 @@ export default function Employees() {
     },
   });
 
+  const { onlineUserIds } = usePresence();
+
   // Compute quick stats for the executive header strip
   const onlineCount = staff.filter((s) => {
-    const p = getPresence(s.updated_at, s.status, false);
+    const p = getPresence(s.updated_at, s.status, onlineUserIds.has(s.id));
     return p === 'active' || p === 'idle';
   }).length;
   const activeCount = staff.filter((s) => s.status === 'Active').length;

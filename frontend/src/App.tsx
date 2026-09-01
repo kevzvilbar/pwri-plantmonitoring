@@ -5,6 +5,7 @@ import { Toaster as Sonner, toast } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider } from "@/hooks/useAuth";
+import { PresenceProvider } from "@/hooks/usePresence";
 import { friendlyError } from "@/lib/supabaseErrors";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AppShell } from "@/components/AppShell";
@@ -103,48 +104,50 @@ const App = () => (
       <Sonner position="top-center" />
       <BrowserRouter basename={import.meta.env.BASE_URL}>
         <AuthProvider>
-          <ErrorBoundary>
-            <Suspense fallback={<RouteFallback />}>
-            <Routes>
-              <Route path="/auth" element={<Auth />} />
-              <Route path="/onboarding" element={<Onboarding />} />
-              <Route
-                path="/pending-approval"
-                element={
-                  <ProtectedRoute>
-                    <PendingApproval />
-                  </ProtectedRoute>
-                }
-              />
-              <Route element={<ProtectedRoute><AppShell /></ProtectedRoute>}>
-                <Route path="/" element={<Dashboard />} />
-                <Route path="/plants" element={<Plants />} />
-                <Route path="/plants/:id" element={<Plants />} />
-                <Route path="/operations" element={<Operations />} />
-                <Route path="/ro-trains" element={<ROTrains />} />
-                {/* ── NEW ── */}
-                <Route path="/topology" element={<PlantTopology />} />
-                <Route path="/data-analysis" element={<DataAnalysis />} />
-                <Route path="/costs" element={<Costs />} />
-                <Route path="/maintenance" element={<Maintenance />} />
-                <Route path="/incidents" element={<Incidents />} />
-                <Route path="/employees" element={<Employees />} />
-                <Route path="/data-corrections" element={<DataCorrections />} />
-                <Route path="/manager-scorecard" element={<ManagerScorecard />} />
-                <Route path="/scorecard" element={<Navigate to="/manager-scorecard" replace />} />
-                <Route path="/import" element={<Import />} />
-                <Route path="/exports" element={<Exports />} />
-                <Route path="/compliance" element={<Compliance />} />
-                <Route path="/alerts" element={<Alerts />} />
-                <Route path="/admin" element={<Admin />} />
-                <Route path="/profile" element={<Profile />} />
-                {/* Legacy redirect shim — Chemical Dosing moved to RO Trains */}
-                <Route path="/chemicals" element={<Chemicals />} />
-              </Route>
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-            </Suspense>
-          </ErrorBoundary>
+          <PresenceProvider>
+            <ErrorBoundary>
+              <Suspense fallback={<RouteFallback />}>
+              <Routes>
+                <Route path="/auth" element={<Auth />} />
+                <Route path="/onboarding" element={<Onboarding />} />
+                <Route
+                  path="/pending-approval"
+                  element={
+                    <ProtectedRoute>
+                      <PendingApproval />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route element={<ProtectedRoute><AppShell /></ProtectedRoute>}>
+                  <Route path="/" element={<Dashboard />} />
+                  <Route path="/plants" element={<Plants />} />
+                  <Route path="/plants/:id" element={<Plants />} />
+                  <Route path="/operations" element={<Operations />} />
+                  <Route path="/ro-trains" element={<ROTrains />} />
+                  {/* ── NEW ── */}
+                  <Route path="/topology" element={<PlantTopology />} />
+                  <Route path="/data-analysis" element={<DataAnalysis />} />
+                  <Route path="/costs" element={<Costs />} />
+                  <Route path="/maintenance" element={<Maintenance />} />
+                  <Route path="/incidents" element={<Incidents />} />
+                  <Route path="/employees" element={<Employees />} />
+                  <Route path="/data-corrections" element={<DataCorrections />} />
+                  <Route path="/manager-scorecard" element={<ManagerScorecard />} />
+                  <Route path="/scorecard" element={<Navigate to="/manager-scorecard" replace />} />
+                  <Route path="/import" element={<Import />} />
+                  <Route path="/exports" element={<Exports />} />
+                  <Route path="/compliance" element={<Compliance />} />
+                  <Route path="/alerts" element={<Alerts />} />
+                  <Route path="/admin" element={<Admin />} />
+                  <Route path="/profile" element={<Profile />} />
+                  {/* Legacy redirect shim — Chemical Dosing moved to RO Trains */}
+                  <Route path="/chemicals" element={<Chemicals />} />
+                </Route>
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+              </Suspense>
+            </ErrorBoundary>
+          </PresenceProvider>
         </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>
