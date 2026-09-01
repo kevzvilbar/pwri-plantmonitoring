@@ -73,6 +73,23 @@ DECLARE
   v_curvature       numeric;
 BEGIN
 
+  -- ─── Gap-fill thresholds ─────────────────────────────────────────────────────
+  -- The two numeric literals used throughout this function are intentional
+  -- constants that MUST be kept in sync with their TypeScript counterparts in
+  -- frontend/src/lib/gapDetection.ts:
+  --
+  --   SQL literal 5   ↔  EVEN_SPLIT_THRESHOLD_DAYS = 5
+  --     Gaps of ≤ 5 days use even delta split (linear interpolation).
+  --
+  --   SQL literal 14  ↔  MAX_GAP_BACKFILL_DAYS = 14
+  --     Gaps of > 14 days are ignored entirely; the trailing-history
+  --     lookback window is also 14 days (interval '14 days' subquery).
+  --
+  -- If either value is changed here, update BOTH exported constants in
+  -- gapDetection.ts so the Data-Analysis gap-preview UI stays in agreement
+  -- with what the automated sweep will actually compute.
+  -- ─────────────────────────────────────────────────────────────────────────────
+
   -- ───────────────────────────────────────────────────────────────────────────
   -- MODULE 1: LOCATORS (locator_readings)
   -- ───────────────────────────────────────────────────────────────────────────

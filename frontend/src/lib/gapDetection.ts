@@ -13,10 +13,14 @@
 import { fmtIsoDate } from '@/lib/format';
 import { RATE_COLUMNS, type RawReading, type CorrectionRow } from '@/lib/regressionCorrection';
 
-/** Maximum number of days in a bounded gap that automated sweep/preview will backfill */
+/** Maximum number of days in a bounded gap that automated sweep/preview will backfill.
+ *  Keep in sync with the inline literal `14` used in all 6 modules of
+ *  fn_backfill_missing_readings (supabase/migrations/20260901000006_backfill_improvements_and_polish.sql). */
 export const MAX_GAP_BACKFILL_DAYS = 14;
 
-/** Gaps at or below this length use even delta split; longer gaps use regression + flow-rate */
+/** Gaps at or below this length use even delta split; longer gaps use regression + flow-rate.
+ *  Keep in sync with the inline literal `5` used in all 6 modules of
+ *  fn_backfill_missing_readings (supabase/migrations/20260901000006_backfill_improvements_and_polish.sql). */
 export const EVEN_SPLIT_THRESHOLD_DAYS = 5;
 
 /** For each source table: which FK column identifies the sub-entity
