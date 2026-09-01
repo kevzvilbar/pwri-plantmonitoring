@@ -207,7 +207,7 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
       if (module === 'locator') {
         const { data, error } = await supabase
           .from('locator_readings')
-          .select('id, current_reading, previous_reading, reading_datetime, off_location_flag, is_meter_replacement, is_meter_rollover, meter_rollover_max, recorded_by, created_at, norm_status')
+          .select('id, current_reading, previous_reading, reading_datetime, off_location_flag, is_meter_replacement, is_meter_rollover, meter_rollover_max, is_estimated, recorded_by, created_at, norm_status')
           .eq('locator_id', entityId)
           .gte('reading_datetime', sinceDate)
           .lt('reading_datetime', untilNextDay)
@@ -224,12 +224,12 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
           .gte('reading_datetime', sinceDate)
           .lt('reading_datetime', untilNextDay)
           .order('reading_datetime', { ascending: false });
-        return (fallback ?? []).map((r: any) => ({ ...r, is_meter_replacement: false, is_meter_rollover: false, meter_rollover_max: null }));
+        return (fallback ?? []).map((r: any) => ({ ...r, is_meter_replacement: false, is_meter_rollover: false, meter_rollover_max: null, is_estimated: false }));
       }
       if (module === 'well') {
         const { data, error } = await supabase
           .from('well_readings')
-          .select('id, current_reading, previous_reading, power_meter_reading, tds_ppm, turbidity_ntu, pressure_psi, reading_datetime, is_meter_replacement, is_meter_rollover, meter_rollover_max, recorded_by, created_at, norm_status')
+          .select('id, current_reading, previous_reading, power_meter_reading, tds_ppm, turbidity_ntu, pressure_psi, reading_datetime, is_meter_replacement, is_meter_rollover, meter_rollover_max, is_estimated, recorded_by, created_at, norm_status')
           .eq('well_id', entityId)
           .gte('reading_datetime', sinceDate)
           .lt('reading_datetime', untilNextDay)
@@ -245,12 +245,12 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
           .gte('reading_datetime', sinceDate)
           .lt('reading_datetime', untilNextDay)
           .order('reading_datetime', { ascending: false });
-        return (fallback ?? []).map((r: any) => ({ ...r, is_meter_rollover: false, meter_rollover_max: null }));
+        return (fallback ?? []).map((r: any) => ({ ...r, is_meter_rollover: false, meter_rollover_max: null, is_estimated: false }));
       }
       if (module === 'power') {
         const { data, error } = await supabase
           .from('power_readings')
-          .select('id, meter_reading_kwh, grid_meter_readings, daily_consumption_kwh, daily_solar_kwh, daily_grid_kwh, solar_meter_reading, reading_datetime, is_meter_replacement, recorded_by, created_at')
+          .select('id, meter_reading_kwh, grid_meter_readings, daily_consumption_kwh, daily_solar_kwh, daily_grid_kwh, solar_meter_reading, reading_datetime, is_meter_replacement, is_estimated, recorded_by, created_at')
           .eq('plant_id', entityId)
           .gte('reading_datetime', sinceDate)
           .lt('reading_datetime', untilNextDay)
@@ -264,12 +264,12 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
           .gte('reading_datetime', sinceDate)
           .lt('reading_datetime', untilNextDay)
           .order('reading_datetime', { ascending: false });
-        return fallback ?? [];
+        return (fallback ?? []).map((r: any) => ({ ...r, is_estimated: false }));
       }
       if (module === 'blending') {
         try {
           let q = (supabase.from('blending_events' as any) as any)
-            .select('id, well_id, plant_id, well_name, plant_name, event_date, reading_datetime, volume_m3, noted_at, is_meter_replacement, raw_meter_reading')
+            .select('id, well_id, plant_id, well_name, plant_name, event_date, reading_datetime, volume_m3, noted_at, is_meter_replacement, raw_meter_reading, is_estimated')
             .eq('well_id', entityId)
             .order('event_date', { ascending: false });
           if (days === 'custom') {
@@ -657,6 +657,7 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
         power_meter_reading: editRow.value2 ? +editRow.value2 : null,
         reading_datetime: dtIso,
         daily_volume: wellDailyVol,
+        is_estimated: false,
       };
       // Only include optional columns when they were actually present in the row
       // returned by the SELECT query (hasMeterReplacement / value4/5/6 !== undefined).
@@ -678,6 +679,7 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
         current_reading: newCur,
         reading_datetime: dtIso,
         is_meter_replacement: !!editRow.isMeterReplacement,
+        is_estimated: false,
         // daily_volume intentionally omitted — DB recomputes it automatically.
       }).eq('id', editRow.id));
       if (!error) await resyncLocatorChain(entityId);
@@ -733,11 +735,13 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
             solar_meter_reading: null,
             reading_datetime: dtIso,
             is_meter_replacement: !!editRow.isMeterReplacement,
+            is_estimated: false,
           }
         : {
             solar_meter_reading: editRow.value2 ? +editRow.value2 : null,
             reading_datetime: dtIso,
             is_meter_replacement: !!editRow.isMeterReplacement,
+            is_estimated: false,
           };
       if (gridIdx === 0 && !isSolarEditCtx) {
         powerUpdatePayload.meter_reading_kwh = +editRow.value;
@@ -773,6 +777,7 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
         event_date: editRow.datetime.slice(0, 10),
         reading_datetime: new Date(editRow.datetime).toISOString(),
         is_meter_replacement: !!editRow.isMeterReplacement,
+        is_estimated: false,
         // previous_reading intentionally omitted — trg_blending_set_reading
         // (20260729_blending_previous_reading_trigger.sql) only auto-resolves
         // it on INSERT, so it carries forward unchanged on UPDATE and
@@ -1078,6 +1083,7 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                     <th className="px-3 py-2 font-medium text-right">TDS (ppm)</th>
                     <th className="px-3 py-2 font-medium text-right">NTU</th>
                     <th className="px-3 py-2 font-medium text-right">Pressure (psi)</th>
+                    <th className="px-3 py-2 font-medium">Flags</th>
                   </> : <>
                     <th className="px-3 py-2 font-medium text-right">Water</th>
                     <th className="px-3 py-2 font-medium text-right">Δ</th>
@@ -1086,11 +1092,13 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                     <th className="px-3 py-2 font-medium text-right">TDS (ppm)</th>
                     <th className="px-3 py-2 font-medium text-right">NTU</th>
                     <th className="px-3 py-2 font-medium text-right">Pressure (psi)</th>
+                    <th className="px-3 py-2 font-medium">Flags</th>
                   </>)}
                   {module === 'blending' && <>
                     <th className="px-3 py-2 font-medium text-right">Reading</th>
                     <th className="px-3 py-2 font-medium text-right">Volume (m³)</th>
                     <th className="px-2 py-2 font-medium text-center">Repl.</th>
+                    <th className="px-3 py-2 font-medium">Flags</th>
                   </>}
                   {module === 'power' && <>
                     <th className="px-3 py-2 font-medium">Meter</th>
@@ -1495,6 +1503,42 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                     );
                   }
 
+                  const isEstimated = !!r.is_estimated;
+                  const flagsList: React.ReactNode[] = [];
+                  if (isEstimated) {
+                    flagsList.push(
+                      <StatusPill
+                        key="est"
+                        tone="warn"
+                        title="System-generated / Backfilled reading — no manual operator entry on file. Saving an edit converts this to a verified human reading."
+                        aria-label="Estimated reading"
+                      >
+                        Est.
+                      </StatusPill>
+                    );
+                  }
+                  if (r.off_location_flag) {
+                    flagsList.push(
+                      <StatusPill
+                        key="off-loc"
+                        tone="warn"
+                        title="GPS mismatch at entry"
+                        aria-label="Off location reading"
+                      >
+                        off-loc
+                      </StatusPill>
+                    );
+                  }
+                  const flagsCell = (
+                    <td className="px-3 py-1.5 whitespace-nowrap">
+                      {flagsList.length > 0 ? (
+                        <div className="flex items-center gap-1 flex-wrap">{flagsList}</div>
+                      ) : (
+                        <span className="text-muted-foreground/30 text-2xs">—</span>
+                      )}
+                    </td>
+                  );
+
                   // ── Non-power modules: original single-tr rendering ──
                   return (
                     <tr
@@ -1503,6 +1547,7 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                         'border-t',
                         isEditing      ? 'bg-primary-soft/60'
                         : isMeterReplacement ? 'bg-warn-soft/40'
+                        : isEstimated  ? 'bg-warn-soft/20'
                         : 'hover:bg-muted/40',
                       ].join(' ')}
                     >
@@ -1532,9 +1577,7 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                       {module === 'locator' && (isDirectMode ? <>
                         <td className="px-3 py-1.5 text-right font-mono-num">{fmtNum(r.current_reading, 1)}</td>
                         {replCell}
-                        <td className="px-3 py-1.5">
-                          {r.off_location_flag && <span className="text-warn font-medium">off-loc</span>}
-                        </td>
+                        {flagsCell}
                       </> : <>
                         <td className="px-3 py-1.5 text-right font-mono-num">{fmtNum(r.current_reading, 1)}</td>
                         <td className="px-3 py-1.5 text-right font-mono-num">
@@ -1544,9 +1587,7 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                           }
                         </td>
                         {replCell}
-                        <td className="px-3 py-1.5">
-                          {r.off_location_flag && <span className="text-warn font-medium">off-loc</span>}
-                        </td>
+                        {flagsCell}
                       </>)}
 
                       {module === 'well' && (isDirectMode ? <>
@@ -1564,6 +1605,7 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                         <td className="px-3 py-1.5 text-right font-mono-num">
                           {r.pressure_psi != null ? fmtNum(r.pressure_psi, 1) : '—'}
                         </td>
+                        {flagsCell}
                       </> : <>
                         <td className="px-3 py-1.5 text-right font-mono-num">{fmtNum(r.current_reading, 1)}</td>
                         <td className="px-3 py-1.5 text-right font-mono-num">
@@ -1585,6 +1627,7 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                         <td className="px-3 py-1.5 text-right font-mono-num">
                           {r.pressure_psi != null ? fmtNum(r.pressure_psi, 1) : '—'}
                         </td>
+                        {flagsCell}
                       </>)}
 
                       {module === 'blending' && <>
@@ -1593,6 +1636,7 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                         </td>
                         <td className="px-3 py-1.5 text-right font-mono-num">{fmtNum(r.volume_m3 ?? 0, 1)}</td>
                         {replCell}
+                        {flagsCell}
                       </>}
 
                       {anyEditable && (

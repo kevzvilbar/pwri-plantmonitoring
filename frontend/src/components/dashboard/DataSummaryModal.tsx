@@ -1100,7 +1100,7 @@ export function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: Dat
                               "px-2 py-1.5 text-right font-mono-num tabular-nums border-border",
                               isEst ? "bg-warn-soft/60" : "",
                             ].join(" ")}
-                            title={isEst ? "Auto-estimated via Polynomial Regression (degree 3) — no reading was recorded for this day. Value will be replaced when actual data is entered." : undefined}
+                            title={isEst ? "System-generated / Backfilled reading — no manual operator entry on file. Value will be replaced when actual data is entered." : undefined}
                           >
                             {vol != null && vol > 0 ? (
                               <span className="inline-flex items-center gap-0.5">

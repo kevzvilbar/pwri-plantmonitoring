@@ -131,19 +131,38 @@ export function PivotTable({
                 </td>
                 {entities.map((e) => {
                   const val = pivot.get(date)?.get(e.id) ?? null;
-                  const reason = val == null ? getReason(e.id, date) : null;
+                  const reason = getReason(e.id, date);
                   // Only wells/locators/RO trains carry a gap-reason lookup
                   // (entityType set — see the callers in
                   // TrendChartDataSummaryPopup.tsx); plain product meters
                   // keep today's non-interactive dash. Future dates can't be
                   // explained yet either, so they stay non-interactive too.
-                  const canLog = !!entityType && val == null && new Date(date + 'T00:00:00').getTime() <= today.getTime();
+                  const isPastOrToday = new Date(date + 'T00:00:00').getTime() <= today.getTime();
+                  const canLog = !!entityType && isPastOrToday;
                   const reasonTitle = reason
                     ? `${reasonEntityPrefix(entityType!, reason.source === 'status')}: ${reasonCategoryLabel(reason.category)}${reason.detail ? ' — ' + reason.detail : ''}`
                     : '';
                   return (
                     <td key={e.id} className={TD}>
-                      {reason && canLog ? (
+                      {val != null ? (
+                        reason ? (
+                          // Both value (backfilled or real) and reason note exist
+                          <div className="inline-flex items-center justify-end gap-1 w-full">
+                            <span>{fmtV(val)}</span>
+                            <button
+                              type="button"
+                              onClick={() => setGapTarget({ entityId: e.id, entityLabel: e.label, dateKey: date, existing: reason })}
+                              title={`${reasonTitle} (click to edit note)`}
+                              className="inline-flex items-center justify-center text-warn cursor-pointer hover:opacity-70 transition-opacity shrink-0"
+                              data-testid={`pivot-gap-icon-${e.id}-${date}`}
+                            >
+                              <MessageCircleOff className="h-3 w-3" />
+                            </button>
+                          </div>
+                        ) : (
+                          fmtV(val)
+                        )
+                      ) : reason && canLog ? (
                         // Has a reason on file — either a per-day gap entry, or
                         // one inferred from a multi-day Offline/Inactive
                         // interval (source: 'status'). Either way, clicking

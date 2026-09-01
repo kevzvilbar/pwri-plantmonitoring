@@ -1669,8 +1669,9 @@ function KpiTab({ staff, roles, plants }: { staff: StaffMember[]; roles: any[]; 
     queryKey: ['kpi-r-wells', since, refreshKey],
     queryFn: async () => {
       const { data } = await supabase.from('well_readings')
-        .select('plant_id, well_id, reading_datetime, recorded_by').gte('reading_datetime', since);
-      return (data ?? []) as { plant_id: string; well_id: string; reading_datetime: string; recorded_by: string | null }[];
+        .select('plant_id, well_id, reading_datetime, recorded_by, is_estimated').gte('reading_datetime', since);
+      return ((data ?? []) as any[])
+        .filter(r => !r.is_estimated && r.recorded_by != null) as { plant_id: string; well_id: string; reading_datetime: string; recorded_by: string | null }[];
     },
     staleTime: 3 * 60_000,
   });
@@ -1679,8 +1680,9 @@ function KpiTab({ staff, roles, plants }: { staff: StaffMember[]; roles: any[]; 
     queryKey: ['kpi-r-loc', since, refreshKey],
     queryFn: async () => {
       const { data } = await supabase.from('locator_readings')
-        .select('plant_id, locator_id, reading_datetime, recorded_by').gte('reading_datetime', since);
-      return (data ?? []) as { plant_id: string; locator_id: string; reading_datetime: string; recorded_by: string | null }[];
+        .select('plant_id, locator_id, reading_datetime, recorded_by, is_estimated').gte('reading_datetime', since);
+      return ((data ?? []) as any[])
+        .filter(r => !r.is_estimated && r.recorded_by != null) as { plant_id: string; locator_id: string; reading_datetime: string; recorded_by: string | null }[];
     },
     staleTime: 3 * 60_000,
   });
@@ -1689,8 +1691,9 @@ function KpiTab({ staff, roles, plants }: { staff: StaffMember[]; roles: any[]; 
     queryKey: ['kpi-r-ro', since, refreshKey],
     queryFn: async () => {
       const { data } = await (supabase as any).from('ro_train_readings')
-        .select('plant_id, train_id, reading_datetime, recorded_by').gte('reading_datetime', since);
-      return (data ?? []) as { plant_id: string; train_id: string; reading_datetime: string; recorded_by: string | null }[];
+        .select('plant_id, train_id, reading_datetime, recorded_by, is_estimated').gte('reading_datetime', since);
+      return ((data ?? []) as any[])
+        .filter(r => !r.is_estimated && r.recorded_by != null) as { plant_id: string; train_id: string; reading_datetime: string; recorded_by: string | null }[];
     },
     staleTime: 3 * 60_000,
   });
@@ -1699,8 +1702,9 @@ function KpiTab({ staff, roles, plants }: { staff: StaffMember[]; roles: any[]; 
     queryKey: ['kpi-r-meter', since, refreshKey],
     queryFn: async () => {
       const { data } = await (supabase as any).from('product_meter_readings')
-        .select('plant_id, meter_id, reading_datetime, recorded_by').gte('reading_datetime', since);
-      return (data ?? []) as { plant_id: string; meter_id: string; reading_datetime: string; recorded_by: string | null }[];
+        .select('plant_id, meter_id, reading_datetime, recorded_by, is_estimated').gte('reading_datetime', since);
+      return ((data ?? []) as any[])
+        .filter(r => !r.is_estimated && r.recorded_by != null) as { plant_id: string; meter_id: string; reading_datetime: string; recorded_by: string | null }[];
     },
     staleTime: 3 * 60_000,
   });
@@ -1709,9 +1713,10 @@ function KpiTab({ staff, roles, plants }: { staff: StaffMember[]; roles: any[]; 
     queryKey: ['kpi-r-power', since, refreshKey],
     queryFn: async () => {
       const { data } = await supabase.from('power_readings')
-        .select('plant_id, reading_datetime, recorded_by, daily_solar_kwh, daily_grid_kwh')
+        .select('plant_id, reading_datetime, recorded_by, daily_solar_kwh, daily_grid_kwh, is_estimated')
         .gte('reading_datetime', since);
-      return (data ?? []) as { plant_id: string; reading_datetime: string; recorded_by: string | null; daily_solar_kwh: number | null; daily_grid_kwh: number | null }[];
+      return ((data ?? []) as any[])
+        .filter(r => !r.is_estimated && r.recorded_by != null) as { plant_id: string; reading_datetime: string; recorded_by: string | null; daily_solar_kwh: number | null; daily_grid_kwh: number | null }[];
     },
     staleTime: 3 * 60_000,
   });
