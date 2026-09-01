@@ -11,8 +11,8 @@ interface TrendChartToolbarProps {
   to: string;
   isFetching: boolean;
   onRangeChange: (range: RangeKey) => void;
-  onFromChange: (value: string) => void;
-  onToChange: (value: string) => void;
+  /** Called with both dates atomically to avoid stale-closure overwrites. */
+  onCustomDatesChange: (from: string, to: string) => void;
   onOpenSummary: () => void;
   trailingControls: ReactNode;
 }
@@ -25,8 +25,7 @@ export function TrendChartToolbar({
   to,
   isFetching,
   onRangeChange,
-  onFromChange,
-  onToChange,
+  onCustomDatesChange,
   onOpenSummary,
   trailingControls,
 }: TrendChartToolbarProps) {
@@ -75,10 +74,7 @@ export function TrendChartToolbar({
           <DateRangePicker
             from={from}
             to={to}
-            onChange={({ from: f, to: t }) => {
-              onFromChange(f);
-              onToChange(t);
-            }}
+            onChange={({ from: f, to: t }) => onCustomDatesChange(f, t)}
             size="sm"
             className="h-7 w-[200px] text-2xs px-2"
           />

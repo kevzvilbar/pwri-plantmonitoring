@@ -103,8 +103,14 @@ export function TrendChart({
   const to = useAppStore((s) => s.chartTo);
   const setRange = useAppStore((s) => s.setChartRange);
   const setChartCustomDates = useAppStore((s) => s.setChartCustomDates);
-  const handleFromChange = (v: string) => setChartCustomDates(v, to);
-  const handleToChange = (v: string) => setChartCustomDates(from, v);
+  // Call setChartCustomDates atomically with both values so the second call
+  // never reverts the first via a stale closure. Previously two separate
+  // handlers (handleFromChange/handleToChange) each captured the other half
+  // from the render closure — when the DateRangePicker fired onChange with
+  // { from: newDate, to: '' } on first click, onToChange('') would call
+  // setChartCustomDates(oldFrom, '') which reverted chartFrom back to its old
+  // value (isValidDateStr(oldFrom) === true, so the store kept it).
+  const handleCustomDatesChange = (f: string, t: string) => setChartCustomDates(f, t);
   // Toggle for the inline data summary table
   const [showSummary, setShowSummary] = useState(false);
 
@@ -378,8 +384,7 @@ export function TrendChart({
         to={to}
         isFetching={isFetching}
         onRangeChange={setRange}
-        onFromChange={handleFromChange}
-        onToChange={handleToChange}
+        onCustomDatesChange={handleCustomDatesChange}
         onOpenSummary={() => setShowSummary(true)}
         trailingControls={
         <TrendChartControls

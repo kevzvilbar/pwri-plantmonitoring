@@ -120,7 +120,13 @@ export const useAppStore = create<AppState>()(
       setChartRange: (range) => set({ chartRange: range }),
       setChartCustomDates: (from, to) =>
         set((state) => ({
+          // Update chartFrom if the new value is valid.
           chartFrom: isValidDateStr(from) ? from : state.chartFrom,
+          // Update chartTo only when the new value is a valid date.
+          // An empty string means "selection in progress — first date picked,
+          // waiting for second". Keep the old chartTo so dashboard cards that
+          // read it when range === 'CUSTOM' don't crash on an empty string,
+          // but don't let a stale chartFrom survive because chartTo was ''.
           chartTo: isValidDateStr(to) ? to : state.chartTo,
         })),
 
