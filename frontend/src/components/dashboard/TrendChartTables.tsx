@@ -34,7 +34,7 @@ export function PivotTable({
   unit?: string;
   colorClass?: string;
   /** Enables "why is this blank" reason lookups for blank cells. */
-  entityType?: 'well' | 'locator' | 'ro_train' | 'meter';
+  entityType?: 'well' | 'locator' | 'ro_train' | 'meter' | 'blending' | 'power';
 }) {
   const rowTotals = dates.map((d) =>
     entities.reduce((s, e) => s + (pivot.get(d)?.get(e.id) ?? 0), 0),

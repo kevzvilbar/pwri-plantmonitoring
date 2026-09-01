@@ -142,6 +142,7 @@ export function RegressionDetail({
         const row: Record<string, unknown> = {
           reading_datetime: g.reading_datetime,
           [result.column_name]: g.corrected_value,
+          is_estimated: true,
         };
         if (meta.plant_id) row.plant_id = meta.plant_id;
         if (meta.entity_fk_col && meta.entity_fk_val) {

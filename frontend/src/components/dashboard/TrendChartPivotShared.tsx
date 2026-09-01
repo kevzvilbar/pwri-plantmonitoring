@@ -149,8 +149,8 @@ export function fmtV(v: number | null | undefined, dec = 1) {
   return v.toLocaleString(undefined, { maximumFractionDigits: dec });
 }
 
-const GAP_ENTITY_TYPE_LABEL: Record<'well' | 'locator' | 'ro_train' | 'meter', string> = {
-  well: 'Well', locator: 'Locator', ro_train: 'RO Train', meter: 'Product Meter',
+const GAP_ENTITY_TYPE_LABEL: Record<'well' | 'locator' | 'ro_train' | 'meter' | 'blending' | 'power', string> = {
+  well: 'Well', locator: 'Locator', ro_train: 'RO Train', meter: 'Product Meter', blending: 'Blending Well', power: 'Power',
 };
 // Underlying table for each entity type — used to resolve plant_id when
 // retroactively logging a gap reason from the Data Summary pivot (see
@@ -159,8 +159,8 @@ const GAP_ENTITY_TYPE_LABEL: Record<'well' | 'locator' | 'ro_train' | 'meter', s
 // (see useTrendChartQueries.ts's "locator_readings has no plant_id column"
 // note), so we look it up directly from the entity's own row instead of
 // threading a plant map through every layer between here and TrendChart.tsx.
-export const GAP_ENTITY_TABLE: Record<'well' | 'locator' | 'ro_train' | 'meter', string> = {
-  well: 'wells', locator: 'locators', ro_train: 'ro_trains', meter: 'product_meters',
+export const GAP_ENTITY_TABLE: Record<'well' | 'locator' | 'ro_train' | 'meter' | 'blending' | 'power', string> = {
+  well: 'wells', locator: 'locators', ro_train: 'ro_trains', meter: 'product_meters', blending: 'wells', power: 'plants',
 };
 const GAP_DOWN_STATUSES = new Set(['Inactive', 'Offline', 'Maintenance', 'Locked']);
 
@@ -173,7 +173,7 @@ export type GapReasonHit = { category: string; detail: string | null; source: 'g
  * entity_status_audit_log) on that date.
  */
 export function useGapReasonLookup(
-  entityType: 'well' | 'locator' | 'ro_train' | 'meter' | undefined,
+  entityType: 'well' | 'locator' | 'ro_train' | 'meter' | 'blending' | 'power' | undefined,
   entities: { id: string; label: string }[],
   _dates: string[],
 ): {
