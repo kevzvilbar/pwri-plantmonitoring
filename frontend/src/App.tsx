@@ -5,7 +5,7 @@ import { Toaster as Sonner, toast } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider } from "@/hooks/useAuth";
-import { PresenceProvider } from "@/hooks/usePresence";
+import { PresenceProvider, globalStampActivity } from "@/hooks/usePresence";
 import { friendlyError } from "@/lib/supabaseErrors";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AppShell } from "@/components/AppShell";
@@ -89,6 +89,11 @@ const queryClient = new QueryClient({
     },
   }),
   mutationCache: new MutationCache({
+    onSuccess: () => {
+      // Every successful data-entry mutation stamps the operator as "active"
+      // so the admin's People & Staff page reflects them online instantly.
+      globalStampActivity();
+    },
     onError: (error) => {
       const msg = friendlyError(error);
       if (msg) toast.error(msg);

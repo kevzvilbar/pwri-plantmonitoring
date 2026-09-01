@@ -71,6 +71,10 @@ type ChecklistExecution = {
 };
 
 // ---------------------------------------------------------------------------
+// Minimal interface for the online-ids lookup — accepts both Set<string> and
+// the { has } adapter returned by the usePresence hook.
+type OnlineIds = { has: (id: string) => boolean };
+
 // Presence helpers
 // ---------------------------------------------------------------------------
 
@@ -208,7 +212,7 @@ function MsgStatus({ isMine, msgId, messages }: { isMine: boolean; msgId: string
 // ---------------------------------------------------------------------------
 
 function ChatWindow({ peer, currentUserId, onClose, onlineIds }: {
-  peer: StaffMember; currentUserId: string; onClose: () => void; onlineIds: Set<string>;
+  peer: StaffMember; currentUserId: string; onClose: () => void; onlineIds: OnlineIds;
 }) {
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
@@ -410,7 +414,7 @@ function InfoRow({ icon, label, value }: { icon: ReactNode; label: string; value
 
 function DetailDrawer({ member, roles, plants, allStaff, onChat, onClose, isSelf, isAdmin, onlineIds }: {
   member: StaffMember; roles: any[]; plants: any[]; allStaff: StaffMember[];
-  onChat: () => void; onClose: () => void; isSelf: boolean; isAdmin: boolean; onlineIds: Set<string>;
+  onChat: () => void; onClose: () => void; isSelf: boolean; isAdmin: boolean; onlineIds: OnlineIds;
 }) {
   const presence = getPresence(member.updated_at, member.status, onlineIds.has(member.id));
   const pc = presenceConfig[presence];
@@ -489,7 +493,7 @@ function DetailDrawer({ member, roles, plants, allStaff, onChat, onClose, isSelf
 // ---------------------------------------------------------------------------
 
 function StaffCard({ member, roles, plants, isSelf, onlineIds, onChat, onDetail }: {
-  member: StaffMember; roles: any[]; plants: any[]; isSelf: boolean; onlineIds: Set<string>; onChat: () => void; onDetail: () => void;
+  member: StaffMember; roles: any[]; plants: any[]; isSelf: boolean; onlineIds: OnlineIds; onChat: () => void; onDetail: () => void;
 }) {
   const presence = getPresence(member.updated_at, member.status, onlineIds.has(member.id));
   const pc = presenceConfig[presence];
@@ -602,7 +606,9 @@ function Staff() {
   const [roleFilter, setRoleFilter] = useState<'all' | 'online' | 'leadership' | 'analyst' | 'operator'>('all');
   const [viewMode, setViewMode] = useState<'grid' | 'table' | 'grouped'>('grid');
 
-  const { onlineUserIds: onlineIds } = usePresence();
+  const { isUserOnline } = usePresence();
+  // Adapter: make a Set-like interface for all the places that call onlineIds.has(id)
+  const onlineIds = useMemo(() => ({ has: (id: string) => isUserOnline(id) }), [isUserOnline]);
 
   const { data: staff = [], refetch: refetchStaff } = useQuery<StaffMember[]>({
     queryKey: ['staff'],
@@ -2757,11 +2763,11 @@ export default function Employees() {
     },
   });
 
-  const { onlineUserIds } = usePresence();
+  const { isUserOnline: isEmpOnline } = usePresence();
 
   // Compute quick stats for the executive header strip
   const onlineCount = staff.filter((s) => {
-    const p = getPresence(s.updated_at, s.status, onlineUserIds.has(s.id));
+    const p = getPresence(s.updated_at, s.status, isEmpOnline(s.id));
     return p === 'active' || p === 'idle';
   }).length;
   const activeCount = staff.filter((s) => s.status === 'Active').length;

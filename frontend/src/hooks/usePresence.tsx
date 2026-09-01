@@ -1,135 +1,176 @@
-import React, { createContext, useContext, useEffect, useState, useMemo, type ReactNode } from 'react';
+/**
+ * usePresence  –  Global online-presence tracking for the entire app.
+ *
+ * Strategy (two complementary layers):
+ *
+ *  1. Database heartbeat  – update user_profiles.updated_at every 60 s AND on
+ *     every successful mutation (via stampActivity).  Also fires on tab focus.
+ *     This is the durable, persistent source of truth.
+ *
+ *  2. Supabase Realtime Postgres subscription  – watch UPDATE events on
+ *     user_profiles so every browser tab (e.g. the admin on /employees) sees
+ *     the latest updated_at for ALL users in real-time.
+ *
+ *  Because updated_at is the canonical "last seen" field, getPresence() in
+ *  Employees.tsx returns 'active' for any user whose updated_at is < 15 min ago.
+ *  stampActivity() must be called on every form submission / data entry so the
+ *  admin can see that the operator is actively working.
+ */
+
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useMemo,
+  type ReactNode,
+} from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
 import { useQueryClient } from '@tanstack/react-query';
 
+// ---------------------------------------------------------------------------
+// Module-level stamp so App.tsx MutationCache.onSuccess can call it without
+// needing access to the React context tree.
+// ---------------------------------------------------------------------------
+let _globalStamp: (() => void) | null = null;
+
+/** Call this after any successful mutation to mark the current user as active. */
+export function globalStampActivity() {
+  _globalStamp?.();
+}
+
+// ---------------------------------------------------------------------------
+// Context
+// ---------------------------------------------------------------------------
+
 interface PresenceContextValue {
-  onlineUserIds: Set<string>;
+  /** True if userId has been seen active within the last 15 minutes. */
   isUserOnline: (userId?: string | null) => boolean;
-  onlineCount: number;
+  /** Immediately update user_profiles.updated_at for the current user. */
+  stampActivity: () => void;
 }
 
 const PresenceContext = createContext<PresenceContextValue>({
-  onlineUserIds: new Set(),
   isUserOnline: () => false,
-  onlineCount: 0,
+  stampActivity: () => {},
 });
+
+// ---------------------------------------------------------------------------
+// Provider
+// ---------------------------------------------------------------------------
 
 export function PresenceProvider({ children }: { children: ReactNode }) {
   const { user, activeOperator, activeOperatorId } = useAuth();
-  const [onlineUserIds, setOnlineUserIds] = useState<Set<string>>(new Set());
   const queryClient = useQueryClient();
 
+  // The ID that represents the currently-logged-in person in user_profiles.
   const currentUserId = activeOperator?.id ?? activeOperatorId ?? user?.id;
 
-  // Periodic heartbeat to database user_profiles table
+  // Track last stamp so we debounce rapid calls (max once per 10 s).
+  const lastStampRef = useRef<number>(0);
+
+  // ---------------------------------------------------------------------------
+  // Stamp: write updated_at to DB and optimistically update 'staff' query cache
+  // ---------------------------------------------------------------------------
+  const stamp = useCallback(async () => {
+    if (!currentUserId) return;
+    const now = Date.now();
+    if (now - lastStampRef.current < 10_000) return; // debounce 10 s
+    lastStampRef.current = now;
+
+    const isoNow = new Date(now).toISOString();
+    try {
+      await supabase
+        .from('user_profiles')
+        .update({ updated_at: isoNow })
+        .eq('id', currentUserId);
+
+      // Optimistically patch the 'staff' query cache so the /employees page
+      // refreshes immediately without waiting for the Realtime event.
+      queryClient.setQueryData<any[]>(['staff'], (prev) =>
+        prev?.map((s) => (s.id === currentUserId ? { ...s, updated_at: isoNow } : s)) ?? prev
+      );
+    } catch {
+      // Non-blocking – presence is best-effort
+    }
+  }, [currentUserId, queryClient]);
+
+  // Register as the global stamp function.
+  useEffect(() => {
+    _globalStamp = stamp;
+    return () => { _globalStamp = null; };
+  }, [stamp]);
+
+  // ---------------------------------------------------------------------------
+  // Periodic heartbeat (60 s) + tab-focus heartbeat
+  // ---------------------------------------------------------------------------
   useEffect(() => {
     if (!currentUserId) return;
 
-    const heartbeat = async () => {
-      const now = new Date().toISOString();
-      try {
-        await supabase
-          .from('user_profiles')
-          .update({ updated_at: now })
-          .eq('id', currentUserId);
+    stamp(); // immediate on mount / login
 
-        queryClient.setQueryData<any[]>(['staff'], (prev) =>
-          prev?.map((s) => (s.id === currentUserId ? { ...s, updated_at: now } : s)) ?? prev
-        );
-      } catch {
-        // Non-blocking
-      }
+    const interval = setInterval(stamp, 60_000);
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') stamp();
     };
-
-    heartbeat();
-    const interval = setInterval(heartbeat, 60 * 1000); // 1-minute heartbeat
-
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        heartbeat();
-      }
-    };
-    document.addEventListener('visibilitychange', handleVisibilityChange);
+    document.addEventListener('visibilitychange', handleVisibility);
 
     return () => {
       clearInterval(interval);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      document.removeEventListener('visibilitychange', handleVisibility);
     };
-  }, [currentUserId, queryClient]);
+  }, [currentUserId, stamp]);
 
-  // Supabase Realtime Presence Channel ('online-users')
+  // ---------------------------------------------------------------------------
+  // Supabase Realtime Postgres subscription on user_profiles UPDATE
+  // When any operator submits data → their updated_at changes → the UPDATE
+  // event fires → we refetch 'staff' so the /employees page shows them online.
+  // ---------------------------------------------------------------------------
   useEffect(() => {
-    if (!currentUserId) {
-      setOnlineUserIds(new Set());
-      return;
-    }
-
-    const ch = supabase.channel('online-users', {
-      config: { presence: { key: currentUserId } },
-    });
-
-    const syncPresence = () => {
-      const state = ch.presenceState();
-      const ids = new Set<string>();
-
-      Object.entries(state).forEach(([key, presences]) => {
-        if (key) ids.add(key);
-        if (Array.isArray(presences)) {
-          presences.forEach((p: any) => {
-            if (p?.user_id) ids.add(p.user_id);
-            if (p?.operator_id) ids.add(p.operator_id);
-          });
+    const ch = supabase
+      .channel('presence-profile-updates')
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'user_profiles' },
+        () => {
+          // Refetch the staff list so updated_at values are current.
+          queryClient.invalidateQueries({ queryKey: ['staff'] });
         }
-      });
+      )
+      .subscribe();
 
-      // Always include active current user
-      if (currentUserId) ids.add(currentUserId);
-      if (user?.id) ids.add(user.id);
-      if (activeOperatorId) ids.add(activeOperatorId);
+    return () => { supabase.removeChannel(ch); };
+  }, [queryClient]);
 
-      setOnlineUserIds(ids);
-    };
-
-    ch.on('presence', { event: 'sync' }, syncPresence)
-      .on('presence', { event: 'join' }, syncPresence)
-      .on('presence', { event: 'leave' }, syncPresence)
-      .subscribe(async (status) => {
-        if (status === 'SUBSCRIBED') {
-          await ch.track({
-            user_id: user?.id,
-            operator_id: activeOperator?.id ?? activeOperatorId,
-            online_at: new Date().toISOString(),
-          });
-          syncPresence();
-        }
-      });
-
-    return () => {
-      supabase.removeChannel(ch);
-    };
-  }, [currentUserId, user?.id, activeOperator?.id, activeOperatorId]);
-
-  const isUserOnline = useMemo(() => {
-    return (userId?: string | null) => {
+  // ---------------------------------------------------------------------------
+  // isUserOnline – reads directly from the 'staff' query cache so no extra state
+  // ---------------------------------------------------------------------------
+  const isUserOnline = useCallback(
+    (userId?: string | null): boolean => {
       if (!userId) return false;
-      return onlineUserIds.has(userId);
-    };
-  }, [onlineUserIds]);
+      const staff = queryClient.getQueryData<any[]>(['staff']) ?? [];
+      const member = staff.find((s) => s.id === userId);
+      if (!member) return false;
+      const diffMin = (Date.now() - new Date(member.updated_at).getTime()) / 60_000;
+      return diffMin < 15;
+    },
+    [queryClient]
+  );
 
   const value = useMemo(
-    () => ({
-      onlineUserIds,
-      isUserOnline,
-      onlineCount: onlineUserIds.size,
-    }),
-    [onlineUserIds, isUserOnline]
+    () => ({ isUserOnline, stampActivity: stamp }),
+    [isUserOnline, stamp]
   );
 
   return <PresenceContext.Provider value={value}>{children}</PresenceContext.Provider>;
 }
 
+// ---------------------------------------------------------------------------
+// Hook
+// ---------------------------------------------------------------------------
 export function usePresence() {
   return useContext(PresenceContext);
 }
-
