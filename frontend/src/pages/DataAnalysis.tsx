@@ -556,8 +556,8 @@ export default function DataAnalysis() {
                 from={dateFrom}
                 to={dateTo}
                 onChange={({ from: f, to: t }) => {
-                  if (f) setDateFrom(f);
-                  if (t) setDateTo(t);
+                  setDateFrom(f);
+                  setDateTo(t);
                 }}
                 className="h-9 text-xs rounded-xl w-full"
               />

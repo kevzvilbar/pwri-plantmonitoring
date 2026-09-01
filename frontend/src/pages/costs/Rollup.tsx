@@ -119,8 +119,8 @@ export function Rollup() {
                 from={from}
                 to={to}
                 onChange={({ from: f, to: t }) => {
-                  if (f) setFrom(f);
-                  if (t) setTo(t);
+                  setFrom(f);
+                  setTo(t);
                 }}
                 className="h-9 rounded-xl text-xs w-full"
               />

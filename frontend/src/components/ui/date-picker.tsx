@@ -9,6 +9,7 @@ import {
   endOfMonth,
   subMonths,
   startOfYear,
+  startOfDay,
   setHours,
   setMinutes,
 } from 'date-fns';
@@ -201,7 +202,10 @@ export function DatePicker({
           mode="single"
           selected={selectedDate}
           onSelect={handleSelect}
-          disabled={(date) => (min ? date < min : false) || (max ? date > max : false)}
+          disabled={(date) => {
+            const d = startOfDay(date);
+            return (min ? d < startOfDay(min) : false) || (max ? d > startOfDay(max) : false);
+          }}
           initialFocus
           className="rounded-b-xl"
         />
@@ -253,7 +257,9 @@ export function DateRangePicker({
     }
     onChange?.({
       from: range.from ? formatDateToIso(range.from) : '',
-      to: range.to ? formatDateToIso(range.to) : range.from ? formatDateToIso(range.from) : '',
+      // Only emit 'to' once the user has actually selected the second date.
+      // Emitting from when to is missing collapsed the range on the first click.
+      to: range.to ? formatDateToIso(range.to) : '',
     });
     if (range.from && range.to) {
       setOpen(false);
@@ -424,9 +430,23 @@ export function DateTimePicker({
   const min = React.useMemo(() => parseDateValue(minDate), [minDate]);
   const max = React.useMemo(() => parseDateValue(maxDate), [maxDate]);
 
-  // Internal time state
-  const hours = selectedDate ? selectedDate.getHours() : new Date().getHours();
-  const minutes = selectedDate ? selectedDate.getMinutes() : 0;
+  // Internal time state — held in useState so that changing Hour/Min without
+  // first picking a date doesn't get thrown away on the next render.
+  const [hours, setHoursState] = React.useState<number>(() =>
+    parseDateValue(value)?.getHours() ?? new Date().getHours()
+  );
+  const [minutes, setMinutesState] = React.useState<number>(() =>
+    parseDateValue(value)?.getMinutes() ?? 0
+  );
+
+  // Sync local time state when the controlled value changes from outside
+  // (e.g. parent resets the field or a preset is applied).
+  React.useEffect(() => {
+    if (selectedDate) {
+      setHoursState(selectedDate.getHours());
+      setMinutesState(selectedDate.getMinutes());
+    }
+  }, [selectedDate]);
 
   const handleDateSelect = (date: Date | undefined) => {
     if (!date) return;
@@ -435,8 +455,13 @@ export function DateTimePicker({
   };
 
   const handleTimeChange = (newHours: number, newMinutes: number) => {
-    const base = selectedDate || new Date();
-    const withTime = setMinutes(setHours(base, newHours), newMinutes);
+    setHoursState(newHours);
+    setMinutesState(newMinutes);
+    // Don't emit until the user has explicitly chosen a date — otherwise
+    // adjusting the time spinners before picking a day would stamp today's
+    // date into the field without the user explicitly selecting it.
+    if (!selectedDate) return;
+    const withTime = setMinutes(setHours(selectedDate, newHours), newMinutes);
     onChange?.(formatDateTimeToIso(withTime));
   };
 
@@ -483,7 +508,10 @@ export function DateTimePicker({
             mode="single"
             selected={selectedDate}
             onSelect={handleDateSelect}
-            disabled={(date) => (min ? date < min : false) || (max ? date > max : false)}
+            disabled={(date) => {
+              const d = startOfDay(date);
+              return (min ? d < startOfDay(min) : false) || (max ? d > startOfDay(max) : false);
+            }}
             initialFocus
           />
         </div>

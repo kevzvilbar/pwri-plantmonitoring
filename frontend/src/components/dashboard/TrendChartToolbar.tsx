@@ -76,8 +76,8 @@ export function TrendChartToolbar({
             from={from}
             to={to}
             onChange={({ from: f, to: t }) => {
-              if (f) onFromChange(f);
-              if (t) onToChange(t);
+              onFromChange(f);
+              onToChange(t);
             }}
             size="sm"
             className="h-7 w-[200px] text-2xs px-2"

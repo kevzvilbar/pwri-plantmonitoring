@@ -593,8 +593,8 @@ export default function Exports() {
               from={from}
               to={to}
               onChange={({ from: f, to: t }) => {
-                if (f) setFrom(f);
-                if (t) setTo(t);
+                setFrom(f);
+                setTo(t);
               }}
               size="sm"
               className="h-8 text-xs min-w-[220px]"
