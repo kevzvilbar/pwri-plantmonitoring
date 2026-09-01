@@ -97,6 +97,17 @@ interface FlaggedRow {
   pre_edit_value?: number | null;
 }
 
+function parseNumeric(val: any): number | null {
+  if (val == null) return null;
+  if (typeof val === 'number') return isNaN(val) ? null : val;
+  if (typeof val === 'string') {
+    const clean = val.replace(/,/g, '').trim();
+    const num = Number(clean);
+    return isNaN(num) ? null : num;
+  }
+  return null;
+}
+
 function extractOldValueFromChanges(changes: any): number | null {
   if (!changes || typeof changes !== 'object') return null;
   const priorityKeys = [
@@ -105,17 +116,26 @@ function extractOldValueFromChanges(changes: any): number | null {
     'permeate_meter_reading', 'reject_meter_reading',
     'previous_reading', 'daily_volume'
   ];
+
+  const getOld = (obj: any): number | null => {
+    if (!obj || typeof obj !== 'object') return null;
+    const candidates = [obj.old, obj.old_value, obj.from, obj.before, obj.previous, obj.prev];
+    for (const c of candidates) {
+      const parsed = parseNumeric(c);
+      if (parsed != null) return parsed;
+    }
+    return null;
+  };
+
   for (const k of priorityKeys) {
     const val = changes[k];
-    if (val && typeof val === 'object' && val.old != null && !isNaN(Number(val.old))) {
-      return Number(val.old);
-    }
+    const old = getOld(val);
+    if (old != null) return old;
   }
   for (const key of Object.keys(changes)) {
     const val = changes[key];
-    if (val && typeof val === 'object' && val.old != null && !isNaN(Number(val.old))) {
-      return Number(val.old);
-    }
+    const old = getOld(val);
+    if (old != null) return old;
   }
   return null;
 }
@@ -671,6 +691,22 @@ async function fetchPending(): Promise<{ rows: FlaggedRow[]; truncated: boolean 
       return acc;
     }, {} as Record<string, any>);
 
+    // Also fetch any correction_requests filed against these records
+    const { data: corrRows } = await (supabase
+      .from('correction_requests' as any)
+      .select('source_id, original_value, proposed_value, reason, note, created_at')
+      .eq('source_table', table)
+      .in('source_id', rowIds)
+      .order('created_at', { ascending: true }) as any);
+    const corrMap = (corrRows ?? []).reduce((acc: Record<string, any>, c: any) => {
+      acc[c.source_id] = {
+        original_value: c.original_value != null ? Number(c.original_value) : null,
+        proposed_value: c.proposed_value != null ? Number(c.proposed_value) : null,
+        reason: c.reason,
+      };
+      return acc;
+    }, {} as Record<string, any>);
+
     for (const r of rows) {
       const vol = r.daily_volume ?? (r.previous_reading != null ? r.current_reading - r.previous_reading : null);
       // BUGFIX: this used to classify backward vs. spike by checking
@@ -684,14 +720,18 @@ async function fetchPending(): Promise<{ rows: FlaggedRow[]; truncated: boolean 
 
       const editEntry = editReasonMap[r.id];
       const normEntry = normMap[r.id];
+      const corrEntry = corrMap[r.id];
 
-      // Extract pre-edit value from audit log changes or reading_normalizations
+      // Extract pre-edit value from audit log changes, normalizations, or correction requests
       let preEditVal: number | null = null;
       if (editEntry?.changes) {
         preEditVal = extractOldValueFromChanges(editEntry.changes);
       }
       if (preEditVal == null && normEntry?.original_value != null && !isNaN(Number(normEntry.original_value))) {
         preEditVal = Number(normEntry.original_value);
+      }
+      if (preEditVal == null && corrEntry?.original_value != null && !isNaN(Number(corrEntry.original_value))) {
+        preEditVal = Number(corrEntry.original_value);
       }
 
       results.push({
