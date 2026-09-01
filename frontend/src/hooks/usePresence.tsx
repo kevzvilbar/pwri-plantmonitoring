@@ -1,28 +1,24 @@
 /**
  * usePresence  –  Global online-presence tracking for the entire app.
  *
- * Strategy (three layers, most-reliable to least-reliable):
+ * Strategy (three complementary layers):
  *
  *  1. Supabase Realtime BROADCAST  – "activity-pings" channel
  *     When any user stamps activity they broadcast { userId, updatedAt }.
  *     Every other tab (admin on /employees, operators on other pages) receives
- *     this and IMMEDIATELY patches the ['staff'] cache so the card goes green
- *     without any round-trip to the database.
- *     Broadcast always works — no table publication setup required.
+ *     this and IMMEDIATELY marks the user as online in-memory AND patches
+ *     the ['staff'] cache so the card goes green without any round-trip delay.
  *
- *  2. Database heartbeat (updated_at)  – durable source of truth.
- *     Written every 60 s + on every form submit + on tab focus.
- *     Guarantees that even a late-joining browser sees correct status on load.
+ *  2. Database RPC Heartbeat (`touch_user_presence`)  – durable source of truth.
+ *     Calls SECURITY DEFINER RPC `touch_user_presence(p_user_id)` so that ANY
+ *     authenticated staff or shift operator on a shared plant tablet can update
+ *     their presence in `user_profiles.updated_at` without RLS permission errors.
  *
- *  3. Periodic refetch safety net (2 min)
- *     Re-fetches ['staff'] every 2 minutes in the background so stragglers
- *     or missed broadcasts are corrected automatically.
- *
- *  Why we moved away from Postgres Realtime changes:
- *    The user_profiles table must be explicitly added to Supabase's Realtime
- *    publication in the dashboard before postgres_changes events fire.  That
- *    step was never done, so the subscription was silently a no-op.  Broadcast
- *    requires zero database setup and fires within ~300 ms.
+ *  3. Telemetry Triggers & Periodic Refetch Safety Net
+ *     Database triggers on plant reading entries (`locator_readings`, `ro_train_readings`,
+ *     `well_readings`, `product_meter_readings`, `chemical_dosing_logs`, etc.)
+ *     automatically stamp the operator's presence whenever they log data.
+ *     The ['staff'] query also refetches periodically to catch any missed pings.
  */
 
 import React, {
@@ -31,6 +27,7 @@ import React, {
   useContext,
   useEffect,
   useRef,
+  useState,
   useMemo,
   type ReactNode,
 } from 'react';
@@ -81,6 +78,10 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
   // The ID that represents the currently-logged-in person in user_profiles.
   const currentUserId = activeOperator?.id ?? activeOperatorId ?? user?.id;
 
+  // Track in-memory live pings (timestamp in ms)
+  const livePingsRef = useRef<Map<string, number>>(new Map());
+  const [, setTick] = useState(0);
+
   // Track last stamp so we debounce rapid calls (max once per 10 s).
   const lastStampRef = useRef<number>(0);
 
@@ -88,10 +89,17 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
   // ---------------------------------------------------------------------------
-  // Patch helper – update a single user's updated_at in the ['staff'] cache
+  // Patch helper – update a single user's updated_at in the ['staff'] cache & pings
   // ---------------------------------------------------------------------------
-  const patchCache = useCallback(
+  const patchCacheAndPing = useCallback(
     (userId: string, updatedAt: string) => {
+      const timeMs = new Date(updatedAt).getTime();
+      livePingsRef.current.set(userId, isNaN(timeMs) ? Date.now() : timeMs);
+
+      // Force re-render of components using usePresence
+      setTick((t) => (t + 1) % 10000);
+
+      // Optimistically patch the 'staff' query cache
       queryClient.setQueryData<any[]>(['staff'], (prev) => {
         if (!prev) return prev;
         return prev.map((s) =>
@@ -103,7 +111,7 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
   );
 
   // ---------------------------------------------------------------------------
-  // Stamp: write updated_at to DB + broadcast to all other browsers
+  // Stamp: write updated_at via RPC to DB + broadcast to all other browsers
   // ---------------------------------------------------------------------------
   const stamp = useCallback(async () => {
     if (!currentUserId) return;
@@ -114,25 +122,35 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
     const isoNow = new Date(now).toISOString();
 
     // 1. Optimistically patch own entry in the local cache immediately.
-    patchCache(currentUserId, isoNow);
+    patchCacheAndPing(currentUserId, isoNow);
 
-    // 2. Broadcast to every other connected browser (fastest path).
-    channelRef.current?.send({
-      type: 'broadcast',
-      event: 'ping',
-      payload: { userId: currentUserId, updatedAt: isoNow },
-    });
-
-    // 3. Persist to DB (durable – source of truth on page reload).
+    // 2. Broadcast to every other connected browser (instant sub-second path).
     try {
-      await supabase
-        .from('user_profiles')
-        .update({ updated_at: isoNow })
-        .eq('id', currentUserId);
+      channelRef.current?.send({
+        type: 'broadcast',
+        event: 'ping',
+        payload: { userId: currentUserId, updatedAt: isoNow },
+      });
+    } catch {
+      // Non-blocking
+    }
+
+    // 3. Persist to DB via SECURITY DEFINER RPC (bypasses table RLS)
+    try {
+      const { error } = await (supabase as any).rpc('touch_user_presence', {
+        p_user_id: currentUserId,
+      });
+      if (error) {
+        // Fallback to direct update if RPC is not present
+        await supabase
+          .from('user_profiles')
+          .update({ updated_at: isoNow })
+          .eq('id', currentUserId);
+      }
     } catch {
       // Non-blocking – presence is best-effort
     }
-  }, [currentUserId, patchCache]);
+  }, [currentUserId, patchCacheAndPing]);
 
   // Register as the global stamp function.
   useEffect(() => {
@@ -149,7 +167,7 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
       .on('broadcast', { event: 'ping' }, ({ payload }) => {
         // Another user submitted data or their heartbeat fired.
         if (payload?.userId && payload?.updatedAt) {
-          patchCache(payload.userId as string, payload.updatedAt as string);
+          patchCacheAndPing(payload.userId as string, payload.updatedAt as string);
         }
       })
       .subscribe();
@@ -159,15 +177,15 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
       supabase.removeChannel(ch);
       channelRef.current = null;
     };
-  }, [patchCache]);
+  }, [patchCacheAndPing]);
 
   // ---------------------------------------------------------------------------
-  // Periodic heartbeat (60 s) + tab-focus heartbeat
+  // Periodic heartbeat (60 s) + tab-focus heartbeat + shift-change stamp
   // ---------------------------------------------------------------------------
   useEffect(() => {
     if (!currentUserId) return;
 
-    stamp(); // immediate on mount / login
+    stamp(); // immediate on mount / login / operator switch
 
     const interval = setInterval(stamp, 60_000);
 
@@ -183,26 +201,37 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
   }, [currentUserId, stamp]);
 
   // ---------------------------------------------------------------------------
-  // Safety-net: refetch ['staff'] every 2 minutes to catch any missed broadcasts
+  // Safety-net: refetch ['staff'] every 60 seconds
   // ---------------------------------------------------------------------------
   useEffect(() => {
     const interval = setInterval(() => {
       queryClient.invalidateQueries({ queryKey: ['staff'] });
-    }, 120_000);
+    }, 60_000);
     return () => clearInterval(interval);
   }, [queryClient]);
 
   // ---------------------------------------------------------------------------
-  // isUserOnline – reads directly from the 'staff' query cache
+  // isUserOnline – checks both in-memory live pings AND 'staff' query cache
   // ---------------------------------------------------------------------------
   const isUserOnline = useCallback(
     (userId?: string | null): boolean => {
       if (!userId) return false;
+
+      // 1. In-memory live ping check (< 15 mins)
+      const lastPing = livePingsRef.current.get(userId);
+      if (lastPing && (Date.now() - lastPing) / 60_000 < 15) {
+        return true;
+      }
+
+      // 2. Database query cache check (< 15 mins)
       const staff = queryClient.getQueryData<any[]>(['staff']) ?? [];
       const member = staff.find((s) => s.id === userId);
-      if (!member) return false;
-      const diffMin = (Date.now() - new Date(member.updated_at).getTime()) / 60_000;
-      return diffMin < 15;
+      if (member?.updated_at) {
+        const diffMin = (Date.now() - new Date(member.updated_at).getTime()) / 60_000;
+        if (diffMin < 15) return true;
+      }
+
+      return false;
     },
     [queryClient]
   );
