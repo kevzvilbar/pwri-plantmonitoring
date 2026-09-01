@@ -10,9 +10,11 @@
  *     the ['staff'] cache so the card goes green without any round-trip delay.
  *
  *  2. Database RPC Heartbeat (`touch_user_presence`)  – durable source of truth.
- *     Calls SECURITY DEFINER RPC `touch_user_presence(p_user_id)` so that ANY
- *     authenticated staff or shift operator on a shared plant tablet can update
- *     their presence in `user_profiles.updated_at` without RLS permission errors.
+ *     Calls SECURITY DEFINER RPC `touch_user_presence(p_user_id)` so that a
+ *     staff member (or a shift operator sharing a plant with the caller) can
+ *     update their presence in `user_profiles.last_seen_at` without RLS
+ *     permission errors. The RPC itself still checks the caller is allowed
+ *     to touch that particular profile (self, admin, or same-plant).
  *
  *  3. Telemetry Triggers & Periodic Refetch Safety Net
  *     Database triggers on plant reading entries (`locator_readings`, `ro_train_readings`,
@@ -92,8 +94,8 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
   // Patch helper – update a single user's updated_at in the ['staff'] cache & pings
   // ---------------------------------------------------------------------------
   const patchCacheAndPing = useCallback(
-    (userId: string, updatedAt: string) => {
-      const timeMs = new Date(updatedAt).getTime();
+    (userId: string, seenAt: string) => {
+      const timeMs = new Date(seenAt).getTime();
       livePingsRef.current.set(userId, isNaN(timeMs) ? Date.now() : timeMs);
 
       // Force re-render of components using usePresence
@@ -103,7 +105,7 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
       queryClient.setQueryData<any[]>(['staff'], (prev) => {
         if (!prev) return prev;
         return prev.map((s) =>
-          s.id === userId ? { ...s, updated_at: updatedAt } : s
+          s.id === userId ? { ...s, last_seen_at: seenAt } : s
         );
       });
     },
@@ -226,8 +228,8 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
       // 2. Database query cache check (< 15 mins)
       const staff = queryClient.getQueryData<any[]>(['staff']) ?? [];
       const member = staff.find((s) => s.id === userId);
-      if (member?.updated_at) {
-        const diffMin = (Date.now() - new Date(member.updated_at).getTime()) / 60_000;
+      if (member?.last_seen_at) {
+        const diffMin = (Date.now() - new Date(member.last_seen_at).getTime()) / 60_000;
         if (diffMin < 15) return true;
       }
 

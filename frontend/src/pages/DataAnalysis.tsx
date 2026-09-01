@@ -89,6 +89,9 @@ export default function DataAnalysis() {
   // Regression state
   const [running, setRunning] = useState(false);
 
+  // Backfill Sweep state
+  const [sweepingBackfill, setSweepingBackfill] = useState(false);
+
   const canEdit = usePermission('data_analysis_review', 'edit');
   const canView = usePermission('data_analysis_review', 'view');
 
@@ -339,8 +342,7 @@ export default function DataAnalysis() {
     setDateTo(to);
   };
 
-  // Backfill Sweep state
-  const [sweepingBackfill, setSweepingBackfill] = useState(false);
+  // Backfill Sweep
   const handleRunBackfillSweep = async () => {
     setSweepingBackfill(true);
     try {

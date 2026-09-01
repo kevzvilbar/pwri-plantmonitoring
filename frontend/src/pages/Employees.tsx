@@ -53,6 +53,7 @@ type StaffMember = {
   plant_assignments: string[];
   status: string;
   updated_at: string;
+  last_seen_at: string | null;
   immediate_head_id: string | null;
 };
 
@@ -80,10 +81,11 @@ type OnlineIds = { has: (id: string) => boolean };
 
 type PresenceState = 'active' | 'idle' | 'away' | 'offline';
 
-function getPresence(updatedAt: string, accountStatus: string, isOnline = false): PresenceState {
+function getPresence(lastSeenAt: string | null, accountStatus: string, isOnline = false): PresenceState {
   if (accountStatus === 'Suspended' || accountStatus === 'Pending') return 'offline';
   if (isOnline) return 'active';
-  const diffMin = (Date.now() - new Date(updatedAt).getTime()) / 60_000;
+  if (!lastSeenAt) return 'offline';
+  const diffMin = (Date.now() - new Date(lastSeenAt).getTime()) / 60_000;
   if (diffMin < 15)  return 'active';
   if (diffMin < 60)  return 'idle';
   if (diffMin < 480) return 'away';
@@ -287,7 +289,7 @@ function ChatWindow({ peer, currentUserId, onClose, onlineIds }: {
     } finally { setSending(false); }
   }, [input, currentUserId, peer.id, refetch]);
 
-  const presence = getPresence(peer.updated_at, peer.status, onlineIds.has(peer.id));
+  const presence = getPresence(peer.last_seen_at, peer.status, onlineIds.has(peer.id));
   const pc = presenceConfig[presence];
 
   return (
@@ -416,7 +418,7 @@ function DetailDrawer({ member, roles, plants, allStaff, onChat, onClose, isSelf
   member: StaffMember; roles: any[]; plants: any[]; allStaff: StaffMember[];
   onChat: () => void; onClose: () => void; isSelf: boolean; isAdmin: boolean; onlineIds: OnlineIds;
 }) {
-  const presence = getPresence(member.updated_at, member.status, onlineIds.has(member.id));
+  const presence = getPresence(member.last_seen_at, member.status, onlineIds.has(member.id));
   const pc = presenceConfig[presence];
   const memberRoles = roles.filter((r) => r.user_id === member.id).map((r) => r.role);
   const memberPlants = plants.filter((p) => member.plant_assignments?.includes(p.id)).map((p) => p.name);
@@ -495,7 +497,7 @@ function DetailDrawer({ member, roles, plants, allStaff, onChat, onClose, isSelf
 function StaffCard({ member, roles, plants, isSelf, onlineIds, onChat, onDetail }: {
   member: StaffMember; roles: any[]; plants: any[]; isSelf: boolean; onlineIds: OnlineIds; onChat: () => void; onDetail: () => void;
 }) {
-  const presence = getPresence(member.updated_at, member.status, onlineIds.has(member.id));
+  const presence = getPresence(member.last_seen_at, member.status, onlineIds.has(member.id));
   const pc = presenceConfig[presence];
   const memberRole = (roles as any[]).find((r) => r.user_id === member.id)?.role ?? 'Operator';
   const rc = getRoleConfig(memberRole);
@@ -645,7 +647,7 @@ function Staff() {
   });
 
   // Calculate high-level stats
-  const onlineCount = staff.filter((s) => onlineIds.has(s.id) || getPresence(s.updated_at, s.status, onlineIds.has(s.id)) === 'active').length;
+  const onlineCount = staff.filter((s) => onlineIds.has(s.id) || getPresence(s.last_seen_at, s.status, onlineIds.has(s.id)) === 'active').length;
   const leadershipCount = staff.filter((s) => {
     const r = (roles as any[]).find((x) => x.user_id === s.id)?.role;
     return r === 'Admin' || r === 'Manager';
@@ -664,7 +666,7 @@ function Staff() {
       const plantMatch = filterPlant === 'all' || s.plant_assignments?.includes(filterPlant);
 
       const r = (roles as any[]).find((x) => x.user_id === s.id)?.role ?? 'Operator';
-      const isOnline = onlineIds.has(s.id) || getPresence(s.updated_at, s.status, onlineIds.has(s.id)) === 'active';
+      const isOnline = onlineIds.has(s.id) || getPresence(s.last_seen_at, s.status, onlineIds.has(s.id)) === 'active';
 
       let roleMatch = true;
       if (roleFilter === 'online') roleMatch = isOnline;
@@ -889,7 +891,7 @@ function Staff() {
               </thead>
               <tbody className="divide-y divide-border/40">
                 {filteredStaff.map((s) => {
-                  const presence = getPresence(s.updated_at, s.status, onlineIds.has(s.id));
+                  const presence = getPresence(s.last_seen_at, s.status, onlineIds.has(s.id));
                   const pc = presenceConfig[presence];
                   const memberRole = (roles as any[]).find((r) => r.user_id === s.id)?.role ?? 'Operator';
                   const rc = getRoleConfig(memberRole);
@@ -2794,7 +2796,7 @@ export default function Employees() {
 
   // Compute quick stats for the executive header strip
   const onlineCount = staff.filter((s) => {
-    const p = getPresence(s.updated_at, s.status, isEmpOnline(s.id));
+    const p = getPresence(s.last_seen_at, s.status, isEmpOnline(s.id));
     return p === 'active' || p === 'idle';
   }).length;
   const activeCount = staff.filter((s) => s.status === 'Active').length;
