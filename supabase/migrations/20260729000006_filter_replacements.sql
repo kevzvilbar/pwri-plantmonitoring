@@ -24,6 +24,10 @@
 -- 0. Catch-up: filter_housing_type was applied directly to the live DB
 --    without a committed migration. Idempotent no-op if already present.
 ALTER TABLE public.plants
+  ADD COLUMN IF NOT EXISTS filter_media_type text
+  CHECK (filter_media_type IN ('AFM', 'Sand', 'Other'));
+
+ALTER TABLE public.plants
   ADD COLUMN IF NOT EXISTS filter_housing_type text
   CHECK (filter_housing_type IN ('Cartridge Filter', 'Bag Filter'));
 
