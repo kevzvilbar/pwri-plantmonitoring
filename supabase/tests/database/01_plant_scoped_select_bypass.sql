@@ -21,9 +21,16 @@ CREATE TEMP TABLE _fixture (
 );
 
 INSERT INTO _fixture
-SELECT gen_random_uuid(), gen_random_uuid(), gen_random_uuid(),
-       gen_random_uuid(), gen_random_uuid(),
-       gen_random_uuid(), gen_random_uuid(), gen_random_uuid();
+-- Generate fresh UUIDs for each test run to avoid collision across test files
+SELECT 
+  public.gen_random_uuid() AS plant_a,
+  public.gen_random_uuid() AS plant_b,
+  public.gen_random_uuid() AS train_b,
+  public.gen_random_uuid() AS operator_a,
+  public.gen_random_uuid() AS manager_partial,
+  public.gen_random_uuid() AS incident_b,
+  public.gen_random_uuid() AS pump_reading_b,
+  public.gen_random_uuid() AS cip_log_b;
 
 DO $$
 DECLARE f record;
