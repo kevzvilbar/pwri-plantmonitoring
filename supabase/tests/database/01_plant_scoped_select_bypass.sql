@@ -38,8 +38,8 @@ BEGIN
 
   INSERT INTO public.ro_trains (id, plant_id, train_number, status, num_afm,
     num_booster_pumps, num_hp_pumps, num_cartridge_filters, num_filter_housings,
-    num_controllers, unit_type, reject_routing)
-  VALUES (f.train_b, f.plant_b, 1, 'Running'::train_status, 0, 1, 1, 1, 1, 1, 'primary', 'discharge');
+    num_controllers)
+  VALUES (f.train_b, f.plant_b, 1, 'Running'::train_status, 0, 1, 1, 1, 1, 1);
 
   -- auth.users only strictly requires id -- see the 2026-08-18 review's
   -- app_metadata.role sync migration, which established this same pattern.
