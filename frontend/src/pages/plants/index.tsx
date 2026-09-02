@@ -89,7 +89,7 @@ function FadingAddressText({ address }: { address: string }) {
         <span
           className={
             overflows
-              ? 'inline-block transition-transform duration-[4000ms] ease-in-out group-hover:-translate-x-[var(--scroll-offset)]'
+              ? 'inline-block transition-transform duration-4000 ease-in-out group-hover:-translate-x-[var(--scroll-offset)]'
               : ''
           }
           style={{ ['--scroll-offset' as any]: `${offset}px` }}
