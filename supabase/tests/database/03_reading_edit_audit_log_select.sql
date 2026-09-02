@@ -20,9 +20,10 @@ BEGIN
   SELECT * INTO f FROM _fixture;
 
   INSERT INTO auth.users (id) VALUES (f.analyst), (f.plain_operator);
-  INSERT INTO public.user_profiles (id, plant_assignments, status, profile_complete, confirmed)
-  VALUES (f.analyst,        ARRAY[]::uuid[], 'Active'::profile_status, true, true),
-         (f.plain_operator, ARRAY[]::uuid[], 'Active'::profile_status, true, true);
+  UPDATE public.user_profiles
+  SET plant_assignments = ARRAY[]::uuid[], status = 'Active'::profile_status, profile_complete = true, confirmed = true
+  WHERE id IN (f.analyst, f.plain_operator);
+  DELETE FROM public.user_roles WHERE user_id IN (f.analyst, f.plain_operator);
   INSERT INTO public.user_roles (user_id, role) VALUES
     (f.analyst, 'Data Analyst'),
     (f.plain_operator, 'Operator');

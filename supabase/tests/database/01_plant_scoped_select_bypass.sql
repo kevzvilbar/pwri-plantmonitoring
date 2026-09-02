@@ -56,11 +56,11 @@ BEGIN
   -- app_metadata.role sync migration, which established this same pattern.
   INSERT INTO auth.users (id) VALUES (f.operator_a), (f.manager_partial);
 
-  INSERT INTO public.user_profiles (id, plant_assignments, status, profile_complete, confirmed)
-  VALUES
-    (f.operator_a,      ARRAY[f.plant_a], 'Active'::profile_status, true, true),
-    (f.manager_partial, ARRAY[f.plant_a], 'Active'::profile_status, true, true); -- deliberately NOT plant_b
+  UPDATE public.user_profiles
+  SET plant_assignments = ARRAY[f.plant_a], status = 'Active'::profile_status, profile_complete = true, confirmed = true
+  WHERE id IN (f.operator_a, f.manager_partial);
 
+  DELETE FROM public.user_roles WHERE user_id IN (f.operator_a, f.manager_partial);
   INSERT INTO public.user_roles (user_id, role) VALUES
     (f.operator_a, 'Operator'),
     (f.manager_partial, 'Manager');

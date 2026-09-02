@@ -29,9 +29,10 @@ BEGIN
     (f.plant_id, 'pgtap-compliance-plant', 'Active'::plant_status, 1, 100, 'independent', 'AFM', 'Cartridge Filter', false, true);
 
   INSERT INTO auth.users (id) VALUES (f.analyst), (f.plain_operator);
-  INSERT INTO public.user_profiles (id, plant_assignments, status, profile_complete, confirmed)
-  VALUES (f.analyst,        ARRAY[f.plant_id], 'Active'::profile_status, true, true),
-         (f.plain_operator, ARRAY[f.plant_id], 'Active'::profile_status, true, true);
+  UPDATE public.user_profiles
+  SET plant_assignments = ARRAY[f.plant_id], status = 'Active'::profile_status, profile_complete = true, confirmed = true
+  WHERE id IN (f.analyst, f.plain_operator);
+  DELETE FROM public.user_roles WHERE user_id IN (f.analyst, f.plain_operator);
   INSERT INTO public.user_roles (user_id, role) VALUES
     (f.analyst, 'Data Analyst'),
     (f.plain_operator, 'Operator');

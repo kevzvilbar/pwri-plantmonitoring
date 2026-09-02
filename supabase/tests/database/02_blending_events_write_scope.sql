@@ -45,8 +45,10 @@ BEGIN
   -- plant_b's blending event at all, the exact scenario the stray policy
   -- let through before.
   INSERT INTO auth.users (id) VALUES (f.outsider);
-  INSERT INTO public.user_profiles (id, plant_assignments, status, profile_complete, confirmed)
-  VALUES (f.outsider, ARRAY[f.plant_a], 'Active'::profile_status, true, true);
+  UPDATE public.user_profiles
+  SET plant_assignments = ARRAY[f.plant_a], status = 'Active'::profile_status, profile_complete = true, confirmed = true
+  WHERE id = f.outsider;
+  DELETE FROM public.user_roles WHERE user_id = f.outsider;
   INSERT INTO public.user_roles (user_id, role) VALUES (f.outsider, 'Operator');
 
   INSERT INTO public.blending_events (id, plant_id, well_id, event_date, raw_meter_reading, noted_at)

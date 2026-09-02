@@ -21,6 +21,10 @@ CREATE TEMP TABLE _fixture (u uuid);
 INSERT INTO _fixture SELECT gen_random_uuid();
 INSERT INTO auth.users (id) SELECT u FROM _fixture;
 
+-- Clear any default role created by auth trigger so we test explicit INSERT from clean state
+DELETE FROM public.user_roles WHERE user_id = (SELECT u FROM _fixture);
+UPDATE auth.users SET raw_app_meta_data = COALESCE(raw_app_meta_data, '{}'::jsonb) - 'role' WHERE id = (SELECT u FROM _fixture);
+
 INSERT INTO public.user_roles (user_id, role) SELECT u, 'Operator' FROM _fixture;
 SELECT is(
   (SELECT raw_app_meta_data->>'role' FROM auth.users WHERE id = (SELECT u FROM _fixture)),

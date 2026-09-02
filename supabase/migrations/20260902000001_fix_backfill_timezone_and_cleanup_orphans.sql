@@ -220,7 +220,7 @@ BEGIN
         AND (reading_datetime AT TIME ZONE 'Asia/Manila')::date <= v_target_end
       ORDER BY reading_datetime ASC
     LOOP
-      SELECT id, current_reading, (reading_datetime AT TIME ZONE 'Asia/Manila')::date AS r_date, is_meter_replacement, is_meter_rollover
+      SELECT id, current_reading, (reading_datetime AT TIME ZONE 'Asia/Manila')::date AS r_date, is_meter_rollover
       INTO r_reading_b
       FROM public.locator_readings
       WHERE locator_id = r_entity.id
@@ -231,7 +231,6 @@ BEGIN
       IF FOUND THEN
         v_gap_days := (r_reading_b.r_date - r_reading_a.r_date) - 1;
         IF v_gap_days >= 1 AND v_gap_days <= 14 
-           AND NOT COALESCE(r_reading_b.is_meter_replacement, false)
            AND NOT COALESCE(r_reading_b.is_meter_rollover, false) THEN
           v_diff := r_reading_b.current_reading - r_reading_a.current_reading;
           IF v_diff >= 0 THEN
