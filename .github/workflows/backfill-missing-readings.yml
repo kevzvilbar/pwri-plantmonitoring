@@ -90,5 +90,23 @@ jobs:
             exit 1
           fi
 
+          # fn_backfill_missing_readings (2026-09-02+) isolates each of its six
+          # modules in its own savepoint: a bad module no longer rolls back the
+          # others, so .ok is now true even on a partial failure. Surface that
+          # case explicitly instead of letting it pass as a silent success.
+          HAS_ERRORS=$(printf '%s' "$RESPONSE" | jq -r '.has_errors // false')
+          if [ "$HAS_ERRORS" = "true" ]; then
+            echo "::warning::Backfill sweep completed with partial module failures — see annotations below."
+            printf '%s' "$RESPONSE" | jq -c '.errors[]?' | while IFS= read -r err; do
+              MODULE=$(printf '%s' "$err" | jq -r '.module')
+              MSG=$(printf '%s' "$err" | jq -r '.message')
+              STATE=$(printf '%s' "$err" | jq -r '.sqlstate')
+              echo "::error::Module '$MODULE' failed (SQLSTATE $STATE): $MSG"
+            done
+            echo "Swept: $(printf '%s' "$RESPONSE" | jq -r '.swept_count') | Skipped: $(printf '%s' "$RESPONSE" | jq -r '.skipped_count') | Retracted: $(printf '%s' "$RESPONSE" | jq -r '.retracted_count')"
+            echo "These counts are from the modules that succeeded — per-module isolation means the failed module(s) above did not block or discard that work."
+            exit 1
+          fi
+
           echo "Backfill sweep completed successfully through $TARGET_DATE."
 
