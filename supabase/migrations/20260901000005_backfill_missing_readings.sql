@@ -11,6 +11,7 @@
 --        - product_meter_readings
 --        - blending_events
 --        - power_readings
+--        - ro_train_readings
 --
 -- Rules & Guards:
 --   • Bounded gaps only (never forward project past the latest real reading).
@@ -66,6 +67,7 @@ DECLARE
   v_target_start  date := p_date - (v_lookback || ' days')::interval;
   v_swept_count   integer := 0;
   v_skipped_count integer := 0;
+  v_retracted_count integer := 0;
 
   -- Iteration variables
   r_entity        RECORD;
@@ -125,6 +127,14 @@ BEGIN
 
                 IF v_has_reason THEN
                   v_skipped_count := v_skipped_count + 1;
+                  -- If there's now a remark for this date, retract any existing estimated reading
+                  DELETE FROM public.locator_readings
+                  WHERE locator_id = r_entity.id 
+                    AND reading_datetime::date = v_cur_date 
+                    AND is_estimated = true;
+                  IF FOUND THEN
+                    v_retracted_count := v_retracted_count + 1;
+                  END IF;
                 ELSE
                   v_val := ROUND(r_reading_a.current_reading + (v_step * k), 2);
                   v_dt_iso := (v_cur_date::text || ' 12:00:00+08')::timestamptz;
@@ -205,6 +215,14 @@ BEGIN
 
                 IF v_has_reason THEN
                   v_skipped_count := v_skipped_count + 1;
+                  -- Retract any existing estimated reading for this gap date
+                  DELETE FROM public.well_readings
+                  WHERE well_id = r_entity.id 
+                    AND reading_datetime::date = v_cur_date 
+                    AND is_estimated = true;
+                  IF FOUND THEN
+                    v_retracted_count := v_retracted_count + 1;
+                  END IF;
                 ELSE
                   v_val := ROUND(r_reading_a.current_reading + (v_step * k), 2);
                   v_daily_vol := ROUND(v_step, 2);
@@ -285,6 +303,14 @@ BEGIN
 
                 IF v_has_reason THEN
                   v_skipped_count := v_skipped_count + 1;
+                  -- Retract any existing estimated reading for this gap date
+                  DELETE FROM public.product_meter_readings
+                  WHERE meter_id = r_entity.id 
+                    AND reading_datetime::date = v_cur_date 
+                    AND is_estimated = true;
+                  IF FOUND THEN
+                    v_retracted_count := v_retracted_count + 1;
+                  END IF;
                 ELSE
                   v_val := ROUND(r_reading_a.current_reading + (v_step * k), 2);
                   v_daily_vol := ROUND(v_step, 2);
@@ -365,6 +391,14 @@ BEGIN
 
                 IF v_has_reason THEN
                   v_skipped_count := v_skipped_count + 1;
+                  -- Retract any existing estimated reading for this gap date
+                  DELETE FROM public.blending_events
+                  WHERE well_id = r_entity.id 
+                    AND event_date = v_cur_date 
+                    AND is_estimated = true;
+                  IF FOUND THEN
+                    v_retracted_count := v_retracted_count + 1;
+                  END IF;
                 ELSE
                   v_val := ROUND(r_reading_a.raw_meter_reading + (v_step * k), 2);
                   v_daily_vol := ROUND(v_step, 2);
@@ -445,6 +479,14 @@ BEGIN
 
                 IF v_has_reason THEN
                   v_skipped_count := v_skipped_count + 1;
+                  -- Retract any existing estimated reading for this gap date
+                  DELETE FROM public.power_readings
+                  WHERE plant_id = r_entity.plant_id 
+                    AND reading_datetime::date = v_cur_date 
+                    AND is_estimated = true;
+                  IF FOUND THEN
+                    v_retracted_count := v_retracted_count + 1;
+                  END IF;
                 ELSE
                   v_val := ROUND(r_reading_a.meter_reading_kwh + (v_step * k), 2);
                   v_daily_vol := ROUND(v_step, 2);
@@ -487,16 +529,33 @@ BEGIN
     END LOOP;
   END LOOP;
 
+  -- ───────────────────────────────────────────────────────────────────────────
+  -- MODULE 6: RO TRAIN READINGS (ro_train_readings) — Orphan Purge
+  -- ───────────────────────────────────────────────────────────────────────────
+  -- When a real (non-estimated) reading is logged on a date that previously
+  -- had only an estimated backfill, delete the estimated row to avoid duplicates.
+  DELETE FROM public.ro_train_readings rtr
+  WHERE is_estimated = true
+    AND reading_datetime::date >= v_target_start
+    AND reading_datetime::date <= v_target_end
+    AND EXISTS (
+      SELECT 1 FROM public.ro_train_readings rtr2
+      WHERE rtr2.train_id = rtr.train_id
+        AND rtr2.is_estimated = false
+        AND rtr2.reading_datetime::date = rtr.reading_datetime::date
+    );
+  v_retracted_count := v_retracted_count + (SELECT changes());
+
   RETURN jsonb_build_object(
     'ok', true,
     'date', p_date,
     'lookback_days', v_lookback,
     'swept_count', v_swept_count,
-    'skipped_count', v_skipped_count
+    'skipped_count', v_skipped_count,
+    'retracted_count', v_retracted_count
   );
 END;
 $function$;
 
 GRANT EXECUTE ON FUNCTION public.fn_backfill_missing_readings(date, integer) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.fn_backfill_missing_readings(date, integer) TO anon;
-
