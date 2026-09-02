@@ -2,7 +2,7 @@
 -- =========================================================
 -- ENUMS
 -- =========================================================
-CREATE TYPE public.app_role AS ENUM ('Operator','Technician','Manager','Admin');
+CREATE TYPE public.app_role AS ENUM ('Operator','Technician','Manager','Admin','Data Analyst');
 CREATE TYPE public.profile_status AS ENUM ('Pending','Active','Suspended');
 CREATE TYPE public.plant_status AS ENUM ('Active','Inactive');
 CREATE TYPE public.train_status AS ENUM ('Running','Offline','Maintenance');
