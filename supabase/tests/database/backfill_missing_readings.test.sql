@@ -112,7 +112,7 @@ BEGIN
 
   -- Insert mock RO Train
   INSERT INTO public.ro_trains (id, plant_id, train_name, status)
-  VALUES (v_train_id, v_plant_id, 'Train Alpha', 'Active');
+  VALUES (v_train_id, v_plant_id, 'Train Alpha', 'Running');
 
   -- Preceding readings for RO train
   INSERT INTO public.ro_train_readings (train_id, plant_id, reading_datetime, permeate_meter, is_estimated)

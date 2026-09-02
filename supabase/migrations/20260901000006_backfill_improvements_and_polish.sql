@@ -320,7 +320,7 @@ BEGIN
     END LOOP;
   END LOOP;
 
-  -- ───────────────────────────────────────────────────────────────────────────
+  -- ──────────────────────────────────────────���────────────────────────────────
   -- MODULE 3: PRODUCT METERS (product_meter_readings)
   -- ───────────────────────────────────────────────────────────────────────────
   FOR r_entity IN
@@ -668,7 +668,7 @@ BEGIN
   -- MODULE 6: RO TRAINS (ro_train_readings)
   -- ───────────────────────────────────────────────────────────────────────────
   FOR r_entity IN
-    SELECT id, plant_id FROM public.ro_trains WHERE status = 'Active'
+    SELECT id, plant_id FROM public.ro_trains WHERE status = 'Running'
   LOOP
     FOR r_reading_a IN
       SELECT id, permeate_meter, reading_datetime::date AS r_date
