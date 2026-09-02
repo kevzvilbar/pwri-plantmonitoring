@@ -70,7 +70,8 @@ export function PlantTelemetryChart({
     queryFn: async () => {
       if (!entityIds) return [];
 
-      const promises: Promise<any>[] = [];
+      // Supabase query builders are thenables, not native Promise instances.
+      const promises: PromiseLike<any>[] = [];
 
       // 1. Product meter readings (Production)
       if (entityIds.productMeterIds.length > 0) {
