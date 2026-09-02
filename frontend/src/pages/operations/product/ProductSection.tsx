@@ -793,6 +793,11 @@ function ProductMeterRow({
                 onClick: () => setGapDialogOpen(true),
                 testId: `product-gap-reason-btn-${meter.id}`,
               },
+              latest?.is_estimated && {
+                tone: 'warn',
+                label: 'Estimated',
+                title: 'Auto-backfilled reading — no manual operator entry on file.',
+              },
               productionVolume != null && {
                 tone: 'primary',
                 label: `Δ ${fmtNum(productionVolume)} m³`,
@@ -1074,7 +1079,7 @@ function ProductMeterHistoryDialog({ meter, plantId, onClose }: { meter: any; pl
       }
       const { data, error } = await supabase
         .from('product_meter_readings' as any)
-        .select('id, current_reading, previous_reading, daily_volume, reading_datetime, is_meter_replacement, recorded_by, created_at, norm_status')
+        .select('id, current_reading, previous_reading, daily_volume, reading_datetime, is_meter_replacement, is_estimated, recorded_by, created_at, norm_status')
         .eq('meter_id', meter.id)
         .gte('reading_datetime', sinceIso)
         .lte('reading_datetime', untilIso)
@@ -1084,7 +1089,7 @@ function ProductMeterHistoryDialog({ meter, plantId, onClose }: { meter: any; pl
       // to the base columns so the dialog still loads.
       const { data: fallback, error: fallbackErr } = await supabase
         .from('product_meter_readings' as any)
-        .select('id, current_reading, previous_reading, daily_volume, reading_datetime, recorded_by, created_at, norm_status')
+        .select('id, current_reading, previous_reading, daily_volume, reading_datetime, is_estimated, recorded_by, created_at, norm_status')
         .eq('meter_id', meter.id)
         .gte('reading_datetime', sinceIso)
         .lte('reading_datetime', untilIso)
@@ -1424,17 +1429,24 @@ function ProductMeterHistoryDialog({ meter, plantId, onClose }: { meter: any; pl
                   const isDeleting = deletingId === r.id;
                   const isToggling = togglingId === r.id;
                   const isMeterReplacement = !!r.is_meter_replacement;
+                  const isEstimated = !!r.is_estimated;
                   const rowEditable = canEditEntry(r, hasFullAccess, activeOperatorId);
                   return (
                     <tr key={r.id ?? i} className={[
                       'border-t',
                       isEditing            ? 'bg-primary-soft/60'
                       : isMeterReplacement ? 'bg-kpi-solar/40'
+                      : isEstimated        ? 'bg-warn-soft/20'
                       : 'hover:bg-muted/40',
                     ].join(' ')}>
                       <td className="px-3 py-1.5 whitespace-nowrap text-muted-foreground">
                         <span className="flex items-center gap-1.5">
                           {r.reading_datetime ? format(new Date(r.reading_datetime), 'MMM d, yyyy HH:mm') : '—'}
+                          {isEstimated && (
+                            <span className="text-3xs font-semibold uppercase tracking-wide text-warn bg-warn-soft/40 px-1 py-0.5 rounded leading-none border border-warn/40" title="Auto-backfilled reading">
+                              Est.
+                            </span>
+                          )}
                           {isMeterReplacement && (
                             <span className="text-3xs font-semibold uppercase tracking-wide text-kpi-solar bg-kpi-solar/15 px-1 py-0.5 rounded leading-none">
                               repl.

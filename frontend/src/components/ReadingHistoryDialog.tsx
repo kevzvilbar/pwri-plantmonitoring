@@ -298,11 +298,11 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
               }
               const { data: d2, error: e2 } = await q2;
               if (e2) throw e2; // surface unexpected errors rather than silently returning []
-              return (d2 ?? []).map((r: any) => ({ ...r, is_meter_replacement: false, raw_meter_reading: null }));
+              return (d2 ?? []).map((r: any) => ({ ...r, is_meter_replacement: false, raw_meter_reading: null, is_estimated: false }));
             }
             throw error;
           }
-          return (data ?? []).map((r: any) => ({ ...r, is_meter_replacement: !!r.is_meter_replacement }));
+          return (data ?? []).map((r: any) => ({ ...r, is_meter_replacement: !!r.is_meter_replacement, is_estimated: !!r.is_estimated }));
         } catch { return []; }
       }
       return [];
@@ -1245,6 +1245,7 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                             'border-t',
                             isEditing  ? 'bg-primary-soft/60'
                             : isRepl   ? 'bg-warn-soft/40'
+                            : r.is_estimated ? 'bg-warn-soft/20'
                             : 'hover:bg-muted/40',
                           ].join(' ')}
                         >
@@ -1259,6 +1260,11 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                           <td className="px-3 py-1.5 whitespace-nowrap text-muted-foreground">
                             <span className="flex items-center gap-1.5">
                               {dateStr}
+                              {r.is_estimated && (
+                                <span className="text-3xs font-semibold uppercase tracking-wide text-warn bg-warn-soft/40 px-1 py-0.5 rounded leading-none border border-warn/40" title="Auto-backfilled reading">
+                                  Est.
+                                </span>
+                              )}
                               {isRepl && (
                                 <span className={`text-3xs font-semibold uppercase tracking-wide px-1 py-0.5 rounded leading-none ${isSolar ? 'text-kpi-solar bg-kpi-solar/15' : 'text-kpi-grid bg-kpi-grid/15'}`}>
                                   repl.
@@ -1340,6 +1346,7 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                           'border-t',
                           isEditing ? 'bg-primary-soft/60'
                           : isGridRepl ? 'bg-warn-soft/40'
+                          : r.is_estimated ? 'bg-warn-soft/20'
                           : 'bg-muted/20',
                         ].join(' ')}>
                           {anyEditable && (
@@ -1357,6 +1364,11 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                           <td className="px-3 py-1.5 whitespace-nowrap text-muted-foreground font-medium" colSpan={dateCols}>
                             <span className="flex items-center gap-1.5">
                               {dateStr}
+                              {r.is_estimated && (
+                                <span className="text-3xs font-semibold uppercase tracking-wide text-warn bg-warn-soft/40 px-1 py-0.5 rounded leading-none border border-warn/40" title="Auto-backfilled reading">
+                                  Est.
+                                </span>
+                              )}
                               {isGridRepl && (
                                 <span className="text-3xs font-semibold uppercase tracking-wide text-kpi-grid bg-kpi-grid/15 px-1 py-0.5 rounded leading-none">
                                   grid repl.

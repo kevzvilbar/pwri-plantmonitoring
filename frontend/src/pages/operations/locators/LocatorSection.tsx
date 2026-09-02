@@ -1404,6 +1404,11 @@ function LocatorRow({
                 icon: ShieldAlert,
                 label: 'meter locked',
               },
+              lastToday?.is_estimated && {
+                tone: 'warn',
+                label: 'Estimated',
+                title: 'Auto-backfilled reading — no manual operator entry on file.',
+              },
               lastToday?.off_location_flag && {
                 tone: 'warn',
                 icon: MapPin,

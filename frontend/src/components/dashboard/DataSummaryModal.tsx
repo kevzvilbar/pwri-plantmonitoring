@@ -580,7 +580,7 @@ export function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: Dat
       if (!permeateIsProductionPlantIds.length) return [] as any[];
       const { data } = await supabase
         .from('ro_train_readings')
-        .select('train_id,permeate_meter_delta,reading_datetime')
+        .select('train_id,permeate_meter_delta,reading_datetime,is_estimated')
         .in('plant_id', permeateIsProductionPlantIds)
         .not('permeate_meter_delta', 'is', null)
         .gt('permeate_meter_delta', 0)
@@ -641,9 +641,13 @@ export function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: Dat
     );
 
     // Accumulate: check cache first, fall back to stored delta.
+    const estimatedKeys = new Set<string>();
     (roMeterReadings ?? []).forEach((r: any) => {
       const dateKey  = format(new Date(r.reading_datetime as string), 'yyyy-MM-dd');
       const trainKey = r.train_id as string;
+      if (r.is_estimated) {
+        estimatedKeys.add(`${dateKey}__${trainKey}`);
+      }
       // Tier-1: prefer cache (may have been updated by a recent mutation-triggered recompute)
       const cached = deltaCache.get(trainKey, dateKey);
       const delta  = cached !== null ? cached : Math.max(0, +(r.permeate_meter_delta ?? 0));
@@ -651,7 +655,7 @@ export function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: Dat
       pivot.get(dateKey)!.set(trainKey, (pivot.get(dateKey)!.get(trainKey) ?? 0) + delta);
     });
 
-    return { dates: allDates, entities: sortedTrains, pivot };
+    return { dates: allDates, entities: sortedTrains, pivot, estimatedKeys };
   }, [roTrainsMeta, roMeterReadings, plantCodeById, fromStr, toStr]);
 
   // BUG FIX — race condition:
@@ -682,7 +686,8 @@ export function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: Dat
       roProdPivot.pivot.get(d)?.forEach((v, k) => merged.set(k, v));
       pivot.set(d, merged);
     });
-    return { dates, entities, pivot, estimatedKeys: prodPivot.estimatedKeys };
+    const mergedEstimated = new Set<string>([...prodPivot.estimatedKeys, ...roProdPivot.estimatedKeys]);
+    return { dates, entities, pivot, estimatedKeys: mergedEstimated };
   }, [prodPivot, roProdPivot]);
 
   const hasRoEntities    = combinedProdPivot.entities.some((e: any) => e._source === 'ro');

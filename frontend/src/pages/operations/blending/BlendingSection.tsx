@@ -384,6 +384,7 @@ export function BlendingForm() {
         .eq('plant_id', plantId)
         .not('raw_meter_reading', 'is', null)
         .order('event_date', { ascending: false })
+        .order('noted_at', { ascending: false, nullsFirst: false })
         .limit(200);
       // Keep only the most recent row per well
       const seen = new Set<string>();
@@ -743,11 +744,17 @@ function BlendingRow({
   const [showAnomalyBanner, setShowAnomalyBanner] = useState(false);
   const anomalyRemarkRequired = blendHighVol && !isAnomalyRemarkValid(anomalyRemark);
 
-  // ── Status chip: "Not logged" → "Ready to save" → "Logged today" ──────────
+  // ── Status chip: "Not logged" → "Ready to save" → "Estimated" / "Logged today" ──
   // Replaces having to parse "prev: — · today: 0 m³ logged" — the color alone
   // now tells a supervisor scanning many wells what state each one is in.
-  const chipState: 'pending' | 'ready' | 'logged' =
-    (todayVolume > 0 || justSaved) ? 'logged' : volumeChanged ? 'ready' : 'pending';
+  const isEstimatedForDate = isBackdated
+    ? !!backdatedContext?.existingForDate?.is_estimated
+    : (hasReadingForSelectedDate ? !!dbLatestRaw?.is_estimated : false);
+  const chipState: 'pending' | 'ready' | 'logged' | 'estimated' =
+    isEstimatedForDate ? 'estimated'
+    : (hasReadingForSelectedDate || justSaved) ? 'logged'
+    : volumeChanged ? 'ready'
+    : 'pending';
 
   // ── Live preview of what Save will actually commit ─────────────────────────
   let previewLine: React.ReactNode = null;
@@ -930,14 +937,14 @@ function BlendingRow({
                 onClick: () => setGapDialogOpen(true),
                 testId: `blending-gap-reason-btn-${well.id}`,
               },
-              ((isBackdated ? backdatedContext?.existingForDate?.is_estimated : dbLatestRaw?.is_estimated) ?? false) && {
+              chipState === 'estimated' && {
                 tone: 'warn',
                 label: 'Estimated',
                 title: 'Auto-backfilled reading — no manual operator entry on file.',
               },
               chipState === 'logged' && {
                 tone: 'accent',
-                label: 'Logged today',
+                label: isBackdated ? `Logged (${eventDate})` : 'Logged today',
               },
               chipState === 'ready' && {
                 tone: 'default',

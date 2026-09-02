@@ -1193,6 +1193,14 @@ export function PowerForm() {
                         <Sun className="h-3 w-3 text-warn shrink-0" />
                         {meterLabel}
                         {isFirst && editingId && <span className="text-2xs text-warn ml-1">(editing)</span>}
+                        {prevRow?.is_estimated && (
+                          <span
+                            className="text-3xs font-semibold uppercase tracking-wide text-warn bg-warn-soft/40 px-1 py-0.5 rounded leading-none border border-warn/40 ml-1"
+                            title="Latest reading is system-generated / backfilled"
+                          >
+                            Est.
+                          </span>
+                        )}
                         {(isAdmin || isManager || isDataAnalyst) && (
                           <button
                             type="button"
@@ -1301,6 +1309,14 @@ export function PowerForm() {
                           {configLoading ? <Loader2 className="h-2 w-2 animate-spin inline" /> : `×${mMult}`}
                         </span>
                         {isFirst && editingId && <span className="text-2xs text-warn ml-1">(editing)</span>}
+                        {prevRow?.is_estimated && (
+                          <span
+                            className="text-3xs font-semibold uppercase tracking-wide text-warn bg-warn-soft/40 px-1 py-0.5 rounded leading-none border border-warn/40 ml-1"
+                            title="Latest reading is system-generated / backfilled"
+                          >
+                            Est.
+                          </span>
+                        )}
                         {(isAdmin || isManager || isDataAnalyst) && (
                           <button
                             type="button"
@@ -1419,6 +1435,14 @@ export function PowerForm() {
                               {configLoading ? <Loader2 className="h-2 w-2 animate-spin inline" /> : `×${mMult}`}
                             </span>
                             {isFirst && editingId && <span className="text-2xs text-warn">(editing)</span>}
+                            {prevRow?.is_estimated && (
+                              <span
+                                className="text-3xs font-semibold uppercase tracking-wide text-warn bg-warn-soft/40 px-1 py-0.5 rounded leading-none border border-warn/40"
+                                title="Latest reading is system-generated / backfilled"
+                              >
+                                Est.
+                              </span>
+                            )}
                           </Label>
                           {(isAdmin || isManager || isDataAnalyst) && (
                             <Button variant="ghost" size="sm"
@@ -1479,6 +1503,14 @@ export function PowerForm() {
                           <span className="text-warn">☀</span>
                           {meterLabel}
                           {isFirst && editingId && <span className="text-2xs text-warn">(editing)</span>}
+                          {prevRow?.is_estimated && (
+                            <span
+                              className="text-3xs font-semibold uppercase tracking-wide text-warn bg-warn-soft/40 px-1 py-0.5 rounded leading-none border border-warn/40"
+                              title="Latest reading is system-generated / backfilled"
+                            >
+                              Est.
+                            </span>
+                          )}
                         </Label>
                         {(isAdmin || isManager || isDataAnalyst) && (
                           <Button variant="ghost" size="sm"
