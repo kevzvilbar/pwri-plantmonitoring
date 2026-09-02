@@ -64,7 +64,11 @@ jobs:
           CLEAN_URL="${SUPABASE_URL%/}"
           echo "Running backfill sweep through: $TARGET_DATE (lookback ${LOOKBACK_DAYS}d)${SCHEDULE:+ [schedule: $SCHEDULE]}"
 
-          HTTP_STATUS=$(curl -s -w "%{http_code}" -o /tmp/backfill_resp.json \
+          # Do not use curl --fail here: it exits before the response body can be
+          # printed, which hides the PostgREST error behind exit code 22.
+          HTTP_STATUS=$(curl --silent --show-error --retry 2 --retry-all-errors \
+            --connect-timeout 15 --max-time 120 \
+            -w "%{http_code}" -o /tmp/backfill_resp.json \
             -X POST \
             "${CLEAN_URL}/rest/v1/rpc/fn_backfill_missing_readings" \
             -H "apikey: ${API_KEY}" \
