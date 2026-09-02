@@ -6,7 +6,7 @@
 BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap;
 
-SELECT plan(15);
+SELECT plan(16);
 
 -- ── 1. Structural Checks ─────────────────────────────────────────────────────
 
@@ -170,7 +170,7 @@ SELECT is(
     SELECT round(current_reading, 2)
     FROM public.well_readings wr
     JOIN public.wells w ON w.id = wr.well_id
-    WHERE w.name = 'Test Well 1' AND wr.reading_datetime::date = '2026-08-02'
+    WHERE w.name = 'Test Well 1' AND (wr.reading_datetime AT TIME ZONE 'Asia/Manila')::date = '2026-08-02'
   ),
   1011.71::numeric,
   'Regression flow-rate computes smooth curve value distinct from even-split'
@@ -208,10 +208,28 @@ SELECT is(
     SELECT count(*)::integer
     FROM public.locator_readings lr
     JOIN public.locators l ON l.id = lr.locator_id
-    WHERE l.name = 'Test Locator 1' AND lr.reading_datetime::date = '2026-08-20'
+    WHERE l.name = 'Test Locator 1' AND (lr.reading_datetime AT TIME ZONE 'Asia/Manila')::date = '2026-08-20'
   ),
   0,
   'Retracted date has no locator reading row'
+);
+
+-- Test 16: Orphan Purge Test: If a real reading is logged on Aug 21, the estimated reading for Aug 21 is automatically purged
+DO $$
+DECLARE
+  v_loc_id uuid;
+  v_plant_id uuid;
+BEGIN
+  SELECT id, plant_id INTO v_loc_id, v_plant_id FROM public.locators WHERE name = 'Test Locator 1';
+  -- Insert real manual morning reading on Aug 21 (07:30 PHT = 23:30 UTC previous day)
+  INSERT INTO public.locator_readings (locator_id, plant_id, reading_datetime, current_reading, is_estimated)
+  VALUES (v_loc_id, v_plant_id, '2026-08-21 07:30:00+08', 9036.0, false);
+END $$;
+
+-- Run sweep again
+SELECT ok(
+  (public.fn_backfill_missing_readings('2026-08-25'::date, 10) ->> 'ok')::boolean = true,
+  'Sweep runs and automatically purges orphaned estimated row on Aug 21'
 );
 
 SELECT * FROM finish();
