@@ -5,6 +5,9 @@
 --
 -- Self-contained: creates its own users/log row, cleans up via ROLLBACK.
 BEGIN;
+CREATE EXTENSION IF NOT EXISTS pgtap;
+SET search_path = public, extensions;
+
 SELECT plan(2);
 
 CREATE TEMP TABLE _fixture (analyst uuid, plain_operator uuid, log_row uuid);

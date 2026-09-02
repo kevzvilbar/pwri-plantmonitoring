@@ -11,6 +11,9 @@
 -- No RLS/impersonation needed here -- this exercises the trigger directly,
 -- as the migration role. Self-contained, cleans up via ROLLBACK.
 BEGIN;
+CREATE EXTENSION IF NOT EXISTS pgtap;
+SET search_path = public, extensions;
+
 SELECT plan(4);
 
 CREATE TEMP TABLE _fixture (u uuid);

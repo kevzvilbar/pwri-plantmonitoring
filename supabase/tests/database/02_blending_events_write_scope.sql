@@ -13,6 +13,9 @@
 -- Self-contained: creates its own plants/well/user/event and cleans up via
 -- ROLLBACK.
 BEGIN;
+CREATE EXTENSION IF NOT EXISTS pgtap;
+SET search_path = public, extensions;
+
 SELECT plan(3);
 
 CREATE TEMP TABLE _fixture (

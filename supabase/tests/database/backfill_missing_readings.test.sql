@@ -44,13 +44,17 @@ SELECT columns_are(
 -- Test 5: reading_gap_reasons accepts all valid entity types including power and ro_train
 DO $$
 DECLARE
+  v_test_plant_id uuid := gen_random_uuid();
   v_test_id uuid := gen_random_uuid();
 BEGIN
-  INSERT INTO public.reading_gap_reasons (entity_type, entity_id, gap_date, reason_code)
-  VALUES ('power', v_test_id, '2026-08-01', 'offline_planned');
+  INSERT INTO public.plants (id, name, status)
+  VALUES (v_test_plant_id, 'Test Plant Gap Reason', 'Active'::plant_status);
 
-  INSERT INTO public.reading_gap_reasons (entity_type, entity_id, gap_date, reason_code)
-  VALUES ('ro_train', v_test_id, '2026-08-01', 'offline_unplanned');
+  INSERT INTO public.reading_gap_reasons (entity_type, entity_id, plant_id, gap_date, reason_category)
+  VALUES ('power', v_test_id, v_test_plant_id, '2026-08-01', 'other');
+
+  INSERT INTO public.reading_gap_reasons (entity_type, entity_id, plant_id, gap_date, reason_category)
+  VALUES ('ro_train', v_test_id, v_test_plant_id, '2026-08-01', 'other');
 END $$;
 
 SELECT pass('reading_gap_reasons accepts power and ro_train entity types');
@@ -80,8 +84,8 @@ DECLARE
   v_train_id uuid := gen_random_uuid();
 BEGIN
   -- Insert mock plant
-  INSERT INTO public.plants (id, name, code, status)
-  VALUES (v_plant_id, 'Test Plant Alpha', 'TPA', 'Active');
+  INSERT INTO public.plants (id, name, status)
+  VALUES (v_plant_id, 'Test Plant Alpha', 'Active'::plant_status);
 
   -- Insert mock locator
   INSERT INTO public.locators (id, plant_id, name, status, is_derived)
@@ -111,8 +115,8 @@ BEGIN
   VALUES (v_well_id, v_plant_id, '2026-08-08 08:00:00+08', 1070, false);
 
   -- Insert mock RO Train
-  INSERT INTO public.ro_trains (id, plant_id, train_name, status)
-  VALUES (v_train_id, v_plant_id, 'Train Alpha', 'Running');
+  INSERT INTO public.ro_trains (id, plant_id, train_number, status)
+  VALUES (v_train_id, v_plant_id, 99, 'Running'::train_status);
 
   -- Preceding readings for RO train
   INSERT INTO public.ro_train_readings (train_id, plant_id, reading_datetime, permeate_meter, is_estimated)
@@ -181,7 +185,7 @@ SELECT ok(
   EXISTS (
     SELECT 1 FROM public.ro_train_readings rtr
     JOIN public.ro_trains t ON t.id = rtr.train_id
-    WHERE t.train_name = 'Train Alpha' AND rtr.is_estimated = true
+    WHERE t.train_number = 99 AND rtr.is_estimated = true
   ),
   'RO train module successfully backfills missing permeate_meter readings'
 );
@@ -190,10 +194,11 @@ SELECT ok(
 DO $$
 DECLARE
   v_loc_id uuid;
+  v_plant_id uuid;
 BEGIN
-  SELECT id INTO v_loc_id FROM public.locators WHERE name = 'Test Locator 1';
-  INSERT INTO public.reading_gap_reasons (entity_type, entity_id, gap_date, reason_code)
-  VALUES ('locator', v_loc_id, '2026-08-20', 'maintenance');
+  SELECT id, plant_id INTO v_loc_id, v_plant_id FROM public.locators WHERE name = 'Test Locator 1';
+  INSERT INTO public.reading_gap_reasons (entity_type, entity_id, plant_id, gap_date, reason_category)
+  VALUES ('locator', v_loc_id, v_plant_id, '2026-08-20', 'maintenance');
 END $$;
 
 -- Run sweep again — late remark retraction should remove the estimated reading for Aug 20

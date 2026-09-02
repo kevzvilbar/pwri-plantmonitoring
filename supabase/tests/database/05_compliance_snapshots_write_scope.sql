@@ -5,6 +5,9 @@
 --
 -- Self-contained: creates its own users/plant, cleans up via ROLLBACK.
 BEGIN;
+CREATE EXTENSION IF NOT EXISTS pgtap;
+SET search_path = public, extensions;
+
 SELECT plan(2);
 
 CREATE TEMP TABLE _fixture (
