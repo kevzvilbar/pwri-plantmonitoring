@@ -346,7 +346,7 @@ export function MeterNameListRows({
               onKeyDown={e => { if (e.key === 'Enter') commitEdit(); if (e.key === 'Escape') cancelEdit(); }}
               className={`text-sm bg-transparent border-b ${isYellow ? 'border-warn' : 'border-info'} focus:outline-none focus:ring-1 ${ring} rounded-t w-full px-1`} />
             <div className="flex items-center justify-center">
-              <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-warn-soft text-warn border border-warn/40">
+              <span className="inline-flex items-center gap-1 text-2xs font-semibold px-2 py-0.5 rounded-full bg-warn-soft text-warn border border-warn/40">
                 <Sun className="h-2.5 w-2.5" /> Solar Gen
               </span>
             </div>
@@ -368,7 +368,7 @@ export function MeterNameListRows({
 
             {/* Type badge */}
             <div className="flex items-center justify-center">
-              <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-warn-soft text-warn border border-warn/40">
+              <span className="inline-flex items-center gap-1 text-2xs font-semibold px-2 py-0.5 rounded-full bg-warn-soft text-warn border border-warn/40">
                 <Sun className="h-2.5 w-2.5" /> Solar Gen
               </span>
             </div>
@@ -676,7 +676,7 @@ export function PowerConsumptionEnergyMix({
                 <span className="text-3xs font-bold uppercase tracking-wide text-warn">Today Solar</span>
               </div>
               {solarDelta !== null && (
-                <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded-full ${solarDelta >= 0 ? 'bg-accent-soft text-accent' : 'bg-destructive/15 text-destructive'}`}>
+                <span className={`text-2xs font-bold px-1.5 py-0.2 rounded-full ${solarDelta >= 0 ? 'bg-accent-soft text-accent' : 'bg-destructive/15 text-destructive'}`}>
                   {solarDelta >= 0 ? '↑' : '↓'} {Math.abs(solarDelta)}%
                 </span>
               )}
@@ -685,7 +685,7 @@ export function PowerConsumptionEnergyMix({
               <span className="text-xl font-bold font-numeral tabular-nums text-foreground">{fmtNum(todaySolar)}</span>
               <span className="text-2xs text-muted-foreground font-semibold">kWh</span>
             </div>
-            <p className="text-[10px] text-muted-foreground mt-1">Solar PV Generation</p>
+            <p className="text-2xs text-muted-foreground mt-1">Solar PV Generation</p>
           </div>
         )}
 
@@ -698,7 +698,7 @@ export function PowerConsumptionEnergyMix({
                 <span className="text-3xs font-bold uppercase tracking-wide text-info">Today Grid</span>
               </div>
               {gridDelta !== null && (
-                <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded-full ${gridDelta <= 0 ? 'bg-accent-soft text-accent' : 'bg-destructive/15 text-destructive'}`}>
+                <span className={`text-2xs font-bold px-1.5 py-0.2 rounded-full ${gridDelta <= 0 ? 'bg-accent-soft text-accent' : 'bg-destructive/15 text-destructive'}`}>
                   {gridDelta >= 0 ? '↑' : '↓'} {Math.abs(gridDelta)}%
                 </span>
               )}
@@ -707,7 +707,7 @@ export function PowerConsumptionEnergyMix({
               <span className="text-xl font-bold font-numeral tabular-nums text-foreground">{fmtNum(todayGrid)}</span>
               <span className="text-2xs text-muted-foreground font-semibold">kWh</span>
             </div>
-            <p className="text-[10px] text-muted-foreground mt-1">Utility Grid Infeed</p>
+            <p className="text-2xs text-muted-foreground mt-1">Utility Grid Infeed</p>
           </div>
         )}
 
@@ -719,7 +719,7 @@ export function PowerConsumptionEnergyMix({
               <span className="text-3xs font-bold uppercase tracking-wide text-primary">Today Total</span>
             </div>
             {hasSolar && todayTotal > 0 && (
-              <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-warn-soft text-warn border border-warn/40">
+              <span className="text-2xs font-bold px-1.5 py-0.2 rounded-full bg-warn-soft text-warn border border-warn/40">
                 {solarPct}% Solar
               </span>
             )}
@@ -728,7 +728,7 @@ export function PowerConsumptionEnergyMix({
             <span className="text-xl font-bold font-numeral tabular-nums text-foreground">{fmtNum(todayTotal)}</span>
             <span className="text-2xs text-muted-foreground font-semibold">kWh</span>
           </div>
-          <p className="text-[10px] text-muted-foreground mt-1">Plant Daily Power</p>
+          <p className="text-2xs text-muted-foreground mt-1">Plant Daily Power</p>
         </div>
 
         {/* Period Aggregate */}
@@ -738,7 +738,7 @@ export function PowerConsumptionEnergyMix({
               <BarChart2 className="h-3.5 w-3.5 text-muted-foreground" />
               <span className="text-3xs font-bold uppercase tracking-wide text-muted-foreground">Period Total</span>
             </div>
-            <span className="text-[10px] text-muted-foreground font-mono">
+            <span className="text-2xs text-muted-foreground font-mono">
               {rangeLabel}
             </span>
           </div>
@@ -746,7 +746,7 @@ export function PowerConsumptionEnergyMix({
             <span className="text-xl font-bold font-numeral tabular-nums text-foreground">{fmtNum(rangeAggregates.totalKwh)}</span>
             <span className="text-2xs text-muted-foreground font-semibold">kWh</span>
           </div>
-          <p className="text-[10px] text-muted-foreground mt-1">
+          <p className="text-2xs text-muted-foreground mt-1">
             Avg <strong className="text-foreground">{fmtNum(rangeAggregates.avgDaily)}</strong> kWh/day · {rangeAggregates.solarPct}% solar
           </p>
         </div>

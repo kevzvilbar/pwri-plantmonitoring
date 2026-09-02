@@ -310,7 +310,7 @@ export function CostSunburst({ plantIds }: Props) {
                         {peso(c.value ?? 0)}
                       </span>
                       <span
-                        className="text-[10px] font-bold tabular-nums font-numeral ml-1.5"
+                        className="text-2xs font-bold tabular-nums font-numeral ml-1.5"
                         style={{ color: swatchColor }}
                       >
                         {fmtNum(pct, 1)}%

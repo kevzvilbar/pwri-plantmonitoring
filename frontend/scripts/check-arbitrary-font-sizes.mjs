@@ -28,7 +28,7 @@
  * script pass — that's the debt this exists to prevent.
  */
 
-import { execFileSync } from 'node:child_process';
+import { readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -42,34 +42,32 @@ const ALLOWLIST = [
   { file: 'components/OdometerRollerInput.tsx', value: '17px', reason: 'Odometer digit readability, a separate choice from the compact scale.' },
   { file: 'components/OdometerRollerInput.tsx', value: '18px', reason: 'Odometer digit readability, a separate choice from the compact scale.' },
   { file: 'components/OdometerRollerInput.tsx', value: '19px', reason: 'Odometer digit readability, a separate choice from the compact scale.' },
-  { file: 'pages/plants/index.tsx', value: '0px', reason: "Responsive label-collapse trick, not a font size — see the comment at the usage site." },
 ];
 
-function findUsages() {
-  let stdout;
-  try {
-    stdout = execFileSync(
-      'grep',
-      ['-rEo', String.raw`text-\[[0-9.]+px\]`, '.', '-l', '--include=*.tsx', '--include=*.ts', '--include=*.css'],
-      { cwd: srcRoot, encoding: 'utf8' },
-    );
-  } catch (err) {
-    // grep exits 1 when it finds nothing at all — that's success (0 usages).
-    if (err.status === 1) return [];
-    throw err;
+function getAllFiles(dir) {
+  const entries = readdirSync(dir, { withFileTypes: true });
+  let files = [];
+  for (const entry of entries) {
+    const fullPath = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      files = files.concat(getAllFiles(fullPath));
+    } else if (/\.(tsx|ts|css)$/.test(entry.name)) {
+      files.push(fullPath);
+    }
   }
-  const files = stdout.trim().split('\n').filter(Boolean);
+  return files;
+}
 
+function findUsages() {
+  const files = getAllFiles(srcRoot);
+  const regex = /text-\[([0-9.]+px)\]/g;
   const usages = [];
-  for (const relFile of files) {
-    const grepOut = execFileSync(
-      'grep', ['-Eo', String.raw`text-\[[0-9.]+px\]`, relFile],
-      { cwd: srcRoot, encoding: 'utf8' },
-    );
-    const matches = grepOut.trim().split('\n').filter(Boolean);
-    for (const m of matches) {
-      const cleanValue = m.match(/\[([0-9.]+px)\]/)[1];
-      usages.push({ file: relFile.replace(/^\.\//, ''), value: cleanValue });
+
+  for (const absFile of files) {
+    const relFile = path.relative(srcRoot, absFile).replace(/\\/g, '/');
+    const content = readFileSync(absFile, 'utf8');
+    for (const match of content.matchAll(regex)) {
+      usages.push({ file: relFile, value: match[1] });
     }
   }
   return usages;

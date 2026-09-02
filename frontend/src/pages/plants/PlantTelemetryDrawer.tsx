@@ -66,7 +66,7 @@ export function PlantTelemetryDrawer({
           <div className="flex items-start justify-between gap-4">
             <div className="space-y-1">
               <div className="flex items-center gap-2">
-                <span className="text-[11px] font-mono font-bold px-2 py-0.5 rounded bg-primary-soft text-primary border border-primary">
+                <span className="text-xs font-mono font-bold px-2 py-0.5 rounded bg-primary-soft text-primary border border-primary">
                   {plant.name.slice(0, 3).toUpperCase()}
                 </span>
                 <SheetTitle className="text-lg font-bold text-foreground">{plant.name}</SheetTitle>
@@ -89,7 +89,7 @@ export function PlantTelemetryDrawer({
 
           <div className="flex items-center justify-between mt-4 pt-3 border-t border-border/80 text-xs">
             <div className="flex items-center gap-2">
-              <span className={`px-2.5 py-0.5 rounded-full font-semibold text-[11px] border ${
+              <span className={`px-2.5 py-0.5 rounded-full font-semibold text-xs border ${
                 isOptimal 
                   ? 'bg-primary-soft text-primary border-primary'
                   : 'bg-danger-soft text-danger border-danger'
@@ -121,37 +121,37 @@ export function PlantTelemetryDrawer({
           {/* Subsystem Live Summary Grid */}
           <div className="grid grid-cols-3 gap-2.5">
             <div className="p-3 rounded-xl border border-border/60 bg-muted/20 space-y-1">
-              <div className="text-[10px] font-bold text-muted-foreground uppercase flex items-center gap-1">
+              <div className="text-2xs font-bold text-muted-foreground uppercase flex items-center gap-1">
                 <Droplet className="h-3 w-3 text-sky-500" /> Wells
               </div>
               <div className="font-mono text-base font-bold text-foreground">
                 {wells.active} <span className="text-xs text-muted-foreground font-normal">/{wells.total}</span>
               </div>
-              <div className="text-[10px] text-muted-foreground">
+              <div className="text-2xs text-muted-foreground">
                 {wells.total > 0 ? `${Math.round((wells.active/wells.total)*100)}% online` : 'No wells'}
               </div>
             </div>
 
             <div className="p-3 rounded-xl border border-border/60 bg-muted/20 space-y-1">
-              <div className="text-[10px] font-bold text-muted-foreground uppercase flex items-center gap-1">
+              <div className="text-2xs font-bold text-muted-foreground uppercase flex items-center gap-1">
                 <Gauge className="h-3 w-3 text-teal-500" /> Locators
               </div>
               <div className="font-mono text-base font-bold text-foreground">
                 {locators.active} <span className="text-xs text-muted-foreground font-normal">/{locators.total}</span>
               </div>
-              <div className="text-[10px] text-muted-foreground">
+              <div className="text-2xs text-muted-foreground">
                 {locators.total > 0 ? `${Math.round((locators.active/locators.total)*100)}% synced` : 'No locators'}
               </div>
             </div>
 
             <div className="p-3 rounded-xl border border-border/60 bg-muted/20 space-y-1">
-              <div className="text-[10px] font-bold text-muted-foreground uppercase flex items-center gap-1">
+              <div className="text-2xs font-bold text-muted-foreground uppercase flex items-center gap-1">
                 <ROTrainIcon className="h-3 w-3 text-violet-500" /> RO Trains
               </div>
               <div className="font-mono text-base font-bold text-foreground">
                 {trains.active} <span className="text-xs text-muted-foreground font-normal">/{trains.total}</span>
               </div>
-              <div className="text-[10px] text-muted-foreground">
+              <div className="text-2xs text-muted-foreground">
                 {trains.total > 0 ? `${Math.round((trains.active/trains.total)*100)}% load` : 'No trains'}
               </div>
             </div>
@@ -165,7 +165,7 @@ export function PlantTelemetryDrawer({
               </div>
               
               {/* Metric Toggle */}
-              <div className="flex rounded-md border border-border/60 bg-muted/40 p-0.5 text-[11px] font-semibold">
+              <div className="flex rounded-md border border-border/60 bg-muted/40 p-0.5 text-xs font-semibold">
                 <button
                   type="button"
                   onClick={() => setActiveMetric('flow')}
@@ -233,7 +233,7 @@ export function PlantTelemetryDrawer({
                 <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
                 <div>
                   <div className="font-bold">RO Fleet Offline</div>
-                  <div className="text-[11px] opacity-90 mt-0.5">All Reverse Osmosis trains in standby / power shedding mode.</div>
+                  <div className="text-xs opacity-90 mt-0.5">All Reverse Osmosis trains in standby / power shedding mode.</div>
                 </div>
               </div>
             ) : (
@@ -241,7 +241,7 @@ export function PlantTelemetryDrawer({
                 <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5" />
                 <div>
                   <div className="font-bold">Nominal System Operation</div>
-                  <div className="text-[11px] opacity-90 mt-0.5">Membrane differential pressure and recovery ratios are within ISO limits.</div>
+                  <div className="text-xs opacity-90 mt-0.5">Membrane differential pressure and recovery ratios are within ISO limits.</div>
                 </div>
               </div>
             )}
@@ -255,7 +255,7 @@ export function PlantTelemetryDrawer({
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
             <span>WebSocket Live Stream Active</span>
           </span>
-          <span className="font-mono text-[11px]">Telemetry Nominal</span>
+          <span className="font-mono text-xs">Telemetry Nominal</span>
         </div>
 
       </SheetContent>

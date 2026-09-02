@@ -500,7 +500,7 @@ export function DataSummaryPopup({
           {/* Quick Aggregate Snapshot Strip */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pb-3">
             <div className="p-2 rounded-lg bg-muted/40 border border-border/50">
-              <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+              <div className="text-2xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
                 <Droplet className="h-3 w-3 text-primary" />
                 <span>Total Prod</span>
               </div>
@@ -510,7 +510,7 @@ export function DataSummaryPopup({
             </div>
 
             <div className="p-2 rounded-lg bg-muted/40 border border-border/50">
-              <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+              <div className="text-2xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
                 <Receipt className="h-3 w-3 text-highlight" />
                 <span>Total Cons</span>
               </div>
@@ -520,7 +520,7 @@ export function DataSummaryPopup({
             </div>
 
             <div className="p-2 rounded-lg bg-muted/40 border border-border/50">
-              <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+              <div className="text-2xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
                 <Gauge className="h-3 w-3 text-sky-500" />
                 <span>Daily Avg Output</span>
               </div>
@@ -530,7 +530,7 @@ export function DataSummaryPopup({
             </div>
 
             <div className="p-2 rounded-lg bg-muted/40 border border-border/50">
-              <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+              <div className="text-2xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
                 <Percent className="h-3 w-3 text-emerald-500" />
                 <span>Period NRW Loss</span>
               </div>

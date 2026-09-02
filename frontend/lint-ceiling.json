@@ -1,6 +1,6 @@
 {
-  "maxWarnings": 1864,
-  "lastUpdated": "2026-08-31",
+  "maxWarnings": 1898,
+  "lastUpdated": "2026-09-02",
   "history": [
     {
       "date": "2026-08-22",
@@ -115,6 +115,11 @@
       "date": "2026-08-31",
       "maxWarnings": 1864,
       "previous": 1730
+    },
+    {
+      "date": "2026-09-02",
+      "maxWarnings": 1898,
+      "previous": 1864
     }
   ]
 }

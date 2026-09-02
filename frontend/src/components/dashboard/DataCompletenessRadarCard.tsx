@@ -242,7 +242,7 @@ export function DataCompletenessRadarCard({ plantIds }: Props) {
                 >
                   {avg == null ? '—' : `${avg}% Overall`}
                 </span>
-                <StatusPill tone={tone} className="px-2 py-0.5 text-[10px] font-bold">
+                <StatusPill tone={tone} className="px-2 py-0.5 text-2xs font-bold">
                   {tone === 'danger' ? 'Gaps' : tone === 'warn' ? 'Partial' : tone === 'muted' ? 'No data' : 'Good'}
                 </StatusPill>
                 <Link

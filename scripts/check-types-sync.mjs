@@ -60,7 +60,7 @@ for (const file of migrationFiles) {
 }
 
 // ── 2. Extract the table names types.ts actually knows about ───────────────
-const typesSrc = readFileSync(TYPES_FILE, 'utf8');
+const typesSrc = readFileSync(TYPES_FILE, 'utf8').replace(/\r/g, '');
 const lines = typesSrc.split('\n');
 
 const tablesLineIdx = lines.findIndex((l) => /^\s{4}Tables:\s*\{$/.test(l));

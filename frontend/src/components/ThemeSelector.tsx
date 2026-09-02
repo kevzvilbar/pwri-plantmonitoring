@@ -86,7 +86,7 @@ export function ThemeSelector() {
         {/* Color Palette Grid */}
         <div className="space-y-1.5">
           <div className="flex items-center justify-between">
-            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+            <p className="text-2xs font-bold text-muted-foreground uppercase tracking-wider">
               Color Palettes ({COLOR_THEMES.length})
             </p>
           </div>

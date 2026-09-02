@@ -507,7 +507,7 @@ export function TrainsList({ plantId }: { plantId: string }) {
                       </span>
                       <span className="text-3xs text-muted-foreground font-mono">Stage 1</span>
                     </div>
-                    <span className="text-[10px] text-muted-foreground font-medium">Filtration &amp; Boost</span>
+                    <span className="text-2xs text-muted-foreground font-medium">Filtration &amp; Boost</span>
                   </div>
 
                   <div className="flex flex-wrap gap-1.5 pt-0.5">
@@ -537,7 +537,7 @@ export function TrainsList({ plantId }: { plantId: string }) {
                       </span>
                       <span className="text-3xs text-muted-foreground font-mono">Stage 2</span>
                     </div>
-                    <span className="text-[10px] text-muted-foreground font-medium">High Pressure &amp; Permeate</span>
+                    <span className="text-2xs text-muted-foreground font-medium">High Pressure &amp; Permeate</span>
                   </div>
 
                   <div className="flex flex-wrap gap-1.5 pt-0.5">

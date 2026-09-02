@@ -915,7 +915,7 @@ function Staff() {
                             <div className="font-bold text-foreground flex items-center gap-1.5">
                               <span>{fullName(s)}</span>
                               {isSelf && (
-                                <span className="text-[10px] font-semibold px-1 rounded bg-primary-soft text-primary">you</span>
+                                <span className="text-2xs font-semibold px-1 rounded bg-primary-soft text-primary">you</span>
                               )}
                             </div>
                             {s.username && (
@@ -2213,7 +2213,7 @@ function KpiTab({ staff, roles, plants }: { staff: StaffMember[]; roles: any[]; 
                   <th className="py-2.5 px-3 font-bold text-center bg-muted/80 border-x border-border/60 min-w-[140px]">
                     <div className="flex flex-col items-center">
                       <span className="text-2xs font-extrabold uppercase tracking-wide text-foreground">Overall KPI Score</span>
-                      <span className="text-[10px] text-muted-foreground font-normal">Appraisal Rating</span>
+                      <span className="text-2xs text-muted-foreground font-normal">Appraisal Rating</span>
                     </div>
                   </th>
                   {INPUT_COLS.map((col) => (
@@ -2850,7 +2850,7 @@ export default function Employees() {
             <Users className="h-3.5 w-3.5" />
             <span>Staff</span>
             {staff.length > 0 && (
-              <span className="ml-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-primary/15 text-primary">
+              <span className="ml-0.5 text-2xs font-bold px-1.5 py-0.5 rounded-full bg-primary/15 text-primary">
                 {staff.length}
               </span>
             )}

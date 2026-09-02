@@ -636,7 +636,7 @@ export default function Plants() {
           }) {
             return (
               <div className="flex flex-col gap-1.5 rounded-lg border border-border/50 bg-muted/20 p-2.5 min-w-[90px] flex-1">
-                <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                <div className="flex items-center justify-between text-2xs font-bold uppercase tracking-wider text-muted-foreground">
                   <span className="flex items-center gap-1">{icon} {label}</span>
                   <span className="font-mono font-bold" style={{ color: plantColor }}>{pct}%</span>
                 </div>
@@ -674,7 +674,7 @@ export default function Plants() {
                   <div className="text-3xl font-extrabold leading-none tracking-tight font-mono" style={{ color: plantColor }}>
                     {fmtNum(p.design_capacity_m3 ?? 0)}
                   </div>
-                  <div className="text-[9px] font-bold mt-1 uppercase tracking-wider text-muted-foreground">
+                  <div className="text-3xs font-bold mt-1 uppercase tracking-wider text-muted-foreground">
                     MLD CAP
                   </div>
                   <svg className="w-[68px] h-[16px] mt-1" viewBox="0 0 68 16">
@@ -691,16 +691,16 @@ export default function Plants() {
                   <FadingAddressText address={p.address || 'Unassigned'} />
                   <div>
                     {incidentFlag ? (
-                      <span className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
+                      <span className={`inline-flex items-center gap-1 text-2xs font-semibold px-2 py-0.5 rounded-full border ${
                         incidentFlag.tone === 'danger'
-                          ? 'bg-danger-soft text-danger border-danger'
-                          : 'bg-warn-soft text-warn border-warn'
+                           ? 'bg-danger-soft text-danger border-danger'
+                           : 'bg-warn-soft text-warn border-warn'
                       }`}>
                         <AlertTriangle className="h-2.5 w-2.5" />
                         {incidentFlag.text}
                       </span>
                     ) : (
-                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-primary-soft text-primary border border-primary">
+                      <span className="inline-flex items-center gap-1 text-2xs font-semibold px-2 py-0.5 rounded-full bg-primary-soft text-primary border border-primary">
                         <CheckCircle2 className="h-2.5 w-2.5" />
                         Active Nominal
                       </span>
@@ -784,7 +784,7 @@ export default function Plants() {
                     <Button
                       size="sm"
                       variant="outline"
-                      className="h-7 px-2 text-[11px] gap-1"
+                      className="h-7 px-2 text-xs gap-1"
                       onClick={() => setInspectedPlant(p)}
                     >
                       <Activity className="h-3 w-3 text-primary" />
@@ -809,7 +809,7 @@ export default function Plants() {
                     <span className="text-xl font-bold font-mono" style={{ color: plantColor }}>
                       {fmtNum(p.design_capacity_m3 ?? 0)}
                     </span>
-                    <span className="text-[9px] text-muted-foreground uppercase font-bold">MLD CAP</span>
+                    <span className="text-3xs text-muted-foreground uppercase font-bold">MLD CAP</span>
                   </div>
                   <div className="flex flex-col gap-1.5 min-w-0">
                     <PlantStatRow icon={<Droplet className="h-3 w-3" />} label="Wells" active={wells.active} total={wells.total} />
