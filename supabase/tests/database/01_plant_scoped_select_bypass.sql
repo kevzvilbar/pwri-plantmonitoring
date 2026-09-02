@@ -11,9 +11,9 @@
 -- everything back at the end, so this runs the same way against a fresh
 -- `supabase test db` as it does against a linked project with real data.
 BEGIN;
+SET search_path = public, extensions;
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 CREATE EXTENSION IF NOT EXISTS pgtap;
-SET search_path = public, extensions;
 
 SELECT plan(7);
 
@@ -27,14 +27,14 @@ CREATE TEMP TABLE _fixture (
 INSERT INTO _fixture
 -- Generate fresh UUIDs for each test run to avoid collision across test files
 SELECT 
-  public.gen_random_uuid() AS plant_a,
-  public.gen_random_uuid() AS plant_b,
-  public.gen_random_uuid() AS train_b,
-  public.gen_random_uuid() AS operator_a,
-  public.gen_random_uuid() AS manager_partial,
-  public.gen_random_uuid() AS incident_b,
-  public.gen_random_uuid() AS pump_reading_b,
-  public.gen_random_uuid() AS cip_log_b;
+  gen_random_uuid() AS plant_a,
+  gen_random_uuid() AS plant_b,
+  gen_random_uuid() AS train_b,
+  gen_random_uuid() AS operator_a,
+  gen_random_uuid() AS manager_partial,
+  gen_random_uuid() AS incident_b,
+  gen_random_uuid() AS pump_reading_b,
+  gen_random_uuid() AS cip_log_b;
 
 DO $$
 DECLARE f record;

@@ -11,9 +11,9 @@
 -- No RLS/impersonation needed here -- this exercises the trigger directly,
 -- as the migration role. Self-contained, cleans up via ROLLBACK.
 BEGIN;
+SET search_path = public, extensions;
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 CREATE EXTENSION IF NOT EXISTS pgtap;
-SET search_path = public, extensions;
 
 SELECT plan(4);
 

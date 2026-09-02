@@ -5,9 +5,9 @@
 --
 -- Self-contained: creates its own users/log row, cleans up via ROLLBACK.
 BEGIN;
+SET search_path = public, extensions;
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 CREATE EXTENSION IF NOT EXISTS pgtap;
-SET search_path = public, extensions;
 
 SELECT plan(2);
 
