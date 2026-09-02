@@ -75,7 +75,7 @@ if (tablesLineIdx === -1) {
 const tableIndent = lines[tablesLineIdx].match(/^(\s*)/)[1].length; // indent of "Tables:" itself
 const entryIndent = ' '.repeat(tableIndent + 2);                    // indent of each table key
 const closeRe = new RegExp(`^${' '.repeat(tableIndent)}\}$`);       // closes the Tables block
-const entryRe = new RegExp(`^${entryIndent}(\w+):\s*\{$`);
+const entryRe = new RegExp(String.raw`^${entryIndent}(\w+):\s*\{$`);
 
 const typedTables = new Set();
 for (let i = tablesLineIdx + 1; i < lines.length; i++) {
