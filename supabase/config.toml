@@ -1,19 +1,1 @@
 project_id = "sosfbfxovtleuvahxvpm"
-
-# ── Edge Functions ─────────────────────────────────────────────────────────────
-# Moved from frontend/supabase/config.toml (§4 item 3 — migrations consolidation).
-# The frontend/supabase/ directory has been removed; this is now the single
-# canonical Supabase project config.
-
-[functions.data-analysis]
-# Was `false` -- the platform-level check Supabase runs before invoking the
-# function at all. callerIdentity() (index.ts) does its own proper
-# verification via auth.getUser() now (see the 2026-08-18 fix), so this
-# was redundant-but-safe either way -- flipped to true anyway as
-# defense-in-depth: it rejects a bad/missing token before the function even
-# cold-starts, rather than relying solely on the function's own check.
-# CORS preflight (OPTIONS) is exempted from this by the platform regardless,
-# so this doesn't affect the Access-Control-Allow-* handling below.
-enabled = true
-verify_jwt = true
-schedule = "0 6 * * *"
