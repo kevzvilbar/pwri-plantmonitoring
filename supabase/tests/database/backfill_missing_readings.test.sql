@@ -4,7 +4,9 @@
 -- =============================================================================
 
 BEGIN;
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
 CREATE EXTENSION IF NOT EXISTS pgtap;
+SET search_path = public, extensions;
 
 SELECT plan(16);
 

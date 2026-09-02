@@ -11,6 +11,10 @@
 -- everything back at the end, so this runs the same way against a fresh
 -- `supabase test db` as it does against a linked project with real data.
 BEGIN;
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+CREATE EXTENSION IF NOT EXISTS pgtap;
+SET search_path = public, extensions;
+
 SELECT plan(7);
 
 -- ── Fixture setup (runs as the migration role, which bypasses RLS) ──────────
