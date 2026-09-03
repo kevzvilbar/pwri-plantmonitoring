@@ -103,9 +103,11 @@ export function useTrainHourlyGaps(plantIds: string[]) {
     queryKey: ['train-hourly-gaps', plantIds],
     queryFn: () => fetchTrainHourlyGaps(plantIds),
     enabled: plantIds.length > 0,
-    staleTime: 5 * 60_000,  // FIX (egress): staleTime matched to refetchInterval — was relying on the 30s global default, so the app-wide background-sync sweep force-refetched this well before its own interval was due
+    // FIX (egress): staleTime matched to refetchInterval — was relying on the
+    // 30s global default, so the app-wide background-sync sweep force-refetched
+    // this well before its own interval was due.
+    staleTime: 5 * 60_000,
     refetchInterval: 5 * 60_000,
-    staleTime: 2 * 60_000,
   });
   return data ?? [];
 }
