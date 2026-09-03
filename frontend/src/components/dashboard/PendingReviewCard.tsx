@@ -35,6 +35,7 @@ export function PendingReviewCard({ plantIds }: Props) {
       );
       return counts.reduce((sum, r) => sum + (r.count ?? 0), 0);
     },
+    staleTime: 60_000,  // FIX (egress): staleTime matched to refetchInterval — was relying on the 30s global default, so the app-wide background-sync sweep force-refetched this well before its own interval was due
     refetchInterval: 60_000,
     staleTime: 30_000,
   });

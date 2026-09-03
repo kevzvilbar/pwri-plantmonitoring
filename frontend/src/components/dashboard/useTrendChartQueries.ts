@@ -195,7 +195,7 @@ export function useTrendChartQueries({
     },
     // Wait for locator IDs to resolve before fetching readings.
     enabled: plantIds.length > 0 && needsLocReadings && (_locatorIdsForReadings !== undefined),
-    staleTime: 0,
+    staleTime: 60_000,  // FIX (egress): was 0 (always stale), which let the background-sync sweep refetch this ahead of its own 60s interval
     refetchInterval: 60_000,
   });
 
@@ -230,7 +230,7 @@ export function useTrendChartQueries({
       return (data as any[]) ?? [];
     },
     enabled: plantIds.length > 0 && needsProductMeterReadings,
-    staleTime: 0,
+    staleTime: 60_000,  // FIX (egress): was 0 (always stale), which let the background-sync sweep refetch this ahead of its own 60s interval
     refetchInterval: 60_000,
   });
 
@@ -249,7 +249,7 @@ export function useTrendChartQueries({
       'well_id,current_reading,previous_reading,daily_volume,reading_datetime,is_meter_replacement,plant_id,norm_status',
     ),
     enabled: plantIds.length > 0 && needsWellReadings,
-    staleTime: 0,
+    staleTime: 60_000,  // FIX (egress): was 0 (always stale), which let the background-sync sweep refetch this ahead of its own 60s interval
     refetchInterval: 60_000,
   });
 
@@ -326,7 +326,7 @@ export function useTrendChartQueries({
       return (data ?? []) as any[];
     },
     enabled: plantIds.length > 0 && (needsRoReadings || needsPermeateProduction) && (_roTrainIdsForReadings !== undefined),
-    staleTime: 0,
+    staleTime: 60_000,  // FIX (egress): was 0 (always stale), which let the background-sync sweep refetch this ahead of its own 60s interval
     refetchInterval: 60_000,
   });
 
@@ -422,7 +422,7 @@ export function useTrendChartQueries({
       );
     },
     enabled: plantIds.length > 0 && needsPowerReadings,
-    staleTime: 0,
+    staleTime: 60_000,  // FIX (egress): was 0 (always stale), which let the background-sync sweep refetch this ahead of its own 60s interval
     refetchInterval: 60_000,
   });
 
@@ -504,7 +504,7 @@ export function useTrendChartQueries({
       });
     },
     enabled: plantIds.length > 0 && needsCostReadings,
-    staleTime: 0,
+    staleTime: 60_000,  // FIX (egress): was 0 (always stale), which let the background-sync sweep refetch this ahead of its own 60s interval
     refetchInterval: 60_000,
   });
 

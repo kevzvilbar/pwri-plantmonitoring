@@ -123,6 +123,7 @@ export function ReadingCoverageCard({ plantIds }: Props) {
       // Distinct wells
       return new Set((data ?? []).map((r: any) => r.well_id)).size;
     },
+    staleTime: 5 * 60_000,  // FIX (egress): staleTime matched to refetchInterval — was relying on the 30s global default, so the app-wide background-sync sweep force-refetched this well before its own interval was due
     refetchInterval: 5 * 60_000,
     staleTime:       2 * 60_000,
   });
@@ -138,6 +139,7 @@ export function ReadingCoverageCard({ plantIds }: Props) {
       const { data } = await q;
       return new Set((data ?? []).map((r: any) => r.locator_id)).size;
     },
+    staleTime: 5 * 60_000,  // FIX (egress): staleTime matched to refetchInterval — was relying on the 30s global default, so the app-wide background-sync sweep force-refetched this well before its own interval was due
     refetchInterval: 5 * 60_000,
     staleTime:       2 * 60_000,
   });
@@ -153,6 +155,7 @@ export function ReadingCoverageCard({ plantIds }: Props) {
       const { data } = await q;
       return new Set((data ?? []).map((r: any) => r.train_id)).size;
     },
+    staleTime: 5 * 60_000,  // FIX (egress): staleTime matched to refetchInterval — was relying on the 30s global default, so the app-wide background-sync sweep force-refetched this well before its own interval was due
     refetchInterval: 5 * 60_000,
     staleTime:       2 * 60_000,
   });

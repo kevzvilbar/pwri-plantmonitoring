@@ -331,7 +331,7 @@ export function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: Dat
       return (data ?? []) as any[];
     },
     enabled: open && plantIds.length > 0,
-    staleTime: 0,
+    staleTime: 30_000,  // FIX (egress): matched to this query's own 30s refetchInterval (while modal is open) instead of 0 (always stale)
     refetchInterval: open ? 30_000 : false,
   });
 
@@ -433,7 +433,7 @@ export function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: Dat
       return (data ?? []) as any[];
     },
     enabled: open && plantIds.length > 0,
-    staleTime: 0,
+    staleTime: 30_000,  // FIX (egress): matched to this query's own 30s refetchInterval (while modal is open) instead of 0 (always stale)
     refetchInterval: open ? 30_000 : false,
   });
 
@@ -589,7 +589,7 @@ export function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: Dat
       return (data ?? []) as any[];
     },
     enabled: open && permeateIsProductionPlantIds.length > 0,
-    staleTime: 0,
+    staleTime: 30_000,  // FIX (egress): matched to this query's own 30s refetchInterval (while modal is open) instead of 0 (always stale)
     refetchInterval: open ? 30_000 : false,
   });
 

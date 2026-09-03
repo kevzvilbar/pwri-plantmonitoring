@@ -363,7 +363,7 @@ export function useDashboardAggregates(p: Record<string, any>) {
       ? (await supabase.from('chemical_inventory').select('*').in('plant_id', plantIds)).data ?? []
       : [],
     enabled: plantIds.length > 0,
-    staleTime: 0,
+    staleTime: 60_000,  // FIX (egress): was 0 (always stale), which let the background-sync sweep refetch this ahead of its own 60s interval
     refetchInterval: 60_000,
   });
 
@@ -503,7 +503,7 @@ export function useDashboardAggregates(p: Record<string, any>) {
       return { count: capped.length, alerts: capped };
     },
     retry: false,
-    staleTime: 0,
+    staleTime: 60_000,  // FIX (egress): was 0 (always stale), which let the background-sync sweep refetch this ahead of its own 60s interval
     refetchInterval: 60_000,
   });
   // Memoised so the `?? []` fallback doesn't produce a new array reference on

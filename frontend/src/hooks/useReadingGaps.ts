@@ -99,6 +99,7 @@ export function useReadingGaps(plantIds: string[]) {
     queryKey: ['well-reading-gaps', plantIds],
     queryFn: () => fetchReadingGaps('well', plantIds),
     enabled: plantIds.length > 0,
+    staleTime: 5 * 60_000,  // FIX (egress): staleTime matched to refetchInterval — was relying on the 30s global default, so the app-wide background-sync sweep force-refetched this well before its own interval was due
     refetchInterval: 5 * 60_000,
     staleTime: 2 * 60_000,
   });
@@ -107,6 +108,7 @@ export function useReadingGaps(plantIds: string[]) {
     queryKey: ['locator-reading-gaps', plantIds],
     queryFn: () => fetchReadingGaps('locator', plantIds),
     enabled: plantIds.length > 0,
+    staleTime: 5 * 60_000,  // FIX (egress): staleTime matched to refetchInterval — was relying on the 30s global default, so the app-wide background-sync sweep force-refetched this well before its own interval was due
     refetchInterval: 5 * 60_000,
     staleTime: 2 * 60_000,
   });

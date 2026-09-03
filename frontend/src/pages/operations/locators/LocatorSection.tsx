@@ -551,14 +551,15 @@ export function LocatorReadingForm({ highlightId }: { highlightId?: string | nul
         .limit(5000)).data ?? [];
     },
     enabled: !!plantId && (_locatorIds !== undefined),
-    staleTime: 0,             // always treat cached data as stale on mount/focus
-    // FIX (egress): this is the priciest poller in the file — up to 5000
-    // rows, select('*'), every 30s, per open tab. Readings are manually
-    // entered, so the underlying data doesn't actually move on a 30s
-    // cadence; 2min still surfaces another operator's entry well within
-    // the same shift. Bump further (or move to a postgres_changes
-    // subscription like TrendChart.tsx already does, so this only refetches
-    // when a row actually changes) if egress is still high after this pass.
+    // FIX (egress, round 2): staleTime:0 meant this query was ALWAYS "stale",
+    // so the app-wide useBackgroundSync sweep (App.tsx: 30s global default +
+    // a 60s refetchQueries({stale:true}) tick) was re-fetching this 5000-row
+    // select('*') dump almost every 60s regardless of the 120s
+    // refetchInterval below — the bump in the previous pass didn't actually
+    // reduce the real-world fetch rate. staleTime now matches
+    // refetchInterval so both mechanisms agree on the cadence instead of
+    // fighting each other.
+    staleTime: 120_000,
     refetchInterval: 120_000,
   });
 
@@ -586,10 +587,11 @@ export function LocatorReadingForm({ highlightId }: { highlightId?: string | nul
       return results.flatMap(r => r.data ?? []);
     },
     enabled: !!plantId && !!_locatorIds?.length,
-    staleTime: 0,
-    // FIX (egress): payload is small (1 row per locator) so this one was
-    // never the big cost, but bumped in lockstep with op-loc-recent above
-    // so the two queries don't drift out of sync with each other.
+    // FIX (egress, round 2): payload is small (1 row per locator) so this
+    // one was never the big cost, but staleTime:0 still meant the global
+    // background-sync sweep re-ran it every ~60s. Matched to refetchInterval
+    // like op-loc-recent above so the two queries stay in lockstep.
+    staleTime: 120_000,
     refetchInterval: 120_000,
   });
 
@@ -1093,7 +1095,7 @@ function LocatorRow({
       return data as { id: string; date_key: string; flagged_at: string } | null;
     },
     enabled: !!locator.is_derived,
-    staleTime: 30_000,
+    staleTime: 60_000,
     refetchInterval: 60_000,
   });
 

@@ -307,8 +307,16 @@ export function WellReadingForm({ highlightId }: { highlightId?: string | null }
       return data ?? [];
     },
     enabled: !!plantId,
-    staleTime: 0,
-    refetchInterval: 30_000, // poll every 30 s — mirrors op-loc-recent so both sections stay live
+    // FIX (egress): this was still on the OLD 30s cadence with staleTime:0
+    // (always stale) — the comment claimed it "mirrors op-loc-recent" but
+    // that query was bumped to 120s + staleTime:120_000 in the previous
+    // egress pass (see LocatorSection.tsx) and this one was missed. Same
+    // 30-day, unbounded select('*') shape as op-loc-recent, so it deserves
+    // the same treatment: staleTime matched to refetchInterval so the
+    // app-wide background-sync sweep doesn't re-fetch it every ~60s on top
+    // of its own timer.
+    staleTime: 120_000,
+    refetchInterval: 120_000, // poll every 2 min — now actually mirrors op-loc-recent
   });
 
   const { latestByWell, todayByWell, avgByWell } = useMemo(() => {
@@ -361,6 +369,8 @@ export function WellReadingForm({ highlightId }: { highlightId?: string | null }
       return (data ?? []) as { well_id: string; reading_datetime: string }[];
     },
     enabled: !!plantId,
+    staleTime: 120_000, // FIX (egress): was relying on the 30s global default, so the
+    // background-sync sweep force-refetched it well before its own interval fired.
     refetchInterval: 120_000,
   });
   const freshDtByWell = useMemo(() => {

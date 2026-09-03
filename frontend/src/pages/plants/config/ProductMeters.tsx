@@ -88,6 +88,7 @@ export function ProductMetersStat({ plantId }: { plantId: string }) {
       if (error) throw error;
       return (data ?? []) as { meter_id: string; reading_datetime: string }[];
     },
+    staleTime: 60_000,  // FIX (egress): staleTime matched to refetchInterval — was relying on the 30s global default, so the app-wide background-sync sweep force-refetched this well before its own interval was due
     refetchInterval: 60_000,
   });
   const freshSet = useMemo(() => {

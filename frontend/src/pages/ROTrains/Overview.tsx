@@ -79,6 +79,7 @@ export function Overview() {
       return map;
     },
     enabled: trainIds.length > 0,
+    staleTime: 180_000,  // FIX (egress): staleTime matched to refetchInterval — was relying on the 30s global default, so the app-wide background-sync sweep force-refetched this well before its own interval was due
     refetchInterval: 180_000,
   });
 
@@ -98,6 +99,7 @@ export function Overview() {
       return map;
     },
     enabled: trainIds.length > 0,
+    staleTime: 180_000,  // FIX (egress): staleTime matched to refetchInterval — was relying on the 30s global default, so the app-wide background-sync sweep force-refetched this well before its own interval was due
     refetchInterval: 180_000,
   });
 

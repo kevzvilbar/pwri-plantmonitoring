@@ -123,7 +123,7 @@ export function useDashboardQueries({
       return (data ?? []) as any[];
     },
     enabled: (_locatorIds?.length ?? 0) > 0,
-    staleTime: 30_000,  // skip re-fetch if invalidated within 30 s
+    staleTime: 60_000,  // FIX (egress): matched to refetchInterval below — was 30_000, which let the app-wide background-sync sweep force-refetch this before its own 60s timer was due
     refetchInterval: 60_000,
   });
 
@@ -159,7 +159,7 @@ export function useDashboardQueries({
       return (fallback ?? []) as any[];
     },
     enabled: (_wellIds?.length ?? 0) > 0,
-    staleTime: 30_000,  // skip re-fetch if invalidated within 30 s
+    staleTime: 60_000,  // FIX (egress): matched to refetchInterval below — was 30_000, which let the app-wide background-sync sweep force-refetch this before its own 60s timer was due
     refetchInterval: 60_000,
   });
   // Production = sum of Product Meter deltas (treated/distributed water)
@@ -184,7 +184,7 @@ export function useDashboardQueries({
       return (data ?? []) as any[];
     },
     enabled: plantIds.length > 0,
-    staleTime: 30_000,  // skip re-fetch if invalidated within 30 s
+    staleTime: 60_000,  // FIX (egress): matched to refetchInterval below — was 30_000, which let the app-wide background-sync sweep force-refetch this before its own 60s timer was due
     refetchInterval: 60_000,
   });
 
@@ -303,7 +303,7 @@ export function useDashboardQueries({
       }));
     },
     enabled: _permeateTrainIds.length > 0,
-    staleTime: 30_000,  // skip re-fetch if invalidated within 30 s
+    staleTime: 60_000,  // FIX (egress): matched to refetchInterval below — was 30_000, which let the app-wide background-sync sweep force-refetch this before its own 60s timer was due
     refetchInterval: 60_000,
   });
 
@@ -382,7 +382,7 @@ export function useDashboardQueries({
       return { rows: Array.from(latestByPlant.values()), prevRows, isStale: true };
     },
     enabled: plantIds.length > 0,
-    staleTime: 30_000,
+    staleTime: 60_000,
     refetchInterval: 60_000,
   });
   const todayPower   = todayPowerRaw?.rows ?? [];
@@ -573,7 +573,7 @@ export function useDashboardQueries({
       });
     },
     enabled: _qualityTrainIds.length > 0,
-    staleTime: 60_000,
+    staleTime: 2 * 60_000,
     refetchInterval: 2 * 60_000,
   });
 
@@ -645,7 +645,7 @@ export function useDashboardQueries({
       return (data ?? []) as any[];
     },
     enabled: plantIds.length > 0,
-    staleTime: 60_000,
+    staleTime: 2 * 60_000,
     refetchInterval: 2 * 60_000,
   });
 
@@ -676,7 +676,7 @@ export function useDashboardQueries({
       return Array.from(latestByPump.values());
     },
     enabled: plantIds.length > 0,
-    staleTime: 60_000,
+    staleTime: 2 * 60_000,
     refetchInterval: 2 * 60_000,
   });
 
@@ -763,7 +763,7 @@ export function useDashboardQueries({
     // Only fetch when there are no product meter readings — avoids a redundant
     // round-trip when product meters are working correctly.
     enabled: !productMetersHaveData && _qualityTrainIds.length > 0,
-    staleTime: 30_000,  // skip re-fetch if invalidated within 30 s
+    staleTime: 60_000,  // FIX (egress): matched to refetchInterval below — was 30_000, which let the app-wide background-sync sweep force-refetch this before its own 60s timer was due
     refetchInterval: 60_000,
   });
   // ── FIX: StatCard cost sources now mirror TrendChart's productionCost computation ──
@@ -862,7 +862,7 @@ export function useDashboardQueries({
       return { rows, costDataDate: rows[0]?.cost_date ?? null, tariffByPlant, dashDosingPeso };
     },
     enabled: plantIds.length > 0,
-    staleTime: 2 * 60_000,
+    staleTime: 5 * 60_000,
     refetchInterval: 5 * 60_000,
   });
   const todayCosts       = todayCostsRaw?.rows ?? [];
@@ -889,7 +889,7 @@ export function useDashboardQueries({
       return data ?? [];
     },
     enabled: plantIds.length > 0,
-    staleTime: 2 * 60_000,
+    staleTime: 5 * 60_000,
     refetchInterval: 5 * 60_000,
   });
 
