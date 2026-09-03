@@ -1,7 +1,5 @@
 import { useState, useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
-import { format, subDays } from 'date-fns';
+import { format, subDays, startOfDay } from 'date-fns';
 import {
   ResponsiveContainer,
   AreaChart,
@@ -13,11 +11,13 @@ import {
   ReferenceLine,
 } from 'recharts';
 import { Card } from '@/components/ui/card';
-import { Activity, TrendingUp, Calendar, Droplets } from 'lucide-react';
+import { TrendingUp } from 'lucide-react';
 import { fmtNum, fmtVol } from '@/lib/format';
 import { ModernChartLegend } from '@/components/dashboard/TrendChartLegend';
 import { C_PRODUCTION, C_CONSUMPTION } from '@/lib/chartColors';
 import { cn } from '@/lib/utils';
+import { useTrendChartQueries } from '@/components/dashboard/useTrendChartQueries';
+import { useTrendChartData } from '@/components/dashboard/useTrendChartData';
 
 export type TimeRange = '7d' | '30d' | '90d';
 
@@ -44,117 +44,94 @@ export function PlantTelemetryChart({
   const [range, setRange] = useState<TimeRange>('30d');
 
   const daysBack = range === '7d' ? 7 : range === '90d' ? 90 : 30;
-  const startDateStr = format(subDays(new Date(), daysBack), 'yyyy-MM-dd');
+  const plantIds = useMemo(() => (plantId ? [plantId] : []), [plantId]);
 
-  // Query product meters and locators for this plant
-  const { data: entityIds } = useQuery({
-    queryKey: ['plant-chart-entity-ids', plantId],
-    queryFn: async () => {
-      const [{ data: pMeters }, { data: locators }, { data: trains }] = await Promise.all([
-        supabase.from('product_meters').select('id, name').eq('plant_id', plantId),
-        supabase.from('locators').select('id, name').eq('plant_id', plantId),
-        supabase.from('ro_trains').select('id, train_number').eq('plant_id', plantId),
-      ]);
-      return {
-        productMeterIds: (pMeters ?? []).map((m: any) => m.id),
-        locatorIds: (locators ?? []).map((l: any) => l.id),
-        trainIds: (trains ?? []).map((t: any) => t.id),
-      };
-    },
-    enabled: !!plantId,
+  // Derive stable date boundaries matching TrendChart
+  const { startISO, endISO, startKey, endKey } = useMemo(() => {
+    const today = new Date();
+    const end = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999);
+    const start = startOfDay(subDays(today, daysBack));
+    return {
+      startISO: start.toISOString(),
+      endISO: end.toISOString(),
+      startKey: format(start, 'yyyy-MM-dd'),
+      endKey: format(today, 'yyyy-MM-dd'),
+    };
+  }, [daysBack]);
+
+  // Use the canonical queries hook so source routing (permeate vs. product meter),
+  // name maps, and direct-mode entity IDs match the main Dashboard 1:1.
+  const {
+    locReadings,
+    wellReadings,
+    productReadings,
+    roReadings,
+    powerReadings,
+    costReadings,
+    powerTariffs,
+    billMultiplierMap,
+    powerConfigMap,
+    wellNames,
+    locatorNames,
+    productMeterNames,
+    plantNames,
+    permeateIsProductionPlants,
+    productExcludedPlants,
+    _trainPlantMap,
+    _trainUnitTypeMap,
+    _directLocatorIds,
+    _directProductMeterIds,
+    isFetching,
+  } = useTrendChartQueries({
+    metric: 'production',
+    plantIds,
+    startISO,
+    endISO,
+    startKey,
+    endKey,
   });
 
-  // Query daily readings
-  const { data: chartData, isLoading } = useQuery({
-    queryKey: ['plant-telemetry-chart', plantId, range, entityIds],
-    queryFn: async () => {
-      if (!entityIds) return [];
-
-      // Supabase query builders are thenables, not native Promise instances.
-      const promises: PromiseLike<any>[] = [];
-
-      // 1. Product meter readings (Production)
-      if (entityIds.productMeterIds.length > 0) {
-        promises.push(
-          supabase
-            .from('product_meter_readings' as any)
-            .select('reading_datetime, daily_volume, current_reading, previous_reading')
-            .in('meter_id', entityIds.productMeterIds)
-            .gte('reading_datetime', startDateStr)
-            .order('reading_datetime', { ascending: true })
-        );
-      } else if (entityIds.trainIds.length > 0) {
-        // Permeate as production fallback
-        promises.push(
-          supabase
-            .from('ro_train_readings')
-            .select('reading_datetime, permeate_meter_delta, recovery_pct')
-            .in('train_id', entityIds.trainIds)
-            .gte('reading_datetime', startDateStr)
-            .order('reading_datetime', { ascending: true })
-        );
-      } else {
-        promises.push(Promise.resolve({ data: [] }));
-      }
-
-      // 2. Locator readings (Consumption)
-      if (entityIds.locatorIds.length > 0) {
-        promises.push(
-          supabase
-            .from('locator_readings')
-            .select('reading_datetime, daily_volume, current_reading, previous_reading')
-            .in('locator_id', entityIds.locatorIds)
-            .gte('reading_datetime', startDateStr)
-            .order('reading_datetime', { ascending: true })
-        );
-      } else {
-        promises.push(Promise.resolve({ data: [] }));
-      }
-
-      const [prodRes, consRes] = await Promise.all(promises);
-
-      const dateMap = new Map<string, { production: number; consumption: number; count: number }>();
-
-      // Aggregate production
-      (prodRes.data ?? []).forEach((r: any) => {
-        const d = r.reading_datetime ? r.reading_datetime.slice(0, 10) : null;
-        if (!d) return;
-        const vol = r.daily_volume ?? (r.permeate_meter_delta ?? (r.current_reading != null && r.previous_reading != null ? Math.max(0, r.current_reading - r.previous_reading) : 0));
-        const entry = dateMap.get(d) ?? { production: 0, consumption: 0, count: 0 };
-        entry.production += +vol || 0;
-        dateMap.set(d, entry);
-      });
-
-      // Aggregate consumption
-      (consRes.data ?? []).forEach((r: any) => {
-        const d = r.reading_datetime ? r.reading_datetime.slice(0, 10) : null;
-        if (!d) return;
-        const vol = r.daily_volume ?? (r.current_reading != null && r.previous_reading != null ? Math.max(0, r.current_reading - r.previous_reading) : 0);
-        const entry = dateMap.get(d) ?? { production: 0, consumption: 0, count: 0 };
-        entry.consumption += +vol || 0;
-        dateMap.set(d, entry);
-      });
-
-      // Generate continuous calendar days for clean trend
-      const rows = [];
-      for (let i = daysBack - 1; i >= 0; i--) {
-        const dt = subDays(new Date(), i);
-        const iso = format(dt, 'yyyy-MM-dd');
-        const entry = dateMap.get(iso);
-        rows.push({
-          date: format(dt, 'MMM d'),
-          isoDate: iso,
-          production: entry ? +entry.production.toFixed(1) : 0,
-          consumption: entry ? +entry.consumption.toFixed(1) : 0,
-        });
-      }
-
-      return rows;
-    },
-    enabled: !!plantId && !!entityIds,
-    staleTime: 60_000,
+  // Use the canonical calculation hook so sequential delta walking, meter replacements,
+  // backfill dates, and timezone handling agree identically with the Dashboard.
+  const { chartData: rawTrendData } = useTrendChartData({
+    metric: 'production',
+    startKey,
+    endKey,
+    startISO,
+    viewGran: 'daily',
+    usesSharedGranularity: true,
+    kwhSource: 'both',
+    locReadings,
+    wellReadings,
+    productReadings,
+    roReadings,
+    powerReadings,
+    costReadings,
+    powerTariffs,
+    billMultiplierMap,
+    powerConfigMap,
+    wellNames,
+    locatorNames,
+    productMeterNames,
+    plantNames,
+    permeateIsProductionPlants,
+    productExcludedPlants,
+    _trainPlantMap,
+    _trainUnitTypeMap,
+    _directLocatorIds,
+    _directProductMeterIds,
   });
 
+  const chartData = useMemo(() => {
+    return (rawTrendData ?? []).map((r: any) => ({
+      date: r.date,
+      isoDate: r.isoDate,
+      production: +(r.production ?? 0).toFixed(1),
+      consumption: +(r.consumption ?? 0).toFixed(1),
+    }));
+  }, [rawTrendData]);
+
+  const isLoading = isFetching && (!chartData || chartData.length === 0);
   const dailyCapacityM3 = designCapacityM3 ? designCapacityM3 * 1000 : null;
 
   const totalProd = (chartData ?? []).reduce((s, r) => s + r.production, 0);
