@@ -768,7 +768,7 @@ function LocatorRow({
   // row's pre-edit values so save() can log a field-level diff + the required
   // reason to reading_edit_audit_log — without this, Data Corrections has no
   // edit reason and no "Value Before Correction" to show for pencil edits.
-  const [editBefore, setEditBefore] = useState<Record<string, any> | null>(null);
+  const [editBefore, setEditBefore] = useState<Record<string, unknown> | null>(null);
   const [editReason, setEditReason] = useState('');
   const [editCustomReason, setEditCustomReason] = useState('');
   const [saving, setSaving]       = useState(false);
@@ -1057,7 +1057,7 @@ function LocatorRow({
       // GENERATED ALWAYS AS column on locator_readings and must never be
       // sent — it's recomputed by the DB, so it's left out of the diff
       // entirely rather than guessed.
-      const after: Record<string, any> = {
+      const after: Record<string, unknown> = {
         current_reading: payload.current_reading,
         reading_datetime: payload.reading_datetime,
         is_estimated: !!payload.is_estimated,

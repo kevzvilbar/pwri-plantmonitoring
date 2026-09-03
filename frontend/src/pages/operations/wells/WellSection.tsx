@@ -597,7 +597,7 @@ function WellRow({
   // save() can log a field-level diff + the required reason to
   // reading_edit_audit_log — without this, Data Corrections has no edit
   // reason and no "Value Before Correction" to show for pencil edits.
-  const [editBefore, setEditBefore]             = useState<Record<string, any> | null>(null);
+  const [editBefore, setEditBefore]             = useState<Record<string, unknown> | null>(null);
   const [editReason, setEditReason]             = useState('');
   const [editCustomReason, setEditCustomReason] = useState('');
   const [saving, setSaving]                     = useState(false);
@@ -784,7 +784,7 @@ function WellRow({
       // "after" mirrors exactly what this UPDATE writes: tds/ntu/pressure are
       // conditional keys on the payload (absent = column untouched), so they
       // only enter the diff when they were actually sent.
-      const after: Record<string, any> = {
+      const after: Record<string, unknown> = {
         current_reading: payload.current_reading,
         reading_datetime: payload.reading_datetime,
         daily_volume: payload.daily_volume ?? null,
@@ -1144,11 +1144,11 @@ function WellRow({
                     reading_datetime: lastToday.reading_datetime ?? null,
                     daily_volume: lastToday.daily_volume ?? null,
                     power_meter_reading: lastToday.power_meter_reading ?? null,
-                    tds_ppm: (lastToday as any).tds_ppm ?? null,
-                    turbidity_ntu: (lastToday as any).turbidity_ntu ?? null,
+                    tds_ppm: lastToday.tds_ppm ?? null,
+                    turbidity_ntu: lastToday.turbidity_ntu ?? null,
                     pressure_psi: lastToday.pressure_psi ?? null,
                     is_meter_rollover: !!lastToday.is_meter_rollover,
-                    meter_rollover_max: (lastToday as any).meter_rollover_max ?? null,
+                    meter_rollover_max: lastToday.meter_rollover_max ?? null,
                     is_meter_replacement: !!lastToday.is_meter_replacement,
                   });
                 },

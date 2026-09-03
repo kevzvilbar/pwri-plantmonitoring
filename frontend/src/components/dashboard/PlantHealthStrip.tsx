@@ -56,9 +56,11 @@ export function PlantHealthStrip({ plantIds, onSelectPlant }: Props) {
       return map;
     },
     enabled: plantIds.length > 0,
-    staleTime: 60_000,  // FIX (egress): staleTime matched to refetchInterval — was relying on the 30s global default, so the app-wide background-sync sweep force-refetched this well before its own interval was due
+    // FIX (egress): staleTime matched to refetchInterval — was relying on the 30s
+    // global default, so the app-wide background-sync sweep force-refetched this
+    // well before its own interval was due.
+    staleTime: 60_000,
     refetchInterval: 60_000,
-    staleTime:       30_000,
   });
 
   // Latest locator reading datetime per plant
@@ -79,9 +81,11 @@ export function PlantHealthStrip({ plantIds, onSelectPlant }: Props) {
       return map;
     },
     enabled: plantIds.length > 0,
-    staleTime: 60_000,  // FIX (egress): staleTime matched to refetchInterval — was relying on the 30s global default, so the app-wide background-sync sweep force-refetched this well before its own interval was due
+    // FIX (egress): staleTime matched to refetchInterval — was relying on the 30s
+    // global default, so the app-wide background-sync sweep force-refetched this
+    // well before its own interval was due.
+    staleTime: 60_000,
     refetchInterval: 60_000,
-    staleTime:       30_000,
   });
 
   // Merge: most recent reading across both sources per plant

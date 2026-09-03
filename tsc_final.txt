@@ -1,0 +1,10 @@
+src/components/dashboard/PendingReviewCard.tsx(40,5): error TS1117: An object literal cannot have multiple properties with the same name.
+src/components/dashboard/PlantHealthStrip.tsx(61,5): error TS1117: An object literal cannot have multiple properties with the same name.
+src/components/dashboard/PlantHealthStrip.tsx(84,5): error TS1117: An object literal cannot have multiple properties with the same name.
+src/components/dashboard/ReadingCoverageCard.tsx(128,5): error TS1117: An object literal cannot have multiple properties with the same name.
+src/components/dashboard/ReadingCoverageCard.tsx(144,5): error TS1117: An object literal cannot have multiple properties with the same name.
+src/components/dashboard/ReadingCoverageCard.tsx(160,5): error TS1117: An object literal cannot have multiple properties with the same name.
+src/hooks/useReadingGaps.ts(104,5): error TS1117: An object literal cannot have multiple properties with the same name.
+src/hooks/useReadingGaps.ts(113,5): error TS1117: An object literal cannot have multiple properties with the same name.
+src/hooks/useTrainHourlyGaps.ts(108,5): error TS1117: An object literal cannot have multiple properties with the same name.
+TSC_EXIT=0 
