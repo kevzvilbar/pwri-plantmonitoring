@@ -20,7 +20,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { StatusPill } from '@/components/StatusPill';
 import { calc, fmtNum, getCurrentPosition, isOffLocation, ALERTS } from '@/lib/calculations';
-import { fmtSaveToast } from '@/lib/format';
+import { fmtSaveToast, fmtDate, fmtDateTime } from '@/lib/format';
 import { findExistingReading } from '@/lib/duplicateCheck';
 import { downloadCSV } from '@/lib/csv';
 import { toast } from 'sonner';
@@ -1114,22 +1114,24 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
               <tbody>
                 {rows.map((r: any, i: number) => {
                   const dt = r.reading_datetime ?? r.event_date ?? r.noted_at ?? '';
-                  // Blending stores event_date as a date-only string (YYYY-MM-DD).
-                  // Parsing it with `new Date(str)` treats it as UTC midnight, which
-                  // shifts the displayed time by the local UTC offset (e.g. +08:00 → 08:00).
-                  // Use local-midnight construction + date-only format to avoid this.
+                  // Always render in Asia/Manila via fmtDate/fmtDateTime (Intl-based,
+                  // pinned timeZone) rather than date-fns' format(), which renders in
+                  // whatever timezone the viewer's own device happens to be set to.
+                  // Blending's date-only event_date previously relied on constructing
+                  // a "local midnight" Date to dodge a UTC-parsing shift — fmtDate
+                  // handles that correctly on its own (see its doc comment in
+                  // lib/format.ts) without depending on the viewer's device timezone.
                   let dateStr: string;
                   if (module === 'blending') {
                     if (r.reading_datetime) {
-                      dateStr = format(new Date(r.reading_datetime), 'MMM d, yyyy HH:mm');
+                      dateStr = fmtDateTime(r.reading_datetime);
                     } else if (r.event_date) {
-                      const [ey, em, ed] = r.event_date.split('-').map(Number);
-                      dateStr = format(new Date(ey, em - 1, ed), 'MMM d, yyyy');
+                      dateStr = fmtDate(r.event_date);
                     } else {
                       dateStr = '—';
                     }
                   } else {
-                    dateStr = dt ? format(new Date(dt), 'MMM d, yyyy HH:mm') : '—';
+                    dateStr = dt ? fmtDateTime(dt) : '—';
                   }
                   const isEditing = editRow?.id === r.id;
                   const isDeleting = deletingId === r.id;
