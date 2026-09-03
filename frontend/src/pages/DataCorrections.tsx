@@ -215,6 +215,86 @@ function DeltaBadge({ vol }: { vol: number | null }) {
   );
 }
 
+// ── Recently corrected (old ↔ new value) panel ────────────────────────────────
+// Both "Edit value" (fn_cascade_reading_correction) and "Approve & Apply" on an
+// operator correction request immediately flip the reading's norm_status away
+// from whatever this tab is filtering on — 'pending_review' here, 'pending' for
+// correction_requests — so the row disappears from the list the instant it's
+// corrected. The only record of what changed used to be a toast that fades in
+// a few seconds; the durable copy (reading_normalizations) only surfaces later,
+// buried in the separate Edit History tab. This keeps the last few corrections
+// visible, old value and new value side by side, right where the reviewer is
+// already looking. Session-only by design — Edit History is the permanent record.
+interface RecentCorrection {
+  key: string;
+  /** Entity name for a direct edit, or a short description for an approved
+   *  operator request (which doesn't carry an entity name — see
+   *  fetchCorrectionRequests / CorrectionRequest). */
+  label: string;
+  plantName: string;
+  sourceTable: SourceTable;
+  oldValue: number;
+  newValue: number;
+  correctedAt: string;
+}
+
+function useRecentCorrections() {
+  const [items, setItems] = useState<RecentCorrection[]>([]);
+  const add = useCallback((c: Omit<RecentCorrection, 'key' | 'correctedAt'>) => {
+    if (c.oldValue === c.newValue) return; // nothing actually changed — not worth a row
+    setItems(prev => [
+      { ...c, key: `${c.sourceTable}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, correctedAt: new Date().toISOString() },
+      ...prev,
+    ].slice(0, 8));
+  }, []);
+  const clear = useCallback(() => setItems([]), []);
+  return { items, add, clear };
+}
+
+function RecentCorrectionsPanel({ items, onClear }: { items: RecentCorrection[]; onClear: () => void }) {
+  if (!items.length) return null;
+  return (
+    <div className="space-y-2 pb-1">
+      <div className="flex items-center justify-between px-1">
+        <div className="flex items-center gap-2">
+          <p className="text-xs font-bold text-foreground uppercase tracking-wide">Just Corrected</p>
+          <Badge variant="outline" className="text-3xs px-2 py-0 font-bold border-accent/40 bg-background">
+            this session
+          </Badge>
+        </div>
+        <button
+          type="button"
+          onClick={onClear}
+          className="text-2xs text-muted-foreground hover:text-foreground underline underline-offset-2"
+        >
+          Clear
+        </button>
+      </div>
+      <div className="grid gap-2">
+        {items.map(c => (
+          <Card key={c.key} className="p-3 border-accent/30 bg-accent-soft/30">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <div className="flex items-center gap-2 flex-wrap min-w-0">
+                <span className="text-xs font-semibold truncate">{c.label}</span>
+                <Badge variant="outline" className="text-2xs px-1.5 py-0">{c.plantName}</Badge>
+                <Badge variant="outline" className="text-2xs px-1.5 py-0">{tableLabel[c.sourceTable]}</Badge>
+              </div>
+              <span className="text-3xs text-muted-foreground whitespace-nowrap">{fmtDt(c.correctedAt)}</span>
+            </div>
+            <div className="flex items-center gap-2 mt-1.5 flex-wrap text-xs">
+              <span className="text-3xs uppercase font-bold text-muted-foreground tracking-wider">Corrected value</span>
+              <span className="font-mono font-medium text-destructive line-through decoration-destructive/60">{fmtNum(c.oldValue)}</span>
+              <ArrowRight className="h-3 w-3 text-accent shrink-0" />
+              <span className="text-3xs uppercase font-bold text-muted-foreground tracking-wider">New value</span>
+              <span className="font-mono font-bold text-accent">{fmtNum(c.newValue)}</span>
+            </div>
+          </Card>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ── Chain context component (item 4) ──────────────────────────────────────────
 
 function ChainContext({ focusedId, sourceTable, entityId, plantId }:
@@ -320,7 +400,17 @@ function ChainContext({ focusedId, sourceTable, entityId, plantId }:
 
 function EditValueModal({
   row, onClose, onDone,
-}: { row: FlaggedRow; onClose: () => void; onDone: () => void }) {
+}: {
+  row: FlaggedRow;
+  onClose: () => void;
+  /** Called after a successful save. `result` carries the old (pre-edit) and
+   *  new value so the caller can surface a durable before/after record —
+   *  this row's own norm_status flips away from 'pending_review' as part of
+   *  the same save, so it vanishes from whatever list is showing it, and a
+   *  toast alone isn't enough for a reviewer to confirm what actually
+   *  changed after the fact. */
+  onDone: (result?: { oldValue: number; newValue: number }) => void;
+}) {
   const { user } = useAuth();
   const [newVal, setNewVal] = useState(String(row.current_reading));
   const [reason, setReason] = useState('');
@@ -348,7 +438,7 @@ function EditValueModal({
         'Superseded — value corrected directly from Pending Review',
       );
       toast.success(`Corrected: ${fmtNum(row.current_reading)} → ${fmtNum(parsed)}${data?.cascade_id ? ' · next row updated' : ''}`);
-      onDone();
+      onDone({ oldValue: row.current_reading, newValue: parsed });
     } catch (e) {
       toast.error(friendlyError(e));
     } finally { setBusy(false); }
@@ -378,6 +468,20 @@ function EditValueModal({
       )}
     >
       <div className="space-y-4 pb-4">
+        {/* Current (about-to-be-replaced) value — kept visible on its own,
+            separate from the editable input below, so it doesn't disappear
+            from view the moment the reviewer starts typing over it. */}
+        <div className="bg-muted/40 rounded-lg px-3 py-2.5 text-xs space-y-1">
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">Current (flagged) value</span>
+            <span className="font-mono font-medium text-warn">{fmtNum(row.current_reading)}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">Previous reading</span>
+            <span className="font-mono font-medium">{fmtNum(row.previous_reading)}</span>
+          </div>
+        </div>
+
         <div className="space-y-1">
           <label htmlFor="datacorrections-new-value" className="text-xs font-medium">Correct current reading</label>
           <Input
@@ -389,9 +493,12 @@ function EditValueModal({
             autoFocus
           />
           {newVal && !isNaN(Number(newVal)) && (
-            <p className="text-xs text-muted-foreground">
-              New delta: <DeltaBadge vol={delta} />
-              {' · next row previous_reading will auto-update'}
+            <p className="text-xs text-muted-foreground flex items-center gap-1.5 flex-wrap">
+              <span className="font-mono line-through decoration-destructive/60 text-destructive">{fmtNum(row.current_reading)}</span>
+              <ArrowRight className="h-3 w-3 text-accent" />
+              <span className="font-mono font-semibold text-accent">{fmtNum(Number(newVal))}</span>
+              <span>· New delta: <DeltaBadge vol={delta} /></span>
+              <span>· next row previous_reading will auto-update</span>
             </p>
           )}
         </div>
@@ -862,6 +969,7 @@ function PendingReviewTab() {
    *  an operator who submitted a reasoned request is owed an explanation
    *  when it's turned down, not just a silent "kept the original value." */
   const [reqNotes, setReqNotes] = useState<Record<string, string>>({});
+  const recent = useRecentCorrections();
 
   const plants = useMemo(() => [...new Set(rows.map(r => r.plant_name))].sort(), [rows]);
 
@@ -939,6 +1047,13 @@ function PendingReviewTab() {
       'Superseded — a duplicate correction request for this reading was already approved',
       req.id,
     );
+    recent.add({
+      label: `${tableLabel[req.source_table]} · ${req.reason}`,
+      plantName: req.plant_name ?? '—',
+      sourceTable: req.source_table,
+      oldValue: req.original_value,
+      newValue: req.proposed_value,
+    });
     toast.success('Correction approved and applied');
     invalidate();
   };
@@ -1131,6 +1246,8 @@ function PendingReviewTab() {
           </div>
         </div>
       )}
+
+      <RecentCorrectionsPanel items={recent.items} onClear={recent.clear} />
 
       {/* Item 8: Operator correction requests with quick-reason presets and visual diff */}
       {corrReqs.length > 0 && (
@@ -1514,7 +1631,19 @@ function PendingReviewTab() {
         <EditValueModal
           row={editRow}
           onClose={() => setEditRow(null)}
-          onDone={() => { setEditRow(null); invalidate(); }}
+          onDone={(result) => {
+            if (result) {
+              recent.add({
+                label: editRow.entity_name,
+                plantName: editRow.plant_name,
+                sourceTable: editRow.source_table,
+                oldValue: result.oldValue,
+                newValue: result.newValue,
+              });
+            }
+            setEditRow(null);
+            invalidate();
+          }}
         />
       )}
       {rolloverRow && (
@@ -1537,6 +1666,7 @@ function CorrectionInboxTab() {
   const [editRow, setEditRow] = useState<FlaggedRow | null>(null);
   const [plantFilter, setPlantFilter] = useState('all');
   const [tableFilter, setTableFilter] = useState<'all' | SourceTable>('all');
+  const recent = useRecentCorrections();
 
   const { data: rows = [], isLoading, error, refetch } = useQuery({
     queryKey: ['correction-inbox', plantFilter, tableFilter],
@@ -1660,6 +1790,8 @@ function CorrectionInboxTab() {
         <span className="text-xs text-muted-foreground ml-auto">{rows.length} active backward readings</span>
       </div>
 
+      <RecentCorrectionsPanel items={recent.items} onClear={recent.clear} />
+
       {rows.length === 0 ? (
         <Card className="p-8 text-center text-sm text-muted-foreground">
           <CheckCircle2 className="h-6 w-6 mx-auto mb-2 text-accent" />
@@ -1707,7 +1839,19 @@ function CorrectionInboxTab() {
       })}
       {editRow && (
         <EditValueModal row={editRow} onClose={() => setEditRow(null)}
-          onDone={() => { setEditRow(null); qc.invalidateQueries({ queryKey: ['correction-inbox'] }); }} />
+          onDone={(result) => {
+            if (result) {
+              recent.add({
+                label: editRow.entity_name,
+                plantName: editRow.plant_name,
+                sourceTable: editRow.source_table,
+                oldValue: result.oldValue,
+                newValue: result.newValue,
+              });
+            }
+            setEditRow(null);
+            qc.invalidateQueries({ queryKey: ['correction-inbox'] });
+          }} />
       )}
     </div>
   );
