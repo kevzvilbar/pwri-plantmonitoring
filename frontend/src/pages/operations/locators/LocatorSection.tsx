@@ -53,6 +53,8 @@ import { ReasonDialog } from '@/components/ReasonDialog';
 import { reasonCategoryLabel } from '@/lib/reasonCodes';
 import { DerivedMeterOverrideDialog } from '@/components/DerivedMeterOverrideDialog';
 import { logReadingEdit, diffFields } from '@/pages/ro-trains/helpers';
+import { CorrectionReasonField } from '@/components/CorrectionReasonField';
+import { isReasonComplete, resolveReason } from '@/lib/correctionReasons';
 
 const LOCATOR_SCHEMA = 'locator_name*, current_reading, reading_datetime (YYYY-MM-DDTHH:mm), previous_reading, input_mode (raw|direct), daily_volume';
 const LOCATOR_TEMPLATE_ROW = {
@@ -761,6 +763,14 @@ function LocatorRow({
   const [reading, setReading]     = useState('');
   const lastPrefilledLoc = useRef<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
+  // Quick-edit audit trail (pencil icon): the pencil / "Edit reading" button
+  // reuses this form's Save button as an UPDATE on lastToday. Snapshot the
+  // row's pre-edit values so save() can log a field-level diff + the required
+  // reason to reading_edit_audit_log — without this, Data Corrections has no
+  // edit reason and no "Value Before Correction" to show for pencil edits.
+  const [editBefore, setEditBefore] = useState<Record<string, any> | null>(null);
+  const [editReason, setEditReason] = useState('');
+  const [editCustomReason, setEditCustomReason] = useState('');
   const [saving, setSaving]       = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [customDt, setCustomDt]   = useState(format(new Date(), "yyyy-MM-dd'T'HH:mm"));
@@ -830,6 +840,17 @@ function LocatorRow({
     }
     setAnomalyRemark(readingRow.anomaly_remark ?? '');
     setShowAnomalyBanner(false);
+    // Pre-edit snapshot for the reading_edit_audit_log diff — this is what
+    // makes the old value visible in Data Corrections ("Value Before
+    // Correction"). NOTE: uses the row as of edit-start, NOT the query's
+    // `previous` anchor, so a later poll refetch can't skew the snapshot.
+    setEditBefore({
+      current_reading: readingRow.current_reading ?? null,
+      reading_datetime: readingRow.reading_datetime ?? null,
+      daily_volume: readingRow.daily_volume ?? null,
+      is_meter_replacement: !!readingRow.is_meter_replacement,
+      is_estimated: !!readingRow.is_estimated,
+    });
   };
 
   const cancelEdit = () => {
@@ -838,6 +859,7 @@ function LocatorRow({
     setCustomDt(new Date().toISOString().slice(0, 16));
     setAnomalyRemark('');
     setShowAnomalyBanner(false);
+    setEditBefore(null); setEditReason(''); setEditCustomReason('');
   };
 
   const cur      = +reading || 0;
@@ -901,6 +923,15 @@ function LocatorRow({
     if (!reading) { toast.error(`${locator.name}: enter a reading`); return; }
     if (atLimit) { toast.error(`${locator.name}: max ${maxReadingsPerDay} readings/day reached`); return; }
     if (locInputMode === 'direct' && +reading <= 0) { toast.error(`${locator.name}: enter a positive volume`); return; }
+
+    // Quick-edit (pencil / "Edit reading") requires a reason — same gate as
+    // ReadingHistoryDialog.saveEdit(). The reason + field-level diff are
+    // written to reading_edit_audit_log after the UPDATE below, which is
+    // what lets Data Corrections render the pre-edit value.
+    if (editingId && !isReasonComplete(editReason, editCustomReason)) {
+      toast.error(`${locator.name}: select a reason for this edit`);
+      return;
+    }
 
     // Redundancy Guard (12 hours): identical odometer reading within 12h cannot be saved
     if (!editingId && locInputMode === 'raw' && previous != null && cur === previous && !meterReplacePending) {
@@ -1013,6 +1044,37 @@ function LocatorRow({
       return;
     }
 
+    // Audit trail for the quick-edit path (pencil / "Edit reading" →
+    // editingId). This UPDATE previously saved with no reason and no
+    // logReadingEdit() call, so Data Corrections had nothing to show — no
+    // edit reason, no "Value Before Correction". Mirror
+    // ReadingHistoryDialog.saveEdit(): log the field-level diff + the
+    // required reason (gated above). Best-effort, same convention as every
+    // other logReadingEdit() caller — a failed insert here never rolls back
+    // the reading itself.
+    if (editingId && editBefore) {
+      // "after" mirrors exactly what this UPDATE writes. daily_volume is a
+      // GENERATED ALWAYS AS column on locator_readings and must never be
+      // sent — it's recomputed by the DB, so it's left out of the diff
+      // entirely rather than guessed.
+      const after: Record<string, any> = {
+        current_reading: payload.current_reading,
+        reading_datetime: payload.reading_datetime,
+        is_estimated: !!payload.is_estimated,
+        is_meter_replacement: !!payload.is_meter_replacement,
+      };
+      await logReadingEdit({
+        table_name: 'locator_readings',
+        record_id: editingId,
+        plant_id: plantId,
+        action: 'update',
+        actor_user_id: userId ?? null,
+        actor_label: actorLabel,
+        changes: diffFields(editBefore, after),
+        reason: resolveReason(editReason, editCustomReason),
+      });
+    }
+
     // Link the replacement record (old final / new initial / date) back to the
     // reading it produced — best-effort, mirrors WellRow's save().
     if (meterReplacePending?.replacementId && savedRow?.id) {
@@ -1056,6 +1118,7 @@ function LocatorRow({
     setTimeout(() => setJustSaved(false), 500);
     setReading(''); clearDraftReading(); setEditingId(null); onSaved();
     setMeterReplacePending(null); setShowReplaceMeter(false);
+    setEditBefore(null); setEditReason(''); setEditCustomReason('');
   };
 
   // ── Derived locator (no physical meter) — GAP FIX (2026-07-25) ────────────
@@ -1523,7 +1586,7 @@ function LocatorRow({
               </Button>
             ) : (
               <Button
-                onClick={save} disabled={saving || !readingChanged || (showAnomalyBanner && anomalyRemarkRequired)}
+                onClick={save} disabled={saving || !readingChanged || (showAnomalyBanner && anomalyRemarkRequired) || (editingId && !isReasonComplete(editReason, editCustomReason))}
                 style={{ '--confirm-glow': 'hsl(var(--kpi-locator, 175 84% 32%) / 0.5)' } as React.CSSProperties}
                 className={cn(
                   'flex-1 h-11 rounded-full text-sm font-semibold shadow-sm transition-all',
@@ -1573,7 +1636,7 @@ function LocatorRow({
             </Button>
           ) : (
             <Button
-              onClick={save} disabled={saving || !readingChanged || (showAnomalyBanner && anomalyRemarkRequired)}
+              onClick={save} disabled={saving || !readingChanged || (showAnomalyBanner && anomalyRemarkRequired) || (editingId && !isReasonComplete(editReason, editCustomReason))}
               style={{ '--confirm-glow': 'hsl(var(--kpi-locator, 175 84% 32%) / 0.5)' } as React.CSSProperties}
               className={cn(
                 'h-11 px-6 rounded-full text-sm font-semibold shrink-0 shadow-sm transition-all',
@@ -1598,6 +1661,21 @@ function LocatorRow({
             </Button>
           )}
           {ActionButtons}
+        </div>
+      )}
+
+      {/* Quick-edit reason — the pencil / "Edit reading" button reuses this
+          form's Save button as an UPDATE, so an edit reason is mandatory here
+          and is written (with the field-level diff) to reading_edit_audit_log,
+          exactly like the History dialog's edit flow. Data Corrections reads
+          that log to render the "Value Before Correction" box. */}
+      {editingId && (
+        <div>
+          <CorrectionReasonField
+            reason={editReason} onReasonChange={setEditReason}
+            customReason={editCustomReason} onCustomReasonChange={setEditCustomReason}
+            label="Reason for this edit"
+          />
         </div>
       )}
 

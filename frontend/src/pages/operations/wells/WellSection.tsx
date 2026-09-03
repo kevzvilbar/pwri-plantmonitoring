@@ -51,6 +51,9 @@ import {
 } from '../shared';
 import { ReasonDialog } from '@/components/ReasonDialog';
 import { reasonCategoryLabel } from '@/lib/reasonCodes';
+import { CorrectionReasonField } from '@/components/CorrectionReasonField';
+import { isReasonComplete, resolveReason } from '@/lib/correctionReasons';
+import { logReadingEdit, diffFields } from '@/pages/ro-trains/helpers';
 
 const WELL_SCHEMA = 'well_name*, current_reading*, reading_datetime (YYYY-MM-DDTHH:mm), previous_reading, tds_ppm, turbidity_ntu, pressure_psi';
 const WELL_TEMPLATE_ROW = {
@@ -578,6 +581,9 @@ function WellRow({
 }) {
   const isMobile = useIsMobile();
   const navigate = useNavigate();
+  // activeOperator: display name for the quick-edit audit entry (actor_label),
+  // mirroring ReadingHistoryDialog's actorLabel().
+  const { activeOperator } = useAuth();
 
   const [reading, setReading]                   = useState('');
   const lastPrefilledMeter = useRef<string | null>(null);
@@ -586,6 +592,14 @@ function WellRow({
   const [ntuReading, setNtuReading]               = useState('');
   const [pressureReading, setPressureReading]     = useState('');
   const [editingId, setEditingId]               = useState<string | null>(null);
+  // Quick-edit audit trail (pencil icon): the pencil reuses this form's Save
+  // button as an UPDATE on lastToday. Snapshot the row's pre-edit values so
+  // save() can log a field-level diff + the required reason to
+  // reading_edit_audit_log — without this, Data Corrections has no edit
+  // reason and no "Value Before Correction" to show for pencil edits.
+  const [editBefore, setEditBefore]             = useState<Record<string, any> | null>(null);
+  const [editReason, setEditReason]             = useState('');
+  const [editCustomReason, setEditCustomReason] = useState('');
   const [saving, setSaving]                     = useState(false);
   const [savingTds, setSavingTds]               = useState(false);
   const [savingNtu, setSavingNtu]               = useState(false);
@@ -661,6 +675,15 @@ function WellRow({
     if (saving) return;
     if (!reading) { toast.error(`${well.name}: enter a meter reading`); return; }
     if (atLimit) { toast.error(`${well.name}: max ${WELL_MAX_READINGS_PER_DAY} readings/day reached`); return; }
+
+    // Quick-edit (pencil icon) requires a reason — same gate as
+    // ReadingHistoryDialog.saveEdit(). The reason + field-level diff are
+    // written to reading_edit_audit_log after the UPDATE below, which is
+    // what lets Data Corrections render the pre-edit value.
+    if (editingId && !isReasonComplete(editReason, editCustomReason)) {
+      toast.error(`${well.name}: select a reason for this edit`);
+      return;
+    }
 
     // Redundancy Guard (12 hours): identical odometer reading within 12h cannot be saved
     if (!editingId && previousMeter != null && cur === previousMeter && !meterReplacePending) {
@@ -750,6 +773,42 @@ function WellRow({
       return;
     }
 
+    // Audit trail for the quick-edit path (pencil icon → editingId). This
+    // UPDATE previously saved with no reason and no logReadingEdit() call,
+    // so Data Corrections had nothing to show — no edit reason, no
+    // "Value Before Correction". Mirror ReadingHistoryDialog.saveEdit():
+    // log the field-level diff + the required reason (gated above).
+    // Best-effort, same convention as every other logReadingEdit() caller —
+    // a failed insert here never rolls back the reading itself.
+    if (editingId && editBefore) {
+      // "after" mirrors exactly what this UPDATE writes: tds/ntu/pressure are
+      // conditional keys on the payload (absent = column untouched), so they
+      // only enter the diff when they were actually sent.
+      const after: Record<string, any> = {
+        current_reading: payload.current_reading,
+        reading_datetime: payload.reading_datetime,
+        daily_volume: payload.daily_volume ?? null,
+        power_meter_reading: payload.power_meter_reading ?? null,
+        is_meter_rollover: !!payload.is_meter_rollover,
+        meter_rollover_max: payload.meter_rollover_max ?? null,
+        is_meter_replacement: !!payload.is_meter_replacement,
+      };
+      if (payload.tds_ppm !== undefined) after.tds_ppm = payload.tds_ppm;
+      if (payload.turbidity_ntu !== undefined) after.turbidity_ntu = payload.turbidity_ntu;
+      if (payload.pressure_psi !== undefined) after.pressure_psi = payload.pressure_psi;
+      await logReadingEdit({
+        table_name: 'well_readings',
+        record_id: editingId,
+        plant_id: plantId,
+        action: 'update',
+        actor_user_id: userId ?? null,
+        actor_label: `${activeOperator?.first_name ?? ''} ${activeOperator?.last_name ?? ''}`.trim()
+          || activeOperator?.username || null,
+        changes: diffFields(editBefore, after),
+        reason: resolveReason(editReason, editCustomReason),
+      });
+    }
+
     // Link the replacement record (old final / new initial / date) back to the
     // reading it produced. Best-effort — the reading itself already saved with
     // is_meter_replacement=true above, so a failure here just leaves the audit
@@ -806,6 +865,12 @@ function WellRow({
     setReading(''); clearDraftWell(); setPowerReading(''); setTdsReading(''); setNtuReading(''); setPressureReading('');
     setIsRollover(false); setRolloverMax(defaultRolloverMax);
     setMeterReplacePending(null); setShowReplaceMeter(false);
+    if (editingId) {
+      setEditBefore(null); setEditReason(''); setEditCustomReason('');
+      // Restore the datetime picker to "now" — it was prefilled with the
+      // edited row's original timestamp when the pencil fired.
+      setCustomDt(format(new Date(), "yyyy-MM-dd'T'HH:mm"));
+    }
     setEditingId(null); onSaved();
   };
 
@@ -1067,13 +1132,32 @@ function WellRow({
                   setTdsReading(lastToday.tds_ppm != null ? String(lastToday.tds_ppm) : '');
                   setNtuReading((lastToday as any).turbidity_ntu != null ? String((lastToday as any).turbidity_ntu) : '');
                   setPressureReading(lastToday.pressure_psi != null ? String(lastToday.pressure_psi) : '');
+                  // Keep the reading's original timestamp: without this, the
+                  // UPDATE would silently move reading_datetime to "now"
+                  // (customDt's default) on every quick-edit.
+                  setCustomDt(format(new Date(lastToday.reading_datetime), "yyyy-MM-dd'T'HH:mm"));
+                  // Pre-edit snapshot for the reading_edit_audit_log diff —
+                  // this is what makes the old value visible in Data
+                  // Corrections ("Value Before Correction").
+                  setEditBefore({
+                    current_reading: lastToday.current_reading ?? null,
+                    reading_datetime: lastToday.reading_datetime ?? null,
+                    daily_volume: lastToday.daily_volume ?? null,
+                    power_meter_reading: lastToday.power_meter_reading ?? null,
+                    tds_ppm: (lastToday as any).tds_ppm ?? null,
+                    turbidity_ntu: (lastToday as any).turbidity_ntu ?? null,
+                    pressure_psi: lastToday.pressure_psi ?? null,
+                    is_meter_rollover: !!lastToday.is_meter_rollover,
+                    meter_rollover_max: (lastToday as any).meter_rollover_max ?? null,
+                    is_meter_replacement: !!lastToday.is_meter_replacement,
+                  });
                 },
               },
               editingId && {
                 icon: X,
                 title: 'Cancel edit',
                 variant: 'danger',
-                onClick: () => { setEditingId(null); setReading(''); setPowerReading(''); setTdsReading(''); setNtuReading(''); setPressureReading(''); },
+                onClick: () => { setEditingId(null); setReading(''); setPowerReading(''); setTdsReading(''); setNtuReading(''); setPressureReading(''); setEditBefore(null); setEditReason(''); setEditCustomReason(''); setCustomDt(format(new Date(), "yyyy-MM-dd'T'HH:mm")); },
               },
               isManagerOrAdmin && {
                 icon: History,
@@ -1119,7 +1203,7 @@ function WellRow({
                 )}
               </div>
               <Button
-                onClick={save} disabled={saving || !meterChanged || atLimit || (showAnomalyBanner && anomalyRemarkRequired)}
+                onClick={save} disabled={saving || !meterChanged || atLimit || (showAnomalyBanner && anomalyRemarkRequired) || (editingId && !isReasonComplete(editReason, editCustomReason))}
                 className={cn(
                   'w-full h-11 text-sm font-bold shadow-sm rounded-xl transition-all',
                   meterChanged
@@ -1141,7 +1225,7 @@ function WellRow({
                 data-testid={`well-meter-input-${well.id}`}
               />
               <Button
-                onClick={save} disabled={saving || !meterChanged || atLimit || (showAnomalyBanner && anomalyRemarkRequired)}
+                onClick={save} disabled={saving || !meterChanged || atLimit || (showAnomalyBanner && anomalyRemarkRequired) || (editingId && !isReasonComplete(editReason, editCustomReason))}
                 size="sm"
                 className={cn(
                   'h-8 px-3.5 shrink-0 text-xs font-semibold shadow-sm transition-all',
@@ -1152,6 +1236,21 @@ function WellRow({
                 title="Save water meter reading">
                 {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : editingId ? 'Update' : 'Save'}
               </Button>
+            </div>
+          )}
+
+          {/* Quick-edit reason — the pencil button reuses this form's Save
+              button as an UPDATE, so an edit reason is mandatory here and is
+              written (with the field-level diff) to reading_edit_audit_log,
+              exactly like the History dialog's edit flow. Data Corrections
+              reads that log to render the "Value Before Correction" box. */}
+          {editingId && (
+            <div className="pt-1">
+              <CorrectionReasonField
+                reason={editReason} onReasonChange={setEditReason}
+                customReason={editCustomReason} onCustomReasonChange={setEditCustomReason}
+                label="Reason for this edit"
+              />
             </div>
           )}
 
