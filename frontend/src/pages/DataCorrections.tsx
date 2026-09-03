@@ -949,7 +949,6 @@ function PendingReviewTab() {
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['data-corrections-pending'],
     queryFn: fetchPending,
-    staleTime: 60_000,  // FIX (egress): staleTime matched to refetchInterval — was relying on the 30s global default, so the app-wide background-sync sweep force-refetched this well before its own interval was due
     refetchInterval: 60_000,
   });
   const rows = data?.rows ?? [];
@@ -1008,7 +1007,6 @@ function PendingReviewTab() {
   const { data: corrReqs = [] } = useQuery({
     queryKey: ['correction-requests-pending'],
     queryFn: fetchCorrectionRequests,
-    staleTime: 60_000,  // FIX (egress): staleTime matched to refetchInterval — was relying on the 30s global default, so the app-wide background-sync sweep force-refetched this well before its own interval was due
     refetchInterval: 60_000,
   });
 
@@ -2023,7 +2021,6 @@ function usePendingCount() {
       ));
       return counts.reduce((sum, r) => sum + (r.count ?? 0), 0);
     },
-    staleTime: 60_000,  // FIX (egress): staleTime matched to refetchInterval — was relying on the 30s global default, so the app-wide background-sync sweep force-refetched this well before its own interval was due
     refetchInterval: 60_000,
   });
 }
@@ -2038,7 +2035,6 @@ function useCorrectionRequestsCount() {
         .eq('status', 'pending') as any);
       return count ?? 0;
     },
-    staleTime: 60_000,  // FIX (egress): staleTime matched to refetchInterval — was relying on the 30s global default, so the app-wide background-sync sweep force-refetched this well before its own interval was due
     refetchInterval: 60_000,
   });
 }
