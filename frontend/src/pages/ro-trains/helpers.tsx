@@ -181,6 +181,13 @@ export function canEditEntry(
 // order — otherwise `String(a) !== String(b)` on an array of objects just
 // compares "[object Object],[object Object]" and silently misses real edits.
 
+// Matches a Postgres/PostgREST timestamptz string like
+// "2026-08-29T01:52:00+00:00" or the "...Z" ISO form JS's toISOString()
+// produces — deliberately narrow (anchored, requires an explicit offset or
+// Z) so it can't misfire on an unrelated string that merely starts with
+// digits.
+const ISO_DATETIME_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/;
+
 function canonicalize(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(canonicalize);
   if (value && typeof value === 'object') {
@@ -190,6 +197,24 @@ function canonicalize(value: unknown): unknown {
         acc[k] = canonicalize((value as Record<string, unknown>)[k]);
         return acc;
       }, {} as Record<string, unknown>);
+  }
+  // BUGFIX: every reading_datetime diff logged through this helper was a
+  // false positive. Supabase/PostgREST returns timestamptz columns as
+  // "...+00:00", but every saveEdit()/handleSave() in this codebase rebuilds
+  // the value via `new Date(...).toISOString()`, which always yields
+  // "...000Z" — the identical instant, a different string. Compared as raw
+  // strings (the previous behavior), those two ALWAYS looked "changed" even
+  // when the operator never touched the timestamp — confirmed live: 100% of
+  // update edits on well_readings, power_readings, blending_events,
+  // ro_train_readings and ro_pretreatment_readings carried this phantom
+  // entry, and for edits where nothing else was touched either, it was the
+  // *only* recorded change — masking, e.g., an edit reason like "data entry
+  // typo" that reviewers would reasonably read as "the value was corrected"
+  // when in fact it never was. Parsing both sides to the same instant before
+  // comparing fixes this at the source for every diffFields() caller.
+  if (typeof value === 'string' && ISO_DATETIME_RE.test(value)) {
+    const t = new Date(value).getTime();
+    if (!isNaN(t)) return new Date(t).toISOString();
   }
   return value;
 }
