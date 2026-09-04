@@ -101,8 +101,11 @@ export function TrendChart({
   const range = useAppStore((s) => s.chartRange);
   const from = useAppStore((s) => s.chartFrom);
   const to = useAppStore((s) => s.chartTo);
+  const chartYear = useAppStore((s) => s.chartYear);
+  const chartMonth = useAppStore((s) => s.chartMonth);
   const setRange = useAppStore((s) => s.setChartRange);
   const setChartCustomDates = useAppStore((s) => s.setChartCustomDates);
+  const setChartMonthlyPeriod = useAppStore((s) => s.setChartMonthlyPeriod);
   // Call setChartCustomDates atomically with both values so the second call
   // never reverts the first via a stale closure. Previously two separate
   // handlers (handleFromChange/handleToChange) each captured the other half
@@ -186,7 +189,20 @@ export function TrendChart({
   // doesn't need a bespoke "weekly total but also monthly entities" case.
   type ViewGran = Granularity; // 'daily' | 'weekly' | 'monthly'
   type ViewBreakdown = 'total' | 'by-locator' | 'by-source';
-  const [viewGran, setViewGran] = useState<ViewGran>('daily');
+  const [viewGran, setViewGran] = useState<ViewGran>(range === 'MONTHLY' && chartMonth === 'YTD' ? 'monthly' : 'daily');
+
+  // Auto-sync granularity when range is MONTHLY:
+  // 'YTD' -> show 12 monthly bars across the year
+  // Specific month (e.g. '08') -> show daily readings of that calendar month
+  useEffect(() => {
+    if (range === 'MONTHLY') {
+      if (chartMonth === 'YTD') {
+        setViewGran('monthly');
+      } else {
+        setViewGran('daily');
+      }
+    }
+  }, [range, chartMonth]);
   const [viewBreakdown, setViewBreakdown] = useState<ViewBreakdown>('total');
   const hasConsumptionDrill = metric === 'production' || metric === 'nrw';
   // Metrics whose primary series already flows through the shared chartData
@@ -291,7 +307,7 @@ export function TrendChart({
 
   // Stable date-bounded ISO strings so react-query can cache properly.
   const { startISO, endISO, startKey, endKey } = useMemo(() => {
-    if (range === 'CUSTOM') {
+    if (range === 'CUSTOM' || range === 'MONTHLY') {
       const s = new Date(`${from}T00:00:00`);
       const e = new Date(`${to}T23:59:59`);
       return {
@@ -382,9 +398,12 @@ export function TrendChart({
         range={range}
         from={from}
         to={to}
+        chartYear={chartYear}
+        chartMonth={chartMonth}
         isFetching={isFetching}
         onRangeChange={setRange}
         onCustomDatesChange={handleCustomDatesChange}
+        onMonthlyPeriodChange={setChartMonthlyPeriod}
         onOpenSummary={() => setShowSummary(true)}
         trailingControls={
         <TrendChartControls
@@ -422,6 +441,7 @@ export function TrendChart({
           showLocatorFilter={showLocatorFilter} setShowLocatorFilter={setShowLocatorFilter}
           locatorTotals={locatorTotals} wellTotals={wellTotals}
           selectTopNLocators={selectTopNLocators} selectTopNWells={selectTopNWells}
+          onSelectMonthlyRange={() => setChartMonthlyPeriod(chartYear, chartMonth)}
         />
         }
       />

@@ -27,8 +27,8 @@ export function readSavedViewMode(): DashboardViewMode {
   return raw === 'sections' || raw === 'popup' ? raw : 'inline';
 }
 
-export type RangeKey = '7D' | '14D' | '30D' | '60D' | '90D' | 'CUSTOM';
-export const RANGE_DAYS: Record<Exclude<RangeKey, 'CUSTOM'>, number> = {
+export type RangeKey = '7D' | '14D' | '30D' | '60D' | '90D' | 'CUSTOM' | 'MONTHLY';
+export const RANGE_DAYS: Record<Exclude<RangeKey, 'CUSTOM' | 'MONTHLY'>, number> = {
   '7D': 7, '14D': 14, '30D': 30, '60D': 60, '90D': 90,
 };
 
@@ -37,7 +37,7 @@ export const RANGE_DAYS: Record<Exclude<RangeKey, 'CUSTOM'>, number> = {
 // doesn't render its own range picker (ComplianceRadarCard, CostSunburst) —
 // they just follow whatever range the rest of the dashboard's charts are on.
 export function rangeKeyToDays(range: RangeKey, from: string, to: string): number {
-  if (range === 'CUSTOM') {
+  if (range === 'CUSTOM' || range === 'MONTHLY') {
     const ms = new Date(to).getTime() - new Date(from).getTime();
     return Math.max(1, Math.round(ms / 86_400_000));
   }

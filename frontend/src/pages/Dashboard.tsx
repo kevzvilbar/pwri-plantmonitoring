@@ -60,6 +60,8 @@ import { PMDueSoonCard }       from '@/components/dashboard/PMDueSoonCard';
 import { PendingReviewCard }   from '@/components/dashboard/PendingReviewCard';
 import { DataCompletenessRadarCard } from '@/components/dashboard/DataCompletenessRadarCard';
 import { CostSunburst }        from '@/components/dashboard/CostSunburst';
+import { DateRangePicker } from '@/components/ui/date-picker';
+import { MonthlyPeriodBar } from '@/components/dashboard/MonthlyPeriodBar';
 import { DashboardSectionNav } from '@/components/dashboard/DashboardSectionNav';
 import { loadThresholds, DEFAULT_THRESHOLDS } from '@/pages/Compliance';
 import { useDashboardQueries } from './useDashboardQueries';
@@ -91,6 +93,14 @@ export default function Dashboard() {
   const selectedPlantId = useAppStore((s) => s.selectedPlantId);
   const addAlerts       = useAppStore((s) => s.addAlerts);
   const removeAlerts    = useAppStore((s) => s.removeAlerts);
+  const chartRange      = useAppStore((s) => s.chartRange);
+  const chartFrom       = useAppStore((s) => s.chartFrom);
+  const chartTo         = useAppStore((s) => s.chartTo);
+  const chartYear       = useAppStore((s) => s.chartYear);
+  const chartMonth      = useAppStore((s) => s.chartMonth);
+  const setChartRange   = useAppStore((s) => s.setChartRange);
+  const setChartCustomDates   = useAppStore((s) => s.setChartCustomDates);
+  const setChartMonthlyPeriod = useAppStore((s) => s.setChartMonthlyPeriod);
   const { data: plants } = usePlants();
   const navigate = useNavigate();
   const [modal, setModal] = useState<null | { metric: string; title: string }>(null);
@@ -267,6 +277,86 @@ export default function Dashboard() {
         plantIds={plantIds} 
         onSelectPlant={(pid) => navigate(`/plants/${pid}`)}
       />
+
+      {/* ─── Dashboard Time Range & Monthly Period Control ─── */}
+      <div className="p-2 rounded-xl border border-border/60 bg-card/70 backdrop-blur-xs flex flex-wrap items-center justify-between gap-2 shadow-2xs">
+        <div className="flex items-center gap-2 flex-wrap">
+          {chartRange !== 'MONTHLY' ? (
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="text-3xs uppercase font-bold tracking-wider text-muted-foreground mr-0.5 flex items-center gap-1">
+                <CalendarDays className="h-3.5 w-3.5 text-primary" />
+                <span className="hidden xs:inline">Range:</span>
+              </span>
+              <div className="flex items-center gap-0.5 bg-muted/60 p-0.5 rounded-lg border border-border/60">
+                {(['7D', '14D', '30D', '60D', '90D'] as const).map((r) => (
+                  <button
+                    key={r}
+                    type="button"
+                    onClick={() => setChartRange(r)}
+                    data-testid={`dash-range-${r}`}
+                    className={[
+                      'h-7 px-2.5 text-2xs font-semibold rounded-md transition-all cursor-pointer',
+                      chartRange === r
+                        ? 'bg-card text-primary shadow-xs border border-border/80'
+                        : 'text-muted-foreground hover:text-foreground',
+                    ].join(' ')}
+                  >
+                    {r}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => setChartRange('CUSTOM')}
+                  data-testid="dash-range-CUSTOM"
+                  className={[
+                    'h-7 px-2.5 text-2xs font-semibold rounded-md transition-all cursor-pointer',
+                    chartRange === 'CUSTOM'
+                      ? 'bg-card text-primary shadow-xs border border-border/80'
+                      : 'text-muted-foreground hover:text-foreground',
+                  ].join(' ')}
+                >
+                  Custom
+                </button>
+                <div className="h-3.5 border-r border-border/40 mx-0.5" aria-hidden />
+                <button
+                  type="button"
+                  onClick={() => setChartRange('MONTHLY')}
+                  data-testid="dash-range-MONTHLY"
+                  className="h-7 px-2.5 text-2xs font-semibold rounded-md transition-all cursor-pointer text-muted-foreground hover:text-foreground"
+                >
+                  Monthly
+                </button>
+              </div>
+
+              {chartRange === 'CUSTOM' && (
+                <DateRangePicker
+                  from={chartFrom}
+                  to={chartTo}
+                  onChange={({ from: f, to: t }) => setChartCustomDates(f, t)}
+                  size="sm"
+                  className="h-7 w-[200px] text-2xs px-2"
+                />
+              )}
+            </div>
+          ) : (
+            <MonthlyPeriodBar
+              year={chartYear}
+              selectedMonth={chartMonth}
+              onPeriodChange={setChartMonthlyPeriod}
+              onBackToDays={() => setChartRange('7D')}
+              testIdPrefix="dash-monthly"
+            />
+          )}
+        </div>
+
+        <div className="text-3xs font-mono text-muted-foreground shrink-0 px-1 hidden sm:block">
+          {chartRange === 'MONTHLY'
+            ? chartMonth === 'YTD'
+              ? `Full Year ${chartYear}`
+              : `${chartYear}-${chartMonth}`
+            : `${chartFrom} → ${chartTo}`}
+        </div>
+      </div>
 
       {/* ─── Sticky Cluster Quick-Jump Section Navigation ─── */}
       <DashboardSectionNav />

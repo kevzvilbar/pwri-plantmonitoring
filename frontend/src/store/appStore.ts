@@ -5,7 +5,7 @@ import { DEFAULT_THEME_ID } from '@/lib/themes';
 
 // Re-exported here so the store file is self-contained; TrendChart
 // imports RangeKey from types.ts as before — this is just for typing.
-type RangeKey = '7D' | '14D' | '30D' | '60D' | '90D' | 'CUSTOM';
+type RangeKey = '7D' | '14D' | '30D' | '60D' | '90D' | 'CUSTOM' | 'MONTHLY';
 
 // ── chartFrom/chartTo validation ──────────────────────────────────────────
 // TrendChart's custom-range <input type="date"> can be cleared by the user,
@@ -63,13 +63,16 @@ interface AppState {
 
   // ── Shared chart range ────────────────────────────────────────────
   // All TrendChart instances on the dashboard read from and write to
-  // these three fields so that selecting 14D on one chart instantly
+  // these fields so that selecting an option on one chart instantly
   // syncs every other chart to the same window.
   chartRange: RangeKey;
-  chartFrom: string; // yyyy-MM-dd — only used when chartRange === 'CUSTOM'
-  chartTo: string;   // yyyy-MM-dd — only used when chartRange === 'CUSTOM'
+  chartFrom: string; // yyyy-MM-dd
+  chartTo: string;   // yyyy-MM-dd
+  chartYear: number;
+  chartMonth: string; // 'YTD' | '01' | '02' | ... | '12'
   setChartRange: (range: RangeKey) => void;
   setChartCustomDates: (from: string, to: string) => void;
+  setChartMonthlyPeriod: (year: number, month: string) => void;
 
   // ── Plant Alerts (in-memory, not persisted) ───────────────────────
   // Modules push alerts here; TopBar bell + PlantAlertPanel read from here.
@@ -117,18 +120,62 @@ export const useAppStore = create<AppState>()(
       chartRange: '7D',
       chartFrom: format(subDays(new Date(), 7), 'yyyy-MM-dd'),
       chartTo: format(new Date(), 'yyyy-MM-dd'),
-      setChartRange: (range) => set({ chartRange: range }),
+      chartYear: new Date().getFullYear(),
+      chartMonth: 'YTD',
+      setChartRange: (range) =>
+        set((state) => {
+          if (range === 'MONTHLY') {
+            const year = state.chartYear || new Date().getFullYear();
+            const month = state.chartMonth || 'YTD';
+            let fromStr: string;
+            let toStr: string;
+            if (month === 'YTD') {
+              fromStr = `${year}-01-01`;
+              toStr = `${year}-12-31`;
+            } else {
+              const m = parseInt(month, 10);
+              const mPad = String(m).padStart(2, '0');
+              fromStr = `${year}-${mPad}-01`;
+              const lastDay = new Date(year, m, 0).getDate();
+              toStr = `${year}-${mPad}-${String(lastDay).padStart(2, '0')}`;
+            }
+            return {
+              chartRange: 'MONTHLY',
+              chartFrom: fromStr,
+              chartTo: toStr,
+            };
+          }
+          return { chartRange: range };
+        }),
       setChartCustomDates: (from, to) =>
         set((state) => ({
           // Update chartFrom if the new value is valid.
           chartFrom: isValidDateStr(from) ? from : state.chartFrom,
           // Update chartTo only when the new value is a valid date.
-          // An empty string means "selection in progress — first date picked,
-          // waiting for second". Keep the old chartTo so dashboard cards that
-          // read it when range === 'CUSTOM' don't crash on an empty string,
-          // but don't let a stale chartFrom survive because chartTo was ''.
           chartTo: isValidDateStr(to) ? to : state.chartTo,
         })),
+      setChartMonthlyPeriod: (year, month) =>
+        set(() => {
+          let fromStr: string;
+          let toStr: string;
+          if (month === 'YTD') {
+            fromStr = `${year}-01-01`;
+            toStr = `${year}-12-31`;
+          } else {
+            const m = parseInt(month, 10);
+            const mPad = String(m).padStart(2, '0');
+            fromStr = `${year}-${mPad}-01`;
+            const lastDay = new Date(year, m, 0).getDate();
+            toStr = `${year}-${mPad}-${String(lastDay).padStart(2, '0')}`;
+          }
+          return {
+            chartRange: 'MONTHLY',
+            chartYear: year,
+            chartMonth: month,
+            chartFrom: fromStr,
+            chartTo: toStr,
+          };
+        }),
 
       // ── Plant alerts ──────────────────────────────────────────────
       plantAlerts: [],
@@ -215,6 +262,8 @@ export const useAppStore = create<AppState>()(
         chartRange: s.chartRange,
         chartFrom: s.chartFrom,
         chartTo: s.chartTo,
+        chartYear: s.chartYear,
+        chartMonth: s.chartMonth,
         snoozeMap: s.snoozeMap,          // persisted so reload doesn't wake alerts early
         colorTheme: s.colorTheme,        // persisted so theme survives page reload
         darkMode: s.darkMode,            // persisted so it survives page reload
