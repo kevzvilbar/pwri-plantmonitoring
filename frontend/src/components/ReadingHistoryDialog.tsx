@@ -416,6 +416,8 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
       // which meter's history dialog was actually open, so editing e.g. Grid
       // Meter 3 Main silently overwrote Grid Meter 1 STP instead. Derive the
       // real index from meterFilter, same as the row display just above does.
+      const isSolarEdit = meterFilter?.type === 'solar';
+      const gridIdxForEdit = meterFilter && !isSolarEdit ? (meterFilter as { type: 'grid'; idx: number }).idx : 0;
       const rIdx = (rows ?? []).indexOf(r);
       const gridValueForEdit = getGridMeterVal(r, gridIdxForEdit, rIdx, rows ?? []);
       const solarValueForEdit = isSolarDirectMode ? solarDirectVal(r) : r.solar_meter_reading;
@@ -1462,6 +1464,7 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                         {/* ── One sub-row per grid meter ── */}
                         {Array.from({ length: resolvedGridCount }).map((_, mi) => {
                           const mLabel = getHistGridLabel(mi);
+                          const mMult  = getHistGridMult(mi);
                           const curr   = getGridMeterVal(r, mi, i, rows);
                           let prev     = predecessor ? getGridMeterVal(predecessor, mi, i + 1, rows) : null;
                           if (curr != null && prev == null) {
