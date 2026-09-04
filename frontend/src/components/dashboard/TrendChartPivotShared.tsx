@@ -170,6 +170,7 @@ export interface GridPowerReadingRow {
   daily_consumption_kwh?: number | null;
   multiplier?: number | null;
   is_meter_replacement?: boolean | null;
+  is_estimated?: boolean | null;
 }
 
 export interface GridMeterColumn {
@@ -197,6 +198,110 @@ export interface GridMeterBreakdown {
 
 export const GRID_METER_OTHER_KEY = '__other__';
 
+/**
+ * Resolves missing grid meter readings for auto-backfilled estimated rows (is_estimated = true)
+ * via linear interpolation between the nearest bounding rows for each meter.
+ * Mirrors getGridMeterVal in ReadingHistoryDialog.tsx so that history dialogs,
+ * summary tables, and trend charts are completely consistent.
+ */
+export function interpolateMissingGridMeterReadings<T extends GridPowerReadingRow>(
+  sortedAscReadings: T[],
+): T[] {
+  if (!sortedAscReadings || sortedAscReadings.length === 0) return sortedAscReadings;
+  if (!sortedAscReadings.some(r => r.is_estimated)) return sortedAscReadings;
+
+  // Group by plant_id so interpolation is strictly within the same plant
+  const byPlant = new Map<string, { row: T; index: number }[]>();
+  sortedAscReadings.forEach((r, index) => {
+    const pid = r.plant_id ?? '__';
+    if (!byPlant.has(pid)) byPlant.set(pid, []);
+    byPlant.get(pid)!.push({ row: r, index });
+  });
+
+  const result = [...sortedAscReadings];
+
+  for (const plantEntries of byPlant.values()) {
+    // Find all meter indices that appear in this plant's readings
+    const meterIndices = new Set<number>();
+    for (const { row } of plantEntries) {
+      if (row.grid_meter_readings) {
+        for (const k of Object.keys(row.grid_meter_readings)) {
+          const mi = parseInt(k, 10);
+          if (Number.isFinite(mi)) meterIndices.add(mi);
+        }
+      }
+      if (row.meter_reading_kwh != null) {
+        meterIndices.add(0);
+      }
+    }
+
+    // For each estimated row, interpolate any missing meter index
+    for (let i = 0; i < plantEntries.length; i++) {
+      const { row: r, index: globalIdx } = plantEntries[i];
+      if (!r.is_estimated) continue;
+
+      const rowTime = new Date(r.reading_datetime).getTime();
+      if (isNaN(rowTime)) continue;
+
+      let gmrCopy: Record<string, number> | null = r.grid_meter_readings ? { ...r.grid_meter_readings } : null;
+
+      for (const mi of meterIndices) {
+        const direct = gmrCopy?.[String(mi)] ?? (mi === 0 ? r.meter_reading_kwh : null);
+        if (direct != null && Number.isFinite(+direct)) continue;
+
+        // Search backward (j < i) for nearest earlier row with valid reading for mi
+        let earlierVal: number | null = null;
+        let earlierTime: number | null = null;
+        for (let j = i - 1; j >= 0; j--) {
+          const prevR = plantEntries[j].row;
+          const v = prevR.grid_meter_readings?.[String(mi)] ?? (mi === 0 ? prevR.meter_reading_kwh : null);
+          if (v != null && Number.isFinite(+v)) {
+            earlierVal = Number(v);
+            earlierTime = new Date(prevR.reading_datetime).getTime();
+            break;
+          }
+        }
+
+        // Search forward (j > i) for nearest later row with valid reading for mi
+        let laterVal: number | null = null;
+        let laterTime: number | null = null;
+        for (let j = i + 1; j < plantEntries.length; j++) {
+          const nextR = plantEntries[j].row;
+          const v = nextR.grid_meter_readings?.[String(mi)] ?? (mi === 0 ? nextR.meter_reading_kwh : null);
+          if (v != null && Number.isFinite(+v)) {
+            laterVal = Number(v);
+            laterTime = new Date(nextR.reading_datetime).getTime();
+            break;
+          }
+        }
+
+        if (
+          earlierVal != null &&
+          laterVal != null &&
+          earlierTime != null &&
+          laterTime != null &&
+          laterTime > earlierTime
+        ) {
+          const fraction = (rowTime - earlierTime) / (laterTime - earlierTime);
+          const estVal = Math.round((earlierVal + (laterVal - earlierVal) * fraction) * 10) / 10;
+          if (!gmrCopy) gmrCopy = {};
+          gmrCopy[String(mi)] = estVal;
+        }
+      }
+
+      if (gmrCopy) {
+        result[globalIdx] = {
+          ...r,
+          grid_meter_readings: gmrCopy,
+          meter_reading_kwh: r.meter_reading_kwh ?? gmrCopy['0'] ?? null,
+        };
+      }
+    }
+  }
+
+  return result;
+}
+
 export function computeGridMeterBreakdown(
   readings: GridPowerReadingRow[],
   opts: {
@@ -213,9 +318,10 @@ export function computeGridMeterBreakdown(
 ): GridMeterBreakdown {
   const { powerConfigMap, billMultiplierMap, plantNames, gridMeterMeta, fromMs, toMs } = opts;
 
-  const sorted = [...readings].sort(
+  const rawSorted = [...readings].sort(
     (a, b) => new Date(a.reading_datetime).getTime() - new Date(b.reading_datetime).getTime(),
   );
+  const sorted = interpolateMissingGridMeterReadings(rawSorted);
 
   // ── Pass 1: plant order (first appearance) + highest meter index seen ──────
   const plantOrder: string[] = [];

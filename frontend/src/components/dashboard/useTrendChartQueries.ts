@@ -449,7 +449,7 @@ export function useTrendChartQueries({
       // Fetch in-window rows (standard path)
       const inWindow = await supaSelect<any>(
         'power_readings',
-        'daily_consumption_kwh,daily_solar_kwh,daily_grid_kwh,meter_reading_kwh,grid_meter_readings,multiplier,reading_datetime,is_meter_replacement,plant_id',
+        'daily_consumption_kwh,daily_solar_kwh,daily_grid_kwh,meter_reading_kwh,grid_meter_readings,multiplier,reading_datetime,is_meter_replacement,plant_id,is_estimated',
       );
       // For each plant, fetch the single most-recent row BEFORE the window to
       // establish a delta baseline for the first in-window reading.
@@ -457,7 +457,7 @@ export function useTrendChartQueries({
       await Promise.all(
         plantIds.map(async (pid) => {
           const { data } = await (supabase.from('power_readings' as never) as any)
-            .select('daily_consumption_kwh,daily_solar_kwh,daily_grid_kwh,meter_reading_kwh,grid_meter_readings,multiplier,reading_datetime,is_meter_replacement,plant_id')
+            .select('daily_consumption_kwh,daily_solar_kwh,daily_grid_kwh,meter_reading_kwh,grid_meter_readings,multiplier,reading_datetime,is_meter_replacement,plant_id,is_estimated')
             .eq('plant_id', pid)
             .lt('reading_datetime', startISO)
             .order('reading_datetime', { ascending: false })

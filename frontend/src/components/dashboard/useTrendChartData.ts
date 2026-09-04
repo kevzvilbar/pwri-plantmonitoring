@@ -14,7 +14,7 @@
 import { useMemo } from 'react';
 import { calc } from '@/lib/calculations';
 import { format } from 'date-fns';
-import { fillDateRange } from './TrendChartPivotShared';
+import { fillDateRange, interpolateMissingGridMeterReadings } from './TrendChartPivotShared';
 import { buildTrendRows, type Granularity, type TrendFieldConfig } from './TrendChartAggregate';
 
 const TREND_FIELD_AGG: Record<string, TrendFieldConfig> = {
@@ -425,9 +425,10 @@ export function useTrendChartData({
     // that disagree with the "Last 7 readings" panel, which always recomputes live.
     // Computing from raw readings first keeps the chart consistent with that panel.
     {
-      const sorted = [...(powerReadings ?? [])].sort(
+      const rawSorted = [...(powerReadings ?? [])].sort(
         (a, b) => new Date(a.reading_datetime).getTime() - new Date(b.reading_datetime).getTime(),
       );
+      const sorted = interpolateMissingGridMeterReadings(rawSorted);
       // Per-plant tracking state (mirrors Plants.tsx prevGridMeter/prevGridReadings)
       const prevGridMeter    = new Map<string, number | null>();
       const prevGridReadings = new Map<string, Record<string, number>>();

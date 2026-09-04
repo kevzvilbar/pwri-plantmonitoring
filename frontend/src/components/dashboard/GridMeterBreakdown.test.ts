@@ -229,4 +229,82 @@ describe('buildKwhSummaryCsv — kWh Data Summary export', () => {
     expect(lines[5]).toBe('date,"Feed, Main",Other,total_kwh');
     expect(lines[6]).toBe('Sep 2,,500,500');
   });
+
+  it('Auto-backfilled estimated rows: interpolates missing secondary meters between known bounding rows', () => {
+    // Mimics the exact scenario from SRP:
+    // Sep 02: Meter 0 = 500, Meter 2 = 9214.0
+    // Sep 03: Estimated row (is_estimated = true), only Meter 0 = 501
+    // Sep 04: Estimated row (is_estimated = true), only Meter 0 = 502
+    // Sep 05: Meter 0 = 505, Meter 2 = 9239.6
+    // Multipliers: [1, 1, 2400]
+    const readings = [
+      {
+        plant_id: 'plant-srp',
+        reading_datetime: '2026-09-02T04:49:00+08:00',
+        meter_reading_kwh: 500,
+        grid_meter_readings: { '0': 500, '2': 9214.0 },
+        is_estimated: false,
+      },
+      {
+        plant_id: 'plant-srp',
+        reading_datetime: '2026-09-03T12:00:00+08:00',
+        meter_reading_kwh: 501,
+        grid_meter_readings: { '0': 501 },
+        is_estimated: true,
+      },
+      {
+        plant_id: 'plant-srp',
+        reading_datetime: '2026-09-04T12:00:00+08:00',
+        meter_reading_kwh: 502,
+        grid_meter_readings: { '0': 502 },
+        is_estimated: true,
+      },
+      {
+        plant_id: 'plant-srp',
+        reading_datetime: '2026-09-05T05:39:00+08:00',
+        meter_reading_kwh: 505,
+        grid_meter_readings: { '0': 505, '2': 9239.6 },
+        is_estimated: false,
+      },
+    ];
+
+    const powerConfigMap = new Map([['plant-srp', [1, 1, 2400]]]);
+    const gridMeterMeta = new Map([
+      ['plant-srp', { names: ['STP', 'Pumphouse', 'Main'], count: 3 }],
+    ]);
+
+    const result = computeGridMeterBreakdown(readings, { powerConfigMap, gridMeterMeta });
+
+    // Verify Sep 03, Sep 04, and Sep 05 deltas
+    const rowSep03 = result.byDate.get('2026-09-03');
+    const rowSep04 = result.byDate.get('2026-09-04');
+    const rowSep05 = result.byDate.get('2026-09-05');
+
+    expect(rowSep03).toBeDefined();
+    expect(rowSep04).toBeDefined();
+    expect(rowSep05).toBeDefined();
+
+    // Meter 2 on Sep 03 should be 26,400 kWh (11.0 delta * 2400)
+    expect(rowSep03?.values['plant-srp#2']).toBe(26400);
+    // Meter 2 on Sep 04 should be 20,160 kWh (8.4 delta * 2400)
+    expect(rowSep04?.values['plant-srp#2']).toBe(20160);
+    // Meter 2 on Sep 05 should be 14,880 kWh (6.2 delta * 2400), NOT 61,440!
+    expect(rowSep05?.values['plant-srp#2']).toBe(14880);
+
+    // Meter 0 deltas:
+    // Sep 03: 501 - 500 = 1
+    expect(rowSep03?.values['plant-srp#0']).toBe(1);
+    // Sep 04: 502 - 501 = 1
+    expect(rowSep04?.values['plant-srp#0']).toBe(1);
+    // Sep 05: 505 - 502 = 3
+    expect(rowSep05?.values['plant-srp#0']).toBe(3);
+
+    // Totals per day:
+    expect(rowSep03?.total).toBe(26401);
+    expect(rowSep04?.total).toBe(20161);
+    expect(rowSep05?.total).toBe(14883);
+
+    // All kWh are fully attributed, no residual in Other!
+    expect(result.hasUnattributed).toBe(false);
+  });
 });
