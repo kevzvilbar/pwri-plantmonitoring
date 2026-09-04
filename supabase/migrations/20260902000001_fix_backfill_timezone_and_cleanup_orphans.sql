@@ -317,6 +317,10 @@ BEGIN
                   WHERE entity_type = 'locator' AND entity_id = r_entity.id AND gap_date = v_cur_date
                 ) INTO v_has_reason;
 
+                v_existing_id := NULL;
+                v_is_est := NULL;
+                v_old_val := NULL;
+
                 SELECT id, is_estimated, current_reading INTO v_existing_id, v_is_est, v_old_val
                 FROM public.locator_readings
                 WHERE locator_id = r_entity.id AND (reading_datetime AT TIME ZONE 'Asia/Manila')::date = v_cur_date
@@ -324,7 +328,7 @@ BEGIN
                 LIMIT 1;
 
                 IF v_has_reason THEN
-                  IF FOUND AND v_is_est = true THEN
+                  IF v_existing_id IS NOT NULL AND v_is_est = true THEN
                     DELETE FROM public.locator_readings WHERE id = v_existing_id;
                     v_retracted_count := v_retracted_count + 1;
                   END IF;
@@ -339,7 +343,7 @@ BEGIN
 
                   v_dt_iso := (v_cur_date::text || ' 12:00:00+08')::timestamptz;
 
-                  IF NOT FOUND THEN
+                  IF v_existing_id IS NULL THEN
                     INSERT INTO public.locator_readings (
                       locator_id, plant_id, reading_datetime, current_reading, is_estimated
                     ) VALUES (
@@ -435,6 +439,10 @@ BEGIN
                   WHERE entity_type = 'well' AND entity_id = r_entity.id AND gap_date = v_cur_date
                 ) INTO v_has_reason;
 
+                v_existing_id := NULL;
+                v_is_est := NULL;
+                v_old_val := NULL;
+
                 SELECT id, is_estimated, current_reading INTO v_existing_id, v_is_est, v_old_val
                 FROM public.well_readings
                 WHERE well_id = r_entity.id AND (reading_datetime AT TIME ZONE 'Asia/Manila')::date = v_cur_date
@@ -442,7 +450,7 @@ BEGIN
                 LIMIT 1;
 
                 IF v_has_reason THEN
-                  IF FOUND AND v_is_est = true THEN
+                  IF v_existing_id IS NOT NULL AND v_is_est = true THEN
                     DELETE FROM public.well_readings WHERE id = v_existing_id;
                     v_retracted_count := v_retracted_count + 1;
                   END IF;
@@ -459,7 +467,7 @@ BEGIN
 
                   v_dt_iso := (v_cur_date::text || ' 12:00:00+08')::timestamptz;
 
-                  IF NOT FOUND THEN
+                  IF v_existing_id IS NULL THEN
                     INSERT INTO public.well_readings (
                       well_id, plant_id, reading_datetime, current_reading, daily_volume, is_estimated
                     ) VALUES (
@@ -555,6 +563,10 @@ BEGIN
                   WHERE entity_type = 'product' AND entity_id = r_entity.id AND gap_date = v_cur_date
                 ) INTO v_has_reason;
 
+                v_existing_id := NULL;
+                v_is_est := NULL;
+                v_old_val := NULL;
+
                 SELECT id, is_estimated, current_reading INTO v_existing_id, v_is_est, v_old_val
                 FROM public.product_meter_readings
                 WHERE meter_id = r_entity.id AND (reading_datetime AT TIME ZONE 'Asia/Manila')::date = v_cur_date
@@ -562,7 +574,7 @@ BEGIN
                 LIMIT 1;
 
                 IF v_has_reason THEN
-                  IF FOUND AND v_is_est = true THEN
+                  IF v_existing_id IS NOT NULL AND v_is_est = true THEN
                     DELETE FROM public.product_meter_readings WHERE id = v_existing_id;
                     v_retracted_count := v_retracted_count + 1;
                   END IF;
@@ -579,7 +591,7 @@ BEGIN
 
                   v_dt_iso := (v_cur_date::text || ' 12:00:00+08')::timestamptz;
 
-                  IF NOT FOUND THEN
+                  IF v_existing_id IS NULL THEN
                     INSERT INTO public.product_meter_readings (
                       meter_id, plant_id, reading_datetime, current_reading, daily_volume, is_estimated
                     ) VALUES (
@@ -673,6 +685,10 @@ BEGIN
                   WHERE entity_type = 'blending' AND entity_id = r_entity.id AND gap_date = v_cur_date
                 ) INTO v_has_reason;
 
+                v_existing_id := NULL;
+                v_is_est := NULL;
+                v_old_val := NULL;
+
                 SELECT id, is_estimated, raw_meter_reading INTO v_existing_id, v_is_est, v_old_val
                 FROM public.blending_events
                 WHERE well_id = r_entity.id AND (event_date = v_cur_date OR (reading_datetime AT TIME ZONE 'Asia/Manila')::date = v_cur_date)
@@ -680,7 +696,7 @@ BEGIN
                 LIMIT 1;
 
                 IF v_has_reason THEN
-                  IF FOUND AND v_is_est = true THEN
+                  IF v_existing_id IS NOT NULL AND v_is_est = true THEN
                     DELETE FROM public.blending_events WHERE id = v_existing_id;
                     v_retracted_count := v_retracted_count + 1;
                   END IF;
@@ -697,7 +713,7 @@ BEGIN
 
                   v_dt_iso := (v_cur_date::text || ' 12:00:00+08')::timestamptz;
 
-                  IF NOT FOUND THEN
+                  IF v_existing_id IS NULL THEN
                     INSERT INTO public.blending_events (
                       well_id, plant_id, well_name, event_date, reading_datetime, raw_meter_reading, volume_m3, is_estimated
                     ) VALUES (
@@ -791,6 +807,10 @@ BEGIN
                   WHERE entity_type = 'power' AND entity_id = r_entity.plant_id AND gap_date = v_cur_date
                 ) INTO v_has_reason;
 
+                v_existing_id := NULL;
+                v_is_est := NULL;
+                v_old_val := NULL;
+
                 SELECT id, is_estimated, meter_reading_kwh INTO v_existing_id, v_is_est, v_old_val
                 FROM public.power_readings
                 WHERE plant_id = r_entity.plant_id AND (reading_datetime AT TIME ZONE 'Asia/Manila')::date = v_cur_date
@@ -798,7 +818,7 @@ BEGIN
                 LIMIT 1;
 
                 IF v_has_reason THEN
-                  IF FOUND AND v_is_est = true THEN
+                  IF v_existing_id IS NOT NULL AND v_is_est = true THEN
                     DELETE FROM public.power_readings WHERE id = v_existing_id;
                     v_retracted_count := v_retracted_count + 1;
                   END IF;
@@ -815,7 +835,7 @@ BEGIN
 
                   v_dt_iso := (v_cur_date::text || ' 12:00:00+08')::timestamptz;
 
-                  IF NOT FOUND THEN
+                  IF v_existing_id IS NULL THEN
                     INSERT INTO public.power_readings (
                       plant_id, reading_datetime, meter_reading_kwh, daily_consumption_kwh, is_estimated
                     ) VALUES (
@@ -914,6 +934,10 @@ BEGIN
                   WHERE entity_type = 'ro_train' AND entity_id = r_entity.id AND gap_date = v_cur_date
                 ) INTO v_has_reason;
 
+                v_existing_id := NULL;
+                v_is_est := NULL;
+                v_old_val := NULL;
+
                 SELECT id, is_estimated, permeate_meter INTO v_existing_id, v_is_est, v_old_val
                 FROM public.ro_train_readings
                 WHERE train_id = r_entity.id AND (reading_datetime AT TIME ZONE 'Asia/Manila')::date = v_cur_date
@@ -921,7 +945,7 @@ BEGIN
                 LIMIT 1;
 
                 IF v_has_reason THEN
-                  IF FOUND AND v_is_est = true THEN
+                  IF v_existing_id IS NOT NULL AND v_is_est = true THEN
                     DELETE FROM public.ro_train_readings WHERE id = v_existing_id;
                     v_retracted_count := v_retracted_count + 1;
                   END IF;
@@ -938,7 +962,7 @@ BEGIN
 
                   v_dt_iso := (v_cur_date::text || ' 12:00:00+08')::timestamptz;
 
-                  IF NOT FOUND THEN
+                  IF v_existing_id IS NULL THEN
                     INSERT INTO public.ro_train_readings (
                       train_id, plant_id, reading_datetime, permeate_meter, permeate_meter_delta, is_estimated
                     ) VALUES (

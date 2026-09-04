@@ -32,6 +32,22 @@ BEGIN
   -- 4. ro_train_readings
   IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'ro_train_readings') THEN
     ALTER TABLE public.ro_train_readings ADD COLUMN IF NOT EXISTS is_estimated BOOLEAN NOT NULL DEFAULT false;
+    ALTER TABLE public.ro_train_readings ADD COLUMN IF NOT EXISTS permeate_meter_delta NUMERIC;
+    ALTER TABLE public.ro_train_readings ADD COLUMN IF NOT EXISTS permeate_meter_prev NUMERIC;
+    ALTER TABLE public.ro_train_readings ADD COLUMN IF NOT EXISTS feed_meter_delta NUMERIC;
+    ALTER TABLE public.ro_train_readings ADD COLUMN IF NOT EXISTS feed_meter_prev NUMERIC;
+    ALTER TABLE public.ro_train_readings ADD COLUMN IF NOT EXISTS reject_meter_delta NUMERIC;
+    ALTER TABLE public.ro_train_readings ADD COLUMN IF NOT EXISTS reject_meter_prev NUMERIC;
+    ALTER TABLE public.ro_train_readings ADD COLUMN IF NOT EXISTS permeate_production_date DATE;
+    ALTER TABLE public.ro_train_readings ADD COLUMN IF NOT EXISTS power_meter_reading_kwh NUMERIC;
+    ALTER TABLE public.ro_train_readings ADD COLUMN IF NOT EXISTS power_delta_kwh NUMERIC;
+    ALTER TABLE public.ro_train_readings ADD COLUMN IF NOT EXISTS power_avg_kw NUMERIC;
+    ALTER TABLE public.ro_train_readings ADD COLUMN IF NOT EXISTS specific_energy_kwh_m3 NUMERIC;
+    ALTER TABLE public.ro_train_readings ADD COLUMN IF NOT EXISTS shared_power_meter_group TEXT;
+    ALTER TABLE public.ro_train_readings ADD COLUMN IF NOT EXISTS chlorine_residual_mg_l NUMERIC;
+    ALTER TABLE public.ro_train_readings ADD COLUMN IF NOT EXISTS incomplete_reason TEXT;
+    ALTER TABLE public.ro_train_readings ADD COLUMN IF NOT EXISTS remarks TEXT;
+    ALTER TABLE public.ro_train_readings ADD COLUMN IF NOT EXISTS is_meter_replacement BOOLEAN DEFAULT false;
   END IF;
 
   -- 5. product_meter_readings
@@ -43,6 +59,18 @@ BEGIN
   IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'locator_readings') THEN
     ALTER TABLE public.locator_readings ADD COLUMN IF NOT EXISTS is_meter_replacement BOOLEAN NOT NULL DEFAULT false;
     ALTER TABLE public.locator_readings ADD COLUMN IF NOT EXISTS is_estimated BOOLEAN NOT NULL DEFAULT false;
+  END IF;
+END $$;
+
+-- Refresh ro_train_readings_latest view if present
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.views WHERE table_schema = 'public' AND table_name = 'ro_train_readings_latest') THEN
+    CREATE OR REPLACE VIEW public.ro_train_readings_latest
+    WITH (security_invoker = true) AS
+    SELECT DISTINCT ON (train_id) *
+    FROM public.ro_train_readings
+    ORDER BY train_id, reading_datetime DESC;
   END IF;
 END $$;
 
