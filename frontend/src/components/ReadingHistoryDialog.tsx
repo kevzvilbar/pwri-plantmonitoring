@@ -651,7 +651,7 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
       const wellRow = rows?.find((r: any) => r.id === editRow.id);
       const wellCur = +editRow.value;
       const wellPrev = wellRow?.previous_reading;
-      const wellDailyVol = wellPrev != null ? Math.max(0, wellCur - wellPrev) : null;
+      const wellDailyVol = wellPrev != null ? (editRow.isMeterReplacement ? 0 : wellCur - wellPrev) : null;
       const wellEditPayload: Record<string, any> = {
         current_reading: wellCur,
         power_meter_reading: editRow.value2 ? +editRow.value2 : null,
@@ -1141,17 +1141,16 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                   // rows sorted descending → rows[i+1] is the immediately preceding reading in time
                   const predecessor: any = rows[i + 1] ?? null;
                   // Rollover-aware Δ for well/locator 'raw' (cumulative-meter) mode.
-                  // Uses the row's OWN stored previous_reading — kept correct by
-                  // fn_cascade_reading_correction / the DB trigger — instead of
-                  // predecessor.current_reading, which is only whatever happens to be
-                  // adjacent in the currently-fetched/filtered rows array (wrong near
-                  // the edge of a custom date range, or after a row is deleted).
-                  // calc.dailyVolume applies (meter_rollover_max - previous) + current
-                  // when is_meter_rollover is set, and floors at 0 otherwise — the same
-                  // formula the DB and the entry form already use, so this stops
-                  // producing the large negative "naive subtraction on rollover" delta.
-                  const rawDelta = r.previous_reading != null
-                    ? calc.dailyVolume(+r.current_reading, +r.previous_reading,
+                  // Prefer the immediate chronological predecessor's reading from the fetched array
+                  // so that adjacent rows in the table always show their true relative shift delta,
+                  // self-healing even if stored previous_reading in the DB suffered drift or corruption.
+                  // Fall back to stored previous_reading only for the earliest row in the loaded window
+                  // where no predecessor row is in memory.
+                  const prevReading = predecessor != null
+                    ? +predecessor.current_reading
+                    : (r.previous_reading != null ? +r.previous_reading : null);
+                  const rawDelta = prevReading != null
+                    ? calc.dailyVolume(+r.current_reading, prevReading,
                         !!r.is_meter_rollover, r.meter_rollover_max != null ? +r.meter_rollover_max : null)
                     : null;
 
