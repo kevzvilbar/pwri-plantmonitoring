@@ -10,6 +10,7 @@ import { Select } from '@/components/ui/select';
 import { Loader2, Download, BarChart2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
+import { cn } from '@/lib/utils';
 import { ReplaceTrainMeterDialog } from '../../ro-trains/ReplaceTrainMeterDialog';
 import { recalculateTrainDeltas } from '../../ro-trains/helpers';
 
@@ -247,8 +248,14 @@ export function TrainOperatorLogModal({
   const pageLogs   = logs.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
 
   const fmtVal = (v: any, unit = '') =>
-    v != null ? <span>{Number(v).toLocaleString(undefined, { maximumFractionDigits: 1 })}<span className="text-muted-foreground/60 ml-0.5 text-2xs">{unit}</span></span>
-              : <span className="text-muted-foreground/30">—</span>;
+    v != null && v !== '' ? (
+      <span className="font-mono tabular-nums whitespace-nowrap">
+        {Number(v).toLocaleString(undefined, { maximumFractionDigits: 1 })}
+        {unit && <span className="text-muted-foreground/60 ml-0.5 text-3xs font-sans">{unit}</span>}
+      </span>
+    ) : (
+      <span className="text-muted-foreground/30">—</span>
+    );
 
   const exportCSV = () => {
     if (!logs.length) { toast.error('No logs to export'); return; }
@@ -361,10 +368,10 @@ export function TrainOperatorLogModal({
             onRetry={refetch}
           >
             <table className="w-full text-xs border-collapse">
-              <thead className="sticky top-0 bg-background border-b z-10">
+              <thead className="sticky top-0 bg-background border-b border-border/60 z-20 shadow-[0_1px_2px_rgba(0,0,0,0.06)]">
                 <tr className="text-muted-foreground uppercase tracking-wide text-2xs">
-                  <th className="text-left px-3 py-2 font-semibold whitespace-nowrap w-[130px]">Date / Time</th>
-                  <th className="text-left px-2 py-2 font-semibold w-[110px]">Operator</th>
+                  <th className="text-left px-3 py-2 font-semibold whitespace-nowrap w-[130px] sticky left-0 top-0 z-30 bg-background border-r border-border/30 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.12)]">Date / Time</th>
+                  <th className="text-left px-2 py-2 font-semibold w-[110px] whitespace-nowrap">Operator</th>
                   <th className="text-right px-2 py-2 font-semibold whitespace-nowrap">Perm Flow</th>
                   <th className="text-right px-2 py-2 font-semibold whitespace-nowrap">Feed Flow</th>
                   <th className="text-right px-2 py-2 font-semibold whitespace-nowrap">Rej. Flow</th>
@@ -379,7 +386,7 @@ export function TrainOperatorLogModal({
                   <th className="text-right px-2 py-2 font-semibold whitespace-nowrap">Perm Meter</th>
                   <th className="text-right px-2 py-2 font-semibold whitespace-nowrap">Δ m³</th>
                   <th className="px-2 py-2 font-semibold text-center text-kpi-solar whitespace-nowrap w-[54px]" title="Meter Replacement — flags reading as meter change; zeroes Δ in chart">Repl.</th>
-                  <th className="text-left px-2 py-2 font-semibold">Remarks</th>
+                  <th className="text-left px-2 py-2 font-semibold whitespace-nowrap">Remarks</th>
                 </tr>
               </thead>
               <tbody className="divide-y">
@@ -393,55 +400,58 @@ export function TrainOperatorLogModal({
                   return (
                     <tr
                       key={r.id ?? i}
-                      className={[
-                        'border-t transition-colors',
-                        isRepl ? 'bg-kpi-solar/40' : 'hover:bg-muted/30',
-                      ].join(' ')}
+                      className={cn(
+                        'group border-b border-border/40 transition-colors',
+                        isRepl ? 'bg-kpi-solar/40' : 'hover:bg-muted/40'
+                      )}
                     >
                       {/* Date / Time */}
-                      <td className="px-3 py-2 whitespace-nowrap text-muted-foreground font-mono text-xs">
+                      <td className={cn(
+                        'px-3 py-2 whitespace-nowrap font-mono tabular-nums text-xs sticky left-0 z-10 border-r border-border/30 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.12)] transition-colors',
+                        isRepl ? 'bg-kpi-solar/40' : 'bg-background group-hover:bg-muted/40'
+                      )}>
                         <div className="text-foreground font-medium">{r.reading_datetime ? format(new Date(r.reading_datetime), 'MMM d, yyyy') : '—'}</div>
                         <div className="flex items-center gap-1">
-                          {r.reading_datetime ? format(new Date(r.reading_datetime), 'HH:mm') : ''}
+                          <span className="text-muted-foreground text-3xs">{r.reading_datetime ? format(new Date(r.reading_datetime), 'HH:mm') : ''}</span>
                           {isRepl && (
                             <span className="text-3xs font-bold uppercase tracking-wide text-kpi-solar bg-kpi-solar/15 px-1 py-0.5 rounded leading-none">repl.</span>
                           )}
                         </div>
                       </td>
                       {/* Operator */}
-                      <td className="px-2 py-2">
+                      <td className="px-2 py-2 text-left">
                         <div className="flex items-center gap-1.5">
                           <div className="h-5 w-5 rounded-full bg-primary-soft text-primary flex items-center justify-center text-3xs font-bold shrink-0">
                             {initials}
                           </div>
-                          <span className="truncate max-w-[80px]" title={opName}>{opName}</span>
+                          <span className="truncate max-w-[80px] block text-xs font-medium" title={opName}>{opName}</span>
                         </div>
                       </td>
                       {/* Flow */}
-                      <td className="px-2 py-2 text-right font-mono">{fmtVal(r.permeate_flow, 'm³/h')}</td>
-                      <td className="px-2 py-2 text-right font-mono">{fmtVal(r.feed_flow, 'm³/h')}</td>
-                      <td className="px-2 py-2 text-right font-mono">{fmtVal(r.reject_flow, 'm³/h')}</td>
+                      <td className="px-2 py-2 text-right font-mono tabular-nums whitespace-nowrap">{fmtVal(r.permeate_flow, 'm³/h')}</td>
+                      <td className="px-2 py-2 text-right font-mono tabular-nums whitespace-nowrap">{fmtVal(r.feed_flow, 'm³/h')}</td>
+                      <td className="px-2 py-2 text-right font-mono tabular-nums whitespace-nowrap">{fmtVal(r.reject_flow, 'm³/h')}</td>
                       {/* Pressure */}
-                      <td className="px-2 py-2 text-right font-mono">{fmtVal(r.feed_pressure_psi, 'psi')}</td>
-                      <td className="px-2 py-2 text-right font-mono">{fmtVal(r.reject_pressure_psi, 'psi')}</td>
-                      <td className="px-2 py-2 text-right font-mono">{fmtVal(r.suction_pressure_psi, 'psi')}</td>
+                      <td className="px-2 py-2 text-right font-mono tabular-nums whitespace-nowrap">{fmtVal(r.feed_pressure_psi, 'psi')}</td>
+                      <td className="px-2 py-2 text-right font-mono tabular-nums whitespace-nowrap">{fmtVal(r.reject_pressure_psi, 'psi')}</td>
+                      <td className="px-2 py-2 text-right font-mono tabular-nums whitespace-nowrap">{fmtVal(r.suction_pressure_psi, 'psi')}</td>
                       {/* Quality */}
-                      <td className="px-2 py-2 text-right font-mono">{fmtVal(r.feed_tds, 'ppm')}</td>
-                      <td className="px-2 py-2 text-right font-mono">{fmtVal(r.permeate_tds, 'ppm')}</td>
-                      <td className="px-2 py-2 text-right font-mono">{fmtVal(r.reject_tds, 'ppm')}</td>
-                      <td className="px-2 py-2 text-right font-mono">{fmtVal(r.temperature_c, '°C')}</td>
+                      <td className="px-2 py-2 text-right font-mono tabular-nums whitespace-nowrap">{fmtVal(r.feed_tds, 'ppm')}</td>
+                      <td className="px-2 py-2 text-right font-mono tabular-nums whitespace-nowrap">{fmtVal(r.permeate_tds, 'ppm')}</td>
+                      <td className="px-2 py-2 text-right font-mono tabular-nums whitespace-nowrap">{fmtVal(r.reject_tds, 'ppm')}</td>
+                      <td className="px-2 py-2 text-right font-mono tabular-nums whitespace-nowrap">{fmtVal(r.temperature_c, '°C')}</td>
                       {/* Recovery */}
-                      <td className="px-2 py-2 text-right font-mono">
+                      <td className="px-2 py-2 text-right font-mono tabular-nums whitespace-nowrap">
                         {r.recovery_pct != null
                           ? <span className="text-accent font-medium">{Number(r.recovery_pct).toFixed(1)}%</span>
                           : <span className="text-muted-foreground/30">—</span>}
                       </td>
                       {/* Permeate meter */}
-                      <td className="px-2 py-2 text-right font-mono text-xs">{fmtVal(r.permeate_meter)}</td>
+                      <td className="px-2 py-2 text-right font-mono tabular-nums whitespace-nowrap text-xs">{fmtVal(r.permeate_meter)}</td>
                       {/* Δ m³ — prefer in-memory delta (computed from corrected permeate_meter)
                            over the stored permeate_meter_delta, which may have been written
                            before DataAnalysis corrected the underlying meter reading. */}
-                      <td className="px-2 py-2 text-right font-mono text-xs">
+                      <td className="px-2 py-2 text-right font-mono tabular-nums whitespace-nowrap text-xs">
                         {(() => {
                           // _computed_delta is always available when permeate_meter exists and
                           // there is a predecessor row.  Fall back to stored delta only when
@@ -450,12 +460,12 @@ export function TrainOperatorLogModal({
                           if (d == null) return <span className="text-muted-foreground/30">—</span>;
                           if (isRepl) return <span className="text-kpi-solar font-medium">0</span>;
                           return d > 0
-                            ? <span className="text-primary">+{d.toLocaleString(undefined,{maximumFractionDigits:1})}</span>
+                            ? <span className="text-primary font-semibold">+{d.toLocaleString(undefined,{maximumFractionDigits:1})}</span>
                             : <span className="text-muted-foreground/40">0</span>;
                         })()}
                       </td>
                       {/* Meter replacement toggle — next to Perm Meter / Δ */}
-                      <td className="px-2 py-2 text-center">
+                      <td className="px-2 py-2 text-center whitespace-nowrap">
                         <button
                           title={isRepl ? 'Meter replacement — click to unmark' : 'Mark as meter replacement (zeroes Δ in chart)'}
                           aria-label={isRepl ? 'Meter replacement — click to unmark' : 'Mark as meter replacement (zeroes Δ in chart)'}
@@ -476,7 +486,9 @@ export function TrainOperatorLogModal({
                         </button>
                       </td>
                       {/* Remarks */}
-                      <td className="px-2 py-2 text-muted-foreground max-w-[140px] truncate" title={r.remarks ?? ''}>{r.remarks || <span className="opacity-30">—</span>}</td>
+                      <td className="px-2 py-2 text-left text-muted-foreground max-w-[140px] truncate text-xs" title={r.remarks ?? ''}>
+                        {r.remarks ? <span title={r.remarks}>{r.remarks}</span> : <span className="text-muted-foreground/30">—</span>}
+                      </td>
                     </tr>
                   );
                 })}

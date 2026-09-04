@@ -1051,8 +1051,8 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                 : `No readings in the last ${days} days`}
             </p>
           ) : (
-            <table className="w-full text-left">
-              <thead className="bg-muted sticky top-0">
+            <table className="w-full text-left border-collapse">
+              <thead className="bg-muted sticky top-0 z-20 shadow-[0_1px_2px_rgba(0,0,0,0.06)] border-b border-border/60">
                 <tr>
                   {anyEditable && (
                     <th className="px-2 py-2 w-8">
@@ -1065,50 +1065,50 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                       />
                     </th>
                   )}
-                  <th className="px-3 py-2 font-medium">Date & Time</th>
+                  <th className="px-3 py-2 font-medium whitespace-nowrap">Date & Time</th>
                   {module === 'locator' && (isDirectMode ? <>
-                    <th className="px-3 py-2 font-medium text-right">Volume (m³)</th>
-                    <th className="px-2 py-2 font-medium text-center">Repl.</th>
-                    <th className="px-3 py-2 font-medium">Flags</th>
+                    <th className="px-3 py-2 font-medium text-right whitespace-nowrap">Volume (m³)</th>
+                    <th className="px-2 py-2 font-medium text-center whitespace-nowrap">Repl.</th>
+                    <th className="px-3 py-2 font-medium whitespace-nowrap">Flags</th>
                   </> : <>
-                    <th className="px-3 py-2 font-medium text-right">Reading</th>
-                    <th className="px-3 py-2 font-medium text-right">Δ</th>
-                    <th className="px-2 py-2 font-medium text-center">Repl.</th>
-                    <th className="px-3 py-2 font-medium">Flags</th>
+                    <th className="px-3 py-2 font-medium text-right whitespace-nowrap">Reading</th>
+                    <th className="px-3 py-2 font-medium text-right whitespace-nowrap">Δ</th>
+                    <th className="px-2 py-2 font-medium text-center whitespace-nowrap">Repl.</th>
+                    <th className="px-3 py-2 font-medium whitespace-nowrap">Flags</th>
                   </>)}
                   {module === 'well' && (isDirectMode ? <>
-                    <th className="px-3 py-2 font-medium text-right">Volume (m³)</th>
-                    <th className="px-2 py-2 font-medium text-center">Repl.</th>
-                    <th className="px-3 py-2 font-medium text-right">Power (kWh)</th>
-                    <th className="px-3 py-2 font-medium text-right">TDS (ppm)</th>
-                    <th className="px-3 py-2 font-medium text-right">NTU</th>
-                    <th className="px-3 py-2 font-medium text-right">Pressure (psi)</th>
-                    <th className="px-3 py-2 font-medium">Flags</th>
+                    <th className="px-3 py-2 font-medium text-right whitespace-nowrap">Volume (m³)</th>
+                    <th className="px-2 py-2 font-medium text-center whitespace-nowrap">Repl.</th>
+                    <th className="px-3 py-2 font-medium text-right whitespace-nowrap">Power (kWh)</th>
+                    <th className="px-3 py-2 font-medium text-right whitespace-nowrap">TDS (ppm)</th>
+                    <th className="px-3 py-2 font-medium text-right whitespace-nowrap">NTU</th>
+                    <th className="px-3 py-2 font-medium text-right whitespace-nowrap">Pressure (psi)</th>
+                    <th className="px-3 py-2 font-medium whitespace-nowrap">Flags</th>
                   </> : <>
-                    <th className="px-3 py-2 font-medium text-right">Water</th>
-                    <th className="px-3 py-2 font-medium text-right">Δ</th>
-                    <th className="px-2 py-2 font-medium text-center">Repl.</th>
-                    <th className="px-3 py-2 font-medium text-right">Power (kWh)</th>
-                    <th className="px-3 py-2 font-medium text-right">TDS (ppm)</th>
-                    <th className="px-3 py-2 font-medium text-right">NTU</th>
-                    <th className="px-3 py-2 font-medium text-right">Pressure (psi)</th>
-                    <th className="px-3 py-2 font-medium">Flags</th>
+                    <th className="px-3 py-2 font-medium text-right whitespace-nowrap">Water</th>
+                    <th className="px-3 py-2 font-medium text-right whitespace-nowrap">Δ</th>
+                    <th className="px-2 py-2 font-medium text-center whitespace-nowrap">Repl.</th>
+                    <th className="px-3 py-2 font-medium text-right whitespace-nowrap">Power (kWh)</th>
+                    <th className="px-3 py-2 font-medium text-right whitespace-nowrap">TDS (ppm)</th>
+                    <th className="px-3 py-2 font-medium text-right whitespace-nowrap">NTU</th>
+                    <th className="px-3 py-2 font-medium text-right whitespace-nowrap">Pressure (psi)</th>
+                    <th className="px-3 py-2 font-medium whitespace-nowrap">Flags</th>
                   </>)}
                   {module === 'blending' && <>
-                    <th className="px-3 py-2 font-medium text-right">Reading</th>
-                    <th className="px-3 py-2 font-medium text-right">Volume (m³)</th>
-                    <th className="px-2 py-2 font-medium text-center">Repl.</th>
-                    <th className="px-3 py-2 font-medium">Flags</th>
+                    <th className="px-3 py-2 font-medium text-right whitespace-nowrap">Reading</th>
+                    <th className="px-3 py-2 font-medium text-right whitespace-nowrap">Volume (m³)</th>
+                    <th className="px-2 py-2 font-medium text-center whitespace-nowrap">Repl.</th>
+                    <th className="px-3 py-2 font-medium whitespace-nowrap">Flags</th>
                   </>}
                   {module === 'power' && <>
-                    <th className="px-3 py-2 font-medium">Meter</th>
-                    <th className="px-3 py-2 font-medium text-right">Reading</th>
-                    <th className="px-3 py-2 font-medium text-right">Δ (kWh)</th>
-                    <th className="px-2 py-2 font-medium text-center text-muted-foreground">×</th>
-                    <th className="px-3 py-2 font-medium text-right text-kpi-grid">Power (kWh)</th>
-                    <th className="px-2 py-2 font-medium text-center">Repl.</th>
+                    <th className="px-3 py-2 font-medium whitespace-nowrap">Meter</th>
+                    <th className="px-3 py-2 font-medium text-right whitespace-nowrap">Reading</th>
+                    <th className="px-3 py-2 font-medium text-right whitespace-nowrap">Δ (kWh)</th>
+                    <th className="px-2 py-2 font-medium text-center text-muted-foreground whitespace-nowrap">×</th>
+                    <th className="px-3 py-2 font-medium text-right text-kpi-grid whitespace-nowrap">Power (kWh)</th>
+                    <th className="px-2 py-2 font-medium text-center whitespace-nowrap">Repl.</th>
                   </>}
-                  {anyEditable && <th className="px-2 py-2 font-medium text-center w-16">Actions</th>}
+                  {anyEditable && <th className="px-2 py-2 font-medium text-center w-16 sticky right-0 top-0 z-30 bg-muted border-l border-border/30 shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.12)] whitespace-nowrap">Actions</th>}
                 </tr>
               </thead>
               <tbody>
@@ -1195,9 +1195,9 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                     // colspan for the date cell: Date + all 6 data columns
                     const dateCols = 7;
                     const actionsCell = anyEditable ? (
-                      <td className="px-2 py-1 text-center align-top" rowSpan={resolvedGridCount + (hasSolar ? 1 : 0) + 1}>
+                      <td className="px-2 py-1 text-center align-top whitespace-nowrap sticky right-0 z-10 border-l border-border/30 shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.12)] transition-colors bg-muted/20" rowSpan={resolvedGridCount + (hasSolar ? 1 : 0) + 1}>
                         {rowEditable && (
-                          <div className="flex items-center justify-center gap-0.5 pt-0.5">
+                          <div className="opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-within:opacity-100 max-md:opacity-100 transition-opacity flex items-center justify-center gap-0.5 pt-0.5">
                             <button
                               title="Edit"
                               aria-label="Edit"
@@ -1243,7 +1243,7 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                       return (
                         <tr key={r.id ?? i}
                           className={[
-                            'border-t',
+                            'group border-b border-border/40 transition-colors',
                             isEditing  ? 'bg-primary-soft/60'
                             : isRepl   ? 'bg-warn-soft/40'
                             : r.is_estimated ? 'bg-warn-soft/20'
@@ -1276,13 +1276,13 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                           {/* Meter column placeholder (hidden in filtered view) */}
                           <td />
                           {/* Reading */}
-                          <td className="px-3 py-1.5 text-right font-mono-num text-2xs">
+                          <td className="px-3 py-1.5 text-right font-mono-num whitespace-nowrap text-2xs">
                             <span className={isSolar ? 'text-kpi-solar' : 'text-kpi-grid'}>
                               {curr != null ? fmtNum(curr, 1) : '—'}
                             </span>
                           </td>
                           {/* Δ raw */}
-                          <td className="px-3 py-1.5 text-right font-mono-num text-2xs">
+                          <td className="px-3 py-1.5 text-right font-mono-num whitespace-nowrap text-2xs">
                             {isRepl
                               ? <span className={isSolar ? 'text-kpi-solar font-medium' : 'text-kpi-grid font-medium'}>0.0</span>
                               : solarDirect
@@ -1291,17 +1291,17 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                             }
                           </td>
                           {/* × multiplier */}
-                          <td className="px-2 py-1.5 text-center font-mono-num text-muted-foreground text-2xs">
+                          <td className="px-2 py-1.5 text-center font-mono-num whitespace-nowrap text-muted-foreground text-2xs">
                             {mMult !== 1 ? `×${mMult}` : '×1'}
                           </td>
                           {/* Effective kWh */}
-                          <td className={['px-3 py-1.5 text-right font-mono-num font-medium text-2xs',
+                          <td className={['px-3 py-1.5 text-right font-mono-num whitespace-nowrap font-medium text-2xs',
                             effective != null && effective < 0 ? 'text-destructive font-semibold' : isSolar ? 'text-kpi-solar' : 'text-kpi-grid',
                           ].join(' ')}>
                             {effective != null ? fmtNum(effective, 1) : '—'}
                           </td>
                           {/* Repl. toggle */}
-                          <td className="px-2 py-1.5 text-center">
+                          <td className="px-2 py-1.5 text-center whitespace-nowrap">
                             <button
                               title={isRepl ? 'Replacement — click to unmark' : 'Mark as meter replacement (zeroes Δ)'}
                               aria-label={isRepl ? 'Replacement — click to unmark' : 'Mark as meter replacement (zeroes Δ)'}
@@ -1319,9 +1319,9 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                             </button>
                           </td>
                           {anyEditable && (
-                            <td className="px-2 py-1 text-center">
+                            <td className="px-2 py-1 text-center whitespace-nowrap sticky right-0 z-10 border-l border-border/30 shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.12)] transition-colors bg-background group-hover:bg-muted/40">
                               {rowEditable && (
-                                <div className="flex items-center justify-center gap-0.5">
+                                <div className="opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-within:opacity-100 max-md:opacity-100 transition-opacity flex items-center justify-center gap-0.5">
                                   <button title="Edit" aria-label="Edit" disabled={!!editRow || isDeleting}
                                     onClick={() => startEdit(r)}
                                     className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground disabled:opacity-40">
@@ -1560,7 +1560,7 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                     <tr
                       key={r.id ?? i}
                       className={[
-                        'border-t',
+                        'group border-b border-border/40 transition-colors',
                         isEditing      ? 'bg-primary-soft/60'
                         : isMeterReplacement ? 'bg-warn-soft/40'
                         : isEstimated  ? 'bg-warn-soft/20'
@@ -1591,12 +1591,12 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                       </td>
 
                       {module === 'locator' && (isDirectMode ? <>
-                        <td className="px-3 py-1.5 text-right font-mono-num">{fmtNum(r.current_reading, 1)}</td>
+                        <td className="px-3 py-1.5 text-right font-mono-num whitespace-nowrap">{fmtNum(r.current_reading, 1)}</td>
                         {replCell}
                         {flagsCell}
                       </> : <>
-                        <td className="px-3 py-1.5 text-right font-mono-num">{fmtNum(r.current_reading, 1)}</td>
-                        <td className="px-3 py-1.5 text-right font-mono-num">
+                        <td className="px-3 py-1.5 text-right font-mono-num whitespace-nowrap">{fmtNum(r.current_reading, 1)}</td>
+                        <td className="px-3 py-1.5 text-right font-mono-num whitespace-nowrap">
                           {isMeterReplacement
                             ? <span className="text-kpi-solar font-medium">0.0</span>
                             : rawDelta != null ? <span className={rawDelta < 0 ? 'text-destructive font-semibold' : ''}>{fmtNum(rawDelta, 1)}</span> : '—'
@@ -1607,50 +1607,50 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                       </>)}
 
                       {module === 'well' && (isDirectMode ? <>
-                        <td className="px-3 py-1.5 text-right font-mono-num">{fmtNum(r.current_reading, 1)}</td>
+                        <td className="px-3 py-1.5 text-right font-mono-num whitespace-nowrap">{fmtNum(r.current_reading, 1)}</td>
                         {replCell}
-                        <td className="px-3 py-1.5 text-right font-mono-num">
+                        <td className="px-3 py-1.5 text-right font-mono-num whitespace-nowrap">
                           {r.power_meter_reading != null ? fmtNum(r.power_meter_reading, 1) : '—'}
                         </td>
-                        <td className="px-3 py-1.5 text-right font-mono-num">
+                        <td className="px-3 py-1.5 text-right font-mono-num whitespace-nowrap">
                           {r.tds_ppm != null ? fmtNum(r.tds_ppm, 1) : '—'}
                         </td>
-                        <td className="px-3 py-1.5 text-right font-mono-num">
+                        <td className="px-3 py-1.5 text-right font-mono-num whitespace-nowrap">
                           {(r as any).turbidity_ntu != null ? (+((r as any).turbidity_ntu)).toFixed(2) : '—'}
                         </td>
-                        <td className="px-3 py-1.5 text-right font-mono-num">
+                        <td className="px-3 py-1.5 text-right font-mono-num whitespace-nowrap">
                           {r.pressure_psi != null ? fmtNum(r.pressure_psi, 1) : '—'}
                         </td>
                         {flagsCell}
                       </> : <>
-                        <td className="px-3 py-1.5 text-right font-mono-num">{fmtNum(r.current_reading, 1)}</td>
-                        <td className="px-3 py-1.5 text-right font-mono-num">
+                        <td className="px-3 py-1.5 text-right font-mono-num whitespace-nowrap">{fmtNum(r.current_reading, 1)}</td>
+                        <td className="px-3 py-1.5 text-right font-mono-num whitespace-nowrap">
                           {isMeterReplacement
                             ? <span className="text-kpi-solar font-medium">0.0</span>
                             : rawDelta != null ? <span className={rawDelta < 0 ? 'text-destructive font-semibold' : ''}>{fmtNum(rawDelta, 1)}</span> : '—'
                           }
                         </td>
                         {replCell}
-                        <td className="px-3 py-1.5 text-right font-mono-num">
+                        <td className="px-3 py-1.5 text-right font-mono-num whitespace-nowrap">
                           {r.power_meter_reading != null ? fmtNum(r.power_meter_reading, 1) : '—'}
                         </td>
-                        <td className="px-3 py-1.5 text-right font-mono-num">
+                        <td className="px-3 py-1.5 text-right font-mono-num whitespace-nowrap">
                           {r.tds_ppm != null ? fmtNum(r.tds_ppm, 1) : '—'}
                         </td>
-                        <td className="px-3 py-1.5 text-right font-mono-num">
+                        <td className="px-3 py-1.5 text-right font-mono-num whitespace-nowrap">
                           {(r as any).turbidity_ntu != null ? (+((r as any).turbidity_ntu)).toFixed(2) : '—'}
                         </td>
-                        <td className="px-3 py-1.5 text-right font-mono-num">
+                        <td className="px-3 py-1.5 text-right font-mono-num whitespace-nowrap">
                           {r.pressure_psi != null ? fmtNum(r.pressure_psi, 1) : '—'}
                         </td>
                         {flagsCell}
                       </>)}
 
                       {module === 'blending' && <>
-                        <td className="px-3 py-1.5 text-right font-mono-num text-muted-foreground">
+                        <td className="px-3 py-1.5 text-right font-mono-num whitespace-nowrap text-muted-foreground">
                           {r.raw_meter_reading != null ? fmtNum(r.raw_meter_reading, 1) : '—'}
                         </td>
-                        <td className="px-3 py-1.5 text-right font-mono-num">
+                        <td className="px-3 py-1.5 text-right font-mono-num whitespace-nowrap">
                           <span className={(r.volume_m3 ?? 0) < 0 ? 'text-destructive font-semibold' : ''}>
                             {fmtNum(r.volume_m3 ?? 0, 1)}
                           </span>
@@ -1660,9 +1660,9 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                       </>}
 
                       {anyEditable && (
-                        <td className="px-2 py-1 text-center">
+                        <td className="px-2 py-1 text-center whitespace-nowrap sticky right-0 z-10 border-l border-border/30 shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.12)] transition-colors bg-background group-hover:bg-muted/40">
                           {rowEditable && (
-                            <div className="flex items-center justify-center gap-0.5">
+                            <div className="opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-within:opacity-100 max-md:opacity-100 transition-opacity flex items-center justify-center gap-0.5">
                               <button
                                 title="Edit"
                                 aria-label="Edit"
