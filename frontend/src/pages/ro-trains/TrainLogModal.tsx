@@ -786,7 +786,7 @@ export function TrainLogModal({ trainId, trainLabel, plantId, onClose, initialTa
               <p className="text-xs text-muted-foreground mt-0.5">
                 {logTab === 'ro'
                   ? `All RO train readings · ${isManager ? 'Click orange checkbox to flag meter replacement' : 'Managers can flag meter replacements'}`
-                  : 'Pre-Treatment records — AFM/MMF, Booster Pumps, Filter Housings, HPP'}
+                  : 'Pre-Treatment records — AFM/MMF, Booster Pumps, Cart./Bag Housings, HPP'}
               </p>
             </div>
             <div className="flex items-center gap-2 shrink-0 mr-8">
@@ -1166,13 +1166,13 @@ export function TrainLogModal({ trainId, trainLabel, plantId, onClose, initialTa
                 <table className="w-full text-xs border-collapse">
                   <thead className="sticky top-0 bg-background border-b border-border/60 z-20 shadow-[0_1px_2px_rgba(0,0,0,0.06)]">
                     <tr className="text-muted-foreground uppercase tracking-wide text-2xs">
-                      {['Date / Time','Operator','HPP (psi)','AFM/MMF Units','Booster Pumps','Cart./Bag Housings','Filter Housings','Changed','Remarks',''].map((h, i) => (
+                      {['Date / Time','Operator','HPP (psi)','AFM/MMF Units','Booster Pumps','Cart./Bag Housings','Changed','Remarks',''].map((h, i) => (
                         <th key={i} className={cn(
                           'px-2 py-2 font-semibold whitespace-nowrap',
                           i === 0 ? 'text-left px-3 w-[130px] sticky left-0 top-0 z-30 bg-background border-r border-border/30 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.12)]'
                           : i === 1 ? 'text-left w-[100px]'
-                          : i === 8 ? 'text-left'
-                          : i === 9 ? 'text-center w-[44px] sticky right-0 top-0 z-30 bg-background border-l border-border/30 shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.12)]'
+                          : i === 7 ? 'text-left'
+                          : i === 8 ? 'text-center w-[44px] sticky right-0 top-0 z-30 bg-background border-l border-border/30 shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.12)]'
                           : 'text-right'
                         )}>{h}</th>
                       ))}
@@ -1231,7 +1231,7 @@ export function TrainLogModal({ trainId, trainLabel, plantId, onClose, initialTa
                                       <span className="text-xs font-medium leading-tight truncate max-w-[90px] block" title={opName}>{opName}</span>
                                     </div>
                                   </td>
-                                  <td colSpan={6} className="px-2 py-1.5 text-muted-foreground italic text-left">
+                                  <td colSpan={5} className="px-2 py-1.5 text-muted-foreground italic text-left">
                                     {r.incomplete_reason || 'Offline check-in (no active pre-treatment data)'}
                                   </td>
                                   <td className="px-2 py-1.5 text-left text-muted-foreground truncate max-w-[120px]">
@@ -1301,7 +1301,6 @@ export function TrainLogModal({ trainId, trainLabel, plantId, onClose, initialTa
                           <td className="px-2 py-2 text-right font-mono tabular-nums whitespace-nowrap">{pressurePills(r.afm_units ?? [])}</td>
                           <td className="px-2 py-2 text-right font-mono tabular-nums whitespace-nowrap">{boosterPills(r.booster_pumps ?? [])}</td>
                           <td className="px-2 py-2 text-right font-mono tabular-nums whitespace-nowrap">{pressurePills(r.cartridge_filter_housings ?? [], u => `H${u.unit}`)}</td>
-                          <td className="px-2 py-2 text-right font-mono tabular-nums whitespace-nowrap">{pressurePills(r.filter_housings ?? [], u => `F${u.unit}`)}</td>
                           <td className="px-2 py-2 text-right font-mono tabular-nums whitespace-nowrap text-xs">
                             {r.bag_filters_changed != null && r.bag_filters_changed > 0
                               ? <span className="text-warn font-semibold">{r.bag_filters_changed}</span>
