@@ -107,9 +107,9 @@ export function computeEntityDeltas(
       // time and never cascaded when an earlier reading is later
       // edited/deleted/replaced, so a downstream row can keep pointing at a
       // stale predecessor indefinitely.
-      // Clamp to 0: a negative daily_volume means the stored value is
-      // corrupt (e.g. a partial or rolled-back write).
-      const storedVol = Math.max(0, +r[dailyVolumeField]);
+      // Preserve negative daily_volume so drops/flaws are reflected rather
+      // than hidden.
+      const storedVol = +r[dailyVolumeField];
       const delta     = storedVol;
       lastReading.set(entityKey, +r.current_reading);
       return { r, delta, rawDelta: null, isMeterReplacement: false };
@@ -123,9 +123,7 @@ export function computeEntityDeltas(
       // start of every range.
       if (r.previous_reading != null) {
         const rawDelta = +r.current_reading - +r.previous_reading;
-        // Clamp: a backwards reading vs stored previous_reading (bad entry /
-        // un-flagged reset) must not produce a negative delta.
-        const delta    = Math.max(0, rawDelta);
+        const delta    = rawDelta;
         return { r, delta, rawDelta, isMeterReplacement: false };
       }
       // No previous_reading in DB → we genuinely don't know the delta for
@@ -136,9 +134,7 @@ export function computeEntityDeltas(
     }
 
     const rawDelta = +r.current_reading - lastReading.get(entityKey)!;
-    // Clamp to 0: a meter reading that goes backwards is a bad entry or an
-    // un-flagged meter reset. Propagating a negative tanks the total.
-    const delta    = Math.max(0, rawDelta);
+    const delta    = rawDelta;
     lastReading.set(entityKey, +r.current_reading);
     return { r, delta, rawDelta, isMeterReplacement: false };
   });

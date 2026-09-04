@@ -1288,7 +1288,7 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                               ? <span className={isSolar ? 'text-kpi-solar font-medium' : 'text-kpi-grid font-medium'}>0.0</span>
                               : solarDirect
                                 ? <span className="text-muted-foreground" title="Direct kWh input — no delta to compute">n/a</span>
-                                : rawDelta != null ? fmtNum(rawDelta, 1) : '—'
+                                : rawDelta != null ? <span className={rawDelta < 0 ? 'text-destructive font-semibold' : ''}>{fmtNum(rawDelta, 1)}</span> : '—'
                             }
                           </td>
                           {/* × multiplier */}
@@ -1297,7 +1297,7 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                           </td>
                           {/* Effective kWh */}
                           <td className={['px-3 py-1.5 text-right font-mono-num font-medium text-2xs',
-                            effective != null && effective < 0 ? 'text-destructive' : isSolar ? 'text-kpi-solar' : 'text-kpi-grid',
+                            effective != null && effective < 0 ? 'text-destructive font-semibold' : isSolar ? 'text-kpi-solar' : 'text-kpi-grid',
                           ].join(' ')}>
                             {effective != null ? fmtNum(effective, 1) : '—'}
                           </td>
@@ -1413,7 +1413,7 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                               <td className="px-3 py-1 text-right font-mono-num text-2xs">
                                 {isGridRepl
                                   ? <span className="text-kpi-grid font-medium">0.0</span>
-                                  : rawDelta != null ? fmtNum(rawDelta, 1) : '—'
+                                  : rawDelta != null ? <span className={rawDelta < 0 ? 'text-destructive font-semibold' : ''}>{fmtNum(rawDelta, 1)}</span> : '—'
                                 }
                               </td>
                               {/* × multiplier */}
@@ -1423,7 +1423,7 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                               {/* Effective kWh */}
                               <td className={[
                                 'px-3 py-1 text-right font-mono-num font-medium text-2xs',
-                                effective != null && effective < 0 ? 'text-destructive' : 'text-kpi-grid',
+                                effective != null && effective < 0 ? 'text-destructive font-semibold' : 'text-kpi-grid',
                               ].join(' ')}>
                                 {effective != null ? fmtNum(effective, 1) : '—'}
                               </td>
@@ -1477,12 +1477,15 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                                   // Direct kWh: never diff two readings — this IS the
                                   // day's kWh already, not a cumulative meter value.
                                   ? (solarDisplayVal != null
-                                      ? <span className="text-kpi-solar">{fmtNum(solarDisplayVal, 1)}</span>
+                                      ? <span className={solarDisplayVal < 0 ? 'text-destructive font-semibold' : 'text-kpi-solar'}>{fmtNum(solarDisplayVal, 1)}</span>
                                       : '—')
                                   : (predecessor?.solar_meter_reading != null && r.solar_meter_reading != null)
-                                    ? <span className="text-kpi-solar">{fmtNum(r.solar_meter_reading - predecessor.solar_meter_reading, 1)}</span>
-                                    : r.daily_solar_kwh != null && +r.daily_solar_kwh > 0
-                                      ? <span className="text-kpi-solar">{fmtNum(+r.daily_solar_kwh, 1)}</span>
+                                    ? (() => {
+                                        const sDelta = r.solar_meter_reading - predecessor.solar_meter_reading;
+                                        return <span className={sDelta < 0 ? 'text-destructive font-semibold' : 'text-kpi-solar'}>{fmtNum(sDelta, 1)}</span>;
+                                      })()
+                                    : r.daily_solar_kwh != null && +r.daily_solar_kwh !== 0
+                                      ? <span className={+r.daily_solar_kwh < 0 ? 'text-destructive font-semibold' : 'text-kpi-solar'}>{fmtNum(+r.daily_solar_kwh, 1)}</span>
                                       : '—'
                               }
                             </td>
@@ -1597,7 +1600,7 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                         <td className="px-3 py-1.5 text-right font-mono-num">
                           {isMeterReplacement
                             ? <span className="text-kpi-solar font-medium">0.0</span>
-                            : rawDelta != null ? fmtNum(rawDelta, 1) : '—'
+                            : rawDelta != null ? <span className={rawDelta < 0 ? 'text-destructive font-semibold' : ''}>{fmtNum(rawDelta, 1)}</span> : '—'
                           }
                         </td>
                         {replCell}
@@ -1625,7 +1628,7 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                         <td className="px-3 py-1.5 text-right font-mono-num">
                           {isMeterReplacement
                             ? <span className="text-kpi-solar font-medium">0.0</span>
-                            : rawDelta != null ? fmtNum(rawDelta, 1) : '—'
+                            : rawDelta != null ? <span className={rawDelta < 0 ? 'text-destructive font-semibold' : ''}>{fmtNum(rawDelta, 1)}</span> : '—'
                           }
                         </td>
                         {replCell}
@@ -1648,7 +1651,11 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                         <td className="px-3 py-1.5 text-right font-mono-num text-muted-foreground">
                           {r.raw_meter_reading != null ? fmtNum(r.raw_meter_reading, 1) : '—'}
                         </td>
-                        <td className="px-3 py-1.5 text-right font-mono-num">{fmtNum(r.volume_m3 ?? 0, 1)}</td>
+                        <td className="px-3 py-1.5 text-right font-mono-num">
+                          <span className={(r.volume_m3 ?? 0) < 0 ? 'text-destructive font-semibold' : ''}>
+                            {fmtNum(r.volume_m3 ?? 0, 1)}
+                          </span>
+                        </td>
                         {replCell}
                         {flagsCell}
                       </>}

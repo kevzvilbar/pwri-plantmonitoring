@@ -159,7 +159,7 @@ async function insertWellReadings(
       // would silently use the stale delta from the original insert after a CSV overwrite.
       const ovwCur = +r.current_reading;
       const ovwPrev = r.previous_reading ? +r.previous_reading : null;
-      const ovwDailyVol = ovwPrev != null ? Math.max(0, ovwCur - ovwPrev) : null;
+      const ovwDailyVol = ovwPrev != null ? ovwCur - ovwPrev : null;
       const ovwPayload: Record<string, any> = {
         current_reading: ovwCur,
         previous_reading: ovwPrev,
@@ -181,8 +181,8 @@ async function insertWellReadings(
     const csvPrev = r.previous_reading ? +r.previous_reading : null;
     const rawWellDelta = csvPrev != null ? csvCur - csvPrev : null;
     if (rawWellDelta != null && rawWellDelta < 0)
-      errors.push(`Well "${r.well_name}" @ ${dt.slice(0, 10)}: negative delta (${rawWellDelta.toFixed(2)}) — meter rollback detected. daily_volume stored as 0.`);
-    const csvDailyVol = rawWellDelta != null ? Math.max(0, rawWellDelta) : null;
+      errors.push(`Well "${r.well_name}" @ ${dt.slice(0, 10)}: negative delta (${rawWellDelta.toFixed(2)}) — meter drop detected and preserved.`);
+    const csvDailyVol = rawWellDelta != null ? rawWellDelta : null;
 
     const insertPayload: Record<string, any> = {
       well_id: wellId,
@@ -743,7 +743,7 @@ function WellRow({
       well_id: well.id, plant_id: plantId,
       current_reading: cur,
       // previous_reading: owned by DB trigger fn_well_reading_integrity() — DO NOT send from client
-      daily_volume: isRollover ? rolloverDailyVol : (dailyVol != null ? Math.max(0, dailyVol) : null),
+      daily_volume: isRollover ? rolloverDailyVol : (dailyVol != null ? dailyVol : null),
       is_meter_rollover: isRollover,
       meter_rollover_max: isRollover ? rolloverMaxNum : null,
       is_meter_replacement: !!meterReplacePending,
@@ -1078,7 +1078,7 @@ function WellRow({
                 label: 'Shared Power',
               },
               dailyVol != null && {
-                tone: 'default',
+                tone: dailyVol < 0 ? 'danger' : 'default',
                 label: `Δ ${fmtNum(dailyVol)} m³`,
               },
             ].filter(Boolean)}
@@ -1197,7 +1197,7 @@ function WellRow({
                   </span>
                 </span>
                 {dailyVol != null && (
-                  <span className="font-mono-num font-bold text-primary text-2xs">
+                  <span className={cn("font-mono-num font-bold text-2xs", dailyVol < 0 ? "text-destructive" : "text-primary")}>
                     Δ {fmtNum(dailyVol)} m³
                   </span>
                 )}

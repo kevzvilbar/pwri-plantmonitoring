@@ -428,8 +428,8 @@ export function ProductForm({ highlightId }: { highlightId?: string | null } = {
                     const csvPrev = r.previous_reading ? +r.previous_reading : null;
                     const rawOvwDelta = csvPrev != null ? csvCur - csvPrev : null;
                     if (rawOvwDelta != null && rawOvwDelta < 0)
-                      errors.push(`Meter "${r.meter_name}" @ ${dtMin}: negative delta (${rawOvwDelta.toFixed(2)}) — meter rollback detected. daily_volume stored as 0.`);
-                    const csvDailyVol = rawOvwDelta != null ? Math.max(0, rawOvwDelta) : null;
+                      errors.push(`Meter "${r.meter_name}" @ ${dtMin}: negative delta (${rawOvwDelta.toFixed(2)}) — meter drop detected and preserved.`);
+                    const csvDailyVol = rawOvwDelta != null ? rawOvwDelta : null;
                     const { error } = await supabase.from('product_meter_readings' as any).update({
                       current_reading: csvCur,
                       previous_reading: csvPrev,
@@ -443,14 +443,11 @@ export function ProductForm({ highlightId }: { highlightId?: string | null } = {
 
                   const csvCur2 = +r.current_reading;
                   const csvPrev2 = r.previous_reading ? +r.previous_reading : null;
-                  // Fix #11 — negative delta was silently clamped to 0 with no user feedback.
-                  // Now we still clamp (a negative daily_volume would corrupt Dashboard sums)
-                  // but emit a warning so the user knows a rollback row was detected.
                   const rawDelta2 = csvPrev2 != null ? csvCur2 - csvPrev2 : null;
                   if (rawDelta2 != null && rawDelta2 < 0) {
-                    errors.push(`Row for "${r.meter_name}" @ ${dt.slice(0, 10)}: negative delta (${rawDelta2.toFixed(2)}) — likely a meter rollback. daily_volume stored as 0; mark it as a meter replacement if needed.`);
+                    errors.push(`Row for "${r.meter_name}" @ ${dt.slice(0, 10)}: negative delta (${rawDelta2.toFixed(2)}) — negative delta preserved.`);
                   }
-                  const csvDailyVol2 = rawDelta2 != null ? Math.max(0, rawDelta2) : null;
+                  const csvDailyVol2 = rawDelta2 != null ? rawDelta2 : null;
                   const { error } = await supabase.from('product_meter_readings' as any).insert({
                     meter_id: meterId,
                     plant_id: pid,
@@ -621,7 +618,7 @@ function ProductMeterRow({
     const dt = new Date(customDt).toISOString();
     // Bug fix: persist daily_volume so Dashboard/TrendChart can sum it directly,
     // mirroring the same fix already applied to locator_readings and well_readings.
-    const dailyVol = previous != null ? Math.max(0, cur - previous) : null;
+    const dailyVol = previous != null ? cur - previous : null;
     const { data: savedRow, error } = await supabase.from('product_meter_readings' as any).insert({
       meter_id: meter.id,
       plant_id: plantId,
@@ -799,7 +796,7 @@ function ProductMeterRow({
                 title: 'Auto-backfilled reading — no manual operator entry on file.',
               },
               productionVolume != null && {
-                tone: 'primary',
+                tone: productionVolume < 0 ? 'danger' : 'primary',
                 label: `Δ ${fmtNum(productionVolume)} m³`,
               },
             ].filter(Boolean)}
@@ -846,7 +843,7 @@ function ProductMeterRow({
           {productionVolume != null && (
             <>
               {' · '}
-              <span className="font-mono-num font-semibold text-primary">{fmtNum(productionVolume)} m³</span>
+              <span className={cn('font-mono-num font-semibold', productionVolume < 0 ? 'text-destructive' : 'text-primary')}>{fmtNum(productionVolume)} m³</span>
               {' produced'}
             </>
           )}
@@ -1142,7 +1139,7 @@ function ProductMeterHistoryDialog({ meter, plantId, onClose }: { meter: any; pl
     const updates: { id: string; previous_reading: number | null; daily_volume: number | null }[] = [];
     for (const row of all as any[]) {
       const newPrev = last;
-      const newVol = newPrev != null ? Math.max(0, +row.current_reading - newPrev) : null;
+      const newVol = newPrev != null ? +row.current_reading - newPrev : null;
       if (row.previous_reading !== newPrev || row.daily_volume !== newVol) {
         updates.push({ id: row.id, previous_reading: newPrev, daily_volume: newVol });
       }
@@ -1198,7 +1195,7 @@ function ProductMeterHistoryDialog({ meter, plantId, onClose }: { meter: any; pl
       // on insert above. It was previously left stale after an edit.
       const existingRow = rows?.find((r: any) => r.id === editRow.id);
       const existingPrev = existingRow?.previous_reading;
-      const newDailyVol = existingPrev != null ? Math.max(0, newCur - existingPrev) : null;
+      const newDailyVol = existingPrev != null ? newCur - existingPrev : null;
       updatePayload = {
         current_reading: newCur,
         reading_datetime: new Date(editRow.datetime).toISOString(),
@@ -1455,7 +1452,7 @@ function ProductMeterHistoryDialog({ meter, plantId, onClose }: { meter: any; pl
                         </span>
                       </td>
                       {meter.is_derived ? (
-                        <td className="px-3 py-1.5 text-right font-mono-num text-primary">
+                        <td className={cn('px-3 py-1.5 text-right font-mono-num', (r.daily_volume ?? r.current_reading) < 0 ? 'text-destructive font-semibold' : 'text-primary')}>
                           {fmtNum(r.daily_volume ?? r.current_reading, 1)}
                         </td>
                       ) : (
@@ -1464,7 +1461,7 @@ function ProductMeterHistoryDialog({ meter, plantId, onClose }: { meter: any; pl
                           <td className="px-3 py-1.5 text-right font-mono-num text-primary">
                             {isMeterReplacement
                               ? <span className="text-kpi-solar font-medium">0.0</span>
-                              : vol != null ? fmtNum(vol, 1) : '—'
+                              : vol != null ? <span className={vol < 0 ? 'text-destructive font-semibold' : ''}>{fmtNum(vol, 1)}</span> : '—'
                             }
                           </td>
                         </>

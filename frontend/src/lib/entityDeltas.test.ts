@@ -61,13 +61,13 @@ describe('computeEntityDeltas', () => {
     expect(out.map((o) => o.delta)).toEqual([42, 17]);
   });
 
-  it('clamps a backwards reading to 0 instead of propagating a negative spike', () => {
+  it('preserves a backwards reading negative delta so flaws are immediately visible', () => {
     const readings = [
       { well_id: 'w1', reading_datetime: iso('2026-07-01'), current_reading: 1000, previous_reading: 900 },
-      { well_id: 'w1', reading_datetime: iso('2026-07-02'), current_reading: 500 }, // meter reset, not flagged
+      { well_id: 'w1', reading_datetime: iso('2026-07-02'), current_reading: 500 }, // backwards reading / entry flaw
     ];
     const out = computeEntityDeltas(readings, 'well_id', null);
-    expect(out[1].delta).toBe(0);
+    expect(out[1].delta).toBe(-500);
     expect(out[1].rawDelta).toBe(-500);
   });
 

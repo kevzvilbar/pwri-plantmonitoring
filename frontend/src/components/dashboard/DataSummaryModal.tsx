@@ -132,9 +132,8 @@ export function computePivotFromReadingsNoCache(
         // First row for this entity within the fetched window — no walked
         // predecessor to diff against locally, so fall back to the stored
         // daily_volume (may legitimately span >1 day if readings were
-        // skipped before the window). Clamp to 0: a negative daily_volume is
-        // a corrupt stored value (e.g. partial write, rollback).
-        delta = Math.max(0, +r[dailyVolumeField]);
+        // skipped before the window). Preserve negative if meter dropped.
+        delta = +r[dailyVolumeField];
         lastReading.set(entityKey, +r.current_reading);
       } else {
         if (r.previous_reading != null && r.current_reading != null)
@@ -252,10 +251,8 @@ function computePivotFromReadings(
         // For the very first row in the fetched window (no lastReading yet), this
         // value correctly represents THAT reading's interval — which may span
         // multiple days if readings were skipped. Use it as-is (it's already the
-        // correct single-interval delta stored at insert time), clamped ≥ 0.
-        // Clamp: a negative value means the stored delta is corrupt (bad write,
-        // rollback, etc.) — treat as 0 rather than propagating a huge negative.
-        delta = Math.max(0, +r[dailyVolumeField]);
+        // correct single-interval delta stored at insert time).
+        delta = +r[dailyVolumeField];
         lastReading.set(entityKey, +r.current_reading);
       } else {
         // No daily_volume and no prior row in range.
@@ -650,7 +647,7 @@ export function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: Dat
       }
       // Tier-1: prefer cache (may have been updated by a recent mutation-triggered recompute)
       const cached = deltaCache.get(trainKey, dateKey);
-      const delta  = cached !== null ? cached : Math.max(0, +(r.permeate_meter_delta ?? 0));
+      const delta  = cached !== null ? cached : +(r.permeate_meter_delta ?? 0);
       if (!pivot.has(dateKey)) pivot.set(dateKey, new Map());
       pivot.get(dateKey)!.set(trainKey, (pivot.get(dateKey)!.get(trainKey) ?? 0) + delta);
     });
@@ -987,8 +984,8 @@ export function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: Dat
                   </tr>
                   <tr className="bg-primary-soft/60">
                     <td className="sticky left-0 z-30 bg-primary-soft/60 px-3 py-1.5 font-semibold text-primary whitespace-nowrap border-b border-r border-border text-2xs">TOTAL</td>
-                    <td className="px-3 py-1.5 text-right font-semibold font-mono-num text-primary border-b border-border tabular-nums">{totProd > 0 ? totProd.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 2 }) : '—'}</td>
-                    <td className="px-3 py-1.5 text-right font-semibold font-mono-num text-highlight border-b border-border tabular-nums">{totCons > 0 ? totCons.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 2 }) : '—'}</td>
+                    <td className="px-3 py-1.5 text-right font-semibold font-mono-num text-primary border-b border-border tabular-nums">{totProd !== 0 ? <span className={totProd < 0 ? 'text-destructive font-semibold' : ''}>{totProd.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 2 })}</span> : '—'}</td>
+                    <td className="px-3 py-1.5 text-right font-semibold font-mono-num text-highlight border-b border-border tabular-nums">{totCons !== 0 ? <span className={totCons < 0 ? 'text-destructive font-semibold' : ''}>{totCons.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 2 })}</span> : '—'}</td>
                     <td className={['px-3 py-1.5 text-right font-semibold font-mono-num border-b border-border tabular-nums', totBal >= 0 ? 'text-accent' : 'text-danger'].join(' ')}>{totBal !== 0 ? totBal.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 2 }) : '—'}</td>
                     <td className="sticky right-0 z-30 bg-primary-soft/60 px-3 py-1.5 text-right font-bold font-mono-num text-primary border-b border-l border-border tabular-nums">{totNRW != null ? `${totNRW}%` : '—'}</td>
                   </tr>
@@ -999,9 +996,9 @@ export function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: Dat
                     return (
                       <tr key={date} className={isEven ? 'bg-background hover:bg-muted/20' : 'bg-muted/10 hover:bg-muted/30'}>
                         <td className={['sticky left-0 z-10 px-3 py-1.5 font-medium text-muted-foreground whitespace-nowrap border-r border-border', isEven ? 'bg-background' : 'bg-muted/10'].join(' ')}>{format(new Date(date + 'T12:00:00'), 'MMM d, yyyy')}</td>
-                        <td className="px-3 py-1.5 text-right font-mono-num tabular-nums text-primary">{prod > 0 ? prod.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 2 }) : <span className="text-muted-foreground/40">—</span>}</td>
-                        <td className="px-3 py-1.5 text-right font-mono-num tabular-nums text-highlight">{cons > 0 ? cons.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 2 }) : <span className="text-muted-foreground/40">—</span>}</td>
-                        <td className={['px-3 py-1.5 text-right font-mono-num tabular-nums', bal > 0 ? 'text-accent' : bal < 0 ? 'text-danger' : 'text-muted-foreground/40'].join(' ')}>{prod > 0 || cons > 0 ? bal.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 2 }) : '—'}</td>
+                        <td className="px-3 py-1.5 text-right font-mono-num tabular-nums text-primary">{prod !== 0 ? <span className={prod < 0 ? 'text-destructive font-semibold' : ''}>{prod.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 2 })}</span> : <span className="text-muted-foreground/40">—</span>}</td>
+                        <td className="px-3 py-1.5 text-right font-mono-num tabular-nums text-highlight">{cons !== 0 ? <span className={cons < 0 ? 'text-destructive font-semibold' : ''}>{cons.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 2 })}</span> : <span className="text-muted-foreground/40">—</span>}</td>
+                        <td className={['px-3 py-1.5 text-right font-mono-num tabular-nums', bal > 0 ? 'text-accent' : bal < 0 ? 'text-danger' : 'text-muted-foreground/40'].join(' ')}>{prod !== 0 || cons !== 0 ? bal.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 2 }) : '—'}</td>
                         <td className={['sticky right-0 z-10 px-3 py-1.5 text-right font-semibold font-mono-num tabular-nums border-l border-border', isEven ? 'bg-background' : 'bg-muted/10', nrw != null && nrw > 10 ? 'text-danger' : nrw != null ? 'text-primary' : 'text-muted-foreground/40'].join(' ')}>{nrw != null ? `${nrw}%` : '—'}</td>
                       </tr>
                     );
@@ -1107,8 +1104,8 @@ export function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: Dat
                             ].join(" ")}
                             title={isEst ? "System-generated / Backfilled reading — no manual operator entry on file. Value will be replaced when actual data is entered." : undefined}
                           >
-                            {vol != null && vol > 0 ? (
-                              <span className="inline-flex items-center gap-0.5">
+                            {vol != null && vol !== 0 ? (
+                              <span className={cn("inline-flex items-center gap-0.5", vol < 0 && "text-destructive font-semibold")}>
                                 {isEst && (
                                   <span className="text-warn text-3xs font-bold leading-none" aria-label="estimated">~</span>
                                 )}
@@ -1125,7 +1122,11 @@ export function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: Dat
                         tab === 'consumption' ? 'text-highlight' : 'text-primary',
                         isEven ? 'bg-background' : 'bg-muted/10',
                       ].join(' ')}>
-                        {rowTot > 0 ? rowTot.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 2 }) : '—'}
+                        {rowTot !== 0 ? (
+                          <span className={rowTot < 0 ? 'text-destructive font-semibold' : ''}>
+                            {rowTot.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 2 })}
+                          </span>
+                        ) : '—'}
                       </td>
                     </tr>
                   );

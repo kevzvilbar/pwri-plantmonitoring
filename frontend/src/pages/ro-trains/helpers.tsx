@@ -344,7 +344,7 @@ export async function recalculateTrainDeltas(trainId: string): Promise<void> {
       const storedFeed   = row.feed_meter_delta != null ? +row.feed_meter_delta : null;
       let newFeedDelta: number | null;
       if (isFeedRepl)                                        { newFeedDelta = 0; }
-      else if (prevFeedMeter != null && curFeedMeter != null) { newFeedDelta = Math.max(0, curFeedMeter - prevFeedMeter); }
+      else if (prevFeedMeter != null && curFeedMeter != null) { newFeedDelta = curFeedMeter - prevFeedMeter; }
       else                                                   { newFeedDelta = null; }
       if (curFeedMeter != null) prevFeedMeter = curFeedMeter;
       if (newFeedDelta !== storedFeed) {
@@ -363,7 +363,7 @@ export async function recalculateTrainDeltas(trainId: string): Promise<void> {
       const stored     = row.permeate_meter_delta != null ? +row.permeate_meter_delta : null;
       let newDelta: number | null;
       if (isPermRepl)                              { newDelta = 0; }
-      else if (prevMeter != null && curMeter != null) { newDelta = Math.max(0, curMeter - prevMeter); }
+      else if (prevMeter != null && curMeter != null) { newDelta = curMeter - prevMeter; }
       else                                         { newDelta = null; }
       if (curMeter != null) prevMeter = curMeter;
       if (newDelta !== stored) {
@@ -390,7 +390,7 @@ export async function recalculateTrainDeltas(trainId: string): Promise<void> {
       const storedRej   = row.reject_meter_delta != null ? +row.reject_meter_delta : null;
       let newRejDelta: number | null;
       if (isRejRepl)                                       { newRejDelta = 0; }
-      else if (prevRejMeter != null && curRejMeter != null) { newRejDelta = Math.max(0, curRejMeter - prevRejMeter); }
+      else if (prevRejMeter != null && curRejMeter != null) { newRejDelta = curRejMeter - prevRejMeter; }
       else                                                 { newRejDelta = null; }
       if (curRejMeter != null) prevRejMeter = curRejMeter;
       if (newRejDelta !== storedRej) {

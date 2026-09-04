@@ -362,7 +362,7 @@ export function TrainLogModal({ trainId, trainLabel, plantId, onClose, initialTa
         ascReadings.forEach((r: any) => {
           if (r.permeate_meter != null) {
             const prev = lastMeter.get(trainId);
-            r._computed_delta = prev != null ? Math.max(0, +r.permeate_meter - prev) : null;
+            r._computed_delta = prev != null ? +r.permeate_meter - prev : null;
             lastMeter.set(trainId, +r.permeate_meter);
           }
           if (r.reject_meter != null) {
@@ -373,7 +373,7 @@ export function TrainLogModal({ trainId, trainLabel, plantId, onClose, initialTa
             const prev = lastRejMeter.get(trainId);
             r._computed_rej_delta = isRejRepl
               ? 0
-              : prev != null ? Math.max(0, +r.reject_meter - prev) : null;
+              : prev != null ? +r.reject_meter - prev : null;
             // Always advance the baseline so subsequent rows compute correctly.
             lastRejMeter.set(trainId, +r.reject_meter);
           }
@@ -1044,7 +1044,7 @@ export function TrainLogModal({ trainId, trainLabel, plantId, onClose, initialTa
                         </td>
                         <td className={cn('px-2 py-2 text-right font-mono text-xs', isRepl && 'text-kpi-solar')}>
                           {isRepl ? <span className="text-kpi-solar font-semibold">★ 0</span>
-                            : delta != null ? <span>{Number(delta).toLocaleString()}<span className="text-muted-foreground/60 ml-0.5 text-3xs">m³</span></span>
+                            : delta != null ? <span className={+delta < 0 ? 'text-destructive font-semibold' : ''}>{Number(delta).toLocaleString()}<span className="text-muted-foreground/60 ml-0.5 text-3xs">m³</span></span>
                             : <span className="text-muted-foreground/30">—</span>}
                         </td>
                         <td className="px-2 py-2 text-right font-mono text-xs">
@@ -1055,7 +1055,7 @@ export function TrainLogModal({ trainId, trainLabel, plantId, onClose, initialTa
                             const isRejRepl = !!(r.is_reject_meter_replacement);
                             const rejDelta  = r._computed_rej_delta ?? (r.reject_meter_delta != null ? +r.reject_meter_delta : null);
                             if (isRejRepl)         return <span className="text-kpi-solar font-semibold">★ 0</span>;
-                            if (rejDelta != null)   return <span>{Number(rejDelta).toLocaleString()}<span className="text-muted-foreground/60 ml-0.5 text-3xs">m³</span></span>;
+                            if (rejDelta != null)   return <span className={+rejDelta < 0 ? 'text-destructive font-semibold' : ''}>{Number(rejDelta).toLocaleString()}<span className="text-muted-foreground/60 ml-0.5 text-3xs">m³</span></span>;
                             return <span className="text-muted-foreground/30">—</span>;
                           })()}
                         </td>

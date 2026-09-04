@@ -148,7 +148,7 @@ export function PivotTable({
                         reason ? (
                           // Both value (backfilled or real) and reason note exist
                           <div className="inline-flex items-center justify-end gap-1 w-full">
-                            <span>{fmtV(val)}</span>
+                            <span className={val != null && val < 0 ? 'text-destructive font-semibold' : ''}>{fmtV(val)}</span>
                             <button
                               type="button"
                               onClick={() => setGapTarget({ entityId: e.id, entityLabel: e.label, dateKey: date, existing: reason })}
@@ -160,7 +160,7 @@ export function PivotTable({
                             </button>
                           </div>
                         ) : (
-                          fmtV(val)
+                          val != null && val < 0 ? <span className="text-destructive font-semibold">{fmtV(val)}</span> : fmtV(val)
                         )
                       ) : reason && canLog ? (
                         // Has a reason on file — either a per-day gap entry, or
@@ -200,7 +200,7 @@ export function PivotTable({
                         >
                           —
                         </button>
-                      ) : fmtV(val)}
+                      ) : val != null && val < 0 ? <span className="text-destructive font-semibold">{fmtV(val)}</span> : fmtV(val)}
                     </td>
                   );
                 })}
@@ -209,7 +209,7 @@ export function PivotTable({
                   colorClass,
                   isEven ? 'bg-background' : 'bg-muted/10',
                 ].join(' ')}>
-                  {rowTotal > 0 ? rowTotal.toLocaleString(undefined, { maximumFractionDigits: 1 }) : '—'}
+                  {rowTotal !== 0 ? <span className={rowTotal < 0 ? 'text-destructive font-semibold' : ''}>{rowTotal.toLocaleString(undefined, { maximumFractionDigits: 1 })}</span> : '—'}
                 </td>
               </tr>
             );
@@ -254,11 +254,11 @@ export function OverviewTable({
   if (metric === 'production' || metric === 'nrw') {
     cols.push({
       key: 'production', label: 'Production (m³)',
-      fmt: (d) => d.production != null ? d.production.toLocaleString(undefined, { maximumFractionDigits: 1 }) : '—',
+      fmt: (d) => d.production != null ? <span className={d.production < 0 ? 'text-destructive font-semibold' : ''}>{d.production.toLocaleString(undefined, { maximumFractionDigits: 1 })}</span> : '—',
     });
     cols.push({
       key: 'consumption', label: 'Consumption (m³)',
-      fmt: (d) => d.consumption != null ? d.consumption.toLocaleString(undefined, { maximumFractionDigits: 1 }) : '—',
+      fmt: (d) => d.consumption != null ? <span className={d.consumption < 0 ? 'text-destructive font-semibold' : ''}>{d.consumption.toLocaleString(undefined, { maximumFractionDigits: 1 })}</span> : '—',
     });
   }
   if (metric === 'nrw') {
@@ -270,7 +270,7 @@ export function OverviewTable({
   if (metric === 'rawwater') {
     cols.push({
       key: 'rawwater', label: 'Raw Water (m³)',
-      fmt: (d) => d.rawwater != null ? d.rawwater.toLocaleString(undefined, { maximumFractionDigits: 1 }) : '—',
+      fmt: (d) => d.rawwater != null ? <span className={d.rawwater < 0 ? 'text-destructive font-semibold' : ''}>{d.rawwater.toLocaleString(undefined, { maximumFractionDigits: 1 })}</span> : '—',
     });
   }
   if (metric === 'recovery') {
@@ -287,9 +287,9 @@ export function OverviewTable({
   }
   if (metric === 'pv') {
     cols.push(
-      { key: 'production', label: 'Production (m³)', fmt: (d) => d.production?.toLocaleString(undefined, { maximumFractionDigits: 1 }) ?? '—' },
-      { key: 'kwh', label: 'Grid (kWh)', fmt: (d) => d.kwh?.toLocaleString(undefined, { maximumFractionDigits: 1 }) ?? '—' },
-      { key: 'solarKwh', label: 'Solar (kWh)', fmt: (d) => d.solarKwh > 0 ? d.solarKwh?.toLocaleString(undefined, { maximumFractionDigits: 1 }) : '—' },
+      { key: 'production', label: 'Production (m³)', fmt: (d) => d.production != null ? <span className={d.production < 0 ? 'text-destructive font-semibold' : ''}>{d.production.toLocaleString(undefined, { maximumFractionDigits: 1 })}</span> : '—' },
+      { key: 'kwh', label: 'Grid (kWh)', fmt: (d) => d.kwh != null ? <span className={d.kwh < 0 ? 'text-destructive font-semibold' : ''}>{d.kwh.toLocaleString(undefined, { maximumFractionDigits: 1 })}</span> : '—' },
+      { key: 'solarKwh', label: 'Solar (kWh)', fmt: (d) => (d.solarKwh ?? 0) !== 0 ? <span className={d.solarKwh < 0 ? 'text-destructive font-semibold' : ''}>{d.solarKwh.toLocaleString(undefined, { maximumFractionDigits: 1 })}</span> : '—' },
       { key: 'pvGrid', label: 'Grid PV (kWh/m³)', fmt: (d) => d.production > 0 ? (d.kwh / d.production).toFixed(2) : '—' },
       { key: 'pvTotal', label: '(Grid+Solar) PV (kWh/m³)', fmt: (d) => d.production > 0 && (d.kwh + d.solarKwh) > 0 ? ((d.kwh + d.solarKwh) / d.production).toFixed(2) : '—' },
     );
@@ -307,15 +307,15 @@ export function OverviewTable({
       {
         key: 'solarKwh',
         label: '☀ Solar (kWh)',
-        fmt: (d) => (d.solarKwh ?? 0) > 0
-          ? (+d.solarKwh).toLocaleString(undefined, { maximumFractionDigits: 1 })
+        fmt: (d) => (d.solarKwh ?? 0) !== 0
+          ? <span className={+d.solarKwh < 0 ? 'text-destructive font-semibold' : ''}>{(+d.solarKwh).toLocaleString(undefined, { maximumFractionDigits: 1 })}</span>
           : <span className="text-muted-foreground/40">—</span>,
       },
       {
         key: 'kwh',
         label: '⚡ Grid (kWh)',
-        fmt: (d) => (d.kwh ?? 0) > 0
-          ? (+d.kwh).toLocaleString(undefined, { maximumFractionDigits: 1 })
+        fmt: (d) => (d.kwh ?? 0) !== 0
+          ? <span className={+d.kwh < 0 ? 'text-destructive font-semibold' : ''}>{(+d.kwh).toLocaleString(undefined, { maximumFractionDigits: 1 })}</span>
           : <span className="text-muted-foreground/40">—</span>,
       },
       {

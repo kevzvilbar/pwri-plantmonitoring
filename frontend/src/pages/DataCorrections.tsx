@@ -210,8 +210,10 @@ function DeltaBadge({ vol }: { vol: number | null }) {
   if (vol == null) return <span className="text-muted-foreground">—</span>;
   const isNeg = vol < 0;
   return (
-    <span className={cn('font-mono text-xs font-medium',
-      isNeg ? 'text-destructive' : vol > 0 ? 'text-accent' : 'text-muted-foreground')}>
+    <span className={cn('font-mono text-xs font-semibold',
+      isNeg
+        ? 'bg-destructive/15 text-destructive border border-destructive/30 px-1.5 py-0.5 rounded inline-flex items-center gap-0.5'
+        : vol > 0 ? 'text-accent' : 'text-muted-foreground')}>
       {vol >= 0 ? '+' : ''}{fmtNum(vol)} m³
     </span>
   );
@@ -694,6 +696,29 @@ function MarkRolloverModal({
             className="font-mono h-9 text-sm"
             autoFocus
           />
+          <div className="flex flex-wrap items-center gap-1.5 pt-1">
+            <span className="text-2xs text-muted-foreground">Presets:</span>
+            {[
+              { label: '99,999.99', val: 99999.99 },
+              { label: '999,999.99', val: 999999.99 },
+              { label: '9,999,999.99', val: 9999999.99 },
+              { label: '99,999', val: 99999 },
+              { label: '999,999', val: 999999 },
+              { label: '9,999,999', val: 9999999 },
+            ].map(p => (
+              <button
+                key={p.label}
+                type="button"
+                onClick={() => { setMaxVal(String(p.val)); setMaxTouched(true); }}
+                className={cn(
+                  'text-2xs font-mono px-1.5 py-0.5 rounded border border-border bg-muted/40 hover:bg-accent/20 transition-colors',
+                  Number(maxVal) === p.val && 'bg-primary/20 border-primary text-primary font-semibold'
+                )}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
           <p className="text-xs text-muted-foreground">
             {configuredMax != null && !maxTouched
               ? "From this well's configured wrap point (Edit Well) — overtype if it's wrong."

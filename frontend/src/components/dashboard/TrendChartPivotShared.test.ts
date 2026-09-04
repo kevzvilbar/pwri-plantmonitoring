@@ -152,12 +152,10 @@ describe('buildEntityPivot — direct-mode meters (HAMAS-style, hamas-production
       // computePivotFromReadingsNoCache's simpler two-branch version does —
       // it prefers a walked lastSeen predecessor once one exists, so Aug 8
       // becomes current(5294) - lastSeen(4988) = 306, and Aug 9 becomes
-      // current(5244) - lastSeen(5294) = -50, clamped to 0 by this
-      // function's Math.max(0, ...) (unlike DataSummaryModal's sibling,
-      // which the reproduction test there notes does NOT clamp).
+      // current(5244) - lastSeen(5294) = -50, preserved as negative delta.
       const { pivot: broken } = buildEntityPivot(readings, 'meter_id');
       expect(broken.get('2026-08-08')!.get('hamas-mirror')).toBe(306);
-      expect(broken.get('2026-08-09')!.get('hamas-mirror')).toBe(0); // clamped, not -50
+      expect(broken.get('2026-08-09')!.get('hamas-mirror')).toBe(-50); // unclamped negative delta preserved
 
       // With directModeIds: each day shows its own real volume.
       const { pivot: fixed } = buildEntityPivot(readings, 'meter_id', new Set(['hamas-mirror']));

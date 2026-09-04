@@ -219,10 +219,7 @@ export function useTrendChartData({
           // cumulative-looking total instead of a single day's delta — see
           // the identical fix in DataSummaryModal.tsx's
           // computePivotFromReadingsNoCache.
-          // Clamp to 0: a negative daily_volume means the stored value is corrupt
-          // (e.g. a partial or rolled-back write). Pass-through was the root cause
-          // of the −898K consumption spike on May 29 that also tanked the NRW chart.
-          const storedVol = Math.max(0, +r[dailyVolumeField]);
+          const storedVol = +r[dailyVolumeField];
           const delta     = storedVol;
           lastReading.set(entityKey, +r.current_reading);
           return { r, delta, rawDelta: null, isMeterReplacement: false };
@@ -235,10 +232,7 @@ export function useTrendChartData({
           // always shows 0, causing a false dip at the start of every range.
           if (r.previous_reading != null) {
             const rawDelta = +r.current_reading - +r.previous_reading;
-            // Clamp: a backwards reading vs stored previous_reading (bad entry /
-            // un-flagged reset) must not produce a negative delta. Matches
-            // buildEntityPivot line 101: Math.max(0, current - prev).
-            const delta    = Math.max(0, rawDelta);
+            const delta    = rawDelta;
             return { r, delta, rawDelta, isMeterReplacement: false };
           }
           // No previous_reading in DB → we genuinely don't know the delta for this
@@ -249,10 +243,7 @@ export function useTrendChartData({
         }
 
         const rawDelta = +r.current_reading - lastReading.get(entityKey)!;
-        // Clamp to 0: a meter reading that goes backwards is a bad entry or an
-        // un-flagged meter reset. Propagating a negative tanks the chart
-        // (e.g. Raw Water −1.1M spike on May 4–5). Matches buildEntityPivot.
-        const delta    = Math.max(0, rawDelta);
+        const delta    = rawDelta;
         lastReading.set(entityKey, +r.current_reading);
         return { r, delta, rawDelta, isMeterReplacement: false };
       });

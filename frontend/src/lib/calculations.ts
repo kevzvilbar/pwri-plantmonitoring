@@ -18,7 +18,7 @@ export const calc = {
     if (isMeterRollover && Number.isFinite(meterMax as number)) {
       return Math.max(0, Math.round((meterMax as number) - previous + current));
     }
-    return Math.max(0, Math.round(current - previous));
+    return Math.round(current - previous);
   },
 
   pressureDiff: (inlet: number, outlet: number) =>

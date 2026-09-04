@@ -2713,7 +2713,7 @@ export function PretreatmentAndROLog() {
                     <Label htmlFor="pretreat-feed-volume-m" className={cn('text-xs', feedInferred ? 'text-info' : 'text-muted-foreground')}>
                       Feed Volume{feedInferred ? ' (inferred)' : ''} (m³)
                     </Label>
-                    <ComputedInput value={feedVol != null ? String(feedVol) : ''} className={feedInferred ? 'border-info text-info font-medium' : 'text-foreground font-medium'} id="pretreat-feed-volume-m"/>
+                    <ComputedInput value={feedVol != null ? String(feedVol) : ''} className={cn(feedInferred ? 'border-info text-info font-medium' : 'text-foreground font-medium', feedVol != null && feedVol < 0 && 'border-destructive bg-destructive/10 text-destructive font-semibold')} id="pretreat-feed-volume-m"/>
                   </div>
                   <div>
                     <Label htmlFor="pretreat-feed-flowrate-m-hr" className="text-xs text-muted-foreground">Feed Flowrate (m³/hr)</Label>
@@ -2764,7 +2764,7 @@ export function PretreatmentAndROLog() {
                     <Label htmlFor="pretreat-m" className={cn('text-xs', permInferred ? 'text-info' : 'text-muted-foreground')}>
                       {meterCfg.ro_production_source === 'permeate' ? 'Production (Permeate)' : 'Permeate Volume'}{permInferred ? ' (inferred)' : ''} (m³)
                     </Label>
-                    <ComputedInput value={permVol != null ? String(permVol) : ''} className={permInferred ? 'border-info text-info font-medium' : 'text-foreground font-medium'} id="pretreat-m"/>
+                    <ComputedInput value={permVol != null ? String(permVol) : ''} className={cn(permInferred ? 'border-info text-info font-medium' : 'text-foreground font-medium', permVol != null && permVol < 0 && 'border-destructive bg-destructive/10 text-destructive font-semibold')} id="pretreat-m"/>
                   </div>
                   <div>
                     <Label htmlFor="pretreat-permeate-flowrate-m-hr" className="text-xs text-muted-foreground">Permeate Flowrate (m³/hr)</Label>
@@ -2815,7 +2815,7 @@ export function PretreatmentAndROLog() {
                     <Label htmlFor="pretreat-reject-volume-m" className={cn('text-xs', rejInferred ? 'text-info' : 'text-muted-foreground')}>
                       Reject Volume{rejInferred ? ' (inferred)' : ''} (m³)
                     </Label>
-                    <ComputedInput value={rejVol != null ? String(rejVol) : ''} className={rejInferred ? 'border-info text-info font-medium' : 'text-foreground font-medium'} id="pretreat-reject-volume-m"/>
+                    <ComputedInput value={rejVol != null ? String(rejVol) : ''} className={cn(rejInferred ? 'border-info text-info font-medium' : 'text-foreground font-medium', rejVol != null && rejVol < 0 && 'border-destructive bg-destructive/10 text-destructive font-semibold')} id="pretreat-reject-volume-m"/>
                   </div>
                   <div>
                     <Label htmlFor="pretreat-reject-flowrate-m-hr" className="text-xs text-muted-foreground">Reject Flowrate (m³/hr)</Label>

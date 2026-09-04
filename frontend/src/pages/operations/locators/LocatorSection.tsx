@@ -1530,11 +1530,11 @@ function LocatorRow({
             {locInputMode === 'raw' ? (
               <>
                 prev: <span className="font-mono-num font-semibold text-foreground">{previous == null ? '—' : fmtNum(previous)}</span>
-                {!isMobile && dailyVol != null && <> · Δ <span className="font-mono-num font-semibold text-primary">{fmtNum(dailyVol)} m³</span></>}
+                {!isMobile && dailyVol != null && <> · Δ <span className={cn('font-mono-num font-semibold', dailyVol < 0 ? 'text-destructive' : 'text-primary')}>{fmtNum(dailyVol)} m³</span></>}
               </>
             ) : (
               <>
-                {dailyVol != null ? <><span className="font-mono-num font-semibold text-primary">{fmtNum(dailyVol)} m³</span> to save</> : <span className="text-muted-foreground/70">enter daily volume</span>}
+                {dailyVol != null ? <><span className={cn('font-mono-num font-semibold', dailyVol < 0 ? 'text-destructive' : 'text-primary')}>{fmtNum(dailyVol)} m³</span> to save</> : <span className="text-muted-foreground/70">enter daily volume</span>}
               </>
             )}
           </div>
@@ -1568,7 +1568,7 @@ function LocatorRow({
               </span>
             </span>
             {dailyVol != null && (
-              <span className="font-mono-num font-semibold text-primary">
+              <span className={cn('font-mono-num font-semibold', dailyVol < 0 ? 'text-destructive' : 'text-primary')}>
                 Δ {fmtNum(dailyVol)} m³
               </span>
             )}
