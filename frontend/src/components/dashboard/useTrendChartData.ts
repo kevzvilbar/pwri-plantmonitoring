@@ -264,10 +264,14 @@ export function useTrendChartData({
     // Overview table, and Per Well "Total Raw" are always consistent.
     computeEntityDeltas(wellReadings ?? [], 'well_id', null).forEach(({ r, delta, rawDelta, isMeterReplacement }) => {
       const dt = new Date(r.reading_datetime);
+      if (dt < new Date(startISO)) return;
+      const dateKey = format(dt, 'yyyy-MM-dd');
+      if (dateKey < startKey || dateKey > endKey) return;
+
       const key = format(dt, 'MMM d');
       const row = ensure(key, dt.getTime());
       row.rawwater += delta;
-      if (isMeterReplacement) {
+      if (isMeterReplacement && dateKey >= startKey && dateKey <= endKey) {
         const entityName = wellNames?.get(r.well_id) ?? r.well_id ?? 'Well';
         const label = `${entityName} Raw Meter`;
         if (!row._meterReplacements.includes(label)) row._meterReplacements.push(label);

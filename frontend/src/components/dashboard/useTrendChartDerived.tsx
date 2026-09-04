@@ -169,7 +169,7 @@ export function useTrendChartDerived(p: Record<string, any>) {
     const sorted = [...wellReadings].sort(
       (a, b) => new Date(a.reading_datetime).getTime() - new Date(b.reading_datetime).getTime(),
     );
-    const { pivot } = buildEntityPivot(sorted, 'well_id');
+    const { pivot } = buildEntityPivot(sorted, 'well_id', undefined, startKey);
     pivot.forEach((entityMap) => {
       entityMap.forEach((val, id) => {
         totals.set(id, (totals.get(id) ?? 0) + val);
@@ -195,7 +195,7 @@ export function useTrendChartDerived(p: Record<string, any>) {
     const sorted = [...(wellReadings ?? [])].sort(
       (a, b) => new Date(a.reading_datetime).getTime() - new Date(b.reading_datetime).getTime(),
     );
-    const { pivot, dateKeys } = buildEntityPivot(sorted, 'well_id');
+    const { pivot, dateKeys } = buildEntityPivot(sorted, 'well_id', undefined, startKey);
     return buildEntityPivotRows(pivot, dateKeys, visibleWellEntities, viewGran, startKey, endKey);
   }, [metric, rawwaterBreakdown, wellReadings, visibleWellEntities, viewGran, startKey, endKey]);
 

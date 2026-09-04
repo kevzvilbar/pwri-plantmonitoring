@@ -136,4 +136,45 @@ describe('useTrendChartData — Power Consumption & Energy Mix initial date fix'
     expect(dates).not.toContain('Sep 10');
     expect(dates).toEqual(['Aug 6', 'Aug 7']);
   });
+
+  it('uses pre-window baseline reading to calculate correct delta for first in-window raw water reading without plotting pre-window date', () => {
+    const wellReadings = [
+      {
+        well_id: 'well-1',
+        plant_id: 'plant-1',
+        reading_datetime: iso(2026, 8, 5), // pre-window seed row
+        current_reading: 5000,
+        previous_reading: null,
+      },
+      {
+        well_id: 'well-1',
+        plant_id: 'plant-1',
+        reading_datetime: iso(2026, 8, 6), // first in-window row (delta = 5250 - 5000 = 250)
+        current_reading: 5250,
+        previous_reading: null,
+      },
+      {
+        well_id: 'well-1',
+        plant_id: 'plant-1',
+        reading_datetime: iso(2026, 8, 7), // delta = 5550 - 5250 = 300
+        current_reading: 5550,
+        previous_reading: null,
+      },
+    ];
+
+    const { result } = renderHook(() =>
+      useTrendChartData({
+        ...defaultProps,
+        metric: 'rawwater',
+        wellReadings,
+        wellNames: new Map([['well-1', 'Well 1']]),
+      }),
+    );
+
+    const { chartData } = result.current;
+    const dates = chartData.map((d: Record<string, unknown>) => d.date);
+    expect(dates).toEqual(['Aug 6', 'Aug 7']);
+    expect(chartData[0].rawwater).toBe(250);
+    expect(chartData[1].rawwater).toBe(300);
+  });
 });

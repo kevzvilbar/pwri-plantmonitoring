@@ -42,6 +42,7 @@ export function buildEntityPivot(
   // skipped. Mirrors EntityHistoryChart.tsx's isDirectMode branch. Safe to pass
   // the same locator-ID set to well/meter pivots too — no ID collision risk.
   directModeIds?: Set<string>,
+  minDateKey?: string,
 ): { pivot: Map<string, Map<string, number>>; dateKeys: string[] } {
   const pivot = new Map<string, Map<string, number>>();
   // Sequential lastSeen: tracks the actual last current_reading per entity so
@@ -94,6 +95,7 @@ export function buildEntityPivot(
       vol = 0;
     }
 
+    if (minDateKey && dateKey < minDateKey) return;
     if (!pivot.has(dateKey)) pivot.set(dateKey, new Map());
     pivot.get(dateKey)!.set(entityId, (pivot.get(dateKey)!.get(entityId) ?? 0) + vol);
   });

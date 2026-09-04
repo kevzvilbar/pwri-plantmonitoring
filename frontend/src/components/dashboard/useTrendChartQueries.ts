@@ -248,13 +248,53 @@ export function useTrendChartQueries({
   // flagged is_meter_replacement and the first reading after a replacement.
   // Fetching well_id here (instead of relying on plant_id alone) lets
   // computeEntityDeltas group correctly by individual meter rather than by
-  // plant, preventing cross-well subtraction that produced the -4,853,089 bug.
+  // We also grab one row BEFORE startISO (per well) to seed the delta for
+  // the very first in-window reading — without it the first bar is always 0.
   const { data: wellReadings, isFetching: fetchingWell, error: errWell, refetch: refetchWell } = useQuery({
     queryKey: ['trend-well', metric, startKey, endKey, plantIds],
-    queryFn: () => supaSelect<any>(
-      'well_readings',
-      'well_id,current_reading,previous_reading,daily_volume,reading_datetime,is_meter_replacement,plant_id,norm_status',
-    ),
+    queryFn: async () => {
+      type WellReadingRow = {
+        well_id: string;
+        current_reading: number;
+        previous_reading: number | null;
+        daily_volume: number | null;
+        reading_datetime: string;
+        is_meter_replacement?: boolean | null;
+        plant_id: string;
+        norm_status?: string | null;
+      };
+      const inWindow = await supaSelect<WellReadingRow>(
+        'well_readings',
+        'well_id,current_reading,previous_reading,daily_volume,reading_datetime,is_meter_replacement,plant_id,norm_status',
+      );
+
+      // Resolve wells for these plants to fetch pre-window baseline rows
+      const { data: wellsData } = await supabase
+        .from('wells')
+        .select('id')
+        .in('plant_id', plantIds);
+      const wellIds = (wellsData ?? []).map((w) => w.id);
+
+      const preRows: WellReadingRow[] = [];
+      if (wellIds.length > 0) {
+        await Promise.all(
+          wellIds.map(async (wid) => {
+            const { data } = await supabase
+              .from('well_readings')
+              .select('well_id,current_reading,previous_reading,daily_volume,reading_datetime,is_meter_replacement,plant_id,norm_status')
+              .eq('well_id', wid)
+              .lt('reading_datetime', startISO)
+              .order('reading_datetime', { ascending: false })
+              .limit(1);
+            if (data?.[0]) preRows.push(data[0] as unknown as WellReadingRow);
+          }),
+        );
+      }
+
+      return [...preRows, ...inWindow].sort(
+        (a, b) => new Date(a.reading_datetime).getTime() - new Date(b.reading_datetime).getTime(),
+      );
+    },
     enabled: plantIds.length > 0 && needsWellReadings,
     staleTime: 180_000,
     refetchInterval: 180_000,
