@@ -142,6 +142,293 @@ export function fmtV(v: number | null | undefined, dec = 1) {
   return v.toLocaleString(undefined, { maximumFractionDigits: dec });
 }
 
+// ─── Grid-by-meter breakdown (Power Consumption & Energy Mix data summary) ───
+//
+// Pure computation behind the "Grid by Meter" side table in DataSummaryPopup's
+// kWh tab. Mirrors the grid-kWh walk in useTrendChartData.ts (search for
+// "Power kWh — priority order") EXACTLY — priority order, replacement-row
+// baseline reset, per-meter CT multipliers and the "days with computed total
+// <= 0 never accumulate" rule — so the table's Total column is always
+// day-for-day identical to the Solar vs Grid table's Grid (kWh) column.
+//
+// Per-meter attribution is only possible when both the current and previous
+// rows carry grid_meter_readings JSONB (priority 1), or when the legacy
+// single-meter delta applies (priority 2 → attributed to meter 0). Days that
+// fall back to stored daily totals (priorities 3/4) cannot be attributed —
+// their residual is parked under the reserved GRID_METER_OTHER_KEY column and
+// the component renders an "Other" column only when such days exist.
+
+/** Minimal shape of the power_readings columns the walk needs. */
+export interface GridPowerReadingRow {
+  plant_id?: string | null;
+  reading_datetime: string;
+  meter_reading_kwh?: number | null;
+  grid_meter_readings?: Record<string, number> | null;
+  daily_grid_kwh?: number | null;
+  daily_consumption_kwh?: number | null;
+  multiplier?: number | null;
+  is_meter_replacement?: boolean | null;
+}
+
+export interface GridMeterColumn {
+  /** Stable key: `${plant_id}#${meterIndex}` (or GRID_METER_OTHER_KEY). */
+  key: string;
+  label: string;
+  title?: string;
+}
+
+/** One day's breakdown: per-column kWh (absent key = unknown, not zero). */
+export interface GridMeterDayRow {
+  dateKey: string; // yyyy-MM-dd
+  values: Record<string, number>;
+  total: number;
+}
+
+export interface GridMeterBreakdown {
+  dates: string[]; // yyyy-MM-dd, chronological, only days that accumulated
+  columns: GridMeterColumn[];
+  byDate: Map<string, GridMeterDayRow>;
+  /** True when at least one day carries unattributable (stored-total) kWh. */
+  hasUnattributed: boolean;
+  multiPlant: boolean;
+}
+
+export const GRID_METER_OTHER_KEY = '__other__';
+
+export function computeGridMeterBreakdown(
+  readings: GridPowerReadingRow[],
+  opts: {
+    powerConfigMap?: Map<string, number[]>;
+    billMultiplierMap?: Map<string, number>;
+    plantNames?: Map<string, string>;
+    /** plant_id → configured grid meter names + count (plant_power_config). */
+    gridMeterMeta?: Map<string, { names: string[]; count: number }>;
+    /** Accumulate only readings within [fromMs, toMs] (null = unbounded).
+     *  Baselines are still seeded from earlier rows, mirroring the chart. */
+    fromMs?: number | null;
+    toMs?: number | null;
+  } = {},
+): GridMeterBreakdown {
+  const { powerConfigMap, billMultiplierMap, plantNames, gridMeterMeta, fromMs, toMs } = opts;
+
+  const sorted = [...readings].sort(
+    (a, b) => new Date(a.reading_datetime).getTime() - new Date(b.reading_datetime).getTime(),
+  );
+
+  // ── Pass 1: plant order (first appearance) + highest meter index seen ──────
+  const plantOrder: string[] = [];
+  const plantSeen = new Set<string>();
+  const plantMaxIdx = new Map<string, number>();
+  for (const r of sorted) {
+    const pid = r.plant_id ?? '__';
+    if (!plantSeen.has(pid)) { plantSeen.add(pid); plantOrder.push(pid); }
+    const gmr = r.grid_meter_readings;
+    if (gmr) {
+      for (const k of Object.keys(gmr)) {
+        const mi = parseInt(k, 10);
+        if (Number.isFinite(mi)) plantMaxIdx.set(pid, Math.max(plantMaxIdx.get(pid) ?? 0, mi));
+      }
+    }
+  }
+
+  const meterCountFor = (pid: string): number =>
+    Math.max(1, gridMeterMeta?.get(pid)?.count ?? 0, (plantMaxIdx.get(pid) ?? -1) + 1);
+
+  const meterLabelFor = (pid: string, mi: number): string => {
+    const names = gridMeterMeta?.get(pid)?.names;
+    const count = meterCountFor(pid);
+    return names?.[mi] || (count === 1 ? 'Grid Meter' : `Grid Meter ${mi + 1}`);
+  };
+
+  // ── Pass 2: the delta walk (mirrors useTrendChartData.ts priority order) ───
+  const byDate = new Map<string, GridMeterDayRow>();
+  const daySort = new Map<string, number>();
+  const prevGridMeter = new Map<string, number | null>();
+  const prevGridReadings = new Map<string, Record<string, number> | null>();
+  const afterGridRepl = new Set<string>();
+
+  for (const r of sorted) {
+    const pid = r.plant_id ?? '__';
+    const isMR = !!r.is_meter_replacement;
+    const gridCurrent = r.meter_reading_kwh != null ? +r.meter_reading_kwh : null;
+    const rGmr = r.grid_meter_readings ?? null;
+
+    if (isMR) {
+      // Replacement row: zero this day, reset baselines for the next delta.
+      prevGridMeter.set(pid, gridCurrent);
+      prevGridReadings.set(pid, rGmr);
+      afterGridRepl.add(pid);
+      continue;
+    }
+
+    let gridKwh = 0;
+    const meterDeltas = new Map<string, number>();
+    // Per-meter multiplier array: plant_power_config wins, then the row's own
+    // scalar multiplier, then the billing multiplier, then 1 — same as chart.
+    const multArr: number[] = powerConfigMap?.get(pid) ?? [
+      +(r.multiplier ?? 0) > 0 ? +r.multiplier : (billMultiplierMap?.get(pid) ?? 1),
+    ];
+
+    if (!afterGridRepl.has(pid)) {
+      const pGmr   = prevGridReadings.get(pid) ?? null;
+      const pMeter = prevGridMeter.get(pid) ?? null;
+
+      if (rGmr && pGmr && Object.keys(rGmr).length > 0) {
+        // Priority 1: multi-meter JSONB delta × per-meter CT multiplier.
+        for (const k of Object.keys(rGmr)) {
+          const mi = parseInt(k, 10);
+          if (!Number.isFinite(mi)) continue; // non-numeric keys aren't meters
+          const mMult = multArr[mi] ?? multArr[0] ?? 1;
+          if (pGmr[k] != null) {
+            const d = (rGmr[k] - pGmr[k]) * mMult;
+            gridKwh += d;
+            const colKey = `${pid}#${mi}`;
+            meterDeltas.set(colKey, (meterDeltas.get(colKey) ?? 0) + d);
+          }
+        }
+      } else if (pMeter != null && gridCurrent != null) {
+        // Priority 2: single-meter legacy delta → attributed to meter 0.
+        gridKwh = (gridCurrent - pMeter) * (multArr[0] ?? 1);
+        meterDeltas.set(`${pid}#0`, gridKwh);
+      }
+
+      // Priorities 3 & 4: stored daily totals — no per-meter attribution.
+      if (gridKwh === 0) {
+        if (r.daily_grid_kwh != null && +r.daily_grid_kwh > 0)
+          gridKwh = +r.daily_grid_kwh;
+        else if (r.daily_consumption_kwh != null && +r.daily_consumption_kwh > 0)
+          gridKwh = +r.daily_consumption_kwh * (multArr[0] ?? 1);
+      }
+    }
+    afterGridRepl.delete(pid);
+    // Baselines update BEFORE the skip checks below — same order as the chart,
+    // so a skipped (non-positive / out-of-window) day still seeds the next delta.
+    prevGridMeter.set(pid, gridCurrent);
+    prevGridReadings.set(pid, rGmr);
+
+    // Chart parity: only positive totals accumulate. Out-of-window readings
+    // contribute no day (but already seeded the baseline above).
+    if (gridKwh <= 0) continue;
+    const t = new Date(r.reading_datetime).getTime();
+    if (fromMs != null && t < fromMs) continue;
+    if (toMs != null && t > toMs) continue;
+
+    const dateKey = format(new Date(r.reading_datetime), 'yyyy-MM-dd');
+    let row = byDate.get(dateKey);
+    if (!row) {
+      row = { dateKey, values: {}, total: 0 };
+      byDate.set(dateKey, row);
+    }
+    const r0 = row;
+    daySort.set(dateKey, Math.max(daySort.get(dateKey) ?? 0, t));
+    r0.total += gridKwh;
+    meterDeltas.forEach((v, k) => { r0.values[k] = (r0.values[k] ?? 0) + v; });
+  }
+
+  // ── Pass 3: unattributed residuals + column list ───────────────────────────
+  let hasUnattributed = false;
+  for (const row of byDate.values()) {
+    const known = Object.entries(row.values)
+      .filter(([k]) => k !== GRID_METER_OTHER_KEY)
+      .reduce((s, [, v]) => s + v, 0);
+    const residual = row.total - known;
+    if (Math.abs(residual) > 0.05) {
+      row.values[GRID_METER_OTHER_KEY] = residual;
+      hasUnattributed = true;
+    }
+  }
+
+  const multiPlant = plantOrder.length > 1;
+  const columns: GridMeterColumn[] = [];
+  for (const pid of plantOrder) {
+    const count = meterCountFor(pid);
+    for (let mi = 0; mi < count; mi++) {
+      const label = meterLabelFor(pid, mi);
+      const plantName = plantNames?.get(pid);
+      columns.push(multiPlant
+        ? {
+            key: `${pid}#${mi}`,
+            label: `${(plantName ?? 'Plant').split(' ')[0]} · ${label}`,
+            title: `${plantName ?? 'Plant'} — ${label}`,
+          }
+        : { key: `${pid}#${mi}`, label, title: label });
+    }
+  }
+
+  return {
+    dates: [...byDate.keys()].sort((a, b) => (daySort.get(a) ?? 0) - (daySort.get(b) ?? 0)),
+    columns,
+    byDate,
+    hasUnattributed,
+    multiPlant,
+  };
+}
+
+/** CSV field escaping: quote only when the value contains a comma, quote or newline. */
+export function csvField(v: string | number | null | undefined): string {
+  if (v == null) return '';
+  const s = String(v);
+  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+/**
+ * Builds the two-section CSV for the kWh Data Summary popup's Export button —
+ * one section per on-screen table:
+ *
+ *   Solar vs Grid      ← the left table (date, solar, grid, total, solar %)
+ *   Grid by Meter      ← the right table (date, per-meter columns, [Other], total)
+ *
+ * Section values mirror each table's display semantics: a metric that renders
+ * as "—" on screen (zero/absent) exports as an empty field, and numbers are
+ * rounded to 2 decimals (1 for the percent) matching the on-screen precision.
+ * Rows are chronological — the same order the popup's other CSV sections use.
+ */
+export function buildKwhSummaryCsv(
+  overviewRows: { date: string; kwh?: number | null; solarKwh?: number | null }[],
+  breakdown: GridMeterBreakdown,
+  dates: string[],
+): string {
+  // ── Section 1: Solar vs Grid ────────────────────────────────────────────────
+  const s1: string[] = [
+    'Solar vs Grid',
+    'date,solar_kwh,grid_kwh,total_kwh,solar_pct',
+  ];
+  for (const r of overviewRows) {
+    const solar = +(r.solarKwh ?? 0);
+    const grid = +(r.kwh ?? 0);
+    const total = solar + grid;
+    s1.push([
+      csvField(r.date),
+      solar !== 0 ? +solar.toFixed(2) : '',
+      grid !== 0 ? +grid.toFixed(2) : '',
+      total > 0 ? +total.toFixed(2) : '',
+      total > 0 && solar > 0 ? +((solar / total) * 100).toFixed(1) : '',
+    ].join(','));
+  }
+
+  // ── Section 2: Grid by Meter ────────────────────────────────────────────────
+  const cols: GridMeterColumn[] = breakdown.hasUnattributed
+    ? [...breakdown.columns, { key: GRID_METER_OTHER_KEY, label: 'Other' }]
+    : breakdown.columns;
+  const s2: string[] = [
+    'Grid by Meter',
+    ['date', ...cols.map((c) => csvField(c.label)), 'total_kwh'].join(','),
+  ];
+  for (const dk of dates) {
+    const row = breakdown.byDate.get(dk);
+    s2.push([
+      csvField(fmtDateKey(dk)),
+      ...cols.map((c) => {
+        const v = row?.values[c.key];
+        return v != null ? +v.toFixed(2) : '';
+      }),
+      row && row.total > 0 ? +row.total.toFixed(2) : '',
+    ].join(','));
+  }
+
+  return [s1.join('\n'), '', s2.join('\n')].join('\n');
+}
+
 const GAP_ENTITY_TYPE_LABEL: Record<'well' | 'locator' | 'ro_train' | 'meter' | 'blending' | 'power', string> = {
   well: 'Well', locator: 'Locator', ro_train: 'RO Train', meter: 'Product Meter', blending: 'Blending Well', power: 'Power',
 };

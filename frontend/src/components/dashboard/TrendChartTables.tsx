@@ -15,6 +15,7 @@ import {
   TH, TH_DATE, TH_TOTAL, TD, TD_TOTAL_COL,
   fmtV, fmtDateKey, useGapReasonLookup,
   GAP_ENTITY_TABLE, type GapReasonHit,
+  GRID_METER_OTHER_KEY, type GridMeterBreakdown, type GridMeterColumn,
 } from './TrendChartPivotShared';
 
 /** Generic pivot table: Date rows × entity columns × Total column */
@@ -362,6 +363,72 @@ export function OverviewTable({
               {cols.map((c) => <td key={c.key} className={TD}>{c.fmt(d)}</td>)}
             </tr>
           ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// ── Grid-by-meter breakdown table (kWh Data Summary side table) ──────────────
+// Sits next to the Solar vs Grid OverviewTable for metric === 'kwh'. Rows are
+// date-for-date aligned with the left table via `dates` (the popup's
+// overviewDates, yyyy-MM-dd keys) — days without per-meter data render as
+// dashes. The Total column always equals the Solar vs Grid table's Grid (kWh)
+// value for the same day (guaranteed by computeGridMeterBreakdown's parity
+// with the chart's grid-kWh walk).
+export function GridMeterBreakdownTable({
+  dates,
+  breakdown,
+}: {
+  dates: string[];
+  breakdown: GridMeterBreakdown;
+}) {
+  const { columns, byDate, hasUnattributed } = breakdown;
+  const cols: GridMeterColumn[] = hasUnattributed
+    ? [...columns, {
+        key: GRID_METER_OTHER_KEY,
+        label: 'Other',
+        title: 'Days recorded as a stored daily total without per-meter readings — cannot be attributed to a specific meter.',
+      }]
+    : columns;
+
+  return (
+    <div className="h-full overflow-auto">
+      <table className="w-full border-collapse text-xs">
+        <thead className="bg-muted/95">
+          <tr>
+            <th className={TH_DATE}>Date</th>
+            {cols.map((c) => <th key={c.key} className={TH} title={c.title}>{c.label}</th>)}
+            <th className={TH_TOTAL}>Total (kWh)</th>
+          </tr>
+        </thead>
+        <tbody>
+          {[...dates].reverse().map((dk, i) => {
+            const row = byDate.get(dk);
+            const zebra = i % 2 === 0 ? 'bg-background' : 'bg-muted/10';
+            return (
+              <tr key={dk} className={`${zebra} hover:bg-muted/25`}>
+                <td className={`px-3.5 py-1.5 whitespace-nowrap font-medium text-xs text-muted-foreground sticky left-0 z-10 ${zebra}`}>
+                  {fmtDateKey(dk)}
+                </td>
+                {cols.map((c) => {
+                  const v = row?.values[c.key];
+                  return (
+                    <td key={c.key} className={TD}>
+                      {v != null
+                        ? <span className={v < 0 ? 'text-destructive font-semibold' : ''}>{v.toLocaleString(undefined, { maximumFractionDigits: 1 })}</span>
+                        : <span className="text-muted-foreground/40">—</span>}
+                    </td>
+                  );
+                })}
+                <td className={TD_TOTAL_COL}>
+                  {row && row.total > 0
+                    ? row.total.toLocaleString(undefined, { maximumFractionDigits: 1 })
+                    : <span className="text-muted-foreground/40">—</span>}
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>

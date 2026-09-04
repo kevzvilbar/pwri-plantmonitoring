@@ -439,6 +439,9 @@ export function TrendChart({
           wellReadings={wellReadings ?? []}
           costReadings={costReadings ?? []}
           roReadings={roReadings ?? []}
+          powerReadings={powerReadings}
+          powerConfigMap={powerConfigMap}
+          billMultiplierMap={billMultiplierMap}
           permeateIsProductionPlants={permeateIsProductionPlants}
           productExcludedPlants={productExcludedPlants}
           trainPlantMap={_trainPlantMap}

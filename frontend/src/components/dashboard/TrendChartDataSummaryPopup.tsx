@@ -1,4 +1,6 @@
 import { useState, useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
 import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
@@ -6,8 +8,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { format } from 'date-fns';
 import { Download, Droplet, Receipt, Gauge, TableProperties, Percent } from 'lucide-react';
-import { DSMTab, buildEntityPivot, fillDateRange, fmtDateKey } from './TrendChartPivotShared';
-import { PivotTable, OverviewTable } from './TrendChartTables';
+import { DSMTab, buildEntityPivot, fillDateRange, fmtDateKey, computeGridMeterBreakdown, buildKwhSummaryCsv, type GridPowerReadingRow } from './TrendChartPivotShared';
+import { PivotTable, OverviewTable, GridMeterBreakdownTable } from './TrendChartTables';
 
 // ── DataSummaryPopup — 3-tab popup shown when "Data Summary" is clicked ───────
 // Tab 1 (always): Overview / Prod vs Consum — aggregated daily totals
@@ -20,6 +22,7 @@ export function DataSummaryPopup({
   chartData,
   locReadings, productReadings, wellReadings, costReadings,
   roReadings,
+  powerReadings, powerConfigMap, billMultiplierMap,
   permeateIsProductionPlants,
   productExcludedPlants,
   trainPlantMap,
@@ -37,6 +40,18 @@ export function DataSummaryPopup({
   wellReadings: any[];
   costReadings: any[];
   roReadings?: any[];
+  // Raw power readings — only consumed by the kWh metric's "Grid by Meter"
+  // side table. Row shape mirrors the power_readings columns the grid-kWh
+  // walk needs (see GridPowerReadingRow in TrendChartPivotShared). Untyped
+  // rows from the chart's query are assignable to this.
+  powerReadings?: GridPowerReadingRow[];
+  // Per-plant, per-meter CT multiplier arrays from plant_power_config — the
+  // same source useTrendChartData's grid-kWh math uses, so this table's
+  // Total column always matches the Solar vs Grid table's Grid (kWh) column.
+  powerConfigMap?: Map<string, number[]>;
+  // Fallback scalar multiplier per plant (used when plant_power_config has no
+  // row for a plant) — same fallback the chart applies.
+  billMultiplierMap?: Map<string, number>;
   // Plants with permeate switched on — covers BOTH exclusive 'permeate' mode
   // and 'both' mode (product meter + permeate summed). See chartData Step 2.
   permeateIsProductionPlants?: Set<string>;
@@ -133,6 +148,55 @@ export function DataSummaryPopup({
       return true;
     });
   }, [wellReadings, filterFrom, filterTo]);
+
+  // ── Grid-by-meter breakdown (kWh tab side table) ────────────────────────────
+  // plant_power_config names/count for the plants present in powerReadings —
+  // labels the meter columns ("Main Feed", "Grid Meter 2", …). Typed client
+  // call: plant_power_config is in the generated Database type, no casts.
+  const plantIdsForPower = useMemo(() => {
+    const ids = new Set<string>();
+    (powerReadings ?? []).forEach((r) => { if (r.plant_id) ids.add(r.plant_id); });
+    return [...ids];
+  }, [powerReadings]);
+
+  const { data: gridMeterMeta } = useQuery({
+    queryKey: ['dsm-grid-meter-meta', plantIdsForPower],
+    queryFn: async () => {
+      const map = new Map<string, { names: string[]; count: number }>();
+      if (!plantIdsForPower.length) return map;
+      const { data, error } = await supabase
+        .from('plant_power_config')
+        .select('plant_id, grid_meter_names, grid_meter_count')
+        .in('plant_id', plantIdsForPower);
+      if (!error) {
+        for (const cfg of data ?? []) {
+          map.set(cfg.plant_id, {
+            names: Array.isArray(cfg.grid_meter_names) ? cfg.grid_meter_names.map(String) : [],
+            count: Math.max(1, Number(cfg.grid_meter_count) || 1),
+          });
+        }
+      }
+      return map;
+    },
+    enabled: open && metric === 'kwh' && plantIdsForPower.length > 0,
+    staleTime: 10 * 60_000,
+  });
+
+  // Grid-per-meter pivot for the kWh tab's side table. The ms window is
+  // derived from the filter strings directly (same construction as
+  // parsedFrom/parsedTo above) so this memo's deps stay on stable strings.
+  const gridBreakdown = useMemo(() => {
+    const fMs = filterFrom ? new Date(`${filterFrom}T00:00:00`).getTime() : null;
+    const tMs = filterTo ? new Date(`${filterTo}T23:59:59`).getTime() : null;
+    return computeGridMeterBreakdown(powerReadings ?? [], {
+      powerConfigMap,
+      billMultiplierMap,
+      plantNames,
+      gridMeterMeta,
+      fromMs: fMs,
+      toMs: tMs,
+    });
+  }, [powerReadings, powerConfigMap, billMultiplierMap, plantNames, gridMeterMeta, filterFrom, filterTo]);
 
   // Determine which secondary tabs are relevant for this metric
   const hasProdTab = metric === 'production' || metric === 'nrw' || metric === 'pv' || metric === 'rawwater';
@@ -427,17 +491,25 @@ export function DataSummaryPopup({
   const handleExportCsv = () => {
     let csvContent = '';
     if (activeTab === 'overview') {
-      const headers = ['Date', 'Production (m3)', 'Consumption (m3)', 'NRW (%)', 'Raw Water (m3)', 'Recovery (%)', 'Permeate TDS (ppm)'];
-      const rows = overviewChartRows.map(r => [
-        r.date,
-        r.production ?? '',
-        r.consumption ?? '',
-        r.nrw ?? '',
-        r.rawwater ?? '',
-        r.recovery ?? '',
-        r.tds ?? ''
-      ].join(','));
-      csvContent = [headers.join(','), ...rows].join('\n');
+      if (metric === 'kwh') {
+        // kWh metric: the on-screen tables are Solar vs Grid + Grid by Meter.
+        // The generic overview headers below carry no kWh columns (they'd all
+        // export empty for this metric), so export both tables as labeled
+        // sections instead — see buildKwhSummaryCsv.
+        csvContent = buildKwhSummaryCsv(overviewChartRows, gridBreakdown, overviewDates);
+      } else {
+        const headers = ['Date', 'Production (m3)', 'Consumption (m3)', 'NRW (%)', 'Raw Water (m3)', 'Recovery (%)', 'Permeate TDS (ppm)'];
+        const rows = overviewChartRows.map(r => [
+          r.date,
+          r.production ?? '',
+          r.consumption ?? '',
+          r.nrw ?? '',
+          r.rawwater ?? '',
+          r.recovery ?? '',
+          r.tds ?? ''
+        ].join(','));
+        csvContent = [headers.join(','), ...rows].join('\n');
+      }
     } else if (activeTab === 'production') {
       const headers = ['Date', ...prodEntities.map(e => `"${e.label.replace(/"/g, '""')}"`), 'Total (m3)'];
       const rows = [...prodDates].reverse().map(d => {
@@ -594,9 +666,32 @@ export function DataSummaryPopup({
         {/* Body */}
         <div className="flex-1 overflow-hidden min-h-0 flex flex-col">
           <div className="flex-1 overflow-hidden min-h-0 flex flex-col">
-              {activeTab === 'overview' && (
+              {activeTab === 'overview' && (metric === 'kwh' ? (
+                /* kWh metric: the Solar vs Grid table gets a "Grid by Meter"
+                   side table (Date × Grid Meter 1..N × Total), day-for-date
+                   aligned via overviewDates. Stacks vertically below xl so
+                   neither table gets cramped on narrow screens. */
+                <div className="flex-1 min-h-0 flex flex-col xl:flex-row overflow-y-auto xl:overflow-hidden">
+                  <div className="flex-1 min-w-0 flex flex-col overflow-hidden min-h-[300px] xl:border-r border-b xl:border-b-0 border-border/40">
+                    <div className="px-3 pt-2 pb-1 text-2xs font-semibold uppercase tracking-wider text-muted-foreground shrink-0">
+                      ☀ Solar vs ⚡ Grid
+                    </div>
+                    <div className="flex-1 min-h-0">
+                      <OverviewTable metric={metric} chartData={overviewChartRows} />
+                    </div>
+                  </div>
+                  <div className="flex-1 min-w-0 flex flex-col overflow-hidden min-h-[300px]">
+                    <div className="px-3 pt-2 pb-1 text-2xs font-semibold uppercase tracking-wider text-muted-foreground shrink-0">
+                      ⚡ Grid by Meter
+                    </div>
+                    <div className="flex-1 min-h-0">
+                      <GridMeterBreakdownTable dates={overviewDates} breakdown={gridBreakdown} />
+                    </div>
+                  </div>
+                </div>
+              ) : (
                 <OverviewTable metric={metric} chartData={overviewChartRows} />
-              )}
+              ))}
               {activeTab === 'production' && hasProdTab && (
                 <PivotTable
                   dates={prodDates}
@@ -642,6 +737,9 @@ export function DataSummaryPopup({
           )}
           {activeTab === 'consumption' && hasConsTab && (
             <span>· {consEntities.length} locators</span>
+          )}
+          {activeTab === 'overview' && metric === 'kwh' && (
+            <span>· {gridBreakdown.columns.length} grid meter{gridBreakdown.columns.length === 1 ? '' : 's'}{gridBreakdown.hasUnattributed ? ' (some days only stored as daily totals)' : ''}</span>
           )}
         </div>
       </DialogContent>
