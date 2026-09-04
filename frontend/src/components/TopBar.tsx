@@ -15,7 +15,7 @@ import {
 } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, NavLink } from 'react-router-dom';
 import { useSidebar } from '@/components/ui/sidebar';
 import { formatDistanceToNow, format } from 'date-fns';
 import { OperatorSwitcher } from '@/components/OperatorSwitcher';
@@ -78,8 +78,8 @@ const getAlertIcon = (alert: { title: string; source?: string; severity: string 
 
 export function TopBar() {
   const { user, profile } = useAuth();
-  const { isMobile } = useSidebar();
-  const showBrand = isMobile;
+  const { isMobile, state } = useSidebar();
+  const sidebarCollapsed = state === 'collapsed';
   const { data: plants } = usePlants();
   const {
     selectedPlantId, setSelectedPlantId,
@@ -461,19 +461,34 @@ export function TopBar() {
     <header className="sticky top-0 z-40 bg-topbar text-topbar-foreground border-b border-white/8 shadow-sm">
       <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 sm:gap-3 px-3 sm:px-4 h-12">
 
-        {/* ── Left: brand mark ── */}
+        {/* ── Left: brand mark (shifts to TopBar when sidebar collapses) ── */}
         <div className="flex items-center min-w-0">
-          {showBrand && (
-            <div className="flex items-center gap-2 shrink-0">
-              <Logomark size={28} className="rounded-lg shrink-0" />
+          {isMobile ? (
+            <NavLink to="/" className="flex items-center gap-2 shrink-0 group" aria-label="PWRI Monitoring & Alert">
+              <Logomark size={28} className="rounded-lg shrink-0 group-hover:scale-105 transition-transform duration-200" />
               <div className="flex flex-col leading-none">
-                <span className="text-xs font-semibold tracking-tight text-topbar-foreground">PWRI</span>
-                <span className="text-3xs text-topbar-muted hidden sm:block tracking-[0.1em] uppercase">
+                <span className="text-xs font-semibold tracking-tight text-topbar-foreground group-hover:text-primary transition-colors">
+                  PWRI
+                </span>
+                <span className="text-3xs text-topbar-muted tracking-[0.1em] uppercase">
                   Monitoring & Alert
                 </span>
               </div>
-            </div>
-          )}
+            </NavLink>
+          ) : sidebarCollapsed ? (
+            <NavLink
+              to="/"
+              className="flex flex-col leading-none shrink-0 group select-none animate-in fade-in slide-in-from-left-3 duration-300"
+              aria-label="PWRI Monitoring & Alert"
+            >
+              <span className="text-xs font-bold tracking-tight text-topbar-foreground group-hover:text-primary transition-colors">
+                PWRI
+              </span>
+              <span className="text-3xs text-topbar-muted tracking-[0.1em] uppercase">
+                Monitoring & Alert
+              </span>
+            </NavLink>
+          ) : null}
         </div>
 
         {/* ── Center: plant selector ── */}
