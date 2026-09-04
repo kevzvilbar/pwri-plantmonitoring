@@ -970,16 +970,16 @@
 
   /* Page entry — wrap page root divs for route transition */
   .page-enter {
-    animation: page-fade-up 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
+    animation: page-fade-up 180ms cubic-bezier(0.16, 1, 0.3, 1) both;
   }
 
   /* Staggered grid/list entrance — apply to each child alongside an inline
-     `style={{ '--stagger-i': index }}`. Delay is capped at 10 items so long
+     `style={{ '--stagger-i': index }}`. Delay is capped at 8 items so long
      lists don't leave the last rows waiting; items beyond that all animate
-     together with item 10's delay. */
+     together with item 8's delay. */
   .stagger-fade-in {
-    animation: stagger-fade-up 260ms cubic-bezier(0.22, 1, 0.36, 1) both;
-    animation-delay: calc(min(var(--stagger-i, 0), 10) * 45ms);
+    animation: stagger-fade-up 180ms cubic-bezier(0.16, 1, 0.3, 1) both;
+    animation-delay: calc(min(var(--stagger-i, 0), 8) * 28ms);
   }
 
   /* Zero-JS variant — put this on the grid/flex *container* and its direct
@@ -987,16 +987,16 @@
      Capped at the first 8 children; anything past that just appears with
      the 8th's delay instead of climbing forever. */
   .stagger-grid > * {
-    animation: stagger-fade-up 260ms cubic-bezier(0.22, 1, 0.36, 1) both;
+    animation: stagger-fade-up 180ms cubic-bezier(0.16, 1, 0.3, 1) both;
   }
   .stagger-grid > *:nth-child(1) { animation-delay: 0ms;   }
-  .stagger-grid > *:nth-child(2) { animation-delay: 45ms;  }
-  .stagger-grid > *:nth-child(3) { animation-delay: 90ms;  }
-  .stagger-grid > *:nth-child(4) { animation-delay: 135ms; }
-  .stagger-grid > *:nth-child(5) { animation-delay: 180ms; }
-  .stagger-grid > *:nth-child(6) { animation-delay: 225ms; }
-  .stagger-grid > *:nth-child(7) { animation-delay: 270ms; }
-  .stagger-grid > *:nth-child(n+8) { animation-delay: 315ms; }
+  .stagger-grid > *:nth-child(2) { animation-delay: 28ms;  }
+  .stagger-grid > *:nth-child(3) { animation-delay: 56ms;  }
+  .stagger-grid > *:nth-child(4) { animation-delay: 84ms;  }
+  .stagger-grid > *:nth-child(5) { animation-delay: 112ms; }
+  .stagger-grid > *:nth-child(6) { animation-delay: 140ms; }
+  .stagger-grid > *:nth-child(7) { animation-delay: 168ms; }
+  .stagger-grid > *:nth-child(n+8) { animation-delay: 196ms; }
 
   /* ── Typography helpers ────────────────────────────────────────── */
 
@@ -1337,7 +1337,7 @@ h1[id], h2[id], h3[id], section[id], [data-scroll-target], .scroll-mt-header {
 @keyframes page-fade-up {
   0% {
     opacity: 0;
-    transform: translateY(6px);
+    transform: translateY(4px);
   }
   100% {
     opacity: 1;
@@ -1348,7 +1348,7 @@ h1[id], h2[id], h3[id], section[id], [data-scroll-target], .scroll-mt-header {
 @keyframes stagger-fade-up {
   0% {
     opacity: 0;
-    transform: translateY(8px);
+    transform: translateY(4px);
   }
   100% {
     opacity: 1;
@@ -1360,12 +1360,12 @@ h1[id], h2[id], h3[id], section[id], [data-scroll-target], .scroll-mt-header {
   0%, 100% {
     opacity: 1;
     transform: scale(1);
-    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.45);
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.4);
   }
   50% {
-    opacity: 0.8;
-    transform: scale(1.06);
-    box-shadow: 0 0 8px 3px rgba(34, 197, 94, 0.6);
+    opacity: 0.82;
+    transform: scale(1.04);
+    box-shadow: 0 0 6px 2.5px rgba(34, 197, 94, 0.55);
   }
 }
 

@@ -144,7 +144,7 @@ export function AppSidebar() {
       {/* ── Brand header: seamlessly aligned with TopBar h-12 in both collapsed & expanded states ── */}
       <div
         className={cn(
-          'h-12 border-b border-sidebar-border/40 shrink-0 flex items-center transition-[padding,width] duration-200',
+          'h-12 border-b border-sidebar-border/40 shrink-0 flex items-center transition-[padding,width] duration-200 ease-spring-out',
           collapsed ? 'justify-center px-0' : 'px-3.5 gap-2.5',
         )}
       >
@@ -153,7 +153,7 @@ export function AppSidebar() {
             <TooltipTrigger asChild>
               <NavLink
                 to="/"
-                className="flex items-center justify-center w-full h-full focus:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring rounded-md transition-transform hover:scale-110 active:scale-95"
+                className="flex items-center justify-center w-full h-full focus:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring rounded-md transition-transform duration-150 hover:scale-105 active:scale-95"
                 aria-label="PWRI Monitoring & Alert - Dashboard"
               >
                 <Logomark size={26} className="shrink-0" />
@@ -169,7 +169,7 @@ export function AppSidebar() {
             className="flex items-center gap-2.5 focus:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring rounded-md group"
             aria-label="PWRI Monitoring & Alert - Dashboard"
           >
-            <Logomark size={28} className="shrink-0 group-hover:scale-110 transition-transform duration-200" />
+            <Logomark size={28} className="shrink-0 group-hover:scale-105 transition-transform duration-150" />
             <div className="flex flex-col leading-none">
               <span className="text-xs font-semibold text-sidebar-foreground tracking-tight group-hover:text-sidebar-primary transition-colors">
                 PWRI

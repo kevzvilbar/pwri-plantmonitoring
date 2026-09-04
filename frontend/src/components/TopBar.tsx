@@ -478,7 +478,7 @@ export function TopBar() {
           ) : sidebarCollapsed ? (
             <NavLink
               to="/"
-              className="flex flex-col leading-none shrink-0 group select-none animate-in fade-in slide-in-from-left-3 duration-300"
+              className="flex flex-col leading-none shrink-0 group select-none animate-in fade-in slide-in-from-left-2 duration-200 ease-spring-out hover:opacity-90 active:scale-[0.98] transition-transform"
               aria-label="PWRI Monitoring & Alert"
             >
               <span className="text-xs font-bold tracking-tight text-topbar-foreground group-hover:text-primary transition-colors">
