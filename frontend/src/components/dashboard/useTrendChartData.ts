@@ -219,7 +219,7 @@ export function useTrendChartData({
           // cumulative-looking total instead of a single day's delta — see
           // the identical fix in DataSummaryModal.tsx's
           // computePivotFromReadingsNoCache.
-          const storedVol = +r[dailyVolumeField];
+          const storedVol = Math.max(0, +r[dailyVolumeField]);
           const delta     = storedVol;
           lastReading.set(entityKey, +r.current_reading);
           return { r, delta, rawDelta: null, isMeterReplacement: false };
@@ -232,8 +232,13 @@ export function useTrendChartData({
           // always shows 0, causing a false dip at the start of every range.
           if (r.previous_reading != null) {
             const rawDelta = +r.current_reading - +r.previous_reading;
-            const delta    = rawDelta;
-            return { r, delta, rawDelta, isMeterReplacement: false };
+            // On the INITIAL reading: an unflagged replacement, rollover, or backward
+            // entry from before the window must not produce a negative delta (or plunge
+            // to -2.1M on the chart). If negative, treat as an unanchored initial point.
+            if (rawDelta >= 0) {
+              return { r, delta: rawDelta, rawDelta, isMeterReplacement: false };
+            }
+            return { r, delta: 0, rawDelta: null, isMeterReplacement: true };
           }
           // No previous_reading in DB → we genuinely don't know the delta for this
           // first row. Return null delta so the chart gaps rather than plots 0.
@@ -243,7 +248,10 @@ export function useTrendChartData({
         }
 
         const rawDelta = +r.current_reading - lastReading.get(entityKey)!;
-        const delta    = rawDelta;
+        // Clamp to 0: a meter reading that goes backwards is a bad entry or an
+        // un-flagged meter reset. Propagating a negative tanks the chart
+        // (e.g. Raw Water −1.1M spike on May 4–5, or −200K dip). Matches buildEntityPivot.
+        const delta    = Math.max(0, rawDelta);
         lastReading.set(entityKey, +r.current_reading);
         return { r, delta, rawDelta, isMeterReplacement: false };
       });

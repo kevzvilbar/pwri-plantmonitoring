@@ -15,6 +15,8 @@
 -- =============================================================================
 
 -- ── 1. LOCATORS: rebuild daily_volume generated column without GREATEST(0, ...) ─
+DROP VIEW IF EXISTS public.locator_readings_latest CASCADE;
+
 ALTER TABLE public.locator_readings DROP COLUMN IF EXISTS daily_volume;
 ALTER TABLE public.locator_readings ADD COLUMN daily_volume NUMERIC GENERATED ALWAYS AS (
   CASE
@@ -25,6 +27,15 @@ ALTER TABLE public.locator_readings ADD COLUMN daily_volume NUMERIC GENERATED AL
       current_reading - COALESCE(previous_reading, 0)
   END
 ) STORED;
+
+CREATE OR REPLACE VIEW public.locator_readings_latest
+WITH (security_invoker = true) AS
+SELECT DISTINCT ON (locator_id) *
+FROM public.locator_readings
+WHERE norm_status IS NULL OR norm_status NOT IN ('retracted', 'pending_review')
+ORDER BY locator_id, reading_datetime DESC;
+
+GRANT SELECT ON public.locator_readings_latest TO authenticated, anon;
 
 -- ── 2. WELLS: update fn_sync_well_reading_chain ──────────────────────────────
 CREATE OR REPLACE FUNCTION public.fn_sync_well_reading_chain()

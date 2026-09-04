@@ -123,8 +123,13 @@ export function computeEntityDeltas(
       // start of every range.
       if (r.previous_reading != null) {
         const rawDelta = +r.current_reading - +r.previous_reading;
-        const delta    = rawDelta;
-        return { r, delta, rawDelta, isMeterReplacement: false };
+        // On the INITIAL reading: an unflagged replacement, rollover, or backward
+        // baseline entry outside the window must not produce a negative delta.
+        // If negative, treat as an unanchored initial point.
+        if (rawDelta >= 0) {
+          return { r, delta: rawDelta, rawDelta, isMeterReplacement: false };
+        }
+        return { r, delta: 0, rawDelta: null, isMeterReplacement: true };
       }
       // No previous_reading in DB → we genuinely don't know the delta for
       // this first row. isMeterReplacement=true here is a "skip this point"
