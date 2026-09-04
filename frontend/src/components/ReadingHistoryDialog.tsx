@@ -1303,6 +1303,11 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                       const curr    = isSolar
                         ? (solarDirect ? solarDirectVal(r) : r.solar_meter_reading)
                         : getGridMeterVal(r, gridIdx, i, rows);
+
+                      // In filtered meter view, skip rows that have no reading for this specific meter
+                      if (!isSolar && curr == null) {
+                        return null;
+                      }
                       let prevVal   = isSolar
                         ? predecessor?.solar_meter_reading
                         : (predecessor ? getGridMeterVal(predecessor, gridIdx, i + 1, rows) : null);

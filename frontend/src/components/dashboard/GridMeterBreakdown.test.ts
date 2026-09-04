@@ -130,6 +130,55 @@ describe('computeGridMeterBreakdown — Grid by Meter side table', () => {
     expect(row.values['plant-2#0']).toBe(10);
     expect(row.values['plant-2#1']).toBe(4);
   });
+
+  it('Intermittent meters: intermediate days with partial meters do not erase baselines for unlogged meters', () => {
+    const meta3 = new Map([[P1, { names: ['STP', 'Pumphouse', 'Main'], count: 3 }]]);
+    const mults3 = new Map([[P1, [1, 120, 1200]]]);
+
+    const result = computeGridMeterBreakdown([
+      // Sep 1: seeds baseline for all 3 meters
+      { plant_id: P1, reading_datetime: iso(2026, 9, 1), grid_meter_readings: { '0': 100, '1': 21325.9, '2': 50000 } },
+      // Sep 2: meters 0 and 2 logged (meter 1 Pumphouse missing)
+      { plant_id: P1, reading_datetime: iso(2026, 9, 2), grid_meter_readings: { '0': 101.5, '2': 50013.2 } },
+      // Sep 3: only meter 0 logged
+      { plant_id: P1, reading_datetime: iso(2026, 9, 3), grid_meter_readings: { '0': 102.5 } },
+      // Sep 4: only meter 0 logged
+      { plant_id: P1, reading_datetime: iso(2026, 9, 4), grid_meter_readings: { '0': 103.5 } },
+      // Sep 5: meter 2 logged again after 3 days, plus meter 0
+      { plant_id: P1, reading_datetime: iso(2026, 9, 5), grid_meter_readings: { '0': 104.5, '2': 50064.4 } },
+    ], { powerConfigMap: mults3, gridMeterMeta: meta3 });
+
+    expect(result.dates).toEqual(['2026-09-02', '2026-09-03', '2026-09-04', '2026-09-05']);
+
+    // Sep 2: meter 0 = 1.5, meter 2 = (50013.2 - 50000) * 1200 = 15840
+    const sep2 = result.byDate.get('2026-09-02')!;
+    expect(sep2.values[`${P1}#0`]).toBe(1.5);
+    expect(sep2.values[`${P1}#1`]).toBeUndefined();
+    expect(sep2.values[`${P1}#2`]).toBe(15840);
+    expect(sep2.total).toBe(15841.5);
+
+    // Sep 3: meter 0 = 1
+    const sep3 = result.byDate.get('2026-09-03')!;
+    expect(sep3.values[`${P1}#0`]).toBe(1);
+    expect(sep3.total).toBe(1);
+
+    // Sep 4: meter 0 = 1
+    const sep4 = result.byDate.get('2026-09-04')!;
+    expect(sep4.values[`${P1}#0`]).toBe(1);
+    expect(sep4.total).toBe(1);
+
+    // Sep 5: meter 0 = 1, meter 2 delta is measured against Sep 2 baseline (50013.2)
+    // (50064.4 - 50013.2) * 1200 = 51.2 * 1200 = 61440
+    const sep5 = result.byDate.get('2026-09-05')!;
+    expect(sep5.values[`${P1}#0`]).toBe(1);
+    expect(sep5.values[`${P1}#2`]).toBe(61440);
+    expect(sep5.total).toBe(61441);
+
+    // Because all deltas are attributed to real meters, no "Other" column is created
+    expect(result.hasUnattributed).toBe(false);
+    expect(result.columns.map((c) => c.label)).toEqual(['STP', 'Pumphouse', 'Main']);
+    expect(sep5.values[GRID_METER_OTHER_KEY]).toBeUndefined();
+  });
 });
 
 describe('buildKwhSummaryCsv — kWh Data Summary export', () => {

@@ -430,7 +430,7 @@ export function useTrendChartData({
       );
       // Per-plant tracking state (mirrors Plants.tsx prevGridMeter/prevGridReadings)
       const prevGridMeter    = new Map<string, number | null>();
-      const prevGridReadings = new Map<string, Record<string, number> | null>();
+      const prevGridReadings = new Map<string, Record<string, number>>();
       const afterGridRepl    = new Set<string>();
 
       for (const r of sorted) {
@@ -441,8 +441,15 @@ export function useTrendChartData({
 
         if (isMR) {
           // Replacement row: zero this day, reset baseline for next delta
-          prevGridMeter.set(pid, gridCurrent);
-          prevGridReadings.set(pid, rGmr ?? null);
+          if (gridCurrent != null) prevGridMeter.set(pid, gridCurrent);
+          const replBaselines = { ...(prevGridReadings.get(pid) ?? {}) };
+          if (rGmr) {
+            for (const [k, v] of Object.entries(rGmr)) {
+              if (v != null && Number.isFinite(+v)) replBaselines[k] = +v;
+            }
+          }
+          if (gridCurrent != null) replBaselines['0'] = gridCurrent;
+          prevGridReadings.set(pid, replBaselines);
           afterGridRepl.add(pid);
           // Still record the meter replacement label so the tooltip shows it
           const dt = new Date(r.reading_datetime);
@@ -475,13 +482,18 @@ export function useTrendChartData({
             for (const k of Object.keys(rGmr)) {
               const mi    = parseInt(k, 10);
               const mMult = multArr[mi] ?? multArr[0] ?? 1;
-              if (pGmr[k] != null) total += (rGmr[k] - pGmr[k]) * mMult;
+              const currVal = rGmr[k];
+              const prevVal = pGmr[k];
+              if (currVal != null && prevVal != null) {
+                const d = (currVal - prevVal) * mMult;
+                if (d >= 0) total += d;
+              }
             }
             gridKwh = total;
           } else if (pMeter != null && gridCurrent != null) {
             // Priority 2: single-meter legacy — (curr − prev) × multArr[0]
             const rawDelta = gridCurrent - pMeter;
-            gridKwh = rawDelta * (multArr[0] ?? 1);
+            if (rawDelta >= 0) gridKwh = rawDelta * (multArr[0] ?? 1);
           }
 
           // Priority 3 & 4: stored daily totals — only when no raw readings available.
@@ -504,8 +516,17 @@ export function useTrendChartData({
           }
         }
         afterGridRepl.delete(pid);
-        prevGridMeter.set(pid, gridCurrent);
-        prevGridReadings.set(pid, rGmr ?? null);
+        if (gridCurrent != null) prevGridMeter.set(pid, gridCurrent);
+        const currentBaselines = { ...(prevGridReadings.get(pid) ?? {}) };
+        if (rGmr) {
+          for (const [k, v] of Object.entries(rGmr)) {
+            if (v != null && Number.isFinite(+v)) currentBaselines[k] = +v;
+          }
+        }
+        if (gridCurrent != null && currentBaselines['0'] == null) {
+          currentBaselines['0'] = gridCurrent;
+        }
+        prevGridReadings.set(pid, currentBaselines);
 
         // Only plot rows within the requested window
         const dt = new Date(r.reading_datetime);

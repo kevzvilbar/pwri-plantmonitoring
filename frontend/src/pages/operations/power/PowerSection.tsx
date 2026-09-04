@@ -668,26 +668,39 @@ export function PowerForm() {
   // Solar meter: previous solar_meter_reading (if tracked)
   const prevSolar  = prevRow?.solar_meter_reading ?? null;
 
+  // Resolves the most recent reading for a given grid meter index across history,
+  // preventing baseline loss when meters are recorded intermittently on different days.
+  const getLatestGridReading = useCallback((meterIdx: number): number | null => {
+    if (!history || history.length === 0) return null;
+    for (const r of history) {
+      if (r.id === editingId) continue;
+      const gmr = r.grid_meter_readings as Record<string, number> | null | undefined;
+      const val = gmr?.[String(meterIdx)] ?? (meterIdx === 0 ? r.meter_reading_kwh : null);
+      if (val != null && !isNaN(Number(val))) return Number(val);
+    }
+    return null;
+  }, [history, editingId]);
+
   // ── Pre-fill grid meter inputs from the most recent previous reading ──────
   // Fires when prevRow identity changes (new row became "latest" after a save
   // or plant change). Uses prevRow?.id as dep to avoid infinite loops — the
   // effect only re-runs when the actual record changes, not on every render.
   useEffect(() => {
     if (!prevRow) return;
-    const gmrPrev = (prevRow as any)?.grid_meter_readings as Record<string, number> | null | undefined;
     setGridMeterReadings(curr =>
       curr.map((val, idx) => {
         if (val !== '') return val; // user has already typed something — don't overwrite
-        const prevVal = gmrPrev?.[String(idx)] ?? (idx === 0 ? prevGrid : null);
+        const prevVal = getLatestGridReading(idx);
         return prevVal != null ? prevVal.toFixed(2) : val;
       }),
     );
     // Keep the meter-0 alias in sync
     setReading(r => {
       if (r !== '') return r;
-      return prevGrid != null ? prevGrid.toFixed(2) : r;
+      const prevVal0 = getLatestGridReading(0);
+      return prevVal0 != null ? prevVal0.toFixed(2) : r;
     });
-  }, [prevRow?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [prevRow?.id, getLatestGridReading]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Pre-fill solar meter inputs (raw mode only) ────────────────────────────
   useEffect(() => {
@@ -829,12 +842,15 @@ export function PowerForm() {
       if (idx === 0) payload.meter_reading_kwh = +val;
 
       // Compute daily_grid_kwh as the sum of (Δ per meter × per-meter CT multiplier).
-      // Previous per-meter readings come from prevRow.grid_meter_readings; for legacy
-      // rows that pre-date this migration, fall back to meter_reading_kwh as meter-0.
+      // Previous per-meter readings are resolved per meter index from history,
+      // so missing readings on the immediate previous day do not erase baselines.
       const prevMeters: Record<string, number> = (() => {
-        const gmr = (prevRow as any)?.grid_meter_readings as Record<string, number> | null | undefined;
-        if (gmr && Object.keys(gmr).length > 0) return gmr;
-        return prevGrid != null ? { '0': prevGrid } : {};
+        const map: Record<string, number> = {};
+        for (let mi = 0; mi < gridMeterCount; mi++) {
+          const v = getLatestGridReading(mi);
+          if (v != null) map[String(mi)] = v;
+        }
+        return map;
       })();
 
       let totalDailyGrid = 0;
@@ -1294,8 +1310,7 @@ export function PowerForm() {
                   const isSavingThis = savingMeter === meterKey;
                   const mMult = getGridMeterMult(idx);
                   // Pre-fill baseline guard — disable Save when value hasn't changed from previous
-                  const gmrPrevSL = (prevRow as any)?.grid_meter_readings as Record<string, number> | null | undefined;
-                  const prevMeterValSL = gmrPrevSL?.[String(idx)] ?? (idx === 0 ? prevGrid : null);
+                  const prevMeterValSL = getLatestGridReading(idx);
                   const gridMeterChanged = val !== '' && (prevMeterValSL == null || +val !== prevMeterValSL);
                   return (
                     <div key={`grid-${idx}`}>
@@ -1420,8 +1435,7 @@ export function PowerForm() {
                     const handleChange = (v: string) => { setGridMeterReading(item.idx, v); if (isFirst) setReading(v); };
                     const isSavingThis = savingMeter === `grid-${item.idx}`;
                     const mMult = getGridMeterMult(item.idx);
-                    const gmrPrevSL = (prevRow as any)?.grid_meter_readings as Record<string, number> | null | undefined;
-                    const prevMeterValSL = gmrPrevSL?.[String(item.idx)] ?? (item.idx === 0 ? prevGrid : null);
+                    const prevMeterValSL = getLatestGridReading(item.idx);
                     const gridMeterChanged = val !== '' && (prevMeterValSL == null || +val !== prevMeterValSL);
                     const perMeterDelta = gridMeterChanged && prevMeterValSL != null ? +val - prevMeterValSL : null;
                     return (

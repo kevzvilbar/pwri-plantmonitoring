@@ -246,7 +246,7 @@ export function computeGridMeterBreakdown(
   const byDate = new Map<string, GridMeterDayRow>();
   const daySort = new Map<string, number>();
   const prevGridMeter = new Map<string, number | null>();
-  const prevGridReadings = new Map<string, Record<string, number> | null>();
+  const prevGridReadings = new Map<string, Record<string, number>>();
   const afterGridRepl = new Set<string>();
 
   for (const r of sorted) {
@@ -257,8 +257,15 @@ export function computeGridMeterBreakdown(
 
     if (isMR) {
       // Replacement row: zero this day, reset baselines for the next delta.
-      prevGridMeter.set(pid, gridCurrent);
-      prevGridReadings.set(pid, rGmr);
+      if (gridCurrent != null) prevGridMeter.set(pid, gridCurrent);
+      const replBaselines = { ...(prevGridReadings.get(pid) ?? {}) };
+      if (rGmr) {
+        for (const [k, v] of Object.entries(rGmr)) {
+          if (v != null && Number.isFinite(+v)) replBaselines[k] = +v;
+        }
+      }
+      if (gridCurrent != null) replBaselines['0'] = gridCurrent;
+      prevGridReadings.set(pid, replBaselines);
       afterGridRepl.add(pid);
       continue;
     }
@@ -277,21 +284,33 @@ export function computeGridMeterBreakdown(
 
       if (rGmr && pGmr && Object.keys(rGmr).length > 0) {
         // Priority 1: multi-meter JSONB delta × per-meter CT multiplier.
+        // Diff against the last known baseline for each individual meter.
         for (const k of Object.keys(rGmr)) {
           const mi = parseInt(k, 10);
           if (!Number.isFinite(mi)) continue; // non-numeric keys aren't meters
           const mMult = multArr[mi] ?? multArr[0] ?? 1;
-          if (pGmr[k] != null) {
-            const d = (rGmr[k] - pGmr[k]) * mMult;
-            gridKwh += d;
-            const colKey = `${pid}#${mi}`;
-            meterDeltas.set(colKey, (meterDeltas.get(colKey) ?? 0) + d);
+          const currVal = rGmr[k];
+          const prevVal = pGmr[k];
+          if (currVal != null && prevVal != null) {
+            const rawD = (currVal - prevVal) * mMult;
+            const d = Math.round(rawD * 1000) / 1000;
+            if (d >= 0) {
+              gridKwh = Math.round((gridKwh + d) * 1000) / 1000;
+              const colKey = `${pid}#${mi}`;
+              meterDeltas.set(colKey, Math.round(((meterDeltas.get(colKey) ?? 0) + d) * 1000) / 1000);
+            }
           }
         }
-      } else if (pMeter != null && gridCurrent != null) {
+      }
+      
+      if (gridKwh === 0 && pMeter != null && gridCurrent != null) {
         // Priority 2: single-meter legacy delta → attributed to meter 0.
-        gridKwh = (gridCurrent - pMeter) * (multArr[0] ?? 1);
-        meterDeltas.set(`${pid}#0`, gridKwh);
+        const rawD = (gridCurrent - pMeter) * (multArr[0] ?? 1);
+        const d = Math.round(rawD * 1000) / 1000;
+        if (d >= 0) {
+          gridKwh = d;
+          meterDeltas.set(`${pid}#0`, gridKwh);
+        }
       }
 
       // Priorities 3 & 4: stored daily totals — no per-meter attribution.
@@ -305,8 +324,21 @@ export function computeGridMeterBreakdown(
     afterGridRepl.delete(pid);
     // Baselines update BEFORE the skip checks below — same order as the chart,
     // so a skipped (non-positive / out-of-window) day still seeds the next delta.
-    prevGridMeter.set(pid, gridCurrent);
-    prevGridReadings.set(pid, rGmr);
+    // Persistent per-meter merge: merge newly observed meter readings into the
+    // plant's running baseline state so unlogged meters retain their prior baselines.
+    if (gridCurrent != null) prevGridMeter.set(pid, gridCurrent);
+    const currentBaselines = { ...(prevGridReadings.get(pid) ?? {}) };
+    if (rGmr) {
+      for (const [k, v] of Object.entries(rGmr)) {
+        if (v != null && Number.isFinite(+v)) {
+          currentBaselines[k] = +v;
+        }
+      }
+    }
+    if (gridCurrent != null && currentBaselines['0'] == null) {
+      currentBaselines['0'] = gridCurrent;
+    }
+    prevGridReadings.set(pid, currentBaselines);
 
     // Chart parity: only positive totals accumulate. Out-of-window readings
     // contribute no day (but already seeded the baseline above).
