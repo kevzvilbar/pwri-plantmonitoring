@@ -43,11 +43,28 @@ export interface GapFillMeta {
   method?:       'even_split' | 'forward_fill' | 'regression_flowrate';
 }
 
+/**
+ * Columns that represent discrete daily volume or power totals (not cumulative odometer registers).
+ * These must be strictly exempt from gap backfill on blank dates — missing dates on direct
+ * production/consumption metrics indicate no reading or zero verified output, not an unobserved
+ * continuous register increment.
+ */
+export const DIRECT_COLUMNS = new Set([
+  'daily_solar_kwh',
+  'daily_volume',
+  'daily_consumption_kwh',
+  'daily_grid_kwh',
+]);
+
 export interface DetectGapsOptions {
   /** Dates (YYYY-MM-DD) that have logged remarks/gap reasons and must NOT be filled */
   exemptDateKeys?: Set<string>;
   /** Maximum number of missing days to auto-fill (default: 14) */
   maxGapDays?: number;
+  /** Sub-entity IDs configured with default_input_mode = 'direct' or is_derived = true */
+  directModeIds?: Set<string>;
+  /** Explicitly marks this column as a direct volume/power reading (exempt from gap backfill) */
+  isDirectReading?: boolean;
 }
 
 /**
@@ -128,6 +145,14 @@ export function detectGaps(
   getEntityFkColumn: EntityFkLookup,
   options?: DetectGapsOptions,
 ): CorrectionRow[] {
+  // Direct volume or direct power readings (e.g. daily solar kWh, direct volume m³)
+  // represent discrete daily totals rather than cumulative continuous odometer registers.
+  // Missing dates indicate no verified yield/reading, not an unobserved register advance.
+  // They must be strictly exempt from gap backfill on blank dates.
+  if (DIRECT_COLUMNS.has(column) || options?.isDirectReading) {
+    return [];
+  }
+
   const entityFkCol = getEntityFkColumn(sourceTable);
   const exemptDates = options?.exemptDateKeys ?? new Set<string>();
   const maxGapDays  = options?.maxGapDays ?? MAX_GAP_BACKFILL_DAYS;
@@ -143,6 +168,11 @@ export function detectGaps(
   const fills: CorrectionRow[] = [];
 
   groups.forEach((rows, groupKey) => {
+    // Entities configured in direct volume mode (e.g. locators with default_input_mode = 'direct')
+    // are discrete daily inputs, not cumulative odometers — exempt them from gap backfilling.
+    if (options?.directModeIds && (options.directModeIds.has(groupKey) || options.directModeIds.has(String(rows[0]?.plant_id)))) {
+      return;
+    }
     // rows already sorted ascending by reading_datetime
     for (let i = 0; i < rows.length - 1; i++) {
       const rowA = rows[i];

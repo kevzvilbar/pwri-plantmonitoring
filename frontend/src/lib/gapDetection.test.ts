@@ -6,6 +6,7 @@ import {
   GAP_FILL_PREFIX,
   EVEN_SPLIT_THRESHOLD_DAYS,
   MAX_GAP_BACKFILL_DAYS,
+  DIRECT_COLUMNS,
 } from './gapDetection';
 import { RawReading } from './regressionCorrection';
 
@@ -14,6 +15,10 @@ describe('gapDetection', () => {
     it('has agreed shared constants', () => {
       expect(EVEN_SPLIT_THRESHOLD_DAYS).toBe(5);
       expect(MAX_GAP_BACKFILL_DAYS).toBe(14);
+      expect(DIRECT_COLUMNS.has('daily_solar_kwh')).toBe(true);
+      expect(DIRECT_COLUMNS.has('daily_volume')).toBe(true);
+      expect(DIRECT_COLUMNS.has('daily_consumption_kwh')).toBe(true);
+      expect(DIRECT_COLUMNS.has('daily_grid_kwh')).toBe(true);
     });
   });
 
@@ -204,6 +209,94 @@ describe('gapDetection', () => {
         },
       ];
       expect(detectGaps(readingsRollover, 'current_reading', 'well_readings', mockFkLookup)).toHaveLength(0);
+    });
+
+    it('strictly exempts direct volume/power readings (such as daily_solar_kwh) from gap backfill', () => {
+      const solarReadings: RawReading[] = [
+        {
+          id: '1',
+          plant_id: 'plant-1',
+          reading_datetime: '2026-08-10T08:00:00+08:00',
+          daily_solar_kwh: 120.5,
+        },
+        {
+          id: '2',
+          plant_id: 'plant-1',
+          reading_datetime: '2026-08-15T08:00:00+08:00',
+          daily_solar_kwh: 140.0,
+        },
+      ];
+
+      // daily_solar_kwh is in DIRECT_COLUMNS -> must return 0 gap fills
+      const fills = detectGaps(solarReadings, 'daily_solar_kwh', 'power_readings', () => null);
+      expect(fills).toHaveLength(0);
+    });
+
+    it('strictly exempts daily_volume from gap backfill', () => {
+      const volumeReadings: RawReading[] = [
+        {
+          id: '1',
+          locator_id: 'loc-1',
+          plant_id: 'plant-1',
+          reading_datetime: '2026-08-10T08:00:00+08:00',
+          daily_volume: 50.0,
+        },
+        {
+          id: '2',
+          locator_id: 'loc-1',
+          plant_id: 'plant-1',
+          reading_datetime: '2026-08-15T08:00:00+08:00',
+          daily_volume: 60.0,
+        },
+      ];
+
+      const fills = detectGaps(volumeReadings, 'daily_volume', 'locator_readings', mockFkLookup);
+      expect(fills).toHaveLength(0);
+    });
+
+    it('strictly exempts entities configured in directModeIds from gap backfill', () => {
+      const readings: RawReading[] = [
+        {
+          id: '1',
+          locator_id: 'loc-direct',
+          plant_id: 'plant-1',
+          reading_datetime: '2026-08-10T08:00:00+08:00',
+          current_reading: 50.0,
+        },
+        {
+          id: '2',
+          locator_id: 'loc-direct',
+          plant_id: 'plant-1',
+          reading_datetime: '2026-08-13T08:00:00+08:00',
+          current_reading: 70.0,
+        },
+      ];
+
+      const directModeIds = new Set(['loc-direct']);
+      const fills = detectGaps(readings, 'current_reading', 'locator_readings', mockFkLookup, { directModeIds });
+      expect(fills).toHaveLength(0);
+    });
+
+    it('strictly exempts readings when options.isDirectReading is set to true', () => {
+      const readings: RawReading[] = [
+        {
+          id: '1',
+          locator_id: 'loc-1',
+          plant_id: 'plant-1',
+          reading_datetime: '2026-08-10T08:00:00+08:00',
+          current_reading: 100.0,
+        },
+        {
+          id: '2',
+          locator_id: 'loc-1',
+          plant_id: 'plant-1',
+          reading_datetime: '2026-08-13T08:00:00+08:00',
+          current_reading: 200.0,
+        },
+      ];
+
+      const fills = detectGaps(readings, 'current_reading', 'locator_readings', mockFkLookup, { isDirectReading: true });
+      expect(fills).toHaveLength(0);
     });
   });
 });

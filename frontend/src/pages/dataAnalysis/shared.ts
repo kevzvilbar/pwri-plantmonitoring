@@ -67,7 +67,7 @@ export const ENTITY_CONFIG: Record<string, {
   locator_readings: {
     lookupTable: 'locators',
     fkColumn:    'locator_id',
-    selectCols:  'id, name, plant_id, status',
+    selectCols:  'id, name, plant_id, status, default_input_mode, is_derived',
     labelFn:     r => String(r.name ?? r.id),
     filterLabel: 'Locator',
   },

@@ -1290,6 +1290,13 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                     // ── meterFilter: flat single-row-per-record rendering ────────────────
                     if (meterFilter) {
                       const isSolar     = meterFilter.type === 'solar';
+                      // Direct power exemption: Solar is exempt from automated backfill on blank dates.
+                      // Skip estimated rows created purely for grid meters so ghost "Est." rows with no
+                      // solar reading never appear in Solar history.
+                      if (isSolar && r.is_estimated && r.solar_meter_reading == null && (r.daily_solar_kwh == null || +r.daily_solar_kwh === 0)) {
+                        return null;
+                      }
+
                       const solarDirect = isSolar && isSolarDirectMode;
                       const gridIdx = !isSolar ? (meterFilter as { type: 'grid'; idx: number }).idx : 0;
                       const mMult   = isSolar ? 1 : getHistGridMult(gridIdx);

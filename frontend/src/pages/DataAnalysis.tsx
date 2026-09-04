@@ -239,7 +239,23 @@ export default function DataAnalysis() {
       const { corrections, stats, resetCount } = runOLS((readings || []) as unknown as RawReading[], column);
 
       // ── Gap detection — find missing dates and interpolate values ─────────
-      const gapFills     = detectGaps((readings || []) as unknown as RawReading[], column, sourceTable, t => ENTITY_CONFIG[t]?.fkColumn ?? null);
+      // Direct volume or derived locators are discrete daily inputs (not cumulative registers)
+      // and must be strictly exempt from gap backfill.
+      const directModeIds = sourceTable === 'locator_readings'
+        ? new Set(
+            (entityOptionsData ?? [])
+              .filter((r: Record<string, unknown>) => r.default_input_mode === 'direct' || Boolean(r.is_derived))
+              .map((r: Record<string, unknown>) => String(r.id)),
+          )
+        : undefined;
+
+      const gapFills     = detectGaps(
+        (readings || []) as unknown as RawReading[],
+        column,
+        sourceTable,
+        t => ENTITY_CONFIG[t]?.fkColumn ?? null,
+        { directModeIds },
+      );
       const allCorrections = [...corrections, ...gapFills];
 
       // ── Meter-replacement warning ─────────────────────────────────────────
