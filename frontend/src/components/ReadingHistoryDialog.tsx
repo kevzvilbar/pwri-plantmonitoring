@@ -73,6 +73,72 @@ export interface HistoryEditState {
   gridIdx?: number;
 }
 
+/**
+ * Resolves the numeric reading for a given grid meter index from a row.
+ * If the row is an auto-backfilled estimate (is_estimated = true) and
+ * grid_meter_readings is unpopulated for this index (e.g. historical estimated row
+ * before multi-meter backfill), it computes a linear interpolation from the bounding
+ * rows in allRows so the table never shows blank dashes ("—").
+ */
+export const getGridMeterVal = (
+  row: any,
+  idx: number,
+  rowIndex: number,
+  allRows: any[]
+): number | null => {
+  if (!row) return null;
+  const gmr = row.grid_meter_readings as Record<string, number> | null | undefined;
+  const direct = gmr?.[String(idx)] ?? (idx === 0 ? row.meter_reading_kwh : null);
+  if (direct != null && !isNaN(Number(direct))) return Number(direct);
+
+  // Fallback interpolation for estimated rows where this meter is unpopulated
+  if (row.is_estimated && allRows?.length) {
+    const rowTime = new Date(row.reading_datetime).getTime();
+    if (!isNaN(rowTime)) {
+      // allRows is sorted descending by reading_datetime.
+      // Search forward (j > rowIndex) for the nearest earlier row with a valid reading for idx
+      let earlierVal: number | null = null;
+      let earlierTime: number | null = null;
+      for (let j = rowIndex + 1; j < allRows.length; j++) {
+        const rj = allRows[j];
+        const rjGmr = rj?.grid_meter_readings as Record<string, number> | null | undefined;
+        const v = rjGmr?.[String(idx)] ?? (idx === 0 ? rj?.meter_reading_kwh : null);
+        if (v != null && !isNaN(Number(v))) {
+          earlierVal = Number(v);
+          earlierTime = new Date(rj.reading_datetime).getTime();
+          break;
+        }
+      }
+
+      // Search backward (j < rowIndex) for the nearest later row with a valid reading for idx
+      let laterVal: number | null = null;
+      let laterTime: number | null = null;
+      for (let j = rowIndex - 1; j >= 0; j--) {
+        const rj = allRows[j];
+        const rjGmr = rj?.grid_meter_readings as Record<string, number> | null | undefined;
+        const v = rjGmr?.[String(idx)] ?? (idx === 0 ? rj?.meter_reading_kwh : null);
+        if (v != null && !isNaN(Number(v))) {
+          laterVal = Number(v);
+          laterTime = new Date(rj.reading_datetime).getTime();
+          break;
+        }
+      }
+
+      if (
+        earlierVal != null &&
+        laterVal != null &&
+        earlierTime != null &&
+        laterTime != null &&
+        laterTime > earlierTime
+      ) {
+        const fraction = (rowTime - earlierTime) / (laterTime - earlierTime);
+        return Math.round((earlierVal + (laterVal - earlierVal) * fraction) * 10) / 10;
+      }
+    }
+  }
+  return null;
+};
+
 export function ReadingHistoryDialog({ entityName, module, entityId, plantId, assetMeterSerial, multiplier = 1,
   gridMeterCount: gridMeterCountProp = 1, gridMeterNames = [], gridMultipliers = [], meterFilter, defaultInputMode = 'raw', solarInputMode = 'raw', onClose }: {
   entityName: string;
@@ -350,10 +416,8 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
       // which meter's history dialog was actually open, so editing e.g. Grid
       // Meter 3 Main silently overwrote Grid Meter 1 STP instead. Derive the
       // real index from meterFilter, same as the row display just above does.
-      const gmrForEdit = r.grid_meter_readings as Record<string, number> | null | undefined;
-      const isSolarEdit = meterFilter?.type === 'solar';
-      const gridIdxForEdit = meterFilter && !isSolarEdit ? (meterFilter as { type: 'grid'; idx: number }).idx : 0;
-      const gridValueForEdit = gmrForEdit?.[String(gridIdxForEdit)] ?? (gridIdxForEdit === 0 ? r.meter_reading_kwh : null);
+      const rIdx = (rows ?? []).indexOf(r);
+      const gridValueForEdit = getGridMeterVal(r, gridIdxForEdit, rIdx, rows ?? []);
       const solarValueForEdit = isSolarDirectMode ? solarDirectVal(r) : r.solar_meter_reading;
       setEditRow({ id: r.id, datetime: dtStr, value: String(gridValueForEdit ?? ''), value2: solarValueForEdit != null ? String(solarValueForEdit) : '', value3: r.daily_grid_kwh != null ? String(r.daily_grid_kwh) : '', gridIdx: gridIdxForEdit, isMeterReplacement: !!r.is_meter_replacement });
     } else if (module === 'blending') {
@@ -1229,10 +1293,19 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                       const mMult   = isSolar ? 1 : getHistGridMult(gridIdx);
                       const curr    = isSolar
                         ? (solarDirect ? solarDirectVal(r) : r.solar_meter_reading)
-                        : (gmr?.[String(gridIdx)] ?? (gridIdx === 0 ? r.meter_reading_kwh : null));
-                      const prevVal = isSolar
+                        : getGridMeterVal(r, gridIdx, i, rows);
+                      let prevVal   = isSolar
                         ? predecessor?.solar_meter_reading
-                        : (prevGmr?.[String(gridIdx)] ?? (gridIdx === 0 ? predecessor?.meter_reading_kwh : null));
+                        : (predecessor ? getGridMeterVal(predecessor, gridIdx, i + 1, rows) : null);
+                      if (!isSolar && curr != null && prevVal == null) {
+                        for (let j = i + 1; j < rows.length; j++) {
+                          const v = getGridMeterVal(rows[j], gridIdx, j, rows);
+                          if (v != null) {
+                            prevVal = v;
+                            break;
+                          }
+                        }
+                      }
                       // Direct kWh: never diff two readings — each one already IS
                       // that period's kWh, not a cumulative odometer value. Diffing
                       // two independent days' totals is what produced negative/
@@ -1389,9 +1462,17 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                         {/* ── One sub-row per grid meter ── */}
                         {Array.from({ length: resolvedGridCount }).map((_, mi) => {
                           const mLabel = getHistGridLabel(mi);
-                          const mMult  = getHistGridMult(mi);
-                          const curr   = gmr?.[String(mi)]     ?? (mi === 0 ? r.meter_reading_kwh     : null);
-                          const prev   = prevGmr?.[String(mi)] ?? (mi === 0 ? predecessor?.meter_reading_kwh : null);
+                          const curr   = getGridMeterVal(r, mi, i, rows);
+                          let prev     = predecessor ? getGridMeterVal(predecessor, mi, i + 1, rows) : null;
+                          if (curr != null && prev == null) {
+                            for (let j = i + 1; j < rows.length; j++) {
+                              const v = getGridMeterVal(rows[j], mi, j, rows);
+                              if (v != null) {
+                                prev = v;
+                                break;
+                              }
+                            }
+                          }
                           const rawDelta    = (curr != null && prev != null) ? curr - prev : null;
                           const effective   = isGridRepl ? 0 : rawDelta != null ? rawDelta * mMult : null;
                           return (
