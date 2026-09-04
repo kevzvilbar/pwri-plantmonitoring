@@ -8,7 +8,11 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { format } from 'date-fns';
 import { Download, Droplet, Receipt, Gauge, TableProperties, Percent } from 'lucide-react';
-import { DSMTab, buildEntityPivot, fillDateRange, fmtDateKey, computeGridMeterBreakdown, buildKwhSummaryCsv, type GridPowerReadingRow } from './TrendChartPivotShared';
+import {
+  DSMTab, buildEntityPivot, fillDateRange, fmtDateKey,
+  computeGridMeterBreakdown, buildKwhSummaryCsv, type GridPowerReadingRow,
+  GRID_METER_OTHER_KEY,
+} from './TrendChartPivotShared';
 import { PivotTable, OverviewTable, GridMeterBreakdownTable } from './TrendChartTables';
 
 // ── DataSummaryPopup — 3-tab popup shown when "Data Summary" is clicked ───────
@@ -201,6 +205,7 @@ export function DataSummaryPopup({
   // Determine which secondary tabs are relevant for this metric
   const hasProdTab = metric === 'production' || metric === 'nrw' || metric === 'pv' || metric === 'rawwater';
   const hasConsTab = metric === 'production' || metric === 'nrw';
+  const hasGridTab = metric === 'kwh';
 
   // Tab label config
   const overviewLabel =
@@ -209,7 +214,7 @@ export function DataSummaryPopup({
     : metric === 'productionCost' ? 'Cost Overview'
     : metric === 'chemCost' ? 'Chemical Cost'
     : metric === 'powerCost' ? 'Power Cost'
-    : metric === 'kwh' ? 'Solar vs Grid (kWh)'
+    : metric === 'kwh' ? 'Solar vs Grid'
     : 'Overview';
 
   const prodTabLabel =
@@ -456,12 +461,18 @@ export function DataSummaryPopup({
   }, [overviewDates, overviewByDate, metric, prodDates, prodEntities, prodPivotMap]);
 
   // Tab guard: if active tab becomes irrelevant, reset
-  const activeTab: DSMTab = (!hasProdTab && tab === 'production') || (!hasConsTab && tab === 'consumption') ? 'overview' : tab;
+  const activeTab: DSMTab =
+    (!hasProdTab && tab === 'production') ||
+    (!hasConsTab && tab === 'consumption') ||
+    (!hasGridTab && tab === 'grid-by-meter')
+      ? 'overview'
+      : tab;
 
   // The shared "dates" for footer count & summary calculations — use per-tab.
   // For rawwater overview: use prodDates so the footer count matches Per Well.
   const tabDates = activeTab === 'consumption' ? consDates
     : activeTab === 'production' ? prodDates
+    : activeTab === 'grid-by-meter' ? overviewDates
     : metric === 'rawwater' ? prodDates
     : overviewDates;
 
@@ -492,11 +503,15 @@ export function DataSummaryPopup({
     let csvContent = '';
     if (activeTab === 'overview') {
       if (metric === 'kwh') {
-        // kWh metric: the on-screen tables are Solar vs Grid + Grid by Meter.
-        // The generic overview headers below carry no kWh columns (they'd all
-        // export empty for this metric), so export both tables as labeled
-        // sections instead — see buildKwhSummaryCsv.
-        csvContent = buildKwhSummaryCsv(overviewChartRows, gridBreakdown, overviewDates);
+        const headers = ['Date', 'Solar (kWh)', 'Grid (kWh)', 'Total (kWh)', 'Solar (%)'];
+        const rows = overviewChartRows.map((r) => {
+          const solar = +(r.solarKwh ?? 0);
+          const grid = +(r.kwh ?? 0);
+          const total = solar + grid;
+          const pct = total > 0 && solar > 0 ? ((solar / total) * 100).toFixed(1) + '%' : '—';
+          return [r.date, solar > 0 ? solar.toFixed(1) : '', grid > 0 ? grid.toFixed(1) : '', total > 0 ? total.toFixed(1) : '', pct].join(',');
+        });
+        csvContent = [headers.join(','), ...rows].join('\n');
       } else {
         const headers = ['Date', 'Production (m3)', 'Consumption (m3)', 'NRW (%)', 'Raw Water (m3)', 'Recovery (%)', 'Permeate TDS (ppm)'];
         const rows = overviewChartRows.map(r => [
@@ -510,6 +525,21 @@ export function DataSummaryPopup({
         ].join(','));
         csvContent = [headers.join(','), ...rows].join('\n');
       }
+    } else if (activeTab === 'grid-by-meter') {
+      const cols = gridBreakdown.hasUnattributed
+        ? [...gridBreakdown.columns, { key: GRID_METER_OTHER_KEY, label: 'Other' }]
+        : gridBreakdown.columns;
+      const headers = ['Date', ...cols.map((c) => `"${c.label.replace(/"/g, '""')}"`), 'Total (kWh)'];
+      const rows = [...overviewDates].reverse().map((dk) => {
+        const row = gridBreakdown.byDate.get(dk);
+        const vals = cols.map((c) => {
+          const v = row?.values[c.key];
+          return v != null ? v.toFixed(1) : '';
+        });
+        const tot = row && row.total > 0 ? row.total.toFixed(1) : '';
+        return [fmtDateKey(dk), ...vals, tot].join(',');
+      });
+      csvContent = [headers.join(','), ...rows].join('\n');
     } else if (activeTab === 'production') {
       const headers = ['Date', ...prodEntities.map(e => `"${e.label.replace(/"/g, '""')}"`), 'Total (m3)'];
       const rows = [...prodDates].reverse().map(d => {
@@ -644,6 +674,7 @@ export function DataSummaryPopup({
           <div className="flex gap-0 -mb-px">
             {([
               { key: 'overview' as DSMTab, label: overviewLabel, show: true },
+              { key: 'grid-by-meter' as DSMTab, label: 'Grid by Meter', show: hasGridTab },
               { key: 'production' as DSMTab, label: prodTabLabel, show: hasProdTab },
               { key: 'consumption' as DSMTab, label: 'Consumption', show: hasConsTab },
             ] as const).filter((t) => t.show).map((t) => (
@@ -651,7 +682,7 @@ export function DataSummaryPopup({
                 key={t.key}
                 onClick={() => setTab(t.key)}
                 className={[
-                  'px-5 py-2 text-xs font-semibold border-b-2 transition-colors whitespace-nowrap',
+                  'px-5 py-2 text-xs font-semibold border-b-2 transition-colors whitespace-nowrap cursor-pointer',
                   activeTab === t.key
                     ? 'border-primary text-primary bg-background'
                     : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border',
@@ -666,55 +697,35 @@ export function DataSummaryPopup({
         {/* Body */}
         <div className="flex-1 overflow-hidden min-h-0 flex flex-col">
           <div className="flex-1 overflow-hidden min-h-0 flex flex-col">
-              {activeTab === 'overview' && (metric === 'kwh' ? (
-                /* kWh metric: the Solar vs Grid table gets a "Grid by Meter"
-                   side table (Date × Grid Meter 1..N × Total), day-for-date
-                   aligned via overviewDates. Stacks vertically below xl so
-                   neither table gets cramped on narrow screens. */
-                <div className="flex-1 min-h-0 flex flex-col xl:flex-row overflow-y-auto xl:overflow-hidden">
-                  <div className="flex-1 min-w-0 flex flex-col overflow-hidden min-h-[300px] xl:border-r border-b xl:border-b-0 border-border/40">
-                    <div className="px-3 pt-2 pb-1 text-2xs font-semibold uppercase tracking-wider text-muted-foreground shrink-0">
-                      ☀ Solar vs ⚡ Grid
-                    </div>
-                    <div className="flex-1 min-h-0">
-                      <OverviewTable metric={metric} chartData={overviewChartRows} />
-                    </div>
-                  </div>
-                  <div className="flex-1 min-w-0 flex flex-col overflow-hidden min-h-[300px]">
-                    <div className="px-3 pt-2 pb-1 text-2xs font-semibold uppercase tracking-wider text-muted-foreground shrink-0">
-                      ⚡ Grid by Meter
-                    </div>
-                    <div className="flex-1 min-h-0">
-                      <GridMeterBreakdownTable dates={overviewDates} breakdown={gridBreakdown} />
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <OverviewTable metric={metric} chartData={overviewChartRows} />
-              ))}
-              {activeTab === 'production' && hasProdTab && (
-                <PivotTable
-                  dates={prodDates}
-                  entities={prodEntities}
-                  pivot={prodPivotMap}
-                  totalLabel={metric === 'rawwater' ? 'Total Raw (m³)' : 'Total Prod. (m³)'}
-                  unit="m³"
-                  colorClass="text-primary"
-                  entityType={metric === 'rawwater' || metric === 'pv' ? 'well' : hasPermeateData ? 'ro_train' : 'meter'}
-                />
-              )}
-              {activeTab === 'consumption' && hasConsTab && (
-                <PivotTable
-                  dates={consDates}
-                  entities={consEntities}
-                  pivot={consPivot}
-                  totalLabel="Total Cons. (m³)"
-                  unit="m³"
-                  colorClass="text-highlight"
-                  entityType="locator"
-                />
-              )}
-            </div>
+            {activeTab === 'overview' && (
+              <OverviewTable metric={metric} chartData={overviewChartRows} />
+            )}
+            {activeTab === 'grid-by-meter' && hasGridTab && (
+              <GridMeterBreakdownTable dates={overviewDates} breakdown={gridBreakdown} />
+            )}
+            {activeTab === 'production' && hasProdTab && (
+              <PivotTable
+                dates={prodDates}
+                entities={prodEntities}
+                pivot={prodPivotMap}
+                totalLabel={metric === 'rawwater' ? 'Total Raw (m³)' : 'Total Prod. (m³)'}
+                unit="m³"
+                colorClass="text-primary"
+                entityType={metric === 'rawwater' || metric === 'pv' ? 'well' : hasPermeateData ? 'ro_train' : 'meter'}
+              />
+            )}
+            {activeTab === 'consumption' && hasConsTab && (
+              <PivotTable
+                dates={consDates}
+                entities={consEntities}
+                pivot={consPivot}
+                totalLabel="Total Cons. (m³)"
+                unit="m³"
+                colorClass="text-highlight"
+                entityType="locator"
+              />
+            )}
+          </div>
         </div>
 
         {/* Footer info bar */}
@@ -738,7 +749,7 @@ export function DataSummaryPopup({
           {activeTab === 'consumption' && hasConsTab && (
             <span>· {consEntities.length} locators</span>
           )}
-          {activeTab === 'overview' && metric === 'kwh' && (
+          {activeTab === 'grid-by-meter' && hasGridTab && (
             <span>· {gridBreakdown.columns.length} grid meter{gridBreakdown.columns.length === 1 ? '' : 's'}{gridBreakdown.hasUnattributed ? ' (some days only stored as daily totals)' : ''}</span>
           )}
         </div>

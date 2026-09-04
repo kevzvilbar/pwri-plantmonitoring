@@ -119,7 +119,7 @@ export function fmtDateKey(key: string): string {
   return format(new Date(key + 'T00:00:00'), 'MMM d');
 }
 
-export type DSMTab = 'overview' | 'production' | 'consumption';
+export type DSMTab = 'overview' | 'production' | 'consumption' | 'grid-by-meter';
 
 // ─── CSS class helpers (avoids repetition) ──────────────────────────────────
 // z-index scheme for the single shared scroll container (see PivotTable/
