@@ -1068,15 +1068,10 @@
   80%, 100%{ transform: scale(2.5); opacity: 0; }
 }
 
-@keyframes page-fade-up {
-  from { opacity: 0; transform: translateY(6px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-
-@keyframes stagger-fade-up {
-  from { opacity: 0; transform: translateY(8px) scale(0.98); }
-  to   { opacity: 1; transform: translateY(0) scale(1); }
-}
+/* NOTE: `page-fade-up` / `stagger-fade-up` were previously declared twice —
+   once here and once further down — and the later definition silently won.
+   They now live in exactly one place: see "Route & stagger entrances" below.
+   (Last @keyframes definition with a given name wins the cascade.) */
 
 @keyframes shimmer {
   0%   { background-position: -200% 0; }
@@ -1334,6 +1329,9 @@ h1[id], h2[id], h3[id], section[id], [data-scroll-target], .scroll-mt-header {
   }
 }
 
+/* ── Route & stagger entrances (single source of truth) ─────────────────────
+   These were duplicated earlier in the file; the dupes are gone. The 4px
+   travel / no-scale versions below are what actually rendered before. */
 @keyframes page-fade-up {
   0% {
     opacity: 0;
@@ -1403,12 +1401,162 @@ h1[id], h2[id], h3[id], section[id], [data-scroll-target], .scroll-mt-header {
   animation: bell-ring-once 0.65s cubic-bezier(0.36, 0.07, 0.19, 0.97) 1;
 }
 
+/* ── Purposeful motion additions (impeccable /animate) ──────────────────────
+   Every animation here earns its place by explaining a state change,
+   acknowledging an action, or directing attention — decoration without
+   purpose is animation debt. All reuse the motion tokens defined in :root
+   above; reduced-motion behavior is handled in the media block at the end. */
+
+/* Live-value tick — makes a background telemetry refresh legible on KPI
+   readouts (StatCard): data syncs silently, so an updated number must
+   announce itself. Routine state change → --duration-fast band. Triggered
+   via a `key` remount on the readout so it re-runs on every actual change. */
+@keyframes value-tick {
+  from { opacity: 0.35; transform: translateY(-1px); }
+  to   { opacity: 1;    transform: translateY(0); }
+}
+.animate-value-tick {
+  animation: value-tick var(--duration-fast) var(--ease-spring) both;
+}
+
+/* Alert arrival flash — one-shot background tint when a deviation banner
+   first mounts, so the eye lands on the new state (direct attention at a
+   meaningful moment). Color-only: no spatial movement. The tone picks the
+   tint via --alert-flash-tint; .animate-alert-flash-critical is declared
+   AFTER .animate-alert-flash so it wins the cascade when both are present. */
+@keyframes alert-flash {
+  from { background-color: hsl(var(--alert-flash-tint) / 0.18); }
+  to   { background-color: hsl(var(--card)); }
+}
+.animate-alert-flash {
+  --alert-flash-tint: var(--warn);
+  animation: alert-flash var(--duration-complex) var(--ease-out) both;
+}
+.animate-alert-flash-critical {
+  --alert-flash-tint: var(--danger);
+  animation: alert-flash var(--duration-complex) var(--ease-out) both;
+}
+
+/* Focal entrance — the ONE authored moment on the dashboard: the telemetry
+   hero powers on like an instrument panel, then a single charge of light
+   sweeps its top edge once. Bounded to one overflow-hidden element, one run,
+   pointer-events-none. Timing follows the authored-entrance band of the
+   motion ladder (500–800ms); everything else on the page stays routine/fast.
+   Requires the target to be `relative overflow-hidden` (clips the sweep). */
+@keyframes hero-arrive {
+  from { opacity: 0; transform: translateY(8px) scale(0.99); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes hero-charge {
+  from { transform: translateX(-110%); opacity: 1; }
+  55%  { opacity: 1; }
+  to   { transform: translateX(110%); opacity: 0; }
+}
+.hero-arrival {
+  animation: hero-arrive 560ms var(--ease-spring) both;
+}
+.hero-arrival::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 2px;
+  width: 45%;
+  border-radius: 9999px;
+  background: linear-gradient(90deg, transparent, hsl(var(--highlight) / 0.9), transparent);
+  animation: hero-charge 700ms var(--ease-out) 260ms both;
+  pointer-events: none;
+}
+
+/* ── Reduced motion: reduce, don't erase ────────────────────────────────────
+   Principle (impeccable /animate): "Reduced motion means fewer and gentler
+   animations, not disabling all motion; feedback that confirms an action
+   should remain legible." The previous blanket (everything at 0.01ms) erased
+   save-confirmations, alert flashes and loading spinners entirely — which
+   reads as a frozen, broken UI. So we instead:
+     1. Drop spatial travel (entrances fade in place, popovers don't slide).
+     2. Stop ambient loops after one pass instead of pulsing forever.
+     3. Keep interaction transitions (hover/press/state colors) running,
+        just calmer.
+     4. Keep loaders spinning (a stopped spinner = frozen UI) and let
+        meaning-bearing confirmations opt back into authored timing via
+        .reduce-motion-keep on the same element. */
 @media (prefers-reduced-motion: reduce) {
   *, ::before, ::after {
-    animation-duration: 0.01ms !important;
+    animation-duration: 150ms !important;
     animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
+    animation-fill-mode: forwards !important;
+    transition-duration: 120ms !important;
     scroll-behavior: auto !important;
+    /* tailwindcss-animate (shadcn dialogs/popovers/tooltips/sheets): zero
+       the slide/zoom/rotate travel while the paired opacity fade survives. */
+    --tw-enter-translate-x: 0 !important;
+    --tw-enter-translate-y: 0 !important;
+    --tw-enter-scale: 1 !important;
+    --tw-enter-rotate: 0 !important;
+    --tw-exit-translate-x: 0 !important;
+    --tw-exit-translate-y: 0 !important;
+    --tw-exit-scale: 1 !important;
+    --tw-exit-rotate: 0 !important;
+  }
+
+  /* Loaders are action-in-progress feedback — they keep spinning, slower. */
+  .animate-spin {
+    animation-duration: 1.5s !important;
+    animation-iteration-count: infinite !important;
+  }
+
+  /* Meaning-bearing one-shot confirmations (save glow, alert flash) opt back
+     into near-authored timing — a subliminal flash is not feedback. */
+  .reduce-motion-keep,
+  .reduce-motion-keep::before,
+  .reduce-motion-keep::after {
+    animation-duration: var(--duration-complex) !important;
+    animation-iteration-count: 1 !important;
+  }
+
+  /* Entrances become fades-in-place: re-declaring a keyframe name here
+     replaces the spatial version above (last definition wins). */
+  @keyframes page-fade-up {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
+  @keyframes stagger-fade-up {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
+  /* Page-root entrances (tailwind.config.ts animation tokens, in use) */
+  @keyframes fade-in {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
+  @keyframes scale-in {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
+  /* Bell shake is pure rotation — drop it; the red badge count carries the
+     state change instead. */
+  @keyframes bell-ring-once {
+    0%, 100% { transform: rotate(0deg); }
+  }
+  /* Save-confirm glow keeps its color feedback, loses the 1.01 scale pop. */
+  @keyframes gauge-confirm {
+    0%   { box-shadow: 0 0 0 0 var(--confirm-glow, rgba(13, 148, 136, 0.6)); }
+    50%  { box-shadow: 0 0 16px 4px var(--confirm-glow, rgba(13, 148, 136, 0.4)); }
+    100% { box-shadow: 0 0 0 0 transparent; }
+  }
+  /* Value tick: fade only. */
+  @keyframes value-tick {
+    from { opacity: 0.35; }
+    to   { opacity: 1; }
+  }
+  /* Hero focal entrance: plain fade; the light sweep is pure decoration. */
+  @keyframes hero-arrive {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
+  .hero-arrival::after {
+    display: none;
   }
 }
 

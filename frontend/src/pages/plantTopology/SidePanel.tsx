@@ -58,10 +58,16 @@ export function SidePanel({
 
   return (
     <div
-      className={`absolute right-0 top-0 bottom-0 z-30 flex flex-col bg-card border-l border-border shadow-2xl transition-all duration-300 ease-in-out overflow-hidden ${
-        open ? 'w-full sm:w-72 opacity-100' : 'w-0 opacity-0 pointer-events-none'
+      /* Slide on transform, not width (impeccable /animate: never animate
+         layout-driving properties — width here). The panel keeps its final
+         width at all times; the topology canvas container's overflow-hidden
+         clips the off-screen resting state, so no scrollbar can appear.
+         Exit (200ms) is faster than entrance (300ms spring arrival). */
+      className={`absolute right-0 top-0 bottom-0 z-30 flex w-full sm:w-72 flex-col bg-card border-l border-border shadow-2xl transition-transform overflow-hidden ${
+        open
+          ? 'translate-x-0 duration-300 ease-spring-out'
+          : 'pointer-events-none translate-x-full duration-200 ease-in-out'
       }`}
-      style={{ minWidth: open ? undefined : 0 }}
     >
       {/* Panel header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-muted/40 shrink-0">

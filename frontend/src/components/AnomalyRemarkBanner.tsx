@@ -35,6 +35,12 @@ export function AnomalyRemarkBanner({
       tone={isCritical ? 'critical' : 'warning'}
       icon={isCritical ? ShieldAlert : AlertCircle}
       title={message}
+      /* One-shot arrival flash: the banner mounting IS the state change, so
+         the tint sweep directs the eye to it (impeccable /animate: direct
+         attention at a meaningful moment). Color-only, one run. The
+         reduce-motion-keep marker preserves this feedback under
+         prefers-reduced-motion instead of erasing it. */
+      className={cn('animate-alert-flash reduce-motion-keep', isCritical && 'animate-alert-flash-critical')}
     >
       <div className="space-y-1.5 pl-6 pt-1">
         <Textarea

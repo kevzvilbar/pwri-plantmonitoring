@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Card } from '@/components/ui/card';
 import { StatusPill } from '@/components/StatusPill';
 import { TrendingUp, TrendingDown, Minus, ChevronDown, ChevronUp } from 'lucide-react';
@@ -10,6 +10,24 @@ import { StatTone, TONE_BG, TONE_ICON } from './types';
 // typeface used by the energy cluster cards. Declared once as the `font-numeral`
 // Tailwind token (tailwind.config.ts) and loaded via the single app-wide
 // @import in index.css — see those files rather than re-declaring it here.
+
+// Re-triggers a CSS animation on the readout whenever the underlying value
+// actually changes. Background sync refreshes telemetry silently — without
+// this, an updated KPI is invisible (impeccable /animate: motion must make
+// state change legible). Returns a counter; render the readout with
+// `key={tick}` so it remounts and `.animate-value-tick` restarts. The first
+// render never ticks: initial paint is arrival, not a change.
+function useValueTick(value: unknown): number {
+  const [tick, setTick] = useState(0);
+  const prevRef = useRef(value);
+  useEffect(() => {
+    if (!Object.is(prevRef.current, value)) {
+      prevRef.current = value;
+      setTick((t) => t + 1);
+    }
+  }, [value]);
+  return tick;
+}
 
 // Tiny up/down/flat arrow with percent label — shown BELOW the value.
 // Renders nothing when `delta` is null or non-finite.
@@ -53,6 +71,7 @@ export function StatCard({
   badge?: React.ReactNode;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const valueTick = useValueTick(value);
 
   const liveRows    = (expandRows ?? []).filter((r) => r.value != null);
   const showExpand  = liveRows.length >= 2;
@@ -101,9 +120,12 @@ export function StatCard({
         </div>
       </div>
 
-      {/* ── Value row ── */}
+      {/* ── Value row ──
+          key={valueTick} remounts the readout when the value actually changes,
+          restarting the tick so background-sync updates are legible. */}
       <div
-        className={`mt-2 text-foreground leading-none whitespace-nowrap overflow-hidden text-ellipsis font-mono tabular-nums ${lg ? 'text-2xl sm:text-3xl font-bold' : 'text-2xl font-bold'}`}
+        key={valueTick}
+        className={`mt-2 text-foreground leading-none whitespace-nowrap overflow-hidden text-ellipsis font-mono tabular-nums ${lg ? 'text-2xl sm:text-3xl font-bold' : 'text-2xl font-bold'} ${valueTick > 0 ? 'animate-value-tick' : ''}`}
       >
         {value}
         {unit && <span className={`font-sans font-normal text-muted-foreground ml-1.5 ${lg ? 'text-sm' : 'text-xs'}`}>{unit}</span>}
@@ -172,6 +194,7 @@ export function PerWellSourceCard({
   multiPlant?: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const aggregateTick = useValueTick(aggregate);
 
   // Filter out rows with no reading for this metric — they'd render as
   // "—" and add noise to a list whose whole purpose is to show numbers.
@@ -217,8 +240,11 @@ export function PerWellSourceCard({
         </div>
       </div>
 
-      {/* ── Value ── */}
-      <div className="mt-2 text-foreground leading-none whitespace-nowrap text-2xl font-bold font-mono tabular-nums">
+      {/* ── Value ── (key={aggregateTick} restarts the tick on real changes) */}
+      <div
+        key={aggregateTick}
+        className={`mt-2 text-foreground leading-none whitespace-nowrap text-2xl font-bold font-mono tabular-nums ${aggregateTick > 0 ? 'animate-value-tick' : ''}`}
+      >
         {aggregate ?? '—'}
         {unit && <span className="font-sans font-normal text-muted-foreground ml-1.5 text-xs">{unit}</span>}
       </div>

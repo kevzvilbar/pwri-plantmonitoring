@@ -147,7 +147,11 @@ export function PlantPulseHero({
 
   return (
     <div className="rounded-[1.75rem] bg-white/[0.03] ring-1 ring-white/10 p-1 sm:p-1.5 shadow-[var(--shadow-elev)]">
-      <div className="rounded-[calc(1.75rem-0.375rem)] bg-gradient-stat text-white p-4 sm:p-5 shadow-[inset_0_1px_1px_rgba(255,255,255,0.08)] edge-light-teal relative overflow-hidden">
+      {/* Focal entrance (the app's ONE authored moment): the hero powers on
+          like an instrument panel, then a single charge of light sweeps the
+          top edge once. The element is already relative overflow-hidden, so
+          the sweep is clipped to the panel. See .hero-arrival in index.css. */}
+      <div className="hero-arrival rounded-[calc(1.75rem-0.375rem)] bg-gradient-stat text-white p-4 sm:p-5 shadow-[inset_0_1px_1px_rgba(255,255,255,0.08)] edge-light-teal relative overflow-hidden">
         
         {/* ── Top Bar: Title, Facility Badge, Incident Flag, Downtime & View Toggle ── */}
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pb-3.5 border-b border-white/15">
