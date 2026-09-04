@@ -633,6 +633,19 @@ export function useTrendChartDerived(p: Record<string, any>) {
     const chartRow: any = trendRows.find((d: any) => d.date === label);
     const replacements: string[] = chartRow?._meterReplacements ?? [];
     const permeateSourceNames: string[] = chartRow?._permeateSourceNames ?? [];
+    const dayCount: number | undefined = chartRow?._dayCount;
+    const isPartial: boolean | undefined = chartRow?._partial;
+
+    let expectedBucketDays: number | null = null;
+    if (viewGran === 'weekly') {
+      expectedBucketDays = 7;
+    } else if (viewGran === 'monthly' && chartRow?.isoDate) {
+      const d = new Date(`${chartRow.isoDate}T00:00:00`);
+      if (!isNaN(d.getTime())) {
+        expectedBucketDays = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+      }
+    }
+
     return (
       <div style={{
         background: 'hsl(var(--card))',
@@ -672,6 +685,15 @@ export function useTrendChartDerived(p: Record<string, any>) {
             </span>
           </div>
         )}
+        {viewGran !== 'daily' && dayCount != null && expectedBucketDays != null && (
+          <div style={{ marginTop: 6, paddingTop: 4, borderTop: '1px solid hsl(var(--border))', fontSize: 10, color: 'hsl(var(--muted-foreground))' }}>
+            <span>Coverage: </span>
+            <strong style={{ color: dayCount < expectedBucketDays ? 'hsl(var(--warn))' : 'inherit' }}>
+              {dayCount} of {expectedBucketDays} days reported
+            </strong>
+            {isPartial ? ' · partial' : ''}
+          </div>
+        )}
       </div>
     );
   };
@@ -693,11 +715,12 @@ export function useTrendChartDerived(p: Record<string, any>) {
     }
     const bucketIsoDate = payload.isoDate as string | undefined;
     if (!bucketIsoDate) return;
-    setDrillFocus({
+    setDrillFocus((prev: DrillFocus | null) => ({
       bucketIsoDate,
       label: payload.date as string,
       fromGranularity: viewGran as 'monthly' | 'weekly',
-    });
+      parent: prev ?? undefined,
+    }));
     setViewGran(nextFinerGranularity(viewGran as 'monthly' | 'weekly'));
   };
 
@@ -715,7 +738,28 @@ export function useTrendChartDerived(p: Record<string, any>) {
 
   const drillCrumbs: DrillCrumb[] = drillFocus
     ? [
-        { label: range === 'CUSTOM' ? 'Custom range' : range, onSelect: () => setDrillFocus(null) },
+        {
+          label: range === 'CUSTOM' ? 'Custom range' : range,
+          onSelect: () => {
+            setDrillFocus(null);
+            if (range === 'MONTHLY' && p.chartMonth === 'YTD') {
+              setViewGran('monthly');
+            } else if (range === 'MONTHLY') {
+              setViewGran('daily');
+            }
+          },
+        },
+        ...(drillFocus.parent
+          ? [
+              {
+                label: drillFocus.parent.label,
+                onSelect: () => {
+                  setDrillFocus(drillFocus.parent!);
+                  setViewGran('weekly');
+                },
+              },
+            ]
+          : []),
         { label: drillFocus.label },
       ]
     : phDayFocus
@@ -791,6 +835,13 @@ export function useTrendChartDerived(p: Record<string, any>) {
             Solar: <span>{row.solarKwh > 0 ? row.solarKwh.toLocaleString(undefined, { maximumFractionDigits: 1 }) + ' kWh' : '—'}</span>
           </p>
         </div>
+        {viewGran !== 'daily' && row?._dayCount != null && (
+          <div style={{ marginTop: 5, paddingTop: 4, borderTop: '1px solid hsl(var(--border))', fontSize: 10, color: 'hsl(var(--muted-foreground))' }}>
+            <span>Coverage: </span>
+            <strong>{row._dayCount} {row._dayCount === 1 ? 'day' : 'days'} reported</strong>
+            {row._partial ? ' · partial' : ''}
+          </div>
+        )}
       </div>
     );
   };

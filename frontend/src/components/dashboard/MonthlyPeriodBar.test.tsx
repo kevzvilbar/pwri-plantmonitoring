@@ -51,6 +51,26 @@ describe('MonthlyPeriodBar Component', () => {
     expect(handlePeriodChange).toHaveBeenCalledWith(2026, '08');
   });
 
+  it('disables future months in the current year', () => {
+    const handlePeriodChange = vi.fn();
+
+    render(
+      <MonthlyPeriodBar
+        year={2026}
+        selectedMonth="YTD"
+        onPeriodChange={handlePeriodChange}
+        testIdPrefix="test-monthly"
+      />
+    );
+
+    // Month 12 (December 2026) is in the future relative to September 2026
+    const decBtn = screen.getByTestId('test-monthly-pill-12');
+    expect(decBtn).toBeDisabled();
+    fireEvent.click(decBtn);
+
+    expect(handlePeriodChange).not.toHaveBeenCalled();
+  });
+
   it('triggers onPeriodChange when clicking YTD Full Year', () => {
     const handlePeriodChange = vi.fn();
 
@@ -143,7 +163,7 @@ describe('useAppStore Monthly Period calculations', () => {
 
   it('rangeKeyToDays calculates days between dates when range is MONTHLY', () => {
     const days = rangeKeyToDays('MONTHLY', '2026-08-01', '2026-08-31');
-    expect(days).toBe(30);
+    expect(days).toBe(31);
   });
 });
 

@@ -39,7 +39,7 @@ export const RANGE_DAYS: Record<Exclude<RangeKey, 'CUSTOM' | 'MONTHLY'>, number>
 export function rangeKeyToDays(range: RangeKey, from: string, to: string): number {
   if (range === 'CUSTOM' || range === 'MONTHLY') {
     const ms = new Date(to).getTime() - new Date(from).getTime();
-    return Math.max(1, Math.round(ms / 86_400_000));
+    return Math.max(1, Math.round(ms / 86_400_000) + 1);
   }
   return RANGE_DAYS[range];
 }

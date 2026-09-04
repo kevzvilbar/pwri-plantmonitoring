@@ -1,8 +1,7 @@
 import type { ReactNode } from 'react';
 import { TableProperties } from 'lucide-react';
-import { DateRangePicker } from '@/components/ui/date-picker';
 import { RangeKey } from './types';
-import { MonthlyPeriodBar } from './MonthlyPeriodBar';
+import { RangeAndMonthlyPicker } from './RangeAndMonthlyPicker';
 
 interface TrendChartToolbarProps {
   metric: string;
@@ -46,67 +45,18 @@ export function TrendChartToolbar({
           </span>
         )}
 
-        {/* Range controls: Days preset vs Monthly period */}
-        {range !== 'MONTHLY' ? (
-          <div className="flex items-center gap-1 bg-muted/60 p-0.5 rounded-lg border border-border/50 flex-wrap">
-            {(['7D', '14D', '30D', '60D', '90D'] as RangeKey[]).map((r) => (
-              <button
-                key={r}
-                type="button"
-                onClick={() => onRangeChange(r)}
-                data-testid={`trend-range-${metric}-${r}`}
-                className={[
-                  'h-7 px-2.5 text-2xs font-semibold rounded-md transition-all cursor-pointer',
-                  range === r
-                    ? 'bg-card text-primary shadow-xs border border-border/80'
-                    : 'text-muted-foreground hover:text-foreground',
-                ].join(' ')}
-              >
-                {r}
-              </button>
-            ))}
-            <button
-              type="button"
-              onClick={() => onRangeChange('CUSTOM')}
-              data-testid={`trend-range-${metric}-CUSTOM`}
-              className={[
-                'h-7 px-2.5 text-2xs font-semibold rounded-md transition-all cursor-pointer',
-                range === 'CUSTOM'
-                  ? 'bg-card text-primary shadow-xs border border-border/80'
-                  : 'text-muted-foreground hover:text-foreground',
-              ].join(' ')}
-            >
-              Custom
-            </button>
-            <div className="h-3.5 border-r border-border/40 mx-0.5" aria-hidden />
-            <button
-              type="button"
-              onClick={() => onRangeChange('MONTHLY')}
-              data-testid={`trend-range-${metric}-MONTHLY`}
-              className="h-7 px-2.5 text-2xs font-semibold rounded-md transition-all cursor-pointer text-muted-foreground hover:text-foreground"
-            >
-              Monthly
-            </button>
-          </div>
-        ) : (
-          <MonthlyPeriodBar
-            year={chartYear ?? new Date().getFullYear()}
-            selectedMonth={chartMonth ?? 'YTD'}
-            onPeriodChange={(y, m) => onMonthlyPeriodChange?.(y, m)}
-            onBackToDays={() => onRangeChange('7D')}
-            testIdPrefix={`trend-${metric}-monthly`}
-          />
-        )}
-
-        {range === 'CUSTOM' && (
-          <DateRangePicker
-            from={from}
-            to={to}
-            onChange={({ from: f, to: t }) => onCustomDatesChange(f, t)}
-            size="sm"
-            className="h-7 w-[200px] text-2xs px-2"
-          />
-        )}
+        {/* Unified Range and Monthly controls */}
+        <RangeAndMonthlyPicker
+          range={range}
+          onRangeChange={onRangeChange}
+          from={from}
+          to={to}
+          onCustomDatesChange={onCustomDatesChange}
+          chartYear={chartYear}
+          chartMonth={chartMonth}
+          onMonthlyPeriodChange={onMonthlyPeriodChange}
+          testIdPrefix={`trend-range-${metric}`}
+        />
 
         {isFetching && (
           <span className="text-2xs font-mono text-muted-foreground animate-pulse shrink-0">Syncing…</span>

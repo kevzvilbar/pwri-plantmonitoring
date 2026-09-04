@@ -577,10 +577,20 @@ export function DataSummaryPopup({
         {/* Header */}
         <DialogHeader className="px-5 pt-4 pb-0 border-b shrink-0 bg-card">
           <div className="flex items-center justify-between gap-3 pb-2 flex-wrap">
-            <DialogTitle className="text-sm font-semibold flex items-center gap-2">
-              <TableProperties className="h-4 w-4 text-primary" />
-              <span>Data Summary — {title ?? metric}</span>
-            </DialogTitle>
+            <div className="flex flex-col gap-0.5">
+              <div className="flex items-center gap-2 flex-wrap">
+                <DialogTitle className="text-sm font-semibold flex items-center gap-2">
+                  <TableProperties className="h-4 w-4 text-primary" />
+                  <span>Data Summary — {title ?? metric}</span>
+                </DialogTitle>
+                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-3xs font-medium bg-muted text-muted-foreground border border-border/60">
+                  Daily audit trail
+                </span>
+              </div>
+              <p className="text-3xs text-muted-foreground">
+                Verified day-level reading records and calculated entity deltas across the period.
+              </p>
+            </div>
 
             <div className="flex items-center gap-2 mr-8">
               <Button

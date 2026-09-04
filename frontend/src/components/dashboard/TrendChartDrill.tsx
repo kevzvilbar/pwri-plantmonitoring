@@ -48,10 +48,10 @@ export function GranularityControl({
   rangeDays: number;
   testIdPrefix?: string;
 }) {
-  const allOptions: { key: Granularity; label: string; icon: React.ReactNode; activeClass: string }[] = [
-    { key: 'daily', label: 'Daily', icon: <BarChart2 className="h-3 w-3" />, activeClass: 'bg-primary text-primary-foreground border-primary' },
-    { key: 'weekly', label: 'Weekly', icon: <Rows3 className="h-3 w-3" />, activeClass: 'bg-chart-2 text-white border-chart-2' },
-    { key: 'monthly', label: 'Monthly', icon: <ChevronsUp className="h-3 w-3" />, activeClass: 'bg-kpi-ro text-white border-kpi-ro' },
+  const allOptions: { key: Granularity; label: string; icon: React.ReactNode }[] = [
+    { key: 'daily', label: 'Daily', icon: <BarChart2 className="h-3 w-3" /> },
+    { key: 'weekly', label: 'Weekly', icon: <Rows3 className="h-3 w-3" /> },
+    { key: 'monthly', label: 'Monthly', icon: <ChevronsUp className="h-3 w-3" /> },
   ];
   // Only offer Monthly bucketing when the active range span has enough data (>= 45 days, e.g. YTD or 60D/90D).
   // On shorter ranges (7D, 14D, 30D, single month), hide the Monthly view option completely so there is NO duplicate
@@ -60,7 +60,7 @@ export function GranularityControl({
 
   return (
     <div className="flex items-center gap-0.5 shrink-0">
-      {options.map(({ key, label, icon, activeClass }) => {
+      {options.map(({ key, label, icon }) => {
         const usable = isGranularityUsable(key, rangeDays);
         const active = value === key;
         return (
@@ -72,12 +72,12 @@ export function GranularityControl({
             data-testid={testIdPrefix ? `${testIdPrefix}-${key}` : undefined}
             title={usable ? undefined : `Needs a longer date range to show more than one ${key === 'weekly' ? 'week' : 'month'}`}
             className={[
-              'h-5 px-1.5 rounded text-2xs font-medium transition-colors leading-none flex items-center gap-0.5 border cursor-pointer',
+              'h-6 min-w-[24px] px-2 rounded text-2xs font-medium transition-all leading-none flex items-center gap-1 border',
               !usable
-                ? 'opacity-40 cursor-not-allowed bg-muted text-muted-foreground border-border'
+                ? 'opacity-40 cursor-not-allowed bg-muted/40 text-muted-foreground/60 border-border/40'
                 : active
-                  ? activeClass
-                  : 'bg-muted text-muted-foreground hover:text-foreground border-border',
+                  ? 'bg-primary text-primary-foreground border-primary font-semibold shadow-xs cursor-pointer'
+                  : 'bg-muted/70 text-muted-foreground hover:text-foreground hover:bg-muted border-border/80 cursor-pointer',
             ].join(' ')}
           >
             {icon}
@@ -107,8 +107,8 @@ export function StackToggle({
         onClick={() => onChange('grouped')}
         title="Grouped bars — compare entities side by side"
         className={[
-          'h-4 px-1.5 rounded text-2xs font-medium transition-colors flex items-center gap-0.5',
-          value === 'grouped' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground',
+          'h-6 min-w-[24px] px-2 rounded text-2xs font-medium transition-colors flex items-center gap-1 cursor-pointer',
+          value === 'grouped' ? 'bg-primary text-primary-foreground font-semibold shadow-xs' : 'text-muted-foreground hover:text-foreground',
         ].join(' ')}
       >
         <Columns3 className="h-3 w-3" />
@@ -119,8 +119,8 @@ export function StackToggle({
         onClick={() => onChange('stacked')}
         title="Stacked bars — see the combined total"
         className={[
-          'h-4 px-1.5 rounded text-2xs font-medium transition-colors flex items-center gap-0.5',
-          value === 'stacked' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground',
+          'h-6 min-w-[24px] px-2 rounded text-2xs font-medium transition-colors flex items-center gap-1 cursor-pointer',
+          value === 'stacked' ? 'bg-primary text-primary-foreground font-semibold shadow-xs' : 'text-muted-foreground hover:text-foreground',
         ].join(' ')}
       >
         <Rows3 className="h-3 w-3 rotate-90" />

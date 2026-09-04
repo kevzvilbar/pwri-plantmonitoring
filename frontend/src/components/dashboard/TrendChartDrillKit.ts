@@ -72,6 +72,8 @@ export interface DrillFocus {
   label: string;
   /** The granularity that produced the clicked bucket (what we drilled FROM). */
   fromGranularity: 'monthly' | 'weekly';
+  /** Previous parent focus when chained (e.g. month -> week -> day). */
+  parent?: DrillFocus;
 }
 
 /** Local start/end (yyyy-MM-dd, inclusive) for the bucket a focus points at. */

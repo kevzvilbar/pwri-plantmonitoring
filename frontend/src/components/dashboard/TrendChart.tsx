@@ -253,7 +253,14 @@ export function TrendChart({
   // active bucket. Wired into Production/NRW and RO's By-train view; Plant
   // Health can reuse the same primitive next.
   const [drillFocus, setDrillFocus] = useState<DrillFocus | null>(null);
-  useEffect(() => { if (viewGran === 'daily') setDrillFocus(null); }, [viewGran]);
+  useEffect(() => {
+    setDrillFocus(null);
+  }, [range, chartMonth]);
+
+  const handleGranularityChange = (g: Granularity) => {
+    setViewGran(g);
+    setDrillFocus(null);
+  };
 
   // Locator filter for drill modes — null means "all selected" (default)
   // When the user opens drill mode, all locators start selected.
@@ -376,7 +383,7 @@ export function TrendChart({
     handleDrillBarActivate, drillFocusRange, focusedTrendRows, focusedEntityRows, drillCrumbs,
     handleLegendIsolate, handleTrainLegendIsolate, formatYAxis, PvTooltip,
   } = useTrendChartDerived({
-    metric, compact, drillFocus, setDrillFocus, drillMode, range,
+    metric, compact, drillFocus, setDrillFocus, drillMode, range, chartMonth,
     selectedLocatorIds, setSelectedLocatorIds, locatorSearch,
     selectedTrainIds, setSelectedTrainIds, trainSearch,
     selectedWellIds, setSelectedWellIds, wellSearch,
@@ -407,7 +414,7 @@ export function TrendChart({
         onOpenSummary={() => setShowSummary(true)}
         trailingControls={
         <TrendChartControls
-          metric={metric} compact={compact} viewGran={viewGran} setViewGran={setViewGran}
+          metric={metric} compact={compact} viewGran={viewGran} setViewGran={handleGranularityChange}
           viewBreakdown={viewBreakdown} setViewBreakdown={setViewBreakdown}
           rawwaterBreakdown={rawwaterBreakdown} setRawwaterBreakdown={setRawwaterBreakdown}
           stackMode={stackMode} setStackMode={setStackMode}
@@ -615,16 +622,24 @@ export function TrendChart({
             </div>
           </div>
         )}
-        {!queryError && !isFetching && chartData.length === 0 && entityRows.length === 0 && phActiveData.length === 0 && metric !== 'kwh' && (
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
-            <div className="rounded-md border border-border/60 bg-card/80 backdrop-blur-sm px-3 py-2 text-xs text-muted-foreground text-center pointer-events-auto max-w-md shadow-sm">
-              <div className="font-medium text-foreground">No data in selected range</div>
-              <div className="text-xs mt-0.5">
-                Try a wider range, switch plant, or log readings for {metric === 'nrw' ? 'wells & locators' : metric === 'pv' ? 'wells & power' : metric === 'tds' || metric === 'recovery' || metric === 'plantHealth' ? 'RO trains' : metric === 'productionCost' ? 'power readings (Operations) + tariff rate (Costs → Power tab) + production volume (product meter readings)' : 'wells'}.
+        {!queryError && !isFetching && chartData.length === 0 && entityRows.length === 0 && phActiveData.length === 0 && metric !== 'kwh' && (() => {
+          const todayIso = format(new Date(), 'yyyy-MM-dd');
+          const isFutureRange = startKey > todayIso;
+          return (
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
+              <div className="rounded-md border border-border/60 bg-card/80 backdrop-blur-sm px-3 py-2 text-xs text-muted-foreground text-center pointer-events-auto max-w-md shadow-sm">
+                <div className="font-medium text-foreground">
+                  {isFutureRange ? "This period hasn't occurred yet" : 'No data in selected range'}
+                </div>
+                <div className="text-xs mt-0.5">
+                  {isFutureRange
+                    ? 'The selected date range is in the future. Select an earlier month, year, or a current date range to view operational trends.'
+                    : `Try a wider range, switch plant, or log readings for ${metric === 'nrw' ? 'wells & locators' : metric === 'pv' ? 'wells & power' : metric === 'tds' || metric === 'recovery' || metric === 'plantHealth' ? 'RO trains' : metric === 'productionCost' ? 'power readings (Operations) + tariff rate (Costs → Power tab) + production volume (product meter readings)' : 'wells'}.`}
+                </div>
               </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
         {/* productionCost-specific: data exists but all cost values are null (missing tariff or production) */}
         {!queryError && !isFetching && metric === 'productionCost' && chartData.length > 0
           && chartData.every((d) => d.totalCost == null) && (

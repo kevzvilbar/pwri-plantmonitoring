@@ -29,7 +29,7 @@ export function MonthlyPeriodBar({
 }: MonthlyPeriodBarProps) {
   const currentYear = new Date().getFullYear();
   const currentMonthIdx = new Date().getMonth() + 1; // 1-12
-  const availableYears = [currentYear - 2, currentYear - 1, currentYear, currentYear + 1];
+  const availableYears = [currentYear - 2, currentYear - 1, currentYear];
 
   return (
     <div
@@ -43,7 +43,7 @@ export function MonthlyPeriodBar({
         <button
           type="button"
           onClick={onBackToDays}
-          className="h-7 px-2 text-2xs font-semibold rounded-md border border-border/80 bg-muted/60 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors flex items-center gap-1 shrink-0"
+          className="h-7 px-2 text-2xs font-semibold rounded-md border border-border/80 bg-muted/60 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors flex items-center gap-1 shrink-0 cursor-pointer"
           title="Return to rolling day presets (7D, 14D, 30D…)"
           data-testid={`${testIdPrefix}-back-days`}
         >
@@ -87,13 +87,17 @@ export function MonthlyPeriodBar({
         {/* YTD Full Year button */}
         <button
           type="button"
-          onClick={() => onPeriodChange(year, 'YTD')}
+          disabled={year > currentYear}
+          onClick={() => !(year > currentYear) && onPeriodChange(year, 'YTD')}
           data-testid={`${testIdPrefix}-pill-YTD`}
+          title={year > currentYear ? 'Future period — no data recorded yet' : undefined}
           className={cn(
-            'h-7 px-2.5 rounded-md font-semibold shrink-0 transition-all text-2xs cursor-pointer',
+            'h-7 px-2.5 rounded-md font-semibold shrink-0 transition-all text-2xs',
             selectedMonth === 'YTD'
-              ? 'bg-primary text-primary-foreground font-bold shadow-xs'
-              : 'bg-muted/60 text-muted-foreground hover:text-foreground hover:bg-muted',
+              ? 'bg-primary text-primary-foreground font-bold shadow-xs cursor-pointer'
+              : year > currentYear
+              ? 'opacity-35 cursor-not-allowed text-muted-foreground/40 bg-muted/10'
+              : 'bg-muted/60 text-muted-foreground hover:text-foreground hover:bg-muted cursor-pointer',
           )}
         >
           YTD Full Year
@@ -110,15 +114,17 @@ export function MonthlyPeriodBar({
             <button
               key={monthKey}
               type="button"
-              onClick={() => onPeriodChange(year, monthKey)}
+              disabled={isFuture}
+              onClick={() => !isFuture && onPeriodChange(year, monthKey)}
               data-testid={`${testIdPrefix}-pill-${monthKey}`}
+              title={isFuture ? 'Future period — no data recorded yet' : undefined}
               className={cn(
-                'h-7 px-2 rounded-md shrink-0 transition-all text-2xs cursor-pointer font-medium',
+                'h-7 px-2 rounded-md shrink-0 transition-all text-2xs font-medium',
                 isSelected
-                  ? 'bg-primary text-primary-foreground font-bold shadow-xs'
+                  ? 'bg-primary text-primary-foreground font-bold shadow-xs cursor-pointer'
                   : isFuture
-                  ? 'text-muted-foreground/40 hover:text-muted-foreground hover:bg-muted/30'
-                  : 'text-foreground/90 hover:text-foreground hover:bg-muted/80 bg-muted/30',
+                  ? 'opacity-35 cursor-not-allowed text-muted-foreground/40 bg-muted/10'
+                  : 'text-foreground/90 hover:text-foreground hover:bg-muted/80 bg-muted/30 cursor-pointer',
               )}
             >
               {label}
