@@ -141,18 +141,46 @@ export function AppSidebar() {
 
   return (
     <Sidebar collapsible="icon">
-      {/* ── Brand header ──────────────────────────────────────────── */}
-      {!collapsed && (
-        <div className="flex items-center gap-2.5 px-3.5 py-3 border-b border-sidebar-border/40 shrink-0">
-          <Logomark size={28} className="rounded-lg shrink-0" />
-          <div className="flex flex-col leading-none">
-            <span className="text-xs font-semibold text-sidebar-foreground tracking-tight">PWRI</span>
-            <span className="text-3xs text-sidebar-foreground/35 tracking-[0.1em] uppercase">
-              Monitoring & Alert
-            </span>
-          </div>
-        </div>
-      )}
+      {/* ── Brand header: seamlessly aligned with TopBar h-12 in both collapsed & expanded states ── */}
+      <div
+        className={cn(
+          'h-12 border-b border-sidebar-border/40 shrink-0 flex items-center transition-[padding,width] duration-200',
+          collapsed ? 'justify-center px-0' : 'px-3.5 gap-2.5',
+        )}
+      >
+        {collapsed ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <NavLink
+                to="/"
+                className="flex items-center justify-center w-full h-full focus:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring rounded-md transition-transform hover:scale-110 active:scale-95"
+                aria-label="PWRI Monitoring & Alert - Dashboard"
+              >
+                <Logomark size={26} className="shrink-0" />
+              </NavLink>
+            </TooltipTrigger>
+            <TooltipContent side="right" className="text-xs font-semibold">
+              PWRI Monitoring & Alert
+            </TooltipContent>
+          </Tooltip>
+        ) : (
+          <NavLink
+            to="/"
+            className="flex items-center gap-2.5 focus:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring rounded-md group"
+            aria-label="PWRI Monitoring & Alert - Dashboard"
+          >
+            <Logomark size={28} className="shrink-0 group-hover:scale-110 transition-transform duration-200" />
+            <div className="flex flex-col leading-none">
+              <span className="text-xs font-semibold text-sidebar-foreground tracking-tight group-hover:text-sidebar-primary transition-colors">
+                PWRI
+              </span>
+              <span className="text-3xs text-sidebar-foreground/35 tracking-[0.1em] uppercase">
+                Monitoring & Alert
+              </span>
+            </div>
+          </NavLink>
+        )}
+      </div>
 
       <SidebarContent className="py-2 gap-0 overflow-x-hidden">
         {visibleGroups.map((g, groupIdx) => (
@@ -196,7 +224,7 @@ export function AppSidebar() {
                               size="sm"
                               className={cn(
                                 'h-8 w-8 p-0 flex items-center justify-center rounded-md mx-auto',
-                                'hover:bg-sidebar-accent/80 transition-colors duration-150',
+                                'hover:bg-sidebar-accent/80 transition-all duration-200 hover:scale-110 active:scale-95',
                                 isActive && [
                                   'bg-sidebar-accent',
                                   'shadow-[inset_2px_0_0_0_hsl(var(--sidebar-primary))]',
@@ -230,7 +258,7 @@ export function AppSidebar() {
                             end={item.end}
                             className={cn(
                               'flex items-center gap-2.5 w-full px-2 py-[5px] rounded-md',
-                              'text-xs leading-tight transition-all duration-150 group',
+                              'text-xs leading-tight transition-all duration-200 group hover:translate-x-1 active:scale-[0.98]',
                               isActive
                                 ? [
                                     'bg-sidebar-accent text-sidebar-foreground font-semibold',
@@ -268,11 +296,11 @@ export function AppSidebar() {
               onClick={toggleSidebar}
               aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
               className={cn(
-                'flex items-center rounded-md transition-all duration-150',
+                'flex items-center rounded-md transition-all duration-200 active:scale-95',
                 'text-sidebar-foreground/35 hover:text-sidebar-foreground/65 hover:bg-sidebar-accent/60',
                 collapsed
-                  ? 'w-8 h-7 mx-auto justify-center'
-                  : 'w-full h-7 gap-1.5 px-2 justify-start',
+                  ? 'w-8 h-7 mx-auto justify-center hover:scale-110'
+                  : 'w-full h-7 gap-1.5 px-2 justify-start hover:translate-x-0.5',
               )}
             >
               {collapsed ? (

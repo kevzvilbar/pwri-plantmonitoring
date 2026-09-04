@@ -78,9 +78,8 @@ const getAlertIcon = (alert: { title: string; source?: string; severity: string 
 
 export function TopBar() {
   const { user, profile } = useAuth();
-  const { state, isMobile } = useSidebar();
-  const sidebarCollapsed = state === 'collapsed';
-  const showBrand = isMobile || sidebarCollapsed;
+  const { isMobile } = useSidebar();
+  const showBrand = isMobile;
   const { data: plants } = usePlants();
   const {
     selectedPlantId, setSelectedPlantId,
