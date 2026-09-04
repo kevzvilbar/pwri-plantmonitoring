@@ -62,12 +62,14 @@ interface FlaggedRow {
   daily_volume: number | null;
   operator_username: string | null;
   norm_status: string;
-  flag_reason?: string;
+  flag_reason?: 'backward' | 'unchanged' | 'edited' | 'spike' | string;
   /** True when current_reading < previous_reading — the real "backward jump"
    *  signal, computed once in fetchPending() from the raw values rather than
    *  the already-clamped daily_volume. See fetchPending for why the latter
    *  can't be trusted for this. */
   is_backward?: boolean;
+  /** True when previous_reading != null and current_reading === previous_reading (zero flow). */
+  is_unchanged?: boolean;
   /** The operator's own explanation for this reading, captured at save time
    *  by AnomalyRemarkBanner / submitAnomalyRemark() (reading_anomaly_remarks)
    *  whenever the reading's flow rate fell outside the normal band — the
@@ -213,6 +215,36 @@ function DeltaBadge({ vol }: { vol: number | null }) {
       {vol >= 0 ? '+' : ''}{fmtNum(vol)} m³
     </span>
   );
+}
+
+function FlagBadge({ reason }: { reason?: string }) {
+  switch (reason) {
+    case 'backward':
+      return (
+        <span className="text-2xs px-1.5 py-0.5 rounded font-medium bg-destructive/10 text-destructive border border-destructive/20">
+          ↓ backward
+        </span>
+      );
+    case 'unchanged':
+      return (
+        <span className="text-2xs px-1.5 py-0.5 rounded font-medium bg-muted text-muted-foreground border border-border">
+          ⏸ unchanged (0 m³)
+        </span>
+      );
+    case 'edited':
+      return (
+        <span className="text-2xs px-1.5 py-0.5 rounded font-medium bg-info-soft text-info border border-info/30">
+          ✎ edited
+        </span>
+      );
+    case 'spike':
+    default:
+      return (
+        <span className="text-2xs px-1.5 py-0.5 rounded font-medium bg-warn-soft text-warn border border-warn/30">
+          ↑ spike
+        </span>
+      );
+  }
 }
 
 // ── Recently corrected (old ↔ new value) panel ────────────────────────────────
@@ -824,6 +856,7 @@ async function fetchPending(): Promise<{ rows: FlaggedRow[]; truncated: boolean 
       // Compare the two raw meter values directly instead, matching how
       // the DB trigger / SQL backfill audit both define "backward".
       const isBackward = r.previous_reading != null && Number(r.current_reading) < Number(r.previous_reading);
+      const isUnchanged = r.previous_reading != null && Number(r.current_reading) === Number(r.previous_reading);
 
       const editEntry = editReasonMap[r.id];
       const normEntry = normMap[r.id];
@@ -841,6 +874,19 @@ async function fetchPending(): Promise<{ rows: FlaggedRow[]; truncated: boolean 
         preEditVal = Number(corrEntry.original_value);
       }
 
+      // Classify flag reason accurately instead of assuming any non-backward is a 'spike':
+      // 1. Backward: current < previous
+      // 2. Unchanged (Zero delta): current == previous
+      // 3. Edited: has a distinct pre-edit value
+      // 4. Spike: excessive positive delta / flow rate
+      const flagReason: 'backward' | 'unchanged' | 'edited' | 'spike' = isBackward
+        ? 'backward'
+        : isUnchanged
+        ? 'unchanged'
+        : preEditVal != null && preEditVal !== Number(r.current_reading)
+        ? 'edited'
+        : 'spike';
+
       results.push({
         id: r.id,
         source_table: table,
@@ -853,8 +899,9 @@ async function fetchPending(): Promise<{ rows: FlaggedRow[]; truncated: boolean 
         daily_volume: vol,
         operator_username: usernameMap[r.recorded_by] ?? null,
         norm_status: r.norm_status,
-        flag_reason: isBackward ? 'backward' : 'spike',
+        flag_reason: flagReason,
         is_backward: isBackward,
+        is_unchanged: isUnchanged,
         anomaly_remark: remarkMap[r.id] ?? null,
         edit_reason: editEntry ? { text: editEntry.text, actor_label: editEntry.actor_label, logged_at: editEntry.logged_at } : null,
         pre_edit_value: preEditVal,
@@ -1394,7 +1441,20 @@ function PendingReviewTab() {
           {rows.length === 0 ? 'No readings pending review — all clear.' : 'No results match the current filters.'}
         </Card>
       ) : (
-        <div className="space-y-2">
+        <div className="space-y-2.5">
+          {/* Section Header for Quarantined Original Readings */}
+          <div className="flex items-center justify-between px-1 pt-2">
+            <div className="flex items-center gap-2">
+              <p className="text-xs font-bold text-foreground uppercase tracking-wide">
+                Flagged Field Readings (Anomaly Quarantine)
+              </p>
+              <Badge variant="outline" className="h-5 px-2 text-3xs font-semibold">
+                {filtered.length} Quarantined
+              </Badge>
+            </div>
+            <span className="text-3xs text-muted-foreground">Original submissions held by validation guards for supervisor review</span>
+          </div>
+
           {/* Select-all header */}
           <div className="flex items-center gap-2 px-1">
             <Checkbox checked={allSelected} onCheckedChange={toggleAll} className="h-4 w-4" />
@@ -1403,12 +1463,23 @@ function PendingReviewTab() {
 
           {filtered.map(row => {
             const isBack = !!row.is_backward;
+            const isUnchanged = !!row.is_unchanged;
             const isBusy = busy[row.id] ?? false;
             const isExp = expanded === row.id;
             // Rough entity + plant IDs for chain context — we pass plant_id from the row
             // The row doesn't carry entityId directly; we use id as proxy for chain lookup
             return (
-              <Card key={row.id} className={cn('p-4', isBack ? 'border-destructive/30' : 'border-warn/40')}>
+              <Card
+                key={row.id}
+                className={cn(
+                  'p-4',
+                  isBack
+                    ? 'border-destructive/30'
+                    : isUnchanged
+                    ? 'border-border/80'
+                    : 'border-warn/40',
+                )}
+              >
                 <div className="flex items-start gap-2.5">
                   <Checkbox checked={selected.has(row.id)} onCheckedChange={() => toggleOne(row.id)} className="mt-0.5 h-4 w-4 shrink-0" />
                   <div className="flex-1 min-w-0 space-y-2">
@@ -1419,10 +1490,7 @@ function PendingReviewTab() {
                           <span className="text-sm font-medium truncate">{row.entity_name}</span>
                           <Badge variant="outline" className="text-2xs px-1.5 py-0">{row.plant_name}</Badge>
                           <Badge variant="outline" className="text-2xs px-1.5 py-0">{tableLabel[row.source_table]}</Badge>
-                          <span className={cn('text-2xs px-1.5 py-0.5 rounded font-medium',
-                            isBack ? 'bg-destructive/10 text-destructive' : 'bg-warn-soft text-warn')}>
-                            {isBack ? '↓ backward' : '↑ spike'}
-                          </span>
+                          <FlagBadge reason={row.flag_reason} />
                         </div>
                         <div className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1.5 flex-wrap">
                           <span>{fmtDt(row.reading_datetime)}</span>
@@ -1562,7 +1630,9 @@ function PendingReviewTab() {
                     )}
 
                     {!row.anomaly_remark && !row.edit_reason && (
-                      <p className="text-2xs text-muted-foreground italic">No operator remark or edit reason on file for this reading.</p>
+                      <p className="text-2xs text-muted-foreground italic">
+                        Original field submission quarantined by system validation guards. No manual edit has been logged.
+                      </p>
                     )}
 
                     {/* Chain context (item 4) */}
