@@ -443,11 +443,14 @@ export function useTrendChartData({
           // Still record the meter replacement label so the tooltip shows it
           const dt = new Date(r.reading_datetime);
           if (dt >= new Date(startISO)) {
-            const key = format(dt, 'MMM d');
-            const row = ensure(key, dt.getTime());
-            const entityName = plantNames?.get(pid) ?? pid ?? 'Plant';
-            const label = `${entityName} Power Meter`;
-            if (!row._meterReplacements.includes(label)) row._meterReplacements.push(label);
+            const dateKey = format(dt, 'yyyy-MM-dd');
+            if (dateKey >= startKey && dateKey <= endKey) {
+              const key = format(dt, 'MMM d');
+              const row = ensure(key, dt.getTime());
+              const entityName = plantNames?.get(pid) ?? pid ?? 'Plant';
+              const label = `${entityName} Power Meter`;
+              if (!row._meterReplacements.includes(label)) row._meterReplacements.push(label);
+            }
           }
           continue;
         }
@@ -503,6 +506,8 @@ export function useTrendChartData({
         // Only plot rows within the requested window
         const dt = new Date(r.reading_datetime);
         if (dt < new Date(startISO)) continue;
+        const dateKey = format(dt, 'yyyy-MM-dd');
+        if (dateKey < startKey || dateKey > endKey) continue;
 
         const key = format(dt, 'MMM d');
         if (gridKwh > 0) {
@@ -512,7 +517,6 @@ export function useTrendChartData({
 
         // productionCost: accumulate ₱ power cost for this day
         if (metric === 'productionCost' && gridKwh > 0) {
-          const dateKey = format(dt, 'yyyy-MM-dd');
           const rate = getRateForDay(pid, dateKey);
           if (rate != null) {
             const row = ensure(key, dt.getTime());
@@ -528,11 +532,15 @@ export function useTrendChartData({
 
     // Accumulate daily_solar_kwh per day for the (Grid+Solar) PV ratio line.
     // Skips null/zero rows so the ratio stays null on days with no solar data.
+    // Pre-window rows (fetched to seed grid baseline) and out-of-range rows are skipped.
     (powerReadings ?? []).forEach((r: any) => {
       if (r.daily_solar_kwh == null || r.is_meter_replacement) return;
       const solarVal = +r.daily_solar_kwh;
       if (solarVal <= 0) return;
       const dt = new Date(r.reading_datetime);
+      if (dt < new Date(startISO)) return;
+      const dateKey = format(dt, 'yyyy-MM-dd');
+      if (dateKey < startKey || dateKey > endKey) return;
       const key = format(dt, 'MMM d');
       const row = ensure(key, dt.getTime());
       row.solarKwh += solarVal;
@@ -542,7 +550,9 @@ export function useTrendChartData({
     // Operators log this manually in Costs → Rollup (or via CSV import).
     // Chem Cost (₱/m³) = chem_cost / production_m3  (computed in final map below)
     (costReadings ?? []).forEach((r: any) => {
-      const dt = new Date(`${r.cost_date}T00:00:00`);
+      const dateKey = r.cost_date;
+      if (dateKey < startKey || dateKey > endKey) return;
+      const dt = new Date(`${dateKey}T00:00:00`);
       const key = format(dt, 'MMM d');
       const row = ensure(key, dt.getTime());
       const chem = +(r.chem_cost ?? 0);
@@ -624,14 +634,16 @@ export function useTrendChartData({
     // omits entire months.  We only fill when the window is ≤ 366 days to
     // avoid generating thousands of stubs for very long ranges.
 
-    // ── Timezone safety: drop any row whose local date exceeds endKey.
+    // ── Timezone safety: drop any row whose local date falls outside [startKey, endKey].
     // When the user is in UTC+8 (Philippines), a reading stored at e.g.
     // 2026-05-17T16:00:00Z renders as May 18 00:00 local time, so it can
     // slip through the Supabase filter (which also uses endKey) and appear
-    // as a future date in the chart. Capping here is the final safeguard.
-    const boundedSparseRows = sparseRows.filter(
-      (r) => format(new Date(r.isoDate), 'yyyy-MM-dd') <= endKey,
-    );
+    // as a future date in the chart. Likewise, pre-window seed readings must
+    // not leak into the chart domain. Bounding here is the final safeguard.
+    const boundedSparseRows = sparseRows.filter((r) => {
+      const dk = format(new Date(r.isoDate), 'yyyy-MM-dd');
+      return dk >= startKey && dk <= endKey;
+    });
 
     if (boundedSparseRows.length < 2) return boundedSparseRows;
     const firstDk = format(new Date(boundedSparseRows[0].isoDate), 'yyyy-MM-dd');
@@ -654,7 +666,7 @@ export function useTrendChartData({
     });
   }, [locReadings, wellReadings, productReadings, roReadings, powerReadings, costReadings, powerTariffs,
       billMultiplierMap, powerConfigMap, metric, wellNames, locatorNames, productMeterNames, plantNames,
-      permeateIsProductionPlants, _trainPlantMap, endKey, _directLocatorIds, _directProductMeterIds]);
+      permeateIsProductionPlants, productExcludedPlants, _trainPlantMap, _trainUnitTypeMap, startISO, startKey, endKey, _directLocatorIds, _directProductMeterIds]);
 
   // ── trendRows: chartData bucketed to the active granularity (M1 + M4) ────
   // chartData itself stays DAILY, unchanged, always — it's still what feeds
