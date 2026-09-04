@@ -201,8 +201,10 @@ export default function ManagerScorecard() {
   // Manager-centric aggregation rollup
   const managerRollup = useMemo(() => {
     const managers: Record<string, {
+      id?: string;
       name: string;
       plants: string[];
+      plantIds: string[];
       totalReadings: number;
       completenessSum: number;
       completenessCount: number;
@@ -211,16 +213,22 @@ export default function ManagerScorecard() {
       pendingCorrections: number;
       approvedCorrections: number;
       rejectedCorrections: number;
+      coveredCorrections: number;
       statusCounts: Record<ScorecardStatus, number>;
     }> = {};
 
     rows.forEach((r) => {
       const plantNames = r.manager_names.length ? r.manager_names : ['Unassigned'];
-      plantNames.forEach((name) => {
-        if (!managers[name]) {
-          managers[name] = {
+      plantNames.forEach((name, idx) => {
+        const mgrId = r.manager_ids?.[idx];
+        const key = mgrId || name;
+
+        if (!managers[key]) {
+          managers[key] = {
+            id: mgrId,
             name,
             plants: [],
+            plantIds: [],
             totalReadings: 0,
             completenessSum: 0,
             completenessCount: 0,
@@ -229,11 +237,13 @@ export default function ManagerScorecard() {
             pendingCorrections: 0,
             approvedCorrections: 0,
             rejectedCorrections: 0,
+            coveredCorrections: 0,
             statusCounts: { good: 0, watch: 0, at_risk: 0, unmonitored: 0 },
           };
         }
-        const m = managers[name];
+        const m = managers[key];
         m.plants.push(r.plant_name);
+        m.plantIds.push(r.plant_id);
         m.totalReadings += r.readings_in_window;
         if (r.overall_completeness_pct !== null) {
           m.completenessSum += r.overall_completeness_pct;
@@ -246,8 +256,22 @@ export default function ManagerScorecard() {
         const corr = plantCorrMap[r.plant_id];
         if (corr) {
           m.pendingCorrections += corr.pending;
-          m.approvedCorrections += corr.approved;
-          m.rejectedCorrections += corr.rejected;
+        }
+      });
+    });
+
+    // Attribute correction resolutions personally to the designated manager:
+    // Only counted as the manager's accomplishment if they personally resolved it (r.resolved_by === m.id).
+    // If resolved at their assigned plant by someone else (e.g. Admin or peer), track as covered.
+    Object.values(managers).forEach((m) => {
+      const assignedPlantSet = new Set(m.plantIds);
+      corrReqs.forEach((r) => {
+        if (!assignedPlantSet.has(r.plant_id)) return;
+        if (m.id && r.resolved_by === m.id) {
+          if (r.status === 'approved') m.approvedCorrections++;
+          else if (r.status === 'rejected') m.rejectedCorrections++;
+        } else if (r.status === 'approved' || r.status === 'rejected') {
+          m.coveredCorrections++;
         }
       });
     });
@@ -265,7 +289,7 @@ export default function ManagerScorecard() {
         tier: oversight.tier,
       };
     }).sort((a, b) => b.oversightScore - a.oversightScore);
-  }, [rows, plantCorrMap]);
+  }, [rows, plantCorrMap, corrReqs]);
 
   const sorted = useMemo(
     () => [...rows].sort((a, b) => STATUS_RANK[a.status] - STATUS_RANK[b.status] || a.plant_name.localeCompare(b.plant_name)),
@@ -621,9 +645,15 @@ export default function ManagerScorecard() {
                     </div>
                     <div className="p-1.5 rounded-lg bg-muted/40">
                       <div className="font-mono-num font-bold text-xs text-foreground">
-                        {m.pendingCorrections > 0 ? <span className="text-warn">{m.pendingCorrections} pend</span> : <span className="text-accent">0 pend</span>}
+                        {m.pendingCorrections > 0 ? (
+                          <span className="text-warn">{m.pendingCorrections} pend</span>
+                        ) : (
+                          <span className="text-accent">✓ {m.approvedCorrections}</span>
+                        )}
                       </div>
-                      <div className="text-3xs text-muted-foreground">Approvals</div>
+                      <div className="text-3xs text-muted-foreground" title={m.coveredCorrections > 0 ? `${m.coveredCorrections} covered by others` : undefined}>
+                        Approvals {m.approvedCorrections > 0 && m.pendingCorrections > 0 ? `(✓${m.approvedCorrections})` : ''}
+                      </div>
                     </div>
                     <div className="p-1.5 rounded-lg bg-muted/40">
                       <div className="font-mono-num font-bold text-xs text-foreground">{m.openExceptions}</div>
@@ -792,20 +822,27 @@ export default function ManagerScorecard() {
 
                       {/* Manager's Correction Approvals */}
                       <td className="px-3 py-2.5 text-center whitespace-nowrap">
-                        <div className="flex items-center justify-center gap-1.5 text-2xs">
-                          {m.pendingCorrections > 0 ? (
-                            <StatusPill tone="warn">
-                              {m.pendingCorrections} pending
-                            </StatusPill>
-                          ) : (
-                            <span className="text-accent font-semibold inline-flex items-center gap-0.5">
-                              <CheckCircle2 className="h-3 w-3" /> 0 pending
+                        <div className="flex flex-col items-center justify-center gap-0.5 text-2xs">
+                          <div className="flex items-center justify-center gap-1.5">
+                            {m.pendingCorrections > 0 ? (
+                              <StatusPill tone="warn">
+                                {m.pendingCorrections} pending
+                              </StatusPill>
+                            ) : (
+                              <span className="text-accent font-semibold inline-flex items-center gap-0.5">
+                                <CheckCircle2 className="h-3 w-3" /> 0 pending
+                              </span>
+                            )}
+                            <span className="text-muted-foreground/60">·</span>
+                            <span className="text-foreground font-mono-num font-medium" title="Personally approved / rejected by this manager">
+                              ✓ {m.approvedCorrections} / ✗ {m.rejectedCorrections}
+                            </span>
+                          </div>
+                          {m.coveredCorrections > 0 && (
+                            <span className="text-3xs text-muted-foreground" title="Corrections at assigned facilities approved/rejected by Admin or covering peer">
+                              ({m.coveredCorrections} covered by others)
                             </span>
                           )}
-                          <span className="text-muted-foreground/60">·</span>
-                          <span className="text-muted-foreground font-mono-num">
-                            ✓ {m.approvedCorrections} / ✗ {m.rejectedCorrections}
-                          </span>
                         </div>
                       </td>
 
