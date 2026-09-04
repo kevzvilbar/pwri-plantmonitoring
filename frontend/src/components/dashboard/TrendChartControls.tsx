@@ -40,7 +40,6 @@ export function TrendChartControls(props: Record<string, any>) {
     locatorSearch, setLocatorSearch, trainSearch, setTrainSearch, wellSearch, setWellSearch,
     showLocatorFilter, setShowLocatorFilter,
     locatorTotals, wellTotals, selectTopNLocators, selectTopNWells,
-    onSelectMonthlyRange,
   } = props;
   return (
         <>
@@ -60,7 +59,7 @@ export function TrendChartControls(props: Record<string, any>) {
               <div>
                 <p className="text-2xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">View</p>
                 <div className="mb-2">
-                  <GranularityControl value={viewGran} onChange={(g) => { setViewGran(g); setSelectedLocatorIds(null); setShowLocatorFilter(false); }} rangeDays={rangeDays} onSelectMonthlyRange={onSelectMonthlyRange} />
+                  <GranularityControl value={viewGran} onChange={(g) => { setViewGran(g); setSelectedLocatorIds(null); setShowLocatorFilter(false); }} rangeDays={rangeDays} />
                 </div>
                 <p className="text-2xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Breakdown</p>
                 <div className="flex flex-wrap gap-1">
@@ -85,7 +84,7 @@ export function TrendChartControls(props: Record<string, any>) {
             {metric === 'pv' && (
               <div>
                 <p className="text-2xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">View</p>
-                <GranularityControl value={viewGran} onChange={setViewGran} rangeDays={rangeDays} onSelectMonthlyRange={onSelectMonthlyRange} />
+                <GranularityControl value={viewGran} onChange={setViewGran} rangeDays={rangeDays} />
               </div>
             )}
             {/* View + Breakdown — raw water (By-well, M4) */}
@@ -93,7 +92,7 @@ export function TrendChartControls(props: Record<string, any>) {
               <div>
                 <p className="text-2xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">View</p>
                 <div className="mb-2">
-                  <GranularityControl value={viewGran} onChange={(g) => { setViewGran(g); setSelectedWellIds(null); }} rangeDays={rangeDays} onSelectMonthlyRange={onSelectMonthlyRange} />
+                  <GranularityControl value={viewGran} onChange={(g) => { setViewGran(g); setSelectedWellIds(null); }} rangeDays={rangeDays} />
                 </div>
                 <p className="text-2xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Breakdown</p>
                 <div className="flex flex-wrap gap-1">
@@ -126,7 +125,7 @@ export function TrendChartControls(props: Record<string, any>) {
                       setShowTrainFilter(false);
                     }}
                     rangeDays={rangeDays}
-                    onSelectMonthlyRange={onSelectMonthlyRange}
+                   
                   />
                   <button onClick={() => setRoDrillMode(roDrillMode === 'by-hour' ? 'default' : 'by-hour')}
                     className={['h-5 px-1.5 rounded text-2xs font-medium border flex items-center gap-1', roDrillMode === 'by-hour' ? 'bg-kpi-ro text-white border-kpi-ro' : 'bg-muted text-muted-foreground border-border'].join(' ')}>
@@ -167,7 +166,7 @@ export function TrendChartControls(props: Record<string, any>) {
             {(metric === 'productionCost' || metric === 'kwh') && (
               <div>
                 <p className="text-2xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">View</p>
-                <GranularityControl value={viewGran} onChange={setViewGran} rangeDays={rangeDays} onSelectMonthlyRange={onSelectMonthlyRange} />
+                <GranularityControl value={viewGran} onChange={setViewGran} rangeDays={rangeDays} />
               </div>
             )}
             {/* Production cost toggles */}
@@ -237,7 +236,7 @@ export function TrendChartControls(props: Record<string, any>) {
           const hasGridData  = chartData.some((d: any) => (d.kwh ?? 0) > 0);
           return (
             <div className="flex items-center gap-1 shrink-0 ml-1">
-              <GranularityControl value={viewGran} onChange={setViewGran} rangeDays={rangeDays} testIdPrefix={`drill-${metric}`} onSelectMonthlyRange={onSelectMonthlyRange} />
+              <GranularityControl value={viewGran} onChange={setViewGran} rangeDays={rangeDays} testIdPrefix={`drill-${metric}`} />
               {hasSolarData && hasGridData && (
                 <>
                   <div className="flex items-center gap-0.5 bg-muted rounded-md p-0.5">
@@ -292,7 +291,7 @@ export function TrendChartControls(props: Record<string, any>) {
         {/* Production Cost — granularity + Stack/Group + line toggles */}
         {metric === 'productionCost' && (
           <div className="flex items-center gap-0.5 shrink-0 ml-1">
-            <GranularityControl value={viewGran} onChange={setViewGran} rangeDays={rangeDays} testIdPrefix={`drill-${metric}`} onSelectMonthlyRange={onSelectMonthlyRange} />
+            <GranularityControl value={viewGran} onChange={setViewGran} rangeDays={rangeDays} testIdPrefix={`drill-${metric}`} />
             <span className="hidden sm:inline-block h-3 border-l border-border mx-1" aria-hidden />
             <StackToggle value={stackMode} onChange={setStackMode} testId="cost-stack-toggle" />
             <span className="text-3xs text-muted-foreground mr-0.5 hidden sm:inline ml-1">Show:</span>
@@ -335,7 +334,7 @@ export function TrendChartControls(props: Record<string, any>) {
         {metric === 'pv' && (
           <div className="flex items-center gap-0.5 shrink-0 ml-1">
             <span className="text-3xs text-muted-foreground uppercase tracking-wide mr-0.5 hidden sm:inline">View</span>
-            <GranularityControl value={viewGran} onChange={setViewGran} rangeDays={rangeDays} testIdPrefix={`drill-${metric}`} onSelectMonthlyRange={onSelectMonthlyRange} />
+            <GranularityControl value={viewGran} onChange={setViewGran} rangeDays={rangeDays} testIdPrefix={`drill-${metric}`} />
           </div>
         )}
 
@@ -348,7 +347,7 @@ export function TrendChartControls(props: Record<string, any>) {
               onChange={(g) => { setViewGran(g); setSelectedWellIds(null); }}
               rangeDays={rangeDays}
               testIdPrefix={`drill-${metric}`}
-              onSelectMonthlyRange={onSelectMonthlyRange}
+             
             />
             <span className="hidden sm:inline-block h-3 border-l border-border mx-1" aria-hidden />
             <span className="text-3xs text-muted-foreground uppercase tracking-wide mr-0.5 hidden sm:inline">Breakdown</span>
@@ -414,7 +413,7 @@ export function TrendChartControls(props: Record<string, any>) {
               onChange={(g) => { setViewGran(g); setSelectedLocatorIds(null); setShowLocatorFilter(false); }}
               rangeDays={rangeDays}
               testIdPrefix={`drill-${metric}`}
-              onSelectMonthlyRange={onSelectMonthlyRange}
+             
             />
 
             {/* ── Divider ── */}
@@ -511,7 +510,7 @@ export function TrendChartControls(props: Record<string, any>) {
               }}
               rangeDays={rangeDays}
               testIdPrefix={`drill-${metric}`}
-              onSelectMonthlyRange={onSelectMonthlyRange}
+             
             />
             <button
               onClick={() => setRoDrillMode(roDrillMode === 'by-hour' ? 'default' : 'by-hour')}

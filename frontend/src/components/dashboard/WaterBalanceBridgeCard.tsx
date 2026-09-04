@@ -80,7 +80,7 @@ export type BridgeRow = {
 // mirror rather than an import for the same reason lib/entityDeltas.ts is —
 // see that file's header.
 export function resolveDateWindow(range: RangeKey, from: string, to: string) {
-  if (range === 'CUSTOM') {
+  if (range === 'CUSTOM' || range === 'MONTHLY') {
     const s = new Date(`${from}T00:00:00`);
     const e = new Date(`${to}T23:59:59`);
     return { startISO: s.toISOString(), endISO: e.toISOString(), startKey: from, endKey: to };
@@ -471,8 +471,8 @@ export function WaterBalanceBridgeCard({
   } = useWaterBalancePeriodTotals(plantIds);
   const rows = useMemo(() => (totals ? buildBridgeRows(totals) : []), [totals]);
 
-  // Same "last Nd for presets, real dates for CUSTOM" label ComplianceRadarCard uses.
-  const isCustomRange = chartRange === 'CUSTOM';
+  // Same "last Nd for presets, real dates for CUSTOM / MONTHLY" label ComplianceRadarCard uses.
+  const isCustomRange = chartRange === 'CUSTOM' || chartRange === 'MONTHLY';
   const days = rangeKeyToDays(chartRange, chartFrom, chartTo);
   const rangeLabel = isCustomRange
     ? (startKey === endKey

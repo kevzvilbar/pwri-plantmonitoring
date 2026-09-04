@@ -83,7 +83,7 @@ export function ComplianceRadarCard({ plantIds }: Props) {
   // CUSTOM (rangeKeyToDays ignores them for the preset buttons) — same fix
   // as CostSunburst/useCostComposition, and the same reason this card was
   // showing "last 1d" instead of whatever date was actually picked.
-  const isCustomRange = chartRange === 'CUSTOM';
+  const isCustomRange = chartRange === 'CUSTOM' || chartRange === 'MONTHLY';
 
   // Same "last Nd" tell CostSunburst had — show the real dates once they're
   // actually being used; presets keep "last Nd" since that's still accurate.

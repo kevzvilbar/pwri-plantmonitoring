@@ -41,45 +41,36 @@ import type { StackMode, DrillCrumb } from './TrendChartDrillKit';
 // would show a chart with only a sliver of a bucket in it, per
 // isGranularityUsable — e.g. Weekly on a 7D range.
 export function GranularityControl({
-  value, onChange, rangeDays, testIdPrefix, onSelectMonthlyRange,
+  value, onChange, rangeDays, testIdPrefix,
 }: {
   value: Granularity;
   onChange: (g: Granularity) => void;
   rangeDays: number;
   testIdPrefix?: string;
-  onSelectMonthlyRange?: () => void;
 }) {
-  const OPTIONS: { key: Granularity; label: string; icon: React.ReactNode; activeClass: string }[] = [
+  const allOptions: { key: Granularity; label: string; icon: React.ReactNode; activeClass: string }[] = [
     { key: 'daily', label: 'Daily', icon: <BarChart2 className="h-3 w-3" />, activeClass: 'bg-primary text-primary-foreground border-primary' },
     { key: 'weekly', label: 'Weekly', icon: <Rows3 className="h-3 w-3" />, activeClass: 'bg-chart-2 text-white border-chart-2' },
     { key: 'monthly', label: 'Monthly', icon: <ChevronsUp className="h-3 w-3" />, activeClass: 'bg-kpi-ro text-white border-kpi-ro' },
   ];
+  // Only offer Monthly bucketing when the active range span has enough data (>= 45 days, e.g. YTD or 60D/90D).
+  // On shorter ranges (7D, 14D, 30D, single month), hide the Monthly view option completely so there is NO duplicate
+  // 'Monthly' button conflicting with the Range selector's Monthly button.
+  const options = allOptions.filter((opt) => opt.key !== 'monthly' || isGranularityUsable('monthly', rangeDays));
+
   return (
     <div className="flex items-center gap-0.5 shrink-0">
-      {OPTIONS.map(({ key, label, icon, activeClass }) => {
-        const canSwitchMonthly = key === 'monthly' && onSelectMonthlyRange;
-        const usable = isGranularityUsable(key, rangeDays) || !!canSwitchMonthly;
+      {options.map(({ key, label, icon, activeClass }) => {
+        const usable = isGranularityUsable(key, rangeDays);
         const active = value === key;
         return (
           <button
             key={key}
             type="button"
             disabled={!usable}
-            onClick={() => {
-              if (key === 'monthly' && !isGranularityUsable(key, rangeDays) && onSelectMonthlyRange) {
-                onSelectMonthlyRange();
-              } else if (usable) {
-                onChange(key);
-              }
-            }}
+            onClick={() => usable && onChange(key)}
             data-testid={testIdPrefix ? `${testIdPrefix}-${key}` : undefined}
-            title={
-              key === 'monthly' && !isGranularityUsable(key, rangeDays) && onSelectMonthlyRange
-                ? 'Switch to Monthly Period view (YTD / Jan–Dec)'
-                : usable
-                ? undefined
-                : `Needs a longer date range to show more than one ${key === 'weekly' ? 'week' : 'month'}`
-            }
+            title={usable ? undefined : `Needs a longer date range to show more than one ${key === 'weekly' ? 'week' : 'month'}`}
             className={[
               'h-5 px-1.5 rounded text-2xs font-medium transition-colors leading-none flex items-center gap-0.5 border cursor-pointer',
               !usable

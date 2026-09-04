@@ -146,7 +146,7 @@ export function DataCompletenessRadarCard({ plantIds }: Props) {
   const chartFrom = useAppStore((s) => s.chartFrom);
   const chartTo = useAppStore((s) => s.chartTo);
   const days = rangeKeyToDays(chartRange, chartFrom, chartTo);
-  const isCustomRange = chartRange === 'CUSTOM';
+  const isCustomRange = chartRange === 'CUSTOM' || chartRange === 'MONTHLY';
   const rangeLabel = isCustomRange
     ? (chartFrom === chartTo
         ? format(parseISO(chartFrom), 'MMM d')

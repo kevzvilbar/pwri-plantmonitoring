@@ -441,7 +441,6 @@ export function TrendChart({
           showLocatorFilter={showLocatorFilter} setShowLocatorFilter={setShowLocatorFilter}
           locatorTotals={locatorTotals} wellTotals={wellTotals}
           selectTopNLocators={selectTopNLocators} selectTopNWells={selectTopNWells}
-          onSelectMonthlyRange={() => setChartMonthlyPeriod(chartYear, chartMonth)}
         />
         }
       />

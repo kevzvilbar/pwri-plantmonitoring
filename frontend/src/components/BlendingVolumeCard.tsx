@@ -136,7 +136,7 @@ export function BlendingVolumeCard({ plantIds }: Props) {
   const chartTo = useAppStore((s) => s.chartTo);
   const days = rangeKeyToDays(chartRange, chartFrom, chartTo);
 
-  const isCustomRange = chartRange === 'CUSTOM';
+  const isCustomRange = chartRange === 'CUSTOM' || chartRange === 'MONTHLY';
   // Presets are inclusive of today (7D = today + 6 prior days) — matches the
   // window this card always used before it followed the shared range.
   const resolvedFrom = isCustomRange ? chartFrom : format(subDays(new Date(), days - 1), 'yyyy-MM-dd');

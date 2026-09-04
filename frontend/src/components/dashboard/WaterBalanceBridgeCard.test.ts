@@ -60,4 +60,12 @@ describe('resolveDateWindow', () => {
     expect(w.endKey).toBe(format(today, 'yyyy-MM-dd'));
     expect(w.startKey).toBe(format(subDays(today, 7), 'yyyy-MM-dd'));
   });
+
+  it('passes MONTHLY from/to straight through without throwing Invalid time value', () => {
+    const w = resolveDateWindow('MONTHLY', '2026-08-01', '2026-08-31');
+    expect(w.startKey).toBe('2026-08-01');
+    expect(w.endKey).toBe('2026-08-31');
+    expect(w.startISO).toBe(new Date('2026-08-01T00:00:00').toISOString());
+    expect(w.endISO).toBe(new Date('2026-08-31T23:59:59').toISOString());
+  });
 });

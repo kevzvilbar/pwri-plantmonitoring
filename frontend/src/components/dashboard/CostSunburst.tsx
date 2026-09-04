@@ -71,7 +71,7 @@ export function CostSunburst({ plantIds }: Props) {
   const chartTo = useAppStore((s) => s.chartTo);
   const days = rangeKeyToDays(chartRange, chartFrom, chartTo);
 
-  const isCustomRange = chartRange === 'CUSTOM';
+  const isCustomRange = chartRange === 'CUSTOM' || chartRange === 'MONTHLY';
   const resolvedTo = isCustomRange ? chartTo : format(new Date(), 'yyyy-MM-dd');
   const resolvedFrom = isCustomRange ? chartFrom : format(subDays(new Date(), days), 'yyyy-MM-dd');
 
