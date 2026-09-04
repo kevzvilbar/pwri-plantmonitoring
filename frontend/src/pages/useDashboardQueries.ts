@@ -36,6 +36,7 @@ export function useDashboardQueries({
       return (data ?? []).map((l: any) => l.id as string);
     },
     enabled: plantIds.length > 0,
+    staleTime: 10 * 60_000, // Master entity IDs rarely change — cache for 10 min
   });
 
   // Locators to treat as "direct volume" for the stat cards below — either the
@@ -62,6 +63,7 @@ export function useDashboardQueries({
       );
     },
     enabled: plantIds.length > 0,
+    staleTime: 10 * 60_000,
   });
 
   // Product meters to treat as "direct volume" for the stat cards below —
@@ -88,6 +90,7 @@ export function useDashboardQueries({
       );
     },
     enabled: plantIds.length > 0,
+    staleTime: 10 * 60_000,
   });
 
   const { data: _wellIds } = useQuery({
@@ -99,6 +102,7 @@ export function useDashboardQueries({
       return (data ?? []).map((w: any) => w.id as string);
     },
     enabled: plantIds.length > 0,
+    staleTime: 10 * 60_000,
   });
 
   const { data: todayLocators } = useQuery({
@@ -123,8 +127,8 @@ export function useDashboardQueries({
       return (data ?? []) as any[];
     },
     enabled: (_locatorIds?.length ?? 0) > 0,
-    staleTime: 60_000,  // FIX (egress): matched to refetchInterval below — was 30_000, which let the app-wide background-sync sweep force-refetch this before its own 60s timer was due
-    refetchInterval: 60_000,
+    staleTime: 120_000,
+    refetchInterval: 120_000,
   });
 
   const { data: todayWells } = useQuery({
@@ -159,8 +163,8 @@ export function useDashboardQueries({
       return (fallback ?? []) as any[];
     },
     enabled: (_wellIds?.length ?? 0) > 0,
-    staleTime: 60_000,  // FIX (egress): matched to refetchInterval below — was 30_000, which let the app-wide background-sync sweep force-refetch this before its own 60s timer was due
-    refetchInterval: 60_000,
+    staleTime: 120_000,
+    refetchInterval: 120_000,
   });
   // Production = sum of Product Meter deltas (treated/distributed water)
   const { data: todayProductMeters } = useQuery({
@@ -184,8 +188,8 @@ export function useDashboardQueries({
       return (data ?? []) as any[];
     },
     enabled: plantIds.length > 0,
-    staleTime: 60_000,  // FIX (egress): matched to refetchInterval below — was 30_000, which let the app-wide background-sync sweep force-refetch this before its own 60s timer was due
-    refetchInterval: 60_000,
+    staleTime: 120_000,
+    refetchInterval: 120_000,
   });
 
   // ── Plant meter configs — detect which plants use RO permeate as production ──
@@ -208,7 +212,7 @@ export function useDashboardQueries({
       return (data ?? []) as any[];
     },
     enabled: plantIds.length > 0,
-    staleTime: 60_000, // config rarely changes — cache for 1 min
+    staleTime: 10 * 60_000, // config rarely changes — cache for 10 min
   });
 
   // Plant IDs that use the RO permeate meter as (part of) their production source.
@@ -276,7 +280,7 @@ export function useDashboardQueries({
       return { ids: rows.map((t: any) => t.id as string), trainPlantMap };
     },
     enabled: permeateProductionPlantIds.length > 0,
-    staleTime: 60_000,
+    staleTime: 10 * 60_000, // Train IDs rarely change — cache for 10 min
   });
   const _permeateTrainIds      = _permeateTrainMeta?.ids ?? [];
   const _permeateTrainPlantMap = _permeateTrainMeta?.trainPlantMap ?? new Map<string, string>();
@@ -303,8 +307,8 @@ export function useDashboardQueries({
       }));
     },
     enabled: _permeateTrainIds.length > 0,
-    staleTime: 60_000,  // FIX (egress): matched to refetchInterval below — was 30_000, which let the app-wide background-sync sweep force-refetch this before its own 60s timer was due
-    refetchInterval: 60_000,
+    staleTime: 120_000,
+    refetchInterval: 120_000,
   });
 
   // Yesterday's RO permeate — same two-step pattern.
@@ -382,8 +386,8 @@ export function useDashboardQueries({
       return { rows: Array.from(latestByPlant.values()), prevRows, isStale: true };
     },
     enabled: plantIds.length > 0,
-    staleTime: 60_000,
-    refetchInterval: 60_000,
+    staleTime: 120_000,
+    refetchInterval: 120_000,
   });
   const todayPower   = todayPowerRaw?.rows ?? [];
   const powerIsStale = todayPowerRaw?.isStale ?? false;
@@ -404,7 +408,7 @@ export function useDashboardQueries({
       return map;
     },
     enabled: plantIds.length > 0,
-    staleTime: 120_000,
+    staleTime: 10 * 60_000,
   });
   // ----- Yesterday aggregates (for trend deltas on highlighted KPIs) -----
   const { data: yLocators } = useQuery({
@@ -488,6 +492,8 @@ export function useDashboardQueries({
       return { rows: rows ?? [], prevRows };
     },
     enabled: plantIds.length > 0,
+    staleTime: 12 * 60 * 60_000, // yesterday is immutable — cache for 12 hours
+    refetchInterval: false,
   });
   // ── Step 1: Resolve all RO train IDs + metadata for the selected plants ─────
   // BUG FIX (same root cause as permeate path, line ~1007):
@@ -519,7 +525,7 @@ export function useDashboardQueries({
       return { ids: rows.map((t: any) => t.id as string), metaMap };
     },
     enabled: plantIds.length > 0,
-    staleTime: 60_000,
+    staleTime: 10 * 60_000,
   });
   const _qualityTrainIds   = _qualityTrainMeta?.ids    ?? [];
   const _qualityTrainMeta2 = _qualityTrainMeta?.metaMap ?? new Map<string, { plant_id: string; train_number: number | null; train_name: string | null; well_id: string | null; unit_type: string | null }>();
@@ -538,7 +544,7 @@ export function useDashboardQueries({
       return map;
     },
     enabled: plantIds.length > 0,
-    staleTime: 60_000,
+    staleTime: 10 * 60_000,
   });
 
   // ── Step 2: Fetch latest quality readings filtered by train_id ───────────────
@@ -598,7 +604,7 @@ export function useDashboardQueries({
       return data ?? [];
     },
     enabled: _qualityTrainIds.length > 0,
-    staleTime: 5 * 60_000,
+    staleTime: 15 * 60_000,
   });
   const roAvgFlowByTrain = useMemo(() => {
     const byTrain = new Map<string, any[]>();
@@ -700,7 +706,7 @@ export function useDashboardQueries({
       return (data ?? []) as any[];
     },
     enabled: plantIds.length > 0,
-    staleTime: 5 * 60_000,
+    staleTime: 15 * 60_000, // 14-day historical rolling average — cache for 15 min
   });
   // Plant-average kWh/hr over the trailing window, keyed by plant_id. Was: a
   // plain average of the stored daily_consumption_kwh values, silently
@@ -763,8 +769,8 @@ export function useDashboardQueries({
     // Only fetch when there are no product meter readings — avoids a redundant
     // round-trip when product meters are working correctly.
     enabled: !productMetersHaveData && _qualityTrainIds.length > 0,
-    staleTime: 60_000,  // FIX (egress): matched to refetchInterval below — was 30_000, which let the app-wide background-sync sweep force-refetch this before its own 60s timer was due
-    refetchInterval: 60_000,
+    staleTime: 120_000,
+    refetchInterval: 120_000,
   });
   // ── FIX: StatCard cost sources now mirror TrendChart's productionCost computation ──
   // Previous: StatCard read production_costs.power_cost (stale legacy column)

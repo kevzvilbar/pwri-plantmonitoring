@@ -132,7 +132,7 @@ function useWaterBalancePeriodTotals(plantIds: string[]) {
       return { permeateCounts, productExcluded };
     },
     enabled: hasPlants,
-    staleTime: 2 * 60_000,
+    staleTime: 10 * 60_000,
   });
   // Stable empty-Set fallbacks: without useMemo here, `?? new Set()` mints a
   // fresh object every render while the query is still loading, which would
@@ -165,7 +165,7 @@ function useWaterBalancePeriodTotals(plantIds: string[]) {
       return { ids: rows.map((t: any) => t.id as string), trainPlantMap, trainUnitTypeMap };
     },
     enabled: hasPlants,
-    staleTime: 2 * 60_000,
+    staleTime: 10 * 60_000,
   });
   const trainIds = roTrainMeta?.ids ?? [];
   const trainPlantMap = useMemo(
@@ -189,7 +189,7 @@ function useWaterBalancePeriodTotals(plantIds: string[]) {
       return new Set<string>((data ?? []).filter((m: any) => m.is_derived === true).map((m: any) => m.id as string));
     },
     enabled: hasPlants,
-    staleTime: 2 * 60_000,
+    staleTime: 10 * 60_000,
   });
 
   // Active locator IDs + direct-mode set (default_input_mode='direct' or
@@ -211,7 +211,7 @@ function useWaterBalancePeriodTotals(plantIds: string[]) {
       };
     },
     enabled: hasPlants,
-    staleTime: 2 * 60_000,
+    staleTime: 10 * 60_000,
   });
   const locatorIds = locatorMeta?.ids ?? [];
   const directLocatorIds = useMemo(
@@ -230,7 +230,7 @@ function useWaterBalancePeriodTotals(plantIds: string[]) {
       return data ?? [];
     },
     enabled: hasPlants,
-    staleTime: 2 * 60_000,
+    staleTime: 5 * 60_000,
   });
 
   const { data: productReadings, isFetching: fProduct, error: eProduct } = useQuery({
@@ -252,7 +252,7 @@ function useWaterBalancePeriodTotals(plantIds: string[]) {
       return data ?? [];
     },
     enabled: hasPlants,
-    staleTime: 2 * 60_000,
+    staleTime: 5 * 60_000,
   });
 
   const { data: roReadings, isFetching: fRo, error: eRo } = useQuery({
@@ -272,7 +272,7 @@ function useWaterBalancePeriodTotals(plantIds: string[]) {
       return data ?? [];
     },
     enabled: hasPlants && roTrainMeta !== undefined,
-    staleTime: 2 * 60_000,
+    staleTime: 5 * 60_000,
   });
 
   const { data: locReadings, isFetching: fLoc, error: eLoc } = useQuery({
@@ -287,7 +287,7 @@ function useWaterBalancePeriodTotals(plantIds: string[]) {
       return data ?? [];
     },
     enabled: hasPlants && locatorMeta !== undefined,
-    staleTime: 2 * 60_000,
+    staleTime: 5 * 60_000,
   });
 
   // blending_events — unchanged from the original version of this card.
@@ -301,7 +301,7 @@ function useWaterBalancePeriodTotals(plantIds: string[]) {
       return data ?? [];
     },
     enabled: hasPlants,
-    staleTime: 2 * 60_000,
+    staleTime: 5 * 60_000,
   });
 
   const metaLoaded = permeateConfig !== undefined && roTrainMeta !== undefined

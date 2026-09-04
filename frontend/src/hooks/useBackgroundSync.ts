@@ -27,7 +27,7 @@ import { useEffect, useRef, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useSyncStore } from '@/store/syncStore';
 
-const SYNC_INTERVAL_MS  = 60_000;  // 1 minute
+const SYNC_INTERVAL_MS  = 120_000; // 2 minutes (cuts background polling frequency by 50%)
 const RETRY_DELAY_MS    = 10_000;  // 10 seconds between retries
 const MAX_RETRIES       = 3;       // silent retries before surfacing an error
 
@@ -50,6 +50,12 @@ export function useBackgroundSync() {
   /** Run a single sync cycle. Returns true on success. */
   const runSync = useCallback(async (): Promise<boolean> => {
     if (!isMountedRef.current) return false;
+
+    // EGRESS OPTIMIZATION: Do not execute network sweeps while the tab is hidden.
+    // The visibilitychange listener will immediately trigger sync when tab is refocused.
+    if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+      return false;
+    }
 
     setStatus('syncing');
 
@@ -112,15 +118,11 @@ export function useBackgroundSync() {
   useEffect(() => {
     isMountedRef.current = true;
 
-    // Run an initial sync shortly after mount so stale data is refreshed
-    // on first visit without waiting a full minute.
-    const firstSyncTimer = setTimeout(triggerSync, 5_000);
-
     // Recurring sync every SYNC_INTERVAL_MS
     intervalRef.current = setInterval(triggerSync, SYNC_INTERVAL_MS);
 
     // Sync when the tab regains focus after being hidden (e.g. user switches
-    // back after a long absence). Throttled by react-query's own staleTime so
+    // back after an absence). Throttled by react-query's own staleTime so
     // very recent data is not redundantly re-fetched.
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') triggerSync();
@@ -129,7 +131,6 @@ export function useBackgroundSync() {
 
     return () => {
       isMountedRef.current = false;
-      clearTimeout(firstSyncTimer);
       if (intervalRef.current !== null) clearInterval(intervalRef.current);
       clearRetryTimeout();
       document.removeEventListener('visibilitychange', handleVisibilityChange);

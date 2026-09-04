@@ -66,10 +66,9 @@ const queryClient = new QueryClient({
       retry: 1,
       refetchOnWindowFocus: false,   // handled by useBackgroundSync visibilitychange listener
       refetchOnReconnect: true,      // re-sync immediately when network comes back
-      // 30 s staleTime: data is considered fresh for 30 s, so back-to-back renders
-      // of the same query key do NOT double-fire.  The centralised 60-second tick
-      // in useBackgroundSync is the primary freshness driver.
-      staleTime: 30_000,
+      // 60 s staleTime: data is considered fresh for 60 s, preventing redundant
+      // re-queries across rapid component mounts and sweeps.
+      staleTime: 60_000,
       // gcTime (formerly cacheTime): keep evicted queries around for 5 min so
       // navigating back to a page shows cached data instantly while re-fetching.
       gcTime: 5 * 60_000,

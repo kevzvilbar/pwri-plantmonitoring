@@ -542,15 +542,16 @@ export function LocatorReadingForm({ highlightId }: { highlightId?: string | nul
     queryFn: async () => {
       const locatorIds = _locatorIds ?? [];
       if (!locatorIds.length) return [];
-      const start = new Date(); start.setDate(start.getDate() - 30);
+      const start = new Date(); start.setDate(start.getDate() - 14);
       return (await supabase.from('locator_readings')
-        .select('*').in('locator_id', locatorIds)
+        .select('id,locator_id,current_reading,reading_datetime,daily_volume,is_meter_replacement,is_estimated,anomaly_remark')
+        .in('locator_id', locatorIds)
         .gte('reading_datetime', start.toISOString())
         .order('reading_datetime', { ascending: false })
         // Safety cap — PostgREST default is 1 000 rows; high-frequency plants
-        // (e.g. hourly Mambaling: 24/day × 30d × N locators) can exceed that,
-        // causing silent truncation. 5 000 covers even the most aggressive schedule.
-        .limit(5000)).data ?? [];
+        // (e.g. hourly Mambaling: 24/day × 14d × N locators) can exceed that,
+        // causing silent truncation. 3 000 covers even the most aggressive schedule.
+        .limit(3000)).data ?? [];
     },
     enabled: !!plantId && (_locatorIds !== undefined),
     // FIX (egress, round 2): staleTime:0 meant this query was ALWAYS "stale",

@@ -116,6 +116,7 @@ export function TopBar() {
       return (data ?? EMPTY_NOTIFICATIONS) as Notification[];
     },
     enabled: !!user,
+    staleTime: 120_000, // 2 minutes — avoids refetching on every 60s background sweep
   });
 
   const notifs = notificationsData ?? EMPTY_NOTIFICATIONS;

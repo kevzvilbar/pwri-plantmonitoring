@@ -996,7 +996,8 @@ function PendingReviewTab() {
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['data-corrections-pending'],
     queryFn: fetchPending,
-    refetchInterval: 60_000,
+    staleTime: 120_000,
+    refetchInterval: 120_000,
   });
   const rows = data?.rows ?? [];
   const truncated = data?.truncated ?? false;
@@ -1054,7 +1055,8 @@ function PendingReviewTab() {
   const { data: corrReqs = [] } = useQuery({
     queryKey: ['correction-requests-pending'],
     queryFn: fetchCorrectionRequests,
-    refetchInterval: 60_000,
+    staleTime: 120_000,
+    refetchInterval: 120_000,
   });
 
   const approveRequest = async (req: CorrectionRequest) => {
@@ -2091,7 +2093,8 @@ function usePendingCount() {
       ));
       return counts.reduce((sum, r) => sum + (r.count ?? 0), 0);
     },
-    refetchInterval: 60_000,
+    staleTime: 120_000,
+    refetchInterval: 120_000,
   });
 }
 
@@ -2105,7 +2108,8 @@ function useCorrectionRequestsCount() {
         .eq('status', 'pending') as any);
       return count ?? 0;
     },
-    refetchInterval: 60_000,
+    staleTime: 120_000,
+    refetchInterval: 120_000,
   });
 }
 

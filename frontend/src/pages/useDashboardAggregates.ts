@@ -363,8 +363,8 @@ export function useDashboardAggregates(p: Record<string, any>) {
       ? (await supabase.from('chemical_inventory').select('*').in('plant_id', plantIds)).data ?? []
       : [],
     enabled: plantIds.length > 0,
-    staleTime: 60_000,  // FIX (egress): was 0 (always stale), which let the background-sync sweep refetch this ahead of its own 60s interval
-    refetchInterval: 60_000,
+    staleTime: 120_000,
+    refetchInterval: 120_000,
   });
 
   const trainGaps = useTrainAutoOffline(plantIds);
@@ -406,7 +406,9 @@ export function useDashboardAggregates(p: Record<string, any>) {
 
       // Downtime: prolonged single shutdowns (>=12h) or abnormal clusters
       // (>=3 events and >=6h total) on the same day.
-      let qDt = supabase.from('downtime_events' as any).select('*').gte('event_date', since);
+      let qDt = supabase.from('downtime_events' as any)
+        .select('id, plant_id, subsystem, duration_hrs, event_date')
+        .gte('event_date', since);
       if (selectedPlantId) qDt = qDt.eq('plant_id', selectedPlantId);
       const { data: dtRows, error: dtErr } = await qDt;
       if (dtErr) throw dtErr;
@@ -445,7 +447,8 @@ export function useDashboardAggregates(p: Record<string, any>) {
       // happened. 2 days (today + yesterday) covers "came back the next
       // morning" without dragging in a month of history.
       const sinceBlending = format(subDays(new Date(), 2), 'yyyy-MM-dd');
-      let qBe = supabase.from('blending_events' as any).select('*')
+      let qBe = supabase.from('blending_events' as any)
+        .select('id, plant_id, well_name, volume_m3, event_date')
         .gte('event_date', sinceBlending).order('event_date', { ascending: false }).limit(50);
       if (selectedPlantId) qBe = qBe.eq('plant_id', selectedPlantId);
       const { data: beRows, error: beErr } = await qBe;
@@ -469,7 +472,8 @@ export function useDashboardAggregates(p: Record<string, any>) {
 
       // Recovery: most recent compliance snapshot per plant, flagged if it
       // carries a recovery_pct_under violation.
-      let qSnap = supabase.from('compliance_snapshots' as any).select('*')
+      let qSnap = supabase.from('compliance_snapshots' as any)
+        .select('plant_id, evaluated_at, violations')
         .order('evaluated_at', { ascending: false }).limit(20);
       if (selectedPlantId) qSnap = qSnap.eq('plant_id', selectedPlantId);
       const { data: snapRows, error: snapErr } = await qSnap;
@@ -503,8 +507,8 @@ export function useDashboardAggregates(p: Record<string, any>) {
       return { count: capped.length, alerts: capped };
     },
     retry: false,
-    staleTime: 60_000,  // FIX (egress): was 0 (always stale), which let the background-sync sweep refetch this ahead of its own 60s interval
-    refetchInterval: 60_000,
+    staleTime: 3 * 60_000,
+    refetchInterval: 3 * 60_000,
   });
   // Memoised so the `?? []` fallback doesn't produce a new array reference on
   // every render — which would re-fire the alert-push useEffect each tick.

@@ -50,6 +50,7 @@ export function useTrendChartQueries({
       return map;
     },
     enabled: plantIds.length > 0 && needsWellReadings,
+    staleTime: 10 * 60_000,
   });
 
   const { data: locatorNames } = useQuery({
@@ -61,6 +62,7 @@ export function useTrendChartQueries({
       return map;
     },
     enabled: plantIds.length > 0 && needsLocReadings,
+    staleTime: 10 * 60_000,
   });
 
   const { data: productMeterNames } = useQuery({
@@ -73,6 +75,7 @@ export function useTrendChartQueries({
       return map;
     },
     enabled: plantIds.length > 0 && needsProductMeterReadings,
+    staleTime: 10 * 60_000,
   });
 
   // Product meters whose is_derived = true — mirrored/residual meters like
@@ -101,6 +104,7 @@ export function useTrendChartQueries({
       );
     },
     enabled: plantIds.length > 0 && needsProductMeterReadings,
+    staleTime: 10 * 60_000,
   });
 
   // Plant names are used for power meter replacement messages and for the permeate-source
@@ -114,6 +118,7 @@ export function useTrendChartQueries({
       return map;
     },
     enabled: plantIds.length > 0 && (needsPowerReadings || needsPermeateProduction),
+    staleTime: 10 * 60_000,
   });
 
   const supaSelect = async <T,>(table: string, cols: string) => {
@@ -150,6 +155,7 @@ export function useTrendChartQueries({
       return (data ?? []).map((l: any) => l.id as string);
     },
     enabled: plantIds.length > 0 && needsLocReadings,
+    staleTime: 10 * 60_000,
   });
 
   // Locators whose default_input_mode = 'direct' OR is_derived = true — the
@@ -176,6 +182,7 @@ export function useTrendChartQueries({
       );
     },
     enabled: plantIds.length > 0 && needsLocReadings,
+    staleTime: 10 * 60_000,
   });
 
   const { data: locReadings, isFetching: fetchingLoc, error: errLoc, refetch: refetchLoc } = useQuery({
@@ -195,8 +202,8 @@ export function useTrendChartQueries({
     },
     // Wait for locator IDs to resolve before fetching readings.
     enabled: plantIds.length > 0 && needsLocReadings && (_locatorIdsForReadings !== undefined),
-    staleTime: 60_000,  // FIX (egress): was 0 (always stale), which let the background-sync sweep refetch this ahead of its own 60s interval
-    refetchInterval: 60_000,
+    staleTime: 180_000,
+    refetchInterval: 180_000,
   });
 
   // Product meter readings — the treated-water output meters installed on
@@ -230,8 +237,8 @@ export function useTrendChartQueries({
       return (data as any[]) ?? [];
     },
     enabled: plantIds.length > 0 && needsProductMeterReadings,
-    staleTime: 60_000,  // FIX (egress): was 0 (always stale), which let the background-sync sweep refetch this ahead of its own 60s interval
-    refetchInterval: 60_000,
+    staleTime: 180_000,
+    refetchInterval: 180_000,
   });
 
   // ── Well readings — fetch with well_id so deltas are scoped per well ────────
@@ -249,8 +256,8 @@ export function useTrendChartQueries({
       'well_id,current_reading,previous_reading,daily_volume,reading_datetime,is_meter_replacement,plant_id,norm_status',
     ),
     enabled: plantIds.length > 0 && needsWellReadings,
-    staleTime: 60_000,  // FIX (egress): was 0 (always stale), which let the background-sync sweep refetch this ahead of its own 60s interval
-    refetchInterval: 60_000,
+    staleTime: 180_000,
+    refetchInterval: 180_000,
   });
 
   // ── BUG FIX: ro_train_readings may not have plant_id (same as locator_readings).
@@ -275,6 +282,7 @@ export function useTrendChartQueries({
       return { ids: rows.map((t: any) => t.id as string), trainPlantMap, trainUnitTypeMap };
     },
     enabled: plantIds.length > 0,
+    staleTime: 10 * 60_000,
   });
   const _roTrainIdsForReadings = _roTrainMeta?.ids;
   const _trainPlantMap = _roTrainMeta?.trainPlantMap ?? new Map<string, string>();
@@ -326,8 +334,8 @@ export function useTrendChartQueries({
       return (data ?? []) as any[];
     },
     enabled: plantIds.length > 0 && (needsRoReadings || needsPermeateProduction) && (_roTrainIdsForReadings !== undefined),
-    staleTime: 60_000,  // FIX (egress): was 0 (always stale), which let the background-sync sweep refetch this ahead of its own 60s interval
-    refetchInterval: 60_000,
+    staleTime: 180_000,
+    refetchInterval: 180_000,
   });
 
   // RO train name lookup — reuses the IDs already fetched above
@@ -342,6 +350,7 @@ export function useTrendChartQueries({
       return map;
     },
     enabled: plantIds.length > 0 && (needsRoReadings || needsPermeateProduction),
+    staleTime: 10 * 60_000,
   });
 
   // ── Plant meter config — fetch permeate_is_production flag per plant ────────
@@ -384,6 +393,7 @@ export function useTrendChartQueries({
       return { permeateCounts, productExcluded };
     },
     enabled: plantIds.length > 0 && needsPermeateProduction,
+    staleTime: 10 * 60_000,
   });
   const permeateIsProductionPlants = permeateConfigData?.permeateCounts;
   const productExcludedPlants      = permeateConfigData?.productExcluded;
@@ -422,8 +432,8 @@ export function useTrendChartQueries({
       );
     },
     enabled: plantIds.length > 0 && needsPowerReadings,
-    staleTime: 60_000,  // FIX (egress): was 0 (always stale), which let the background-sync sweep refetch this ahead of its own 60s interval
-    refetchInterval: 60_000,
+    staleTime: 180_000,
+    refetchInterval: 180_000,
   });
 
   // Chemical cost comes from TWO sources which are merged per day:
@@ -504,8 +514,8 @@ export function useTrendChartQueries({
       });
     },
     enabled: plantIds.length > 0 && needsCostReadings,
-    staleTime: 60_000,  // FIX (egress): was 0 (always stale), which let the background-sync sweep refetch this ahead of its own 60s interval
-    refetchInterval: 60_000,
+    staleTime: 180_000,
+    refetchInterval: 180_000,
   });
 
   // Power tariffs: rate_per_kwh (₱/kWh) effective on or before each day.
@@ -523,6 +533,7 @@ export function useTrendChartQueries({
       return (data as any[]) ?? [];
     },
     enabled: plantIds.length > 0 && needsCostReadings,
+    staleTime: 10 * 60_000,
   });
 
   // CT multiplier from electric_bills — mirrors PowerChart's authoritative multiplier source.
@@ -548,10 +559,7 @@ export function useTrendChartQueries({
       return map;
     },
     enabled: plantIds.length > 0 && metric === 'kwh',
-    // staleTime 0: a stale multiplier causes newly-inserted readings to show
-    // the raw meter delta instead of the CT-multiplied kWh value. Always
-    // revalidate so the chart is correct immediately after any insert.
-    staleTime: 0,
+    staleTime: 5 * 60_000,
   });
 
   // Per-plant, per-meter CT multiplier arrays from plant_power_config.
@@ -574,7 +582,7 @@ export function useTrendChartQueries({
       return map;
     },
     enabled: plantIds.length > 0 && metric === 'kwh',
-    staleTime: 0,
+    staleTime: 5 * 60_000,
   });
 
   const isFetching = fetchingLoc || fetchingWell || fetchingRo || fetchingPower || fetchingCost || fetchingProduct;

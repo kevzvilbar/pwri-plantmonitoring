@@ -38,8 +38,8 @@ export function PendingReviewCard({ plantIds }: Props) {
     // FIX (egress): staleTime matched to refetchInterval — was relying on the 30s
     // global default, so the app-wide background-sync sweep force-refetched this
     // well before its own interval was due.
-    staleTime: 60_000,
-    refetchInterval: 60_000,
+    staleTime: 120_000,
+    refetchInterval: 120_000,
   });
 
   if (pendingCount === 0) {

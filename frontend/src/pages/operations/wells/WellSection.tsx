@@ -296,9 +296,9 @@ export function WellReadingForm({ highlightId }: { highlightId?: string | null }
     meta: { silent: true },
     queryFn: async () => {
       if (!plantId) return [];
-      const start = new Date(); start.setDate(start.getDate() - 30);
+      const start = new Date(); start.setDate(start.getDate() - 14);
       const { data, error } = await supabase.from('well_readings')
-        .select('*').eq('plant_id', plantId)
+        .select('id,well_id,current_reading,reading_datetime,power_meter_reading').eq('plant_id', plantId)
         .gte('reading_datetime', start.toISOString())
         .order('reading_datetime', { ascending: false });
       if (error) {

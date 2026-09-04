@@ -31,6 +31,7 @@ export function usePlants() {
       if (error) throw error;
       return (data ?? []) as Plant[];
     },
+    staleTime: 10 * 60_000, // Master plants list rarely changes — cache for 10 min
   });
 }
 

@@ -102,6 +102,7 @@ export default function DataAnalysis() {
       const { data } = await supabase.from('plants').select('id,name').order('name');
       return (data ?? []) as Plant[];
     },
+    staleTime: 10 * 60_000,
   });
   const plants = plantsData ?? [];
 

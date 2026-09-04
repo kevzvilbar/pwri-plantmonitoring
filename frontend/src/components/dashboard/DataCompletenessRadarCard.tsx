@@ -168,7 +168,7 @@ export function DataCompletenessRadarCard({ plantIds }: Props) {
         ),
       }),
       enabled: !!p.id,
-      staleTime: 2 * 60_000,
+      staleTime: 10 * 60_000,
     })),
   });
 
