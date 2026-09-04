@@ -20,6 +20,7 @@ import {
 } from '@/components/ui/dialog';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import { cn } from '@/lib/utils';
 
 // ─── DataSummaryModal ─────────────────────────────────────────────────────────
 // Full-screen pivot-table popup. Rows = dates, columns = individual
