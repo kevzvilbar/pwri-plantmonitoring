@@ -140,9 +140,9 @@ SELECT is(
   'Before sweep, 0 estimated readings exist on Test Locator 1'
 );
 
--- Execute sweep covering Aug 19..Aug 25
+-- Execute sweep covering Aug 01..Aug 25
 SELECT ok(
-  (public.fn_backfill_missing_readings('2026-08-25'::date, 10) ->> 'swept_count')::integer > 0,
+  (public.fn_backfill_missing_readings('2026-08-25'::date, 25) ->> 'swept_count')::integer > 0,
   'Sweep runs successfully over test date range'
 );
 
@@ -205,7 +205,7 @@ END $$;
 
 -- Run sweep again — late remark retraction should remove the estimated reading for Aug 20
 SELECT ok(
-  (public.fn_backfill_missing_readings('2026-08-25'::date, 10) ->> 'retracted_count')::integer >= 1,
+  (public.fn_backfill_missing_readings('2026-08-25'::date, 25) ->> 'retracted_count')::integer >= 1,
   'Late remark retracts existing estimated reading'
 );
 
@@ -235,7 +235,7 @@ END $$;
 
 -- Run sweep again
 SELECT ok(
-  (public.fn_backfill_missing_readings('2026-08-25'::date, 10) ->> 'ok')::boolean = true,
+  (public.fn_backfill_missing_readings('2026-08-25'::date, 25) ->> 'ok')::boolean = true,
   'Sweep runs and automatically purges orphaned estimated row on Aug 21'
 );
 

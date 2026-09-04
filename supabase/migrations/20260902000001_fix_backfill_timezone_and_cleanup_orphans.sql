@@ -126,11 +126,19 @@ BEGIN
   WITH deleted AS (
     DELETE FROM public.locator_readings e
     WHERE e.is_estimated = true
-      AND EXISTS (
-        SELECT 1 FROM public.locator_readings r
-        WHERE r.locator_id = e.locator_id
-          AND COALESCE(r.is_estimated, false) = false
-          AND (r.reading_datetime AT TIME ZONE 'Asia/Manila')::date = (e.reading_datetime AT TIME ZONE 'Asia/Manila')::date
+      AND (
+        EXISTS (
+          SELECT 1 FROM public.locator_readings r
+          WHERE r.locator_id = e.locator_id
+            AND COALESCE(r.is_estimated, false) = false
+            AND (r.reading_datetime AT TIME ZONE 'Asia/Manila')::date = (e.reading_datetime AT TIME ZONE 'Asia/Manila')::date
+        )
+        OR EXISTS (
+          SELECT 1 FROM public.reading_gap_reasons gr
+          WHERE gr.entity_type = 'locator'
+            AND gr.entity_id = e.locator_id
+            AND gr.gap_date = (e.reading_datetime AT TIME ZONE 'Asia/Manila')::date
+        )
       )
     RETURNING 1
   ) SELECT count(*) INTO v_purged_count FROM deleted;
@@ -139,11 +147,19 @@ BEGIN
   WITH deleted AS (
     DELETE FROM public.well_readings e
     WHERE e.is_estimated = true
-      AND EXISTS (
-        SELECT 1 FROM public.well_readings r
-        WHERE r.well_id = e.well_id
-          AND COALESCE(r.is_estimated, false) = false
-          AND (r.reading_datetime AT TIME ZONE 'Asia/Manila')::date = (e.reading_datetime AT TIME ZONE 'Asia/Manila')::date
+      AND (
+        EXISTS (
+          SELECT 1 FROM public.well_readings r
+          WHERE r.well_id = e.well_id
+            AND COALESCE(r.is_estimated, false) = false
+            AND (r.reading_datetime AT TIME ZONE 'Asia/Manila')::date = (e.reading_datetime AT TIME ZONE 'Asia/Manila')::date
+        )
+        OR EXISTS (
+          SELECT 1 FROM public.reading_gap_reasons gr
+          WHERE gr.entity_type = 'well'
+            AND gr.entity_id = e.well_id
+            AND gr.gap_date = (e.reading_datetime AT TIME ZONE 'Asia/Manila')::date
+        )
       )
     RETURNING 1
   ) SELECT count(*) INTO v_purged_count FROM deleted;
@@ -152,11 +168,19 @@ BEGIN
   WITH deleted AS (
     DELETE FROM public.product_meter_readings e
     WHERE e.is_estimated = true
-      AND EXISTS (
-        SELECT 1 FROM public.product_meter_readings r
-        WHERE r.meter_id = e.meter_id
-          AND COALESCE(r.is_estimated, false) = false
-          AND (r.reading_datetime AT TIME ZONE 'Asia/Manila')::date = (e.reading_datetime AT TIME ZONE 'Asia/Manila')::date
+      AND (
+        EXISTS (
+          SELECT 1 FROM public.product_meter_readings r
+          WHERE r.meter_id = e.meter_id
+            AND COALESCE(r.is_estimated, false) = false
+            AND (r.reading_datetime AT TIME ZONE 'Asia/Manila')::date = (e.reading_datetime AT TIME ZONE 'Asia/Manila')::date
+        )
+        OR EXISTS (
+          SELECT 1 FROM public.reading_gap_reasons gr
+          WHERE gr.entity_type = 'product'
+            AND gr.entity_id = e.meter_id
+            AND gr.gap_date = (e.reading_datetime AT TIME ZONE 'Asia/Manila')::date
+        )
       )
     RETURNING 1
   ) SELECT count(*) INTO v_purged_count FROM deleted;
@@ -165,11 +189,19 @@ BEGIN
   WITH deleted AS (
     DELETE FROM public.blending_events e
     WHERE e.is_estimated = true
-      AND EXISTS (
-        SELECT 1 FROM public.blending_events r
-        WHERE r.well_id = e.well_id
-          AND COALESCE(r.is_estimated, false) = false
-          AND COALESCE(r.event_date, (r.reading_datetime AT TIME ZONE 'Asia/Manila')::date) = COALESCE(e.event_date, (e.reading_datetime AT TIME ZONE 'Asia/Manila')::date)
+      AND (
+        EXISTS (
+          SELECT 1 FROM public.blending_events r
+          WHERE r.well_id = e.well_id
+            AND COALESCE(r.is_estimated, false) = false
+            AND COALESCE(r.event_date, (r.reading_datetime AT TIME ZONE 'Asia/Manila')::date) = COALESCE(e.event_date, (e.reading_datetime AT TIME ZONE 'Asia/Manila')::date)
+        )
+        OR EXISTS (
+          SELECT 1 FROM public.reading_gap_reasons gr
+          WHERE gr.entity_type = 'blending'
+            AND gr.entity_id = e.well_id
+            AND gr.gap_date = COALESCE(e.event_date, (e.reading_datetime AT TIME ZONE 'Asia/Manila')::date)
+        )
       )
     RETURNING 1
   ) SELECT count(*) INTO v_purged_count FROM deleted;
@@ -178,11 +210,19 @@ BEGIN
   WITH deleted AS (
     DELETE FROM public.power_readings e
     WHERE e.is_estimated = true
-      AND EXISTS (
-        SELECT 1 FROM public.power_readings r
-        WHERE r.plant_id = e.plant_id
-          AND COALESCE(r.is_estimated, false) = false
-          AND (r.reading_datetime AT TIME ZONE 'Asia/Manila')::date = (e.reading_datetime AT TIME ZONE 'Asia/Manila')::date
+      AND (
+        EXISTS (
+          SELECT 1 FROM public.power_readings r
+          WHERE r.plant_id = e.plant_id
+            AND COALESCE(r.is_estimated, false) = false
+            AND (r.reading_datetime AT TIME ZONE 'Asia/Manila')::date = (e.reading_datetime AT TIME ZONE 'Asia/Manila')::date
+        )
+        OR EXISTS (
+          SELECT 1 FROM public.reading_gap_reasons gr
+          WHERE gr.entity_type = 'power'
+            AND gr.entity_id = e.plant_id
+            AND gr.gap_date = (e.reading_datetime AT TIME ZONE 'Asia/Manila')::date
+        )
       )
     RETURNING 1
   ) SELECT count(*) INTO v_purged_count FROM deleted;
@@ -191,11 +231,19 @@ BEGIN
   WITH deleted AS (
     DELETE FROM public.ro_train_readings e
     WHERE e.is_estimated = true
-      AND EXISTS (
-        SELECT 1 FROM public.ro_train_readings r
-        WHERE r.train_id = e.train_id
-          AND COALESCE(r.is_estimated, false) = false
-          AND (r.reading_datetime AT TIME ZONE 'Asia/Manila')::date = (e.reading_datetime AT TIME ZONE 'Asia/Manila')::date
+      AND (
+        EXISTS (
+          SELECT 1 FROM public.ro_train_readings r
+          WHERE r.train_id = e.train_id
+            AND COALESCE(r.is_estimated, false) = false
+            AND (r.reading_datetime AT TIME ZONE 'Asia/Manila')::date = (e.reading_datetime AT TIME ZONE 'Asia/Manila')::date
+        )
+        OR EXISTS (
+          SELECT 1 FROM public.reading_gap_reasons gr
+          WHERE gr.entity_type = 'ro_train'
+            AND gr.entity_id = e.train_id
+            AND gr.gap_date = (e.reading_datetime AT TIME ZONE 'Asia/Manila')::date
+        )
       )
     RETURNING 1
   ) SELECT count(*) INTO v_purged_count FROM deleted;
@@ -216,6 +264,7 @@ BEGIN
       SELECT id, current_reading, (reading_datetime AT TIME ZONE 'Asia/Manila')::date AS r_date
       FROM public.locator_readings
       WHERE locator_id = r_entity.id
+        AND COALESCE(is_estimated, false) = false
         AND (reading_datetime AT TIME ZONE 'Asia/Manila')::date >= (v_target_start - interval '14 days')
         AND (reading_datetime AT TIME ZONE 'Asia/Manila')::date <= v_target_end
       ORDER BY reading_datetime ASC
@@ -224,6 +273,7 @@ BEGIN
       INTO r_reading_b
       FROM public.locator_readings
       WHERE locator_id = r_entity.id
+        AND COALESCE(is_estimated, false) = false
         AND (reading_datetime AT TIME ZONE 'Asia/Manila')::date > r_reading_a.r_date
       ORDER BY reading_datetime ASC
       LIMIT 1;
@@ -231,7 +281,7 @@ BEGIN
       IF FOUND THEN
         v_gap_days := (r_reading_b.r_date - r_reading_a.r_date) - 1;
         IF v_gap_days >= 1 AND v_gap_days <= 14 
-           AND NOT COALESCE(r_reading_b.is_meter_rollover, false) THEN
+            AND NOT COALESCE(r_reading_b.is_meter_rollover, false) THEN
           v_diff := r_reading_b.current_reading - r_reading_a.current_reading;
           IF v_diff >= 0 THEN
             v_hist_rate := NULL;
@@ -242,6 +292,7 @@ BEGIN
                 SELECT current_reading, reading_datetime
                 FROM public.locator_readings
                 WHERE locator_id = r_entity.id
+                  AND COALESCE(is_estimated, false) = false
                   AND (reading_datetime AT TIME ZONE 'Asia/Manila')::date < r_reading_a.r_date
                   AND (reading_datetime AT TIME ZONE 'Asia/Manila')::date >= (r_reading_a.r_date - interval '14 days')
                 ORDER BY reading_datetime DESC
@@ -330,6 +381,7 @@ BEGIN
       SELECT id, current_reading, (reading_datetime AT TIME ZONE 'Asia/Manila')::date AS r_date
       FROM public.well_readings
       WHERE well_id = r_entity.id
+        AND COALESCE(is_estimated, false) = false
         AND (reading_datetime AT TIME ZONE 'Asia/Manila')::date >= (v_target_start - interval '14 days')
         AND (reading_datetime AT TIME ZONE 'Asia/Manila')::date <= v_target_end
       ORDER BY reading_datetime ASC
@@ -338,6 +390,7 @@ BEGIN
       INTO r_reading_b
       FROM public.well_readings
       WHERE well_id = r_entity.id
+        AND COALESCE(is_estimated, false) = false
         AND (reading_datetime AT TIME ZONE 'Asia/Manila')::date > r_reading_a.r_date
       ORDER BY reading_datetime ASC
       LIMIT 1;
@@ -357,6 +410,7 @@ BEGIN
                 SELECT current_reading, reading_datetime
                 FROM public.well_readings
                 WHERE well_id = r_entity.id
+                  AND COALESCE(is_estimated, false) = false
                   AND (reading_datetime AT TIME ZONE 'Asia/Manila')::date < r_reading_a.r_date
                   AND (reading_datetime AT TIME ZONE 'Asia/Manila')::date >= (r_reading_a.r_date - interval '14 days')
                 ORDER BY reading_datetime DESC
@@ -447,6 +501,7 @@ BEGIN
       SELECT id, current_reading, (reading_datetime AT TIME ZONE 'Asia/Manila')::date AS r_date
       FROM public.product_meter_readings
       WHERE meter_id = r_entity.id
+        AND COALESCE(is_estimated, false) = false
         AND (reading_datetime AT TIME ZONE 'Asia/Manila')::date >= (v_target_start - interval '14 days')
         AND (reading_datetime AT TIME ZONE 'Asia/Manila')::date <= v_target_end
       ORDER BY reading_datetime ASC
@@ -455,6 +510,7 @@ BEGIN
       INTO r_reading_b
       FROM public.product_meter_readings
       WHERE meter_id = r_entity.id
+        AND COALESCE(is_estimated, false) = false
         AND (reading_datetime AT TIME ZONE 'Asia/Manila')::date > r_reading_a.r_date
       ORDER BY reading_datetime ASC
       LIMIT 1;
@@ -474,6 +530,7 @@ BEGIN
                 SELECT current_reading, reading_datetime
                 FROM public.product_meter_readings
                 WHERE meter_id = r_entity.id
+                  AND COALESCE(is_estimated, false) = false
                   AND (reading_datetime AT TIME ZONE 'Asia/Manila')::date < r_reading_a.r_date
                   AND (reading_datetime AT TIME ZONE 'Asia/Manila')::date >= (r_reading_a.r_date - interval '14 days')
                 ORDER BY reading_datetime DESC
@@ -564,6 +621,7 @@ BEGIN
       SELECT id, raw_meter_reading, COALESCE(event_date, (reading_datetime AT TIME ZONE 'Asia/Manila')::date) AS r_date
       FROM public.blending_events
       WHERE well_id = r_entity.id
+        AND COALESCE(is_estimated, false) = false
         AND COALESCE(event_date, (reading_datetime AT TIME ZONE 'Asia/Manila')::date) >= (v_target_start - interval '14 days')::date
         AND COALESCE(event_date, (reading_datetime AT TIME ZONE 'Asia/Manila')::date) <= v_target_end
       ORDER BY COALESCE(event_date, (reading_datetime AT TIME ZONE 'Asia/Manila')::date) ASC
@@ -572,6 +630,7 @@ BEGIN
       INTO r_reading_b
       FROM public.blending_events
       WHERE well_id = r_entity.id
+        AND COALESCE(is_estimated, false) = false
         AND COALESCE(event_date, (reading_datetime AT TIME ZONE 'Asia/Manila')::date) > r_reading_a.r_date
       ORDER BY COALESCE(event_date, (reading_datetime AT TIME ZONE 'Asia/Manila')::date) ASC
       LIMIT 1;
@@ -589,6 +648,7 @@ BEGIN
                 SELECT raw_meter_reading, event_date, reading_datetime
                 FROM public.blending_events
                 WHERE well_id = r_entity.id
+                  AND COALESCE(is_estimated, false) = false
                   AND COALESCE(event_date, (reading_datetime AT TIME ZONE 'Asia/Manila')::date) < r_reading_a.r_date
                   AND COALESCE(event_date, (reading_datetime AT TIME ZONE 'Asia/Manila')::date) >= (r_reading_a.r_date - interval '14 days')::date
                 ORDER BY COALESCE(event_date, (reading_datetime AT TIME ZONE 'Asia/Manila')::date) DESC
@@ -679,6 +739,7 @@ BEGIN
       SELECT id, meter_reading_kwh, (reading_datetime AT TIME ZONE 'Asia/Manila')::date AS r_date
       FROM public.power_readings
       WHERE plant_id = r_entity.plant_id
+        AND COALESCE(is_estimated, false) = false
         AND (reading_datetime AT TIME ZONE 'Asia/Manila')::date >= (v_target_start - interval '14 days')
         AND (reading_datetime AT TIME ZONE 'Asia/Manila')::date <= v_target_end
       ORDER BY reading_datetime ASC
@@ -687,6 +748,7 @@ BEGIN
       INTO r_reading_b
       FROM public.power_readings
       WHERE plant_id = r_entity.plant_id
+        AND COALESCE(is_estimated, false) = false
         AND (reading_datetime AT TIME ZONE 'Asia/Manila')::date > r_reading_a.r_date
       ORDER BY reading_datetime ASC
       LIMIT 1;
@@ -704,6 +766,7 @@ BEGIN
                 SELECT meter_reading_kwh, reading_datetime
                 FROM public.power_readings
                 WHERE plant_id = r_entity.plant_id
+                  AND COALESCE(is_estimated, false) = false
                   AND (reading_datetime AT TIME ZONE 'Asia/Manila')::date < r_reading_a.r_date
                   AND (reading_datetime AT TIME ZONE 'Asia/Manila')::date >= (r_reading_a.r_date - interval '14 days')
                 ORDER BY reading_datetime DESC
@@ -794,6 +857,7 @@ BEGIN
       SELECT id, permeate_meter, (reading_datetime AT TIME ZONE 'Asia/Manila')::date AS r_date
       FROM public.ro_train_readings
       WHERE train_id = r_entity.id
+        AND COALESCE(is_estimated, false) = false
         AND (reading_datetime AT TIME ZONE 'Asia/Manila')::date >= (v_target_start - interval '14 days')
         AND (reading_datetime AT TIME ZONE 'Asia/Manila')::date <= v_target_end
         AND permeate_meter IS NOT NULL
@@ -803,6 +867,7 @@ BEGIN
       INTO r_reading_b
       FROM public.ro_train_readings
       WHERE train_id = r_entity.id
+        AND COALESCE(is_estimated, false) = false
         AND (reading_datetime AT TIME ZONE 'Asia/Manila')::date > r_reading_a.r_date
         AND permeate_meter IS NOT NULL
       ORDER BY reading_datetime ASC
@@ -823,6 +888,7 @@ BEGIN
                 SELECT permeate_meter, reading_datetime
                 FROM public.ro_train_readings
                 WHERE train_id = r_entity.id
+                  AND COALESCE(is_estimated, false) = false
                   AND (reading_datetime AT TIME ZONE 'Asia/Manila')::date < r_reading_a.r_date
                   AND (reading_datetime AT TIME ZONE 'Asia/Manila')::date >= (r_reading_a.r_date - interval '14 days')
                   AND permeate_meter IS NOT NULL
