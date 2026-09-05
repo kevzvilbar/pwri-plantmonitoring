@@ -855,6 +855,7 @@ export function PowerForm() {
 
       let totalDailyGrid = 0;
       let allMetersPresent = true;
+      let computedMeterCount = 0;
       for (let mi = 0; mi < gridMeterCount; mi++) {
         const curr = mergedGridReadings[String(mi)];
         const prev = prevMeters[String(mi)];
@@ -862,21 +863,23 @@ export function PowerForm() {
           const mMult = Array.isArray(configMultiplierArr) && +configMultiplierArr[mi] > 0
             ? +configMultiplierArr[mi]
             : effectiveMultiplier;
-          totalDailyGrid += (curr - prev) * mMult;
+          const delta = (curr - prev) * mMult;
+          if (delta >= 0) {
+            totalDailyGrid += delta;
+            computedMeterCount++;
+          }
         } else {
           allMetersPresent = false;
         }
       }
-      if (allMetersPresent) {
+      if (computedMeterCount > 0) {
+        payload.daily_grid_kwh       = totalDailyGrid;
+        payload.daily_consumption_kwh = totalDailyGrid;
+      } else if (allMetersPresent) {
         payload.daily_grid_kwh       = totalDailyGrid;
         payload.daily_consumption_kwh = totalDailyGrid;
       } else if (idx === 0 && deltaGrid != null) {
-        // Partial data: only meter-0 is available — write a partial estimate so the
-        // dashboard doesn't show an empty bar until all meters are saved.
-        // BUG B FIX: always set daily_grid_kwh here, not just when computedDailyGrid
-        // is non-null.  With Bug A fixed, computedDailyGrid is now always non-null
-        // when deltaGrid != null, so this path now correctly writes the CT-scaled
-        // value for both solar+grid AND grid-only plants.
+        // Partial data fallback: only meter-0 is available
         const partialKwh = computedDailyGrid ?? deltaGrid * effectiveMultiplier;
         payload.daily_grid_kwh        = partialKwh;
         payload.daily_consumption_kwh = partialKwh;
