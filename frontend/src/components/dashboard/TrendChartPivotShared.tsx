@@ -138,7 +138,7 @@ export type DSMTab = 'overview' | 'production' | 'consumption' | 'grid-by-meter'
 //   z-20 — header's plain sticky-top cells, above the body columns scrolling under them
 //   z-30 — header's corner cells (sticky on top *and* left/right at once),
 //          above the plain header cells scrolling under them
-export const TH = 'px-3 py-2 text-center text-2xs font-bold text-muted-foreground uppercase tracking-wider border-b border-border/80 align-bottom sticky top-0 z-20 bg-card/95 backdrop-blur-sm';
+export const TH = 'px-3 py-2 text-right text-2xs font-bold text-muted-foreground uppercase tracking-wider border-b border-border/80 align-bottom sticky top-0 z-20 bg-card/95 backdrop-blur-sm';
 export const TH_DATE = 'px-3.5 py-2 text-left text-2xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap border-b border-border/80 sticky left-0 top-0 z-30 bg-card/95 backdrop-blur-sm w-[84px] min-w-[84px]';
 export const TH_TOTAL = 'px-3 py-2 text-right text-2xs font-extrabold border-b border-l border-border/80 sticky right-0 top-0 z-30 bg-primary-soft text-primary align-bottom w-[90px] min-w-[90px]';
 export const TD = 'px-3 py-2 text-right font-mono tabular-nums text-xs text-foreground/90';

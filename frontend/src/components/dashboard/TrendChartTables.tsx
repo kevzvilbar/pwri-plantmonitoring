@@ -110,8 +110,8 @@ export function PivotTable({
             <th className={TH_DATE}>Date</th>
             {entities.map((e) => (
               <th key={e.id} className={TH} title={e.label}>
-                <div className="text-center leading-tight break-words hyphens-auto" style={{ wordBreak: 'break-word' }}>{e.label}</div>
-                <div className="text-3xs font-normal opacity-60 mt-0.5">{unit}</div>
+                <div className="text-right leading-tight break-words hyphens-auto" style={{ wordBreak: 'break-word' }}>{e.label}</div>
+                <div className="text-3xs font-normal opacity-60 mt-0.5 text-right">{unit}</div>
               </th>
             ))}
             <th className={TH_TOTAL}>{totalLabel}<br /><span className="text-3xs font-normal opacity-80">{unit}</span></th>
@@ -143,9 +143,10 @@ export function PivotTable({
                   const reasonTitle = reason
                     ? `${reasonEntityPrefix(entityType!, reason.source === 'status')}: ${reasonCategoryLabel(reason.category)}${reason.detail ? ' — ' + reason.detail : ''}`
                     : '';
+                  const hasVal = val != null && val !== 0;
                   return (
                     <td key={e.id} className={TD}>
-                      {val != null ? (
+                      {hasVal ? (
                         reason ? (
                           // Both value (backfilled or real) and reason note exist: icon first, then number so decimals align
                           <div className="inline-flex items-center justify-end gap-1 w-full">
@@ -158,32 +159,24 @@ export function PivotTable({
                             >
                               <MessageCircleOff className="h-3 w-3" />
                             </button>
-                            <span className={val != null && val < 0 ? 'text-destructive font-semibold' : ''}>{fmtV(val)}</span>
+                            <span className={val < 0 ? 'text-destructive font-semibold' : ''}>{fmtV(val)}</span>
                           </div>
                         ) : (
-                          val != null && val < 0 ? <span className="text-destructive font-semibold">{fmtV(val)}</span> : fmtV(val)
+                          val < 0 ? <span className="text-destructive font-semibold">{fmtV(val)}</span> : fmtV(val)
                         )
                       ) : reason && canLog ? (
-                        // Has a reason on file — either a per-day gap entry, or
-                        // one inferred from a multi-day Offline/Inactive
-                        // interval (source: 'status'). Either way, clicking
-                        // writes a day-specific reading_gap_reasons row, which
-                        // always takes precedence over the inferred interval
-                        // (see getReason above) — so this lets an operator
-                        // layer a more specific note onto one day of a longer
-                        // offline stretch without touching the status log.
+                        // Has a reason on file, but no non-zero reading: show ONLY the note icon (never combine with dash)
                         <button
                           type="button"
                           onClick={() => setGapTarget({ entityId: e.id, entityLabel: e.label, dateKey: date, existing: reason })}
-                          title={`${reasonTitle} (click to edit)`}
+                          title={`${reasonTitle} (click to edit note)`}
                           className="inline-flex items-center justify-center text-warn cursor-pointer hover:opacity-70 transition-opacity"
                           data-testid={`pivot-gap-icon-${e.id}-${date}`}
                         >
                           <MessageCircleOff className="h-3 w-3" />
                         </button>
                       ) : reason ? (
-                        // Only reachable for a future date (see canLog) —
-                        // read-only, matching the original behavior.
+                        // Read-only reason note on empty cell: show ONLY the note icon
                         <span
                           title={reasonTitle}
                           className="inline-flex items-center justify-center text-warn cursor-help"
@@ -201,7 +194,9 @@ export function PivotTable({
                         >
                           —
                         </button>
-                      ) : val != null && val < 0 ? <span className="text-destructive font-semibold">{fmtV(val)}</span> : fmtV(val)}
+                      ) : (
+                        <span className="text-muted-foreground/40">—</span>
+                      )}
                     </td>
                   );
                 })}
