@@ -132,7 +132,7 @@ export function friendlyError(err: AnyError, fallback = 'An unexpected error occ
     return 'Incorrect email or password.';
   }
   if (msg.toLowerCase().includes('already registered')) {
-    return 'That email address is already in use.';
+    return 'Unable to complete registration with this email. If you already have an account, please sign in or reset your password.';
   }
 
   // 7. Generic network / JWT

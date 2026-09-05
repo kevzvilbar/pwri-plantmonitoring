@@ -70,10 +70,18 @@ async function logSignUpAudit(p: {
 // ─── Sign-In ──────────────────────────────────────────────────────────────────
 type PickEntry = { id: string; username: string; first_name: string | null; last_name: string | null; plant_assignments: string[] };
 
-function SignInForm() {
+function SignInForm({
+  initialEmail = '',
+  notice = null,
+  onClearNotice,
+}: {
+  initialEmail?: string;
+  notice?: { email: string; count: number } | null;
+  onClearNotice?: () => void;
+}) {
   const navigate = useNavigate();
   const [busy, setBusy] = useState(false);
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(initialEmail);
   const [password, setPassword] = useState('');
   const [view, setView] = useState<'signin' | 'forgot'>('signin');
   const [showPassword, setShowPassword] = useState(false);
@@ -82,6 +90,10 @@ function SignInForm() {
   const [signedInPlantId, setSignedInPlantId] = useState<string | null>(null);
   // Zustand setter — persists the chosen operator across the whole app
   const setActiveOperatorId = useAppStore((s) => s.setActiveOperatorId);
+
+  useEffect(() => {
+    if (initialEmail) setEmail(initialEmail);
+  }, [initialEmail]);
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -205,50 +217,89 @@ function SignInForm() {
   }
 
   return (
-    <form onSubmit={handleSignIn} className="space-y-3">
-      <div>
-        <Label htmlFor="signin-email">Email</Label>
-        <Input id="signin-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" required />
-      </div>
-      <div>
-        <Label htmlFor="signin-password">Password</Label>
-        <div className="relative">
+    <div className="space-y-3">
+      {notice && (
+        <div className="rounded-lg bg-emerald-500/10 border border-emerald-500/30 p-3 text-xs text-emerald-800 dark:text-emerald-200 flex items-start justify-between gap-2 animate-fade-in">
+          <div className="space-y-1">
+            <p className="font-semibold text-emerald-900 dark:text-emerald-100 flex items-center gap-1.5">
+              <span className="h-2 w-2 rounded-full bg-emerald-500 shrink-0" />
+              Registration Submitted (Pending Approval)
+            </p>
+            <p className="text-muted-foreground leading-relaxed">
+              {notice.count > 1
+                ? `${notice.count} operator accounts have been submitted for ${notice.email}.`
+                : `Your account registration for ${notice.email} has been submitted.`}{' '}
+              An administrator will review and activate your account under Admin Console → Employees before you can sign in.
+            </p>
+          </div>
+          {onClearNotice && (
+            <button
+              type="button"
+              onClick={onClearNotice}
+              className="text-muted-foreground hover:text-foreground p-1 text-sm font-bold"
+              aria-label="Dismiss notice"
+            >
+              ×
+            </button>
+          )}
+        </div>
+      )}
+
+      <form onSubmit={handleSignIn} className="space-y-3">
+        <div>
+          <Label htmlFor="signin-email">Email</Label>
           <Input
-            id="signin-password"
-            type={showPassword ? 'text' : 'password'}
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
+            id="signin-email"
+            type="email"
+            autoComplete="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="you@example.com"
             required
-            className="pr-10"
           />
-          <button
-            type="button"
-            onClick={() => setShowPassword((v) => !v)}
-            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-            tabIndex={-1}
-            aria-label={showPassword ? 'Hide password' : 'Show password'}
-          >
-            {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-          </button>
         </div>
-        <div className="flex justify-end mt-1">
-          <button
-            type="button"
-            onClick={() => setView('forgot')}
-            className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors"
-          >
-            Forgot password?
-          </button>
+        <div>
+          <Label htmlFor="signin-password">Password</Label>
+          <div className="relative">
+            <Input
+              id="signin-password"
+              type={showPassword ? 'text' : 'password'}
+              autoComplete="current-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              className="pr-10"
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword((v) => !v)}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none rounded p-0.5"
+              aria-label={showPassword ? 'Hide password' : 'Show password'}
+            >
+              {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </button>
+          </div>
+          <div className="flex justify-end mt-1">
+            <button
+              type="button"
+              onClick={() => setView('forgot')}
+              className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors"
+            >
+              Forgot password?
+            </button>
+          </div>
         </div>
-      </div>
-      <Button type="submit" disabled={busy} className="w-full">
-        {busy ? 'Signing in…' : 'Sign in'}
-      </Button>
-    </form>
+        <Button type="submit" disabled={busy} className="w-full">
+          {busy ? 'Signing in…' : 'Sign in'}
+        </Button>
+      </form>
+    </div>
   );
 }
 
 // ─── OTP digit boxes ──────────────────────────────────────────────────────────
+// Supabase email recovery tokens default to 6–8 characters depending on project
+// auth settings. This component defaults to 8 to accommodate the configured length.
 function OtpInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   const LENGTH = 8;
   const boxRefs = useRef<(HTMLInputElement | null)[]>([]);
@@ -281,7 +332,7 @@ function OtpInput({ value, onChange }: { value: string; onChange: (v: string) =>
   };
 
   return (
-    <div className="flex gap-2 justify-center my-1">
+    <div role="group" aria-label="8-digit verification code" className="flex gap-2 justify-center my-1">
       {Array.from({ length: LENGTH }).map((_, idx) => (
         <input
           key={idx}
@@ -289,6 +340,8 @@ function OtpInput({ value, onChange }: { value: string; onChange: (v: string) =>
           type="text"
           inputMode="numeric"
           maxLength={1}
+          autoComplete={idx === 0 ? 'one-time-code' : undefined}
+          aria-label={`Digit ${idx + 1} of ${LENGTH}`}
           value={digits[idx].trim()}
           onChange={(e) => commit(idx, e.target.value.replace(/\D/g, '').slice(-1))}
           onKeyDown={(e) => handleKeyDown(idx, e)}
@@ -307,6 +360,85 @@ function OtpInput({ value, onChange }: { value: string; onChange: (v: string) =>
   );
 }
 
+// ─── Shared: Set New Password Form ───────────────────────────────────────────
+function SetNewPasswordForm({
+  onSubmit,
+  busy,
+  submitLabel = 'Update password',
+}: {
+  onSubmit: (password: string) => Promise<void>;
+  busy: boolean;
+  submitLabel?: string;
+}) {
+  const [password, setPassword] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const vp = passSchema.safeParse(password);
+    if (!vp.success) { toast.error(vp.error.issues[0].message); return; }
+    if (password !== confirm) { toast.error('Passwords do not match'); return; }
+    await onSubmit(password);
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-3">
+      <div>
+        <Label htmlFor="set-new-password">New password</Label>
+        <div className="relative">
+          <Input
+            id="set-new-password"
+            type={showPassword ? 'text' : 'password'}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="Min 8 characters"
+            autoComplete="new-password"
+            autoFocus
+            required
+            className="pr-10"
+          />
+          <button
+            type="button"
+            onClick={() => setShowPassword((v) => !v)}
+            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none rounded p-0.5"
+            aria-label={showPassword ? 'Hide password' : 'Show password'}
+          >
+            {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+          </button>
+        </div>
+      </div>
+      <div>
+        <Label htmlFor="set-confirm-password">Confirm new password</Label>
+        <div className="relative">
+          <Input
+            id="set-confirm-password"
+            type={showConfirm ? 'text' : 'password'}
+            value={confirm}
+            onChange={(e) => setConfirm(e.target.value)}
+            placeholder="Repeat new password"
+            autoComplete="new-password"
+            required
+            className="pr-10"
+          />
+          <button
+            type="button"
+            onClick={() => setShowConfirm((v) => !v)}
+            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none rounded p-0.5"
+            aria-label={showConfirm ? 'Hide confirm password' : 'Show confirm password'}
+          >
+            {showConfirm ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+          </button>
+        </div>
+      </div>
+      <Button type="submit" disabled={busy} className="w-full">
+        {busy ? 'Updating…' : submitLabel}
+      </Button>
+    </form>
+  );
+}
+
 // ─── Forgot Password (3-step OTP wizard) ─────────────────────────────────────
 type ForgotStep = 'email' | 'code' | 'newpass';
 
@@ -314,8 +446,6 @@ function ForgotPasswordForm({ onBack }: { onBack: () => void }) {
   const [step, setStep]       = useState<ForgotStep>('email');
   const [email, setEmail]     = useState('');
   const [code, setCode]       = useState('');
-  const [password, setPass]   = useState('');
-  const [confirm, setConfirm] = useState('');
   const [busy, setBusy]       = useState(false);
   const [cooldown, setCooldown] = useState(0);
 
@@ -328,13 +458,6 @@ function ForgotPasswordForm({ onBack }: { onBack: () => void }) {
   }, []);
 
   // ── Step 1: send OTP ──
-  // ── Bug fix ────────────────────────────────────────────────────────────────
-  // This used to call signInWithOtp() — a *sign-in* method. Its token can only
-  // be verified with type:'email', which establishes a normal SIGNED_IN
-  // session, not a recovery one. resetPasswordForEmail() is the method built
-  // for this: it issues a recovery-typed token via the "Reset Password" email
-  // template, which is what step 2 needs to fire PASSWORD_RECOVERY instead of
-  // SIGNED_IN (see handleVerifyCode below).
   const handleSendCode = async (isResend = false) => {
     const ve = emailSchema.safeParse(email);
     if (!ve.success) { toast.error(ve.error.issues[0].message); return; }
@@ -348,16 +471,6 @@ function ForgotPasswordForm({ onBack }: { onBack: () => void }) {
   };
 
   // ── Step 2: verify OTP ──
-  // ── Bug fix ────────────────────────────────────────────────────────────────
-  // type was 'magiclink', which doesn't match a resetPasswordForEmail() token
-  // (causing "invalid or expired code") and, worse, on success fires a plain
-  // SIGNED_IN event. useAuth.tsx only special-cases PASSWORD_RECOVERY; for
-  // SIGNED_IN it just sets `user`, so Auth()'s `if (user && !isRecovery)`
-  // guard immediately navigates to "/" and unmounts this wizard before step 3
-  // ever renders — the new password is never actually set. type:'recovery' is
-  // the type that matches resetPasswordForEmail() and correctly fires
-  // PASSWORD_RECOVERY, which useAuth.tsx already handles by keeping the user
-  // on /auth (see the PASSWORD_RECOVERY branch in useAuth.tsx).
   const handleVerifyCode = async () => {
     if (code.replace(/\s/g, '').length < 8) { toast.error('Enter the full 8-digit code'); return; }
     setBusy(true);
@@ -372,12 +485,9 @@ function ForgotPasswordForm({ onBack }: { onBack: () => void }) {
   };
 
   // ── Step 3: update password ──
-  const handleUpdatePassword = async () => {
-    const vp = passSchema.safeParse(password);
-    if (!vp.success) { toast.error(vp.error.issues[0].message); return; }
-    if (password !== confirm) { toast.error('Passwords do not match'); return; }
+  const handleUpdatePassword = async (newPassword: string) => {
     setBusy(true);
-    const { error } = await supabase.auth.updateUser({ password });
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
     setBusy(false);
     if (error) { toast.error(friendlyError(error)); return; }
     toast.success('Password updated! Please sign in.');
@@ -416,6 +526,7 @@ function ForgotPasswordForm({ onBack }: { onBack: () => void }) {
         <Input
           id="forgot-email"
           type="email"
+          autoComplete="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           placeholder="you@example.com"
@@ -466,6 +577,9 @@ function ForgotPasswordForm({ onBack }: { onBack: () => void }) {
           {cooldown > 0 ? `Resend code (${cooldown}s)` : 'Resend code'}
         </button>
       </div>
+      <p className="text-2xs text-muted-foreground text-center pt-2 leading-normal">
+        Didn't receive an 8-digit code? If your email contains a direct reset link instead, click it directly in your inbox to reset your password.
+      </p>
     </div>
   );
 
@@ -480,31 +594,7 @@ function ForgotPasswordForm({ onBack }: { onBack: () => void }) {
         <p className="text-xs text-muted-foreground mt-0.5">Choose a strong password for your account.</p>
       </div>
       <StepDots />
-      <div>
-        <Label htmlFor="otp-new-password">New password</Label>
-        <Input
-          id="otp-new-password"
-          type="password"
-          value={password}
-          onChange={(e) => setPass(e.target.value)}
-          placeholder="Min 8 characters"
-          autoFocus
-        />
-      </div>
-      <div>
-        <Label htmlFor="otp-confirm-password">Confirm new password</Label>
-        <Input
-          id="otp-confirm-password"
-          type="password"
-          value={confirm}
-          onChange={(e) => setConfirm(e.target.value)}
-          placeholder="Repeat new password"
-          onKeyDown={(e) => e.key === 'Enter' && handleUpdatePassword()}
-        />
-      </div>
-      <Button onClick={handleUpdatePassword} disabled={busy} className="w-full">
-        {busy ? 'Updating…' : 'Update password'}
-      </Button>
+      <SetNewPasswordForm onSubmit={handleUpdatePassword} busy={busy} submitLabel="Update password" />
     </div>
   );
 }
@@ -512,16 +602,11 @@ function ForgotPasswordForm({ onBack }: { onBack: () => void }) {
 // ─── Reset Password (recovery session) ───────────────────────────────────────
 function ResetPasswordForm() {
   const navigate = useNavigate();
-  const [password, setPassword] = useState('');
-  const [confirm, setConfirm] = useState('');
   const [busy, setBusy] = useState(false);
 
-  const handleUpdate = async () => {
-    const vp = passSchema.safeParse(password);
-    if (!vp.success) { toast.error(vp.error.issues[0].message); return; }
-    if (password !== confirm) { toast.error('Passwords do not match'); return; }
+  const handleUpdate = async (newPassword: string) => {
     setBusy(true);
-    const { error } = await supabase.auth.updateUser({ password });
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
     setBusy(false);
     if (error) { toast.error(friendlyError(error)); return; }
     toast.success('Password updated! Please sign in with your new password.');
@@ -538,36 +623,17 @@ function ResetPasswordForm() {
         <p className="font-semibold text-sm">Set a new password</p>
         <p className="text-xs text-muted-foreground mt-0.5">Choose a strong password for your account.</p>
       </div>
-      <div>
-        <Label htmlFor="recovery-new-password">New password</Label>
-        <Input
-          id="recovery-new-password"
-          type="password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          placeholder="Min 8 characters"
-        />
-      </div>
-      <div>
-        <Label htmlFor="recovery-confirm-password">Confirm new password</Label>
-        <Input
-          id="recovery-confirm-password"
-          type="password"
-          value={confirm}
-          onChange={(e) => setConfirm(e.target.value)}
-          placeholder="Repeat new password"
-          onKeyDown={(e) => e.key === 'Enter' && handleUpdate()}
-        />
-      </div>
-      <Button onClick={handleUpdate} disabled={busy} className="w-full">
-        {busy ? 'Updating…' : 'Update password'}
-      </Button>
+      <SetNewPasswordForm onSubmit={handleUpdate} busy={busy} submitLabel="Set new password" />
     </div>
   );
 }
 
 // ─── Sign-Up (multi-step) ─────────────────────────────────────────────────────
-function SignUpForm() {
+function SignUpForm({
+  onSuccess,
+}: {
+  onSuccess?: (email: string, count: number) => void;
+}) {
   // Fetch plants directly — usePlants() relies on an authenticated session,
   // but sign-up runs before auth so we query with the anon key directly.
   const [plants, setPlants] = useState<{ id: string; name: string; address?: string }[]>([]);
@@ -583,11 +649,16 @@ function SignUpForm() {
   // Credentials
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [designation, setDesignation] = useState('');
   // Operator branch
   const [operatorCount, setOperatorCount] = useState(1);
   const [operators, setOperators] = useState<OperatorEntry[]>([blankOperator()]);
   const [plantId, setPlantId] = useState('');
+  // Partial success tracking for batch operators
+  const [completedIndices, setCompletedIndices] = useState<Set<number>>(new Set());
   // Non-operator branch
   const [single, setSingle] = useState({ username: '', first_name: '', last_name: '', middle_name: '', suffix: '' });
   const [plantIds, setPlantIds] = useState<string[]>([]);
@@ -610,6 +681,7 @@ function SignUpForm() {
       if (!designation) { toast.error('Select a designation'); return; }
       const ve = emailSchema.safeParse(email); if (!ve.success) { toast.error(ve.error.issues[0].message); return; }
       const vp = passSchema.safeParse(password); if (!vp.success) { toast.error(vp.error.issues[0].message); return; }
+      if (password !== confirmPassword) { toast.error('Passwords do not match'); return; }
       setStep(isOperator ? 'count' : 'details'); return;
     }
     if (step === 'count') {
@@ -690,7 +762,9 @@ function SignUpForm() {
       };
 
       if (isOperator) {
+        const newlyCreated = new Set(completedIndices);
         for (let i = 0; i < operatorCount; i++) {
+          if (newlyCreated.has(i)) continue; // skip already created accounts
           const op = operators[i];
           if (!op.username || !op.first_name || !op.last_name) {
             toast.error(`Operator ${i + 1}: fill all required fields.`);
@@ -698,7 +772,19 @@ function SignUpForm() {
           }
           // Shared-email operators use + addressing for subsequent accounts
           const acctEmail = i === 0 ? email : email.replace('@', `+op${i}@`);
-          await createAccount(acctEmail, op, OPERATOR_DESIGNATION, assignedPlants);
+          try {
+            await createAccount(acctEmail, op, OPERATOR_DESIGNATION, assignedPlants);
+            newlyCreated.add(i);
+            setCompletedIndices(new Set(newlyCreated));
+          } catch (err: any) {
+            setBusy(false);
+            const succeededCount = newlyCreated.size;
+            toast.error(
+              `${succeededCount} of ${operatorCount} accounts created. Operator ${i + 1} (@${op.username}) failed: ${friendlyError(err)}. You can adjust details and retry remaining accounts.`,
+              { duration: 8000 }
+            );
+            return;
+          }
         }
         void logSignUpAudit({ email, designation, operatorCount, plantIds: assignedPlants });
         toast.success(`${operatorCount} operator account${operatorCount > 1 ? 's' : ''} created — pending approval.`);
@@ -709,10 +795,14 @@ function SignUpForm() {
       }
 
       setBusy(false);
-      setStep('designation'); setEmail(''); setPassword(''); setDesignation('');
+      const registeredEmail = email;
+      const count = isOperator ? operatorCount : 1;
+      setStep('designation'); setEmail(''); setPassword(''); setConfirmPassword(''); setDesignation('');
       setOperatorCount(1); setOperators([blankOperator()]); setPlantId('');
       setSingle({ username: '', first_name: '', last_name: '', middle_name: '', suffix: '' });
       setPlantIds([]);
+      setCompletedIndices(new Set());
+      onSuccess?.(registeredEmail, count);
     } catch (err) {
       toast.error(friendlyError(err));
       setBusy(false);
@@ -738,8 +828,63 @@ function SignUpForm() {
       {/* Step: Designation */}
       {step === 'designation' && (
         <div className="space-y-3">
-          <div><Label htmlFor="signup-email">Email *</Label><Input id="signup-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="user@example.com" /></div>
-          <div><Label htmlFor="signup-password">Password *</Label><Input id="signup-password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Min 8 characters" minLength={8} /></div>
+          <div>
+            <Label htmlFor="signup-email">Email *</Label>
+            <Input
+              id="signup-email"
+              type="email"
+              autoComplete="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="user@example.com"
+            />
+          </div>
+          <div>
+            <Label htmlFor="signup-password">Password *</Label>
+            <div className="relative">
+              <Input
+                id="signup-password"
+                type={showPassword ? 'text' : 'password'}
+                autoComplete="new-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Min 8 characters"
+                minLength={8}
+                className="pr-10"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((v) => !v)}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none rounded p-0.5"
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+              >
+                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
+          </div>
+          <div>
+            <Label htmlFor="signup-confirm-password">Confirm password *</Label>
+            <div className="relative">
+              <Input
+                id="signup-confirm-password"
+                type={showConfirmPassword ? 'text' : 'password'}
+                autoComplete="new-password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                placeholder="Repeat password"
+                minLength={8}
+                className="pr-10"
+              />
+              <button
+                type="button"
+                onClick={() => setShowConfirmPassword((v) => !v)}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none rounded p-0.5"
+                aria-label={showConfirmPassword ? 'Hide confirm password' : 'Show confirm password'}
+              >
+                {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
+          </div>
           <div>
             <Label htmlFor="signup-designation">Designation *</Label>
             <DesignationCombobox id="signup-designation" value={designation} onChange={setDesignation} placeholder="Select designation…" data-testid="signup-designation" />
@@ -750,7 +895,7 @@ function SignUpForm() {
             }`}>
               {isOperator ? <Users className="h-3.5 w-3.5 mt-0.5 shrink-0" /> : <User className="h-3.5 w-3.5 mt-0.5 shrink-0" />}
               {isOperator
-                ? "Operator accounts share one email. You'll enter each operator's username individually. Only one plant is allowed."
+                ? "Operator accounts share one email inbox. Each operator receives an individual login address routed to this email. Only one plant is allowed."
                 : 'This designation uses a unique email and can be assigned to multiple plants.'}
             </div>
           )}
@@ -760,8 +905,9 @@ function SignUpForm() {
       {/* Step: Count (Operator) */}
       {step === 'count' && (
         <div className="space-y-3">
-          <div className="rounded-lg bg-muted/60 p-3 text-xs text-muted-foreground">
-            All operators share email <strong>{email}</strong> and pick their username at sign-in.
+          <div className="rounded-lg bg-muted/60 p-3 text-xs text-muted-foreground leading-relaxed">
+            All operators receive password reset links and notifications at <strong>{email}</strong>.
+            Each operator will have their own distinct login address and username.
           </div>
           <div>
             <Label htmlFor="operator-count">How many Operators will use this email? *</Label>
@@ -775,34 +921,96 @@ function SignUpForm() {
       {/* Step: Operator entries */}
       {step === 'entries' && (
         <div className="space-y-3 max-h-[55vh] overflow-y-auto pr-1">
-          {Array.from({ length: operatorCount }, (_, i) => (
-            <div key={i} className="border rounded-lg p-3 space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Operator {i + 1}</span>
-                <Badge variant="outline" className="text-2xs">Shared: {email}</Badge>
-              </div>
-              <div><Label className="text-xs" htmlFor={`op-${i}-username`}>Username *</Label>
-                <Input id={`op-${i}-username`} value={operators[i]?.username ?? ''} onChange={(e) => updateOp(i, 'username', e.target.value)} placeholder="e.g. jdelacruz" /></div>
-              <div className="grid grid-cols-2 gap-2">
-                <div><Label className="text-xs" htmlFor={`op-${i}-first`}>First name *</Label><Input id={`op-${i}-first`} value={operators[i]?.first_name ?? ''} onChange={(e) => updateOp(i, 'first_name', e.target.value)} /></div>
-                <div><Label className="text-xs" htmlFor={`op-${i}-last`}>Last name *</Label><Input id={`op-${i}-last`} value={operators[i]?.last_name ?? ''} onChange={(e) => updateOp(i, 'last_name', e.target.value)} /></div>
-                <div><Label className="text-xs" htmlFor={`op-${i}-middle`}>Middle name</Label><Input id={`op-${i}-middle`} value={operators[i]?.middle_name ?? ''} onChange={(e) => updateOp(i, 'middle_name', e.target.value)} /></div>
-                <div><Label className="text-xs" htmlFor={`op-${i}-suffix`}>Suffix</Label><Input id={`op-${i}-suffix`} value={operators[i]?.suffix ?? ''} onChange={(e) => updateOp(i, 'suffix', e.target.value)} placeholder="Jr., Sr.…" /></div>
-              </div>
+          <div className="rounded-lg bg-info-soft border border-info/30 p-2.5 text-xs text-info flex items-start gap-2">
+            <Users className="h-4 w-4 mt-0.5 shrink-0" />
+            <div className="leading-relaxed">
+              <strong>Individual Login Addresses:</strong> Operator 1 signs in using <code>{email}</code>. Additional operators use plus-aliased addresses (e.g. <code>{email.replace('@', '+op1@')}</code>) so each operator can independently reset passwords, with all notifications arriving in the shared inbox.
             </div>
-          ))}
+          </div>
+
+          {Array.from({ length: operatorCount }, (_, i) => {
+            const acctEmail = i === 0 ? email : email.replace('@', `+op${i}@`);
+            const isCompleted = completedIndices.has(i);
+            return (
+              <div key={i} className={`border rounded-lg p-3 space-y-2 transition-all ${isCompleted ? 'bg-muted/40 border-success/40' : ''}`}>
+                <div className="flex items-center justify-between flex-wrap gap-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Operator {i + 1}</span>
+                    {isCompleted && <Badge className="bg-success text-success-foreground text-2xs py-0">✓ Account Created</Badge>}
+                  </div>
+                  <Badge variant="outline" className="text-2xs font-mono">
+                    Login: {acctEmail} {i === 0 ? '(Primary)' : `(Alias → ${email})`}
+                  </Badge>
+                </div>
+                <div>
+                  <Label className="text-xs" htmlFor={`op-${i}-username`}>Username *</Label>
+                  <Input
+                    id={`op-${i}-username`}
+                    autoComplete="username"
+                    disabled={isCompleted}
+                    value={operators[i]?.username ?? ''}
+                    onChange={(e) => updateOp(i, 'username', e.target.value)}
+                    placeholder="e.g. jdelacruz"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <Label className="text-xs" htmlFor={`op-${i}-first`}>First name *</Label>
+                    <Input
+                      id={`op-${i}-first`}
+                      autoComplete="given-name"
+                      disabled={isCompleted}
+                      value={operators[i]?.first_name ?? ''}
+                      onChange={(e) => updateOp(i, 'first_name', e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs" htmlFor={`op-${i}-last`}>Last name *</Label>
+                    <Input
+                      id={`op-${i}-last`}
+                      autoComplete="family-name"
+                      disabled={isCompleted}
+                      value={operators[i]?.last_name ?? ''}
+                      onChange={(e) => updateOp(i, 'last_name', e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs" htmlFor={`op-${i}-middle`}>Middle name</Label>
+                    <Input
+                      id={`op-${i}-middle`}
+                      autoComplete="additional-name"
+                      disabled={isCompleted}
+                      value={operators[i]?.middle_name ?? ''}
+                      onChange={(e) => updateOp(i, 'middle_name', e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs" htmlFor={`op-${i}-suffix`}>Suffix</Label>
+                    <Input
+                      id={`op-${i}-suffix`}
+                      autoComplete="honorific-suffix"
+                      disabled={isCompleted}
+                      value={operators[i]?.suffix ?? ''}
+                      onChange={(e) => updateOp(i, 'suffix', e.target.value)}
+                      placeholder="Jr., Sr.…"
+                    />
+                  </div>
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
 
       {/* Step: Non-operator single details */}
       {step === 'details' && (
         <div className="space-y-2">
-          <div><Label htmlFor="single-username">Username *</Label><Input id="single-username" value={single.username} onChange={(e) => setSingle((s) => ({ ...s, username: e.target.value }))} placeholder="e.g. jdelacruz" /></div>
+          <div><Label htmlFor="single-username">Username *</Label><Input id="single-username" autoComplete="username" value={single.username} onChange={(e) => setSingle((s) => ({ ...s, username: e.target.value }))} placeholder="e.g. jdelacruz" /></div>
           <div className="grid grid-cols-2 gap-2">
-            <div><Label htmlFor="single-first">First name *</Label><Input id="single-first" value={single.first_name} onChange={(e) => setSingle((s) => ({ ...s, first_name: e.target.value }))} /></div>
-            <div><Label htmlFor="single-last">Last name *</Label><Input id="single-last" value={single.last_name} onChange={(e) => setSingle((s) => ({ ...s, last_name: e.target.value }))} /></div>
-            <div><Label htmlFor="single-middle">Middle name</Label><Input id="single-middle" value={single.middle_name} onChange={(e) => setSingle((s) => ({ ...s, middle_name: e.target.value }))} /></div>
-            <div><Label htmlFor="single-suffix">Suffix</Label><Input id="single-suffix" value={single.suffix} onChange={(e) => setSingle((s) => ({ ...s, suffix: e.target.value }))} placeholder="Jr., Sr.…" /></div>
+            <div><Label htmlFor="single-first">First name *</Label><Input id="single-first" autoComplete="given-name" value={single.first_name} onChange={(e) => setSingle((s) => ({ ...s, first_name: e.target.value }))} /></div>
+            <div><Label htmlFor="single-last">Last name *</Label><Input id="single-last" autoComplete="family-name" value={single.last_name} onChange={(e) => setSingle((s) => ({ ...s, last_name: e.target.value }))} /></div>
+            <div><Label htmlFor="single-middle">Middle name</Label><Input id="single-middle" autoComplete="additional-name" value={single.middle_name} onChange={(e) => setSingle((s) => ({ ...s, middle_name: e.target.value }))} /></div>
+            <div><Label htmlFor="single-suffix">Suffix</Label><Input id="single-suffix" autoComplete="honorific-suffix" value={single.suffix} onChange={(e) => setSingle((s) => ({ ...s, suffix: e.target.value }))} placeholder="Jr., Sr.…" /></div>
           </div>
         </div>
       )}
@@ -848,11 +1056,25 @@ function SignUpForm() {
             {isOperator ? (
               <>
                 <div className="p-3 flex justify-between"><span className="text-muted-foreground">Operators</span><span className="font-medium">{operatorCount}</span></div>
-                <div className="p-3"><span className="text-muted-foreground text-xs">Usernames</span>
-                  <div className="mt-1 flex flex-wrap gap-1">
-                    {operators.slice(0, operatorCount).map((o, i) => (
-                      <Badge key={i} variant="secondary" className="text-xs">@{o.username} — {o.first_name} {o.last_name}</Badge>
-                    ))}
+                <div className="p-3">
+                  <span className="text-muted-foreground text-xs font-medium">Operator Accounts &amp; Login Addresses</span>
+                  <div className="mt-1 space-y-1.5">
+                    {operators.slice(0, operatorCount).map((o, i) => {
+                      const acctEmail = i === 0 ? email : email.replace('@', `+op${i}@`);
+                      const isCompleted = completedIndices.has(i);
+                      return (
+                        <div key={i} className="flex items-center justify-between text-xs p-2 rounded-lg bg-muted/40 border">
+                          <div>
+                            <span className="font-semibold text-foreground">@{o.username}</span>
+                            <span className="text-muted-foreground ml-1.5">— {o.first_name} {o.last_name}</span>
+                          </div>
+                          <div className="flex items-center gap-1.5 font-mono text-2xs text-muted-foreground">
+                            <span>{acctEmail}</span>
+                            {isCompleted && <Badge className="bg-success text-success-foreground text-[10px] py-0 px-1">Created</Badge>}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
                 <div className="p-3 flex justify-between"><span className="text-muted-foreground">Plant</span><span className="font-medium">{(plants ?? []).find((p) => p.id === plantId)?.name ?? plantId}</span></div>
@@ -873,7 +1095,11 @@ function SignUpForm() {
             Account{isOperator && operatorCount > 1 ? 's' : ''} will be placed in the approval queue until an Admin activates {isOperator && operatorCount > 1 ? 'them' : 'it'}.
           </p>
           <Button onClick={handleSubmit} disabled={busy} className="w-full">
-            {busy ? 'Creating…' : `Create ${isOperator && operatorCount > 1 ? `${operatorCount} accounts` : 'account'}`}
+            {busy
+              ? 'Creating…'
+              : isOperator && completedIndices.size > 0
+              ? `Retry remaining ${operatorCount - completedIndices.size} account${operatorCount - completedIndices.size > 1 ? 's' : ''}`
+              : `Create ${isOperator && operatorCount > 1 ? `${operatorCount} accounts` : 'account'}`}
           </Button>
           <Button variant="ghost" size="sm" className="w-full" onClick={goBack}>
             <ChevronLeft className="h-3.5 w-3.5 mr-1" /> Back
@@ -901,6 +1127,8 @@ function SignUpForm() {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 export default function Auth() {
   const { user, loading, isRecovery } = useAuth();
+  const [activeTab, setActiveTab] = useState<'signin' | 'signup'>('signin');
+  const [pendingNotice, setPendingNotice] = useState<{ email: string; count: number } | null>(null);
 
   if (loading) return <div className="min-h-screen flex items-center justify-center">Loading…</div>;
   if (user && !isRecovery) return <Navigate to="/" replace />;
@@ -964,7 +1192,7 @@ export default function Auth() {
             {isRecovery ? (
               <ResetPasswordForm />
             ) : (
-              <Tabs defaultValue="signin">
+              <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'signin' | 'signup')}>
                 {/* h-14 list / h-full trigger = a 48px-tall tap target,
                     not the ~36px default — this app's primary users are
                     field operators on phones, often in sun glare. */}
@@ -972,8 +1200,21 @@ export default function Auth() {
                   <TabsTrigger value="signin" className="h-full">Sign in</TabsTrigger>
                   <TabsTrigger value="signup" className="h-full">Sign up</TabsTrigger>
                 </TabsList>
-                <TabsContent value="signin"><SignInForm /></TabsContent>
-                <TabsContent value="signup"><SignUpForm /></TabsContent>
+                <TabsContent value="signin">
+                  <SignInForm
+                    initialEmail={pendingNotice?.email}
+                    notice={pendingNotice}
+                    onClearNotice={() => setPendingNotice(null)}
+                  />
+                </TabsContent>
+                <TabsContent value="signup">
+                  <SignUpForm
+                    onSuccess={(registeredEmail, count) => {
+                      setPendingNotice({ email: registeredEmail, count });
+                      setActiveTab('signin');
+                    }}
+                  />
+                </TabsContent>
               </Tabs>
             )}
           </div>
