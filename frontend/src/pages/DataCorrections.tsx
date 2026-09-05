@@ -39,8 +39,18 @@ import {
   CheckCircle2, XCircle, AlertCircle, RefreshCw, Loader2,
   ChevronDown, ChevronUp, ClipboardCheck, Inbox, History,
   Users, ArrowRight, Pencil, Search, ShieldAlert, Gauge,
-  AlertTriangle, CheckSquare, FileText,
+  AlertTriangle, CheckSquare, FileText, Clock, Activity, Tag, HelpCircle, FileQuestion,
 } from 'lucide-react';
+import {
+  Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
+} from '@/components/ui/tooltip';
+import {
+  Popover, PopoverContent, PopoverTrigger,
+} from '@/components/ui/popover';
+import {
+  computeRollingAverageRate, computeRollingAverageRateFromDeltas, RatePoint, VolumePoint,
+} from '@/lib/flowRateGuards';
+import { submitAnomalyRemark } from '@/lib/anomalyRemarks';
 import { cn } from '@/lib/utils';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -55,9 +65,13 @@ interface FlaggedRow {
    *  up wells.meter_rollover_max for the rollover-default fetch below. */
   entity_id?: string;
   entity_name: string;
+  plant_id?: string;
   plant_name: string;
   reading_datetime: string;
   previous_reading: number | null;
+  /** Preceding reading timestamp and operator, queried for tooltip details */
+  previous_reading_datetime?: string | null;
+  previous_operator_username?: string | null;
   current_reading: number;
   daily_volume: number | null;
   operator_username: string | null;
@@ -72,31 +86,29 @@ interface FlaggedRow {
   is_unchanged?: boolean;
   /** The operator's own explanation for this reading, captured at save time
    *  by AnomalyRemarkBanner / submitAnomalyRemark() (reading_anomaly_remarks)
-   *  whenever the reading's flow rate fell outside the normal band — the
-   *  same "needs_remark" / "critical" classification that (independently)
-   *  landed this row in Pending Review. Distinct from `notes` in
-   *  PendingReviewTab, which is the reviewer's own note when approving/
-   *  rejecting. Undefined while loading; null once loaded if no remark
-   *  exists (e.g. this row was flagged for backward/spike reasons the DB
-   *  trigger catches but the client-side flow-rate guard didn't, so no
-   *  remark was ever required at entry). */
-  anomaly_remark?: { text: string; tier: 'needs_remark' | 'critical'; logged_at: string } | null;
-  /** BUGFIX: this reading may instead (or also) have a required "Reason for
-   *  this edit" logged by CorrectionReasonField / logReadingEdit() when it
-   *  was edited via one of the History dialogs (ReadingHistoryDialog.tsx) —
-   *  a completely separate table (reading_edit_audit_log) from
-   *  anomaly_remark above (reading_anomaly_remarks). Previously fetchPending()
-   *  never queried this table at all, so a row with a genuine, mandatorily-
-   *  collected edit reason would still render "No operator remark on file
-   *  for this reading" — technically true of reading_anomaly_remarks, but
-   *  misleading to a reviewer who has no way to know a second, populated
-   *  audit trail exists for the same row. Undefined while loading; null
-   *  once loaded if this row was never edited (or was edited without RLS
-   *  read access to the log — see reading_edit_audit_log's Admin/Manager-
-   *  only SELECT policy, 20260717_reading_edit_audit_log.sql). */
+   *  whenever the reading's flow rate fell outside the normal band. */
+  anomaly_remark?: {
+    text: string;
+    tier: 'needs_remark' | 'critical';
+    direction?: 'high' | 'low' | null;
+    deviation_pct?: number | null;
+    flow_rate?: number | null;
+    avg_flow_rate?: number | null;
+    rate_unit?: string;
+    logged_at: string;
+    logged_by?: string | null;
+  } | null;
+  /** Edit reason from reading_edit_audit_log if modified via history dialog */
   edit_reason?: { text: string; actor_label: string | null; logged_at: string } | null;
-  /** The value of this reading BEFORE it was edited/corrected (from reading_edit_audit_log or reading_normalizations) */
+  /** The value of this reading BEFORE it was edited/corrected */
   pre_edit_value?: number | null;
+  /** Computed flow rate diagnostics explaining why this reading was quarantined */
+  calculated_flow_rate?: number | null;
+  avg_flow_rate?: number | null;
+  deviation_pct?: number | null;
+  deviation_direction?: 'high' | 'low' | null;
+  elapsed_hours?: number | null;
+  diagnostic_summary?: string;
 }
 
 function parseNumeric(val: any): number | null {
@@ -182,7 +194,7 @@ interface OperatorStat {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 const fmtNum = (n: number | null) =>
-  n == null ? '—' : n.toLocaleString('en-PH', { maximumFractionDigits: 2 });
+  n == null ? '—' : n.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 const fmtDt = (s: string) => format(new Date(s), 'dd MMM yy HH:mm');
 
@@ -247,6 +259,320 @@ function FlagBadge({ reason }: { reason?: string }) {
         </span>
       );
   }
+}
+
+function formatElapsedDuration(hours: number | null): string {
+  if (hours == null || !Number.isFinite(hours)) return '—';
+  if (hours < 1) {
+    const mins = Math.max(1, Math.round(hours * 60));
+    return `${mins}m`;
+  }
+  if (hours < 24) {
+    return `${hours.toFixed(1)}h`;
+  }
+  const days = (hours / 24).toFixed(1);
+  return `${days}d (${hours.toFixed(1)}h)`;
+}
+
+function PrecedingReadingTooltip({
+  prevReading,
+  prevDatetime,
+  prevUser,
+  elapsedHours,
+  label = 'Preceding Reading',
+}: {
+  prevReading: number | null;
+  prevDatetime?: string | null;
+  prevUser?: string | null;
+  elapsedHours?: number | null;
+  label?: string;
+}) {
+  return (
+    <div className="flex items-center gap-1">
+      <span className="text-muted-foreground text-2xs font-semibold">{label}</span>
+      <TooltipProvider delayDuration={150}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              aria-label="Preceding reading details"
+              className="inline-flex items-center justify-center text-muted-foreground hover:text-foreground rounded p-0.5 hover:bg-muted/50 transition-colors focus:outline-none"
+            >
+              <Clock className="h-3 w-3 text-primary/80 hover:text-primary shrink-0" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="top" className="max-w-xs p-2.5 text-xs shadow-md space-y-1.5 z-50">
+            <div className="font-semibold text-foreground flex items-center gap-1.5 text-2xs uppercase tracking-wider text-muted-foreground pb-1 border-b border-border/50">
+              <Clock className="h-3 w-3 text-primary" /> Preceding Reading Details
+            </div>
+            <div className="space-y-1 text-2xs">
+              <div className="flex justify-between gap-3">
+                <span className="text-muted-foreground">Date & Time:</span>
+                <span className="font-mono font-medium text-foreground">
+                  {prevDatetime ? fmtDt(prevDatetime) : 'Baseline / No prior timestamp'}
+                </span>
+              </div>
+              {elapsedHours != null && (
+                <div className="flex justify-between gap-3">
+                  <span className="text-muted-foreground">Elapsed Duration:</span>
+                  <span className="font-medium text-accent">
+                    {formatElapsedDuration(elapsedHours)} elapsed
+                  </span>
+                </div>
+              )}
+              <div className="flex justify-between gap-3">
+                <span className="text-muted-foreground">Preceding Value:</span>
+                <span className="font-mono font-bold text-foreground">
+                  {fmtNum(prevReading)} m³
+                </span>
+              </div>
+              {prevUser && (
+                <div className="flex justify-between gap-3">
+                  <span className="text-muted-foreground">Recorded By:</span>
+                  <span className="text-foreground">{prevUser}</span>
+                </div>
+              )}
+            </div>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    </div>
+  );
+}
+
+function AnomalyDiagnosticsBadge({ row }: { row: FlaggedRow }) {
+  const isSpike = row.flag_reason === 'spike' || row.deviation_direction === 'high';
+  const isBackward = row.is_backward;
+  const isUnchanged = row.is_unchanged;
+  const isEdited = row.flag_reason === 'edited';
+
+  let badgeText = 'Anomaly Flagged';
+  let badgeVariant = 'border-warn/30 bg-warn-soft text-warn';
+  let Icon = Activity;
+
+  if (isBackward) {
+    badgeText = 'Meter Backward';
+    badgeVariant = 'border-destructive/30 bg-destructive/10 text-destructive';
+    Icon = AlertTriangle;
+  } else if (isUnchanged) {
+    badgeText = 'Zero Flow';
+    badgeVariant = 'border-border bg-muted text-muted-foreground';
+    Icon = Activity;
+  } else if (isEdited) {
+    badgeText = 'Manual Edit';
+    badgeVariant = 'border-info/30 bg-info-soft text-info';
+    Icon = Pencil;
+  } else if (isSpike) {
+    badgeText = row.deviation_pct != null
+      ? `Spike (+${row.deviation_pct}%)`
+      : 'High Flow Spike';
+    badgeVariant = 'border-warn/40 bg-warn-soft text-warn';
+    Icon = Activity;
+  } else if (row.deviation_direction === 'low') {
+    badgeText = row.deviation_pct != null
+      ? `Low Flow (-${row.deviation_pct}%)`
+      : 'Low Flow Rate';
+    badgeVariant = 'border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400';
+    Icon = Activity;
+  }
+
+  return (
+    <TooltipProvider delayDuration={150}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            className={cn('inline-flex items-center gap-1 text-2xs px-1.5 py-0.5 rounded font-medium border cursor-pointer hover:opacity-85 transition-opacity', badgeVariant)}
+            aria-label="View anomaly cause"
+          >
+            <Icon className="h-3 w-3 shrink-0" />
+            <span>{badgeText}</span>
+          </button>
+        </TooltipTrigger>
+        <TooltipContent side="bottom" align="start" className="max-w-xs p-2.5 text-xs shadow-lg space-y-2 z-50">
+          <div className="flex items-center gap-1.5 font-semibold text-xs text-foreground pb-1 border-b border-border/50">
+            <ShieldAlert className="h-3.5 w-3.5 text-warn shrink-0" /> Why this was flagged as an anomaly
+          </div>
+          <p className="text-2xs text-foreground/90 leading-relaxed">
+            {row.diagnostic_summary || 'Quarantined for supervisor verification.'}
+          </p>
+          {(row.calculated_flow_rate != null || row.avg_flow_rate != null) && (
+            <div className="bg-muted/40 p-2 rounded text-2xs space-y-1 font-mono border border-border/40">
+              {row.calculated_flow_rate != null && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Calculated Rate:</span>
+                  <span className="font-bold text-foreground">{row.calculated_flow_rate.toFixed(2)} m³/hr</span>
+                </div>
+              )}
+              {row.avg_flow_rate != null && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">7-Day Avg Rate:</span>
+                  <span className="text-foreground">{row.avg_flow_rate.toFixed(2)} m³/hr</span>
+                </div>
+              )}
+              {row.deviation_pct != null && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Deviation from Avg:</span>
+                  <span className={cn('font-bold', row.deviation_direction === 'high' ? 'text-destructive' : 'text-warn')}>
+                    {row.deviation_direction === 'high' ? '+' : '-'}{row.deviation_pct}%
+                  </span>
+                </div>
+              )}
+              {row.elapsed_hours != null && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Elapsed Duration:</span>
+                  <span className="text-foreground">{formatElapsedDuration(row.elapsed_hours)}</span>
+                </div>
+              )}
+            </div>
+          )}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
+const QUICK_ANOMALY_REASONS = [
+  { label: 'Demand Surge', icon: '⚡', text: 'Unusually high operational demand / production surge' },
+  { label: 'Line Flushing / Leak', icon: '💧', text: 'Pipeline flushing / leak test conducted' },
+  { label: 'Plant Downtime', icon: '🛑', text: 'Plant downtime / pump stopped during interval' },
+  { label: 'Pump Maintenance', icon: '🔧', text: 'Pump or meter serviced / calibrated' },
+  { label: 'Meter Rollover', icon: '🔄', text: 'Meter exceeded maximum register and rolled over' },
+  { label: 'Data Entry Typo', icon: '✏️', text: 'Operator typo corrected or re-verified' },
+];
+
+function CompactReasonBadge({
+  row,
+  customReason,
+  onSaveReason,
+}: {
+  row: FlaggedRow;
+  customReason: string;
+  onSaveReason: (row: FlaggedRow, reason: string) => Promise<void>;
+}) {
+  const [open, setOpen] = useState(false);
+  const [inputVal, setInputVal] = useState(customReason || '');
+  const [saving, setSaving] = useState(false);
+
+  const existingReason = row.anomaly_remark?.text || row.edit_reason?.text || customReason;
+
+  const handlePresetClick = async (presetText: string) => {
+    setInputVal(presetText);
+    setSaving(true);
+    await onSaveReason(row, presetText);
+    setSaving(false);
+    setOpen(false);
+  };
+
+  const handleSaveManual = async () => {
+    if (!inputVal.trim()) return;
+    setSaving(true);
+    await onSaveReason(row, inputVal.trim());
+    setSaving(false);
+    setOpen(false);
+  };
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        {existingReason ? (
+          <button
+            type="button"
+            className="inline-flex items-center gap-1 text-2xs px-2 py-0.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20 transition-colors font-medium max-w-[240px] truncate cursor-pointer"
+            title={`Reason: "${existingReason}" (Click to view or edit)`}
+          >
+            <Tag className="h-3 w-3 shrink-0 text-emerald-500" />
+            <span className="truncate">Reason: "{existingReason}"</span>
+          </button>
+        ) : (
+          <button
+            type="button"
+            className="inline-flex items-center gap-1 text-2xs px-2 py-0.5 rounded-full border border-amber-500/50 bg-amber-500/15 text-amber-700 dark:text-amber-400 hover:bg-amber-500/25 transition-colors font-medium animate-pulse cursor-pointer"
+            title="Set anomaly reason (required for approval)"
+          >
+            <FileQuestion className="h-3 w-3 shrink-0 text-amber-500" />
+            <span>Set Reason</span>
+          </button>
+        )}
+      </PopoverTrigger>
+      <PopoverContent className="w-80 p-3 space-y-2.5 text-xs shadow-xl z-50" align="start">
+        <div className="flex items-center justify-between pb-1 border-b border-border/50">
+          <span className="font-semibold text-xs flex items-center gap-1.5 text-foreground">
+            <Tag className="h-3.5 w-3.5 text-primary" />
+            {existingReason ? 'Anomaly Reason' : 'Set Anomaly Reason'}
+          </span>
+          {row.anomaly_remark?.tier && (
+            <Badge variant="outline" className="text-3xs px-1 py-0 uppercase">
+              {row.anomaly_remark.tier}
+            </Badge>
+          )}
+        </div>
+
+        {existingReason && !saving && (
+          <div className="p-2 rounded bg-muted/40 border border-border/50 text-2xs text-foreground space-y-1">
+            <div className="italic">"{existingReason}"</div>
+            <div className="text-3xs text-muted-foreground flex justify-between pt-1 border-t border-border/40">
+              <span>{row.anomaly_remark ? 'Operator Entry Remark' : row.edit_reason ? 'Edit Audit Log' : 'Supervisor Tag'}</span>
+              {row.anomaly_remark?.logged_at && <span>{fmtDt(row.anomaly_remark.logged_at)}</span>}
+            </div>
+          </div>
+        )}
+
+        <div className="space-y-1">
+          <div className="text-3xs font-medium uppercase text-muted-foreground tracking-wider">
+            {existingReason ? 'Change Reason / Quick Presets:' : 'Quick Select Preset Reason:'}
+          </div>
+          <div className="grid grid-cols-2 gap-1">
+            {QUICK_ANOMALY_REASONS.map(preset => (
+              <button
+                key={preset.label}
+                type="button"
+                disabled={saving}
+                onClick={() => handlePresetClick(preset.text)}
+                className="text-left px-2 py-1 rounded bg-muted/30 hover:bg-primary/10 hover:text-primary text-2xs transition-colors border border-border/40 truncate flex items-center gap-1 disabled:opacity-50"
+              >
+                <span>{preset.icon}</span>
+                <span className="truncate">{preset.label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="space-y-1.5 pt-1 border-t border-border/40">
+          <Input
+            placeholder="Or enter custom reason…"
+            value={inputVal}
+            onChange={e => setInputVal(e.target.value)}
+            className="h-7 text-xs"
+            disabled={saving}
+            onKeyDown={e => {
+              if (e.key === 'Enter') handleSaveManual();
+            }}
+          />
+          <div className="flex justify-end gap-1.5">
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-6 text-2xs"
+              onClick={() => setOpen(false)}
+              disabled={saving}
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              className="h-6 text-2xs gap-1"
+              disabled={saving || !inputVal.trim() || inputVal === existingReason}
+              onClick={handleSaveManual}
+            >
+              {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />}
+              Save Reason
+            </Button>
+          </div>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
 }
 
 // ── Recently corrected (old ↔ new value) panel ────────────────────────────────
@@ -786,8 +1112,29 @@ async function fetchPending(): Promise<{ rows: FlaggedRow[]; truncated: boolean 
       .in('id', plantIds) as any);
     const plantMap = Object.fromEntries((plants ?? []).map((p: any) => [p.id, p.name]));
 
-    // Resolve usernames from user_profiles (avoiding shared plant emails)
-    const userIds = [...new Set(rows.map((r: any) => r.recorded_by))].filter(Boolean) as string[];
+    // Predecessors lookup per pending row to get exact date/time and operator of prior reading
+    const predecessorMap: Record<string, { reading_datetime: string; current_reading: number; recorded_by: string | null }> = {};
+    const predResults = await Promise.all(
+      rows.map(async (r: any) => {
+        const { data: pRows } = await (supabase
+          .from(table as any)
+          .select('id, reading_datetime, current_reading, recorded_by')
+          .eq(entityCol, r[entityCol])
+          .lt('reading_datetime', r.reading_datetime)
+          .order('reading_datetime', { ascending: false })
+          .limit(1) as any);
+        return { rowId: r.id, prev: pRows?.[0] ?? null };
+      })
+    );
+    for (const p of predResults) {
+      if (p.prev) predecessorMap[p.rowId] = p.prev;
+    }
+
+    // Resolve usernames from user_profiles (including both pending submitter and preceding submitter)
+    const userIds = [...new Set([
+      ...rows.map((r: any) => r.recorded_by),
+      ...Object.values(predecessorMap).map((p: any) => p.recorded_by),
+    ])].filter(Boolean) as string[];
     const { data: profiles } = await (supabase
       .from('user_profiles')
       .select('id, username, first_name, last_name')
@@ -800,33 +1147,72 @@ async function fetchPending(): Promise<{ rows: FlaggedRow[]; truncated: boolean 
       })
     );
 
-    // Resolve the operator's own anomaly remark for each row (AnomalyRemarkBanner
-    // at entry time, reading_anomaly_remarks) — so the reviewer sees WHY the
-    // operator says a flagged reading is correct, not just an empty note box.
-    // Ordered oldest→newest so the reduce below keeps the latest remark per
-    // record_id in the rare case a row picked up more than one (e.g. re-saved
-    // after the underlying reading was edited and flagged again).
+    // Resolve the operator's own anomaly remark for each row (including flow rate & deviation metadata)
     const rowIds = rows.map((r: any) => r.id);
     const { data: remarkRows } = await (supabase
       .from('reading_anomaly_remarks' as any)
-      .select('record_id, remark_text, tier, logged_at')
+      .select('record_id, remark_text, tier, direction, deviation_pct, flow_rate, avg_flow_rate, rate_unit, logged_at, logged_by')
       .eq('table_name', table)
       .in('record_id', rowIds)
       .order('logged_at', { ascending: true }) as any);
     const remarkMap = (remarkRows ?? []).reduce((acc: Record<string, any>, rem: any) => {
-      acc[rem.record_id] = { text: rem.remark_text, tier: rem.tier, logged_at: rem.logged_at };
+      acc[rem.record_id] = {
+        text: rem.remark_text,
+        tier: rem.tier,
+        direction: rem.direction,
+        deviation_pct: rem.deviation_pct != null ? Number(rem.deviation_pct) : null,
+        flow_rate: rem.flow_rate != null ? Number(rem.flow_rate) : null,
+        avg_flow_rate: rem.avg_flow_rate != null ? Number(rem.avg_flow_rate) : null,
+        rate_unit: rem.rate_unit,
+        logged_at: rem.logged_at,
+        logged_by: rem.logged_by,
+      };
       return acc;
     }, {} as Record<string, any>);
 
-    // BUGFIX: a reading can also (or instead) carry a required "Reason for
-    // this edit" — a totally different field from the anomaly remark above,
-    // logged by CorrectionReasonField/logReadingEdit() to
-    // reading_edit_audit_log whenever someone edits an already-saved
-    // reading via the History dialogs. This was never queried here, so a
-    // row with a genuine, mandatorily-collected edit reason still rendered
-    // "No operator remark on file for this reading" — misleading, since a
-    // populated audit trail did exist for it, just in a table this page
-    // never looked at.
+    // Query historical normal readings over the last 14 days for these entities to compute 7-day average flow rate
+    const twoWeeksAgo = new Date();
+    twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
+    const { data: histRows } = await (supabase
+      .from(table as any)
+      .select(`id, ${entityCol}, reading_datetime, daily_volume, current_reading, previous_reading`)
+      .in(entityCol, entityIds)
+      .eq('norm_status', 'normal')
+      .gte('reading_datetime', twoWeeksAgo.toISOString())
+      .order('reading_datetime', { ascending: true }) as any);
+
+    const entityHistMap: Record<string, any[]> = {};
+    for (const h of histRows ?? []) {
+      const eid = h[entityCol];
+      if (!entityHistMap[eid]) entityHistMap[eid] = [];
+      entityHistMap[eid].push(h);
+    }
+
+    const entityAvgRateMap: Record<string, number | null> = {};
+    for (const eid of entityIds) {
+      const eRows = entityHistMap[eid] ?? [];
+      if (!eRows.length) {
+        entityAvgRateMap[eid] = null;
+        continue;
+      }
+      if (table === 'well_readings') {
+        const points: RatePoint[] = eRows.map((er: any) => ({
+          value: Number(er.current_reading),
+          at: new Date(er.reading_datetime),
+        }));
+        entityAvgRateMap[eid] = computeRollingAverageRate(points, 7);
+      } else {
+        const volPoints: VolumePoint[] = eRows
+          .filter((er: any) => er.daily_volume != null && !isNaN(Number(er.daily_volume)))
+          .map((er: any) => ({
+            volume: Number(er.daily_volume),
+            at: new Date(er.reading_datetime),
+          }));
+        entityAvgRateMap[eid] = computeRollingAverageRateFromDeltas(volPoints, 7);
+      }
+    }
+
+    // BUGFIX: a reading can also (or instead) carry a required "Reason for this edit"
     const { data: editReasonRows } = await (supabase
       .from('reading_edit_audit_log' as any)
       .select('record_id, reason, actor_label, edited_at, changes, action')
@@ -873,13 +1259,6 @@ async function fetchPending(): Promise<{ rows: FlaggedRow[]; truncated: boolean 
 
     for (const r of rows) {
       const vol = r.daily_volume ?? (r.previous_reading != null ? r.current_reading - r.previous_reading : null);
-      // BUGFIX: this used to classify backward vs. spike by checking
-      // `vol < 0`, but daily_volume is clamped to 0 at save time (and, for
-      // locator_readings, by its own GENERATED expression) — so a genuine
-      // backward jump waiting in Pending Review almost never actually shows
-      // a negative stored volume, and was silently misfiled as 'spike'.
-      // Compare the two raw meter values directly instead, matching how
-      // the DB trigger / SQL backfill audit both define "backward".
       const isBackward = r.previous_reading != null && Number(r.current_reading) < Number(r.previous_reading);
       const isUnchanged = r.previous_reading != null && Number(r.current_reading) === Number(r.previous_reading);
 
@@ -899,11 +1278,57 @@ async function fetchPending(): Promise<{ rows: FlaggedRow[]; truncated: boolean 
         preEditVal = Number(corrEntry.original_value);
       }
 
-      // Classify flag reason accurately instead of assuming any non-backward is a 'spike':
-      // 1. Backward: current < previous
-      // 2. Unchanged (Zero delta): current == previous
-      // 3. Edited: has a distinct pre-edit value
-      // 4. Spike: excessive positive delta / flow rate
+      // Predecessor details
+      const pred = predecessorMap[r.id];
+      const prevDt = pred?.reading_datetime ?? null;
+      const prevUser = pred?.recorded_by ? usernameMap[pred.recorded_by] ?? null : null;
+
+      let elapsedHours: number | null = null;
+      if (prevDt && r.reading_datetime) {
+        const diffMs = new Date(r.reading_datetime).getTime() - new Date(prevDt).getTime();
+        if (diffMs > 0) {
+          elapsedHours = diffMs / 3_600_000;
+        }
+      }
+
+      let calculatedFlowRate: number | null = null;
+      if (vol != null && elapsedHours != null && elapsedHours > 0) {
+        calculatedFlowRate = vol / elapsedHours;
+      }
+
+      const rem = remarkMap[r.id];
+      const avgFlowRate = rem?.avg_flow_rate ?? entityAvgRateMap[r[entityCol]] ?? null;
+
+      let deviationPct: number | null = rem?.deviation_pct ?? null;
+      let deviationDirection: 'high' | 'low' | null = rem?.direction ?? null;
+
+      if (deviationPct == null && calculatedFlowRate != null && avgFlowRate != null && avgFlowRate > 0) {
+        deviationPct = Math.round(Math.abs(calculatedFlowRate / avgFlowRate - 1) * 100);
+        deviationDirection = calculatedFlowRate >= avgFlowRate ? 'high' : 'low';
+      }
+
+      const elapsedStr = elapsedHours != null ? formatElapsedDuration(elapsedHours) : 'interval';
+      let diagnosticSummary = '';
+
+      if (isBackward) {
+        diagnosticSummary = `Meter moved backward: current reading (${fmtNum(r.current_reading)}) is lower than preceding (${fmtNum(r.previous_reading)}), resulting in a negative delta (${fmtNum(vol)} m³ over ${elapsedStr}). Possible meter rollover, swap, or data entry error.`;
+      } else if (isUnchanged) {
+        diagnosticSummary = `Zero flow recorded: current reading equals preceding reading (${fmtNum(r.current_reading)}). 0.00 m³ volume elapsed over ${elapsedStr}. Possible plant downtime or meter stoppage.`;
+      } else if (preEditVal != null && preEditVal !== Number(r.current_reading)) {
+        diagnosticSummary = `Manual edit detected: reading was modified post-submission from ${fmtNum(preEditVal)} to ${fmtNum(r.current_reading)} (Δ ${fmtNum(vol)} m³).`;
+      } else if (calculatedFlowRate != null && avgFlowRate != null && avgFlowRate > 0) {
+        if (deviationDirection === 'high') {
+          diagnosticSummary = `Flow rate spike: calculated rate of ${calculatedFlowRate.toFixed(2)} m³/hr is +${deviationPct}% above the 7-day average baseline (${avgFlowRate.toFixed(2)} m³/hr). Normal operational ceiling exceeded.`;
+        } else {
+          diagnosticSummary = `Low flow rate: calculated rate of ${calculatedFlowRate.toFixed(2)} m³/hr is -${deviationPct}% below the 7-day average baseline (${avgFlowRate.toFixed(2)} m³/hr).`;
+        }
+      } else if (calculatedFlowRate != null) {
+        diagnosticSummary = `Calculated flow rate is ${calculatedFlowRate.toFixed(2)} m³/hr (${fmtNum(vol)} m³ over ${elapsedStr}). Insufficient 7-day normal history to compute average baseline.`;
+      } else {
+        diagnosticSummary = `Flagged by system integrity guards: ${fmtNum(vol)} m³ delta over ${elapsedStr}.`;
+      }
+
+      // Classify flag reason accurately:
       const flagReason: 'backward' | 'unchanged' | 'edited' | 'spike' = isBackward
         ? 'backward'
         : isUnchanged
@@ -917,9 +1342,12 @@ async function fetchPending(): Promise<{ rows: FlaggedRow[]; truncated: boolean 
         source_table: table,
         entity_id: r[entityCol],
         entity_name: entityMap[r[entityCol]] ?? '—',
+        plant_id: r.plant_id,
         plant_name: plantMap[r.plant_id] ?? '—',
         reading_datetime: r.reading_datetime,
         previous_reading: r.previous_reading,
+        previous_reading_datetime: prevDt,
+        previous_operator_username: prevUser,
         current_reading: r.current_reading,
         daily_volume: vol,
         operator_username: usernameMap[r.recorded_by] ?? null,
@@ -927,9 +1355,15 @@ async function fetchPending(): Promise<{ rows: FlaggedRow[]; truncated: boolean 
         flag_reason: flagReason,
         is_backward: isBackward,
         is_unchanged: isUnchanged,
-        anomaly_remark: remarkMap[r.id] ?? null,
+        anomaly_remark: rem ?? null,
         edit_reason: editEntry ? { text: editEntry.text, actor_label: editEntry.actor_label, logged_at: editEntry.logged_at } : null,
         pre_edit_value: preEditVal,
+        calculated_flow_rate: calculatedFlowRate,
+        avg_flow_rate: avgFlowRate,
+        deviation_pct: deviationPct,
+        deviation_direction: deviationDirection,
+        elapsed_hours: elapsedHours,
+        diagnostic_summary: diagnosticSummary,
       });
     }
   }
@@ -1036,6 +1470,7 @@ function PendingReviewTab() {
   const [searchQ, setSearchQ] = useState('');
   const [plantFilter, setPlantFilter] = useState('all');
   const [notes, setNotes] = useState<Record<string, string>>({});
+  const [customReasons, setCustomReasons] = useState<Record<string, string>>({});
   /** Required rejection reason for operator correction requests (item 8) —
    *  keyed by correction_requests.id. Unlike `notes` above (optional, for
    *  admin's own direct edits/approvals), this one gates the Reject button:
@@ -1043,6 +1478,53 @@ function PendingReviewTab() {
    *  when it's turned down, not just a silent "kept the original value." */
   const [reqNotes, setReqNotes] = useState<Record<string, string>>({});
   const recent = useRecentCorrections();
+
+  const handleSaveReason = async (row: FlaggedRow, reasonText: string) => {
+    try {
+      await submitAnomalyRemark({
+        table_name: row.source_table as any,
+        record_id: row.id,
+        plant_id: row.plant_id ?? '',
+        tier: (row.anomaly_remark?.tier as any) ?? (row.is_backward ? 'critical' : 'needs_remark'),
+        direction: (row.deviation_direction as any) ?? (row.is_backward ? 'low' : 'high'),
+        deviation_pct: row.deviation_pct ?? 0,
+        flow_rate: row.calculated_flow_rate ?? null,
+        avg_flow_rate: row.avg_flow_rate ?? null,
+        rate_unit: 'm3/hr',
+        remark_text: reasonText,
+      });
+
+      setNotes(p => ({ ...p, [row.id]: p[row.id] || reasonText }));
+      setCustomReasons(p => ({ ...p, [row.id]: reasonText }));
+
+      qc.setQueryData(['data-corrections-pending'], (old: any) => {
+        if (!old?.rows) return old;
+        return {
+          ...old,
+          rows: old.rows.map((r: FlaggedRow) => {
+            if (r.id !== row.id) return r;
+            return {
+              ...r,
+              anomaly_remark: {
+                text: reasonText,
+                tier: r.anomaly_remark?.tier ?? 'needs_remark',
+                direction: r.deviation_direction ?? null,
+                deviation_pct: r.deviation_pct ?? null,
+                flow_rate: r.calculated_flow_rate ?? null,
+                avg_flow_rate: r.avg_flow_rate ?? null,
+                rate_unit: 'm3/hr',
+                logged_at: new Date().toISOString(),
+              },
+            };
+          }),
+        };
+      });
+
+      toast.success('Anomaly reason documented');
+    } catch (err: any) {
+      toast.error(friendlyError(err));
+    }
+  };
 
   const plants = useMemo(() => [...new Set(rows.map(r => r.plant_name))].sort(), [rows]);
 
@@ -1173,6 +1655,19 @@ function PendingReviewTab() {
   };
 
   const resolveOne = async (row: FlaggedRow, decision: 'normal' | 'retracted') => {
+    // If approving a quarantined anomaly, require an explained reason (from operator remark, edit log, note, or custom reason)
+    const hasReason = Boolean(
+      row.anomaly_remark?.text ||
+      row.edit_reason?.text ||
+      customReasons[row.id]?.trim() ||
+      notes[row.id]?.trim()
+    );
+
+    if (decision === 'normal' && !hasReason && (row.flag_reason === 'spike' || row.is_backward || row.is_unchanged || row.flag_reason === 'needs_remark')) {
+      toast.warning('An anomaly reason is required before approving this reading. Please use the "Set Reason" button or provide a note.');
+      return;
+    }
+
     setBusy(p => ({ ...p, [row.id]: true }));
     // NOTE: .select('id') is required here, not cosmetic. Without it, a
     // silent RLS/lock mismatch returns { data: [], error: null } — same
@@ -1191,12 +1686,13 @@ function PendingReviewTab() {
       toast.error(`${row.entity_name}: update didn't apply — check permissions or whether this reading is locked, then refresh.`);
       invalidate();
     } else {
+      const resolvedNote = notes[row.id] || customReasons[row.id] || (decision === 'normal' ? 'Approved from corrections queue' : 'Rejected from corrections queue');
       await (supabase.from('reading_normalizations' as any).insert({
         source_table: row.source_table, source_id: row.id,
         action: decision === 'normal' ? 'normalize' : 'retract',
         original_value: row.current_reading,
         adjusted_value: decision === 'normal' ? row.current_reading : null,
-        note: notes[row.id] || (decision === 'normal' ? 'Approved from corrections queue' : 'Rejected from corrections queue'),
+        note: resolvedNote,
         performed_by: user?.id ?? null, performed_role: actorRole,
       }) as any);
       // This reading is no longer pending — close out any duplicate
@@ -1518,6 +2014,12 @@ function PendingReviewTab() {
                           <Badge variant="outline" className="text-2xs px-1.5 py-0">{row.plant_name}</Badge>
                           <Badge variant="outline" className="text-2xs px-1.5 py-0">{tableLabel[row.source_table]}</Badge>
                           <FlagBadge reason={row.flag_reason} />
+                          <AnomalyDiagnosticsBadge row={row} />
+                          <CompactReasonBadge
+                            row={row}
+                            customReason={customReasons[row.id] ?? ''}
+                            onSaveReason={handleSaveReason}
+                          />
                         </div>
                         <div className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1.5 flex-wrap">
                           <span>{fmtDt(row.reading_datetime)}</span>
@@ -1577,7 +2079,13 @@ function PendingReviewTab() {
                             )}
                           </div>
                           <div>
-                            <div className="text-3xs uppercase font-bold text-muted-foreground tracking-wider">Preceding Baseline (Prev)</div>
+                            <PrecedingReadingTooltip
+                              prevReading={row.previous_reading}
+                              prevDatetime={row.previous_reading_datetime}
+                              prevUser={row.previous_operator_username}
+                              elapsedHours={row.elapsed_hours}
+                              label="Preceding Baseline (Prev)"
+                            />
                             <div className="font-mono font-medium text-xs text-muted-foreground mt-0.5">{fmtNum(row.previous_reading)}</div>
                           </div>
                         </div>
@@ -1585,7 +2093,13 @@ function PendingReviewTab() {
                         {/* 4-column breakdown grid */}
                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs bg-muted/20 p-2 rounded-md">
                           <div>
-                            <div className="text-muted-foreground text-2xs">Preceding Baseline</div>
+                            <PrecedingReadingTooltip
+                              prevReading={row.previous_reading}
+                              prevDatetime={row.previous_reading_datetime}
+                              prevUser={row.previous_operator_username}
+                              elapsedHours={row.elapsed_hours}
+                              label="Preceding Baseline"
+                            />
                             <div className="font-mono font-medium">{fmtNum(row.previous_reading)}</div>
                           </div>
                           <div>
@@ -1606,60 +2120,38 @@ function PendingReviewTab() {
                       /* Standard meter values grid */
                       <div className="grid grid-cols-3 gap-3 text-xs bg-muted/15 p-2 rounded-md border border-border/40">
                         <div>
-                          <div className="text-muted-foreground text-2xs font-semibold">Preceding Reading</div>
-                          <div className="font-mono font-medium">{fmtNum(row.previous_reading)}</div>
+                          <PrecedingReadingTooltip
+                            prevReading={row.previous_reading}
+                            prevDatetime={row.previous_reading_datetime}
+                            prevUser={row.previous_operator_username}
+                            elapsedHours={row.elapsed_hours}
+                            label="Preceding Reading"
+                          />
+                          <div className="font-mono font-medium mt-0.5">{fmtNum(row.previous_reading)}</div>
                         </div>
                         <div>
                           <div className="text-muted-foreground text-2xs font-semibold">Logged Reading</div>
-                          <div className="font-mono font-bold text-foreground">{fmtNum(row.current_reading)}</div>
+                          <div className="font-mono font-bold text-foreground mt-0.5">{fmtNum(row.current_reading)}</div>
                         </div>
                         <div>
                           <div className="text-muted-foreground text-2xs font-semibold">Calculated Delta</div>
-                          <DeltaBadge vol={row.daily_volume} />
+                          <div className="mt-0.5"><DeltaBadge vol={row.daily_volume} /></div>
                         </div>
                       </div>
                     )}
 
-                    {/* Operator's own remark (reading_anomaly_remarks, captured
-                        at entry time by AnomalyRemarkBanner when this reading's
-                        flow rate fell outside the normal band) OR — a separate
-                        source, checked as a fallback — the required "reason for
-                        this edit" (reading_edit_audit_log) logged if this row
-                        was corrected via a History dialog. Distinct from the
-                        reviewer's own note in the Actions row below. A row can
-                        have neither (flagged fresh by the DB trigger, never
-                        edited) — that's the only case that should show the
-                        "nothing on file" message. */}
-                    {row.anomaly_remark ? (
-                      <div className={cn('flex items-start gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border',
-                        row.anomaly_remark.tier === 'critical'
-                          ? 'bg-destructive/10 border-destructive/30 text-destructive'
-                          : 'bg-warn-soft border-warn/40 text-warn')}>
-                        <AlertCircle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-                        <span>
-                          <span className="font-medium">Operator remark: </span>
-                          <span className="font-normal text-foreground/90">"{row.anomaly_remark.text}"</span>
+                    {/* Compact single-line Operator remark or edit reason strip */}
+                    {(row.anomaly_remark || row.edit_reason) && (
+                      <div className="flex items-center gap-1.5 text-2xs px-2.5 py-1 rounded-md border bg-muted/20 border-border/40 text-foreground/90">
+                        <Tag className="h-3 w-3 shrink-0 text-primary" />
+                        <span className="font-semibold text-muted-foreground shrink-0">
+                          {row.anomaly_remark ? 'Operator remark:' : 'Edit reason:'}
                         </span>
+                        <span className="truncate italic">"{row.anomaly_remark?.text || row.edit_reason?.text}"</span>
+                        {row.edit_reason?.actor_label && (
+                          <span className="text-3xs text-muted-foreground shrink-0">— by {row.edit_reason.actor_label}</span>
+                        )}
                       </div>
-                    ) : null}
-
-                    {row.edit_reason && (
-                      <div className="flex items-start gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border bg-info-soft border-info/40 text-info">
-                        <Pencil className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-                        <span>
-                          <span className="font-medium">Edit reason: </span>
-                          <span className="font-normal text-foreground/90">"{row.edit_reason.text}"</span>
-                          {row.edit_reason.actor_label && (
-                            <span className="text-2xs text-muted-foreground"> — by {row.edit_reason.actor_label}</span>
-                          )}
-                        </span>
-                      </div>
-                    )}
-
-                    {!row.anomaly_remark && !row.edit_reason && (
-                      <p className="text-2xs text-muted-foreground italic">
-                        Original field submission quarantined by system validation guards. No manual edit has been logged.
-                      </p>
                     )}
 
                     {/* Chain context (item 4) */}
@@ -1667,8 +2159,8 @@ function PendingReviewTab() {
                       <ChainContext
                         focusedId={row.id}
                         sourceTable={row.source_table}
-                        entityId={row.id}
-                        plantId={''}
+                        entityId={row.entity_id ?? row.id}
+                        plantId={row.plant_id ?? ''}
                       />
                     )}
 

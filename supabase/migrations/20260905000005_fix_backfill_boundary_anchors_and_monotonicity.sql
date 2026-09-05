@@ -1464,3 +1464,4 @@ SELECT public.fn_backfill_missing_readings((now() AT TIME ZONE 'Asia/Manila')::d
 
 -- Reload PostgREST schema cache immediately
 NOTIFY pgrst, 'reload schema';
+
