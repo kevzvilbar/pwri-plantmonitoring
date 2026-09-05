@@ -250,6 +250,65 @@ export function DataSummaryPopup({
     });
   }, [roReadings, filterFrom, filterTo]);
 
+  // RO train entities for per-train columns in Recovery / Permeate TDS overview
+  const roTrainEntities = useMemo<{ id: string; label: string }[]>(() => {
+    const idsFromReadings = (filteredRoReadings ?? []).map((r: any) => r.train_id).filter(Boolean);
+    const idsFromNames = roTrainNames ? Array.from(roTrainNames.keys()) : [];
+    const allIds = Array.from(new Set([...idsFromReadings, ...idsFromNames]));
+    return allIds.map((id) => ({
+      id,
+      label: roTrainNames?.get(id) ?? `Train ${String(id).slice(-4)}`,
+    })).sort((a, b) => a.label.localeCompare(b.label, undefined, { numeric: true }));
+  }, [filteredRoReadings, roTrainNames]);
+
+  // Daily per-train aggregations for Recovery (%) and TDS (ppm)
+  const { roTrainRecoveryByDate, roTrainTdsByDate } = useMemo(() => {
+    const recoveryAcc = new Map<string, Map<string, { sum: number; count: number }>>();
+    const tdsAcc = new Map<string, Map<string, { sum: number; count: number }>>();
+
+    (filteredRoReadings ?? []).forEach((r: any) => {
+      if (!r.train_id || !r.reading_datetime) return;
+      const dk = format(new Date(r.reading_datetime), 'yyyy-MM-dd');
+
+      if (r.recovery_pct != null && !isNaN(+r.recovery_pct)) {
+        if (!recoveryAcc.has(dk)) recoveryAcc.set(dk, new Map());
+        const tMap = recoveryAcc.get(dk)!;
+        const cur = tMap.get(r.train_id) ?? { sum: 0, count: 0 };
+        tMap.set(r.train_id, { sum: cur.sum + (+r.recovery_pct), count: cur.count + 1 });
+      }
+
+      if (r.permeate_tds != null && !isNaN(+r.permeate_tds)) {
+        if (!tdsAcc.has(dk)) tdsAcc.set(dk, new Map());
+        const tMap = tdsAcc.get(dk)!;
+        const cur = tMap.get(r.train_id) ?? { sum: 0, count: 0 };
+        tMap.set(r.train_id, { sum: cur.sum + (+r.permeate_tds), count: cur.count + 1 });
+      }
+    });
+
+    const recoveryByDate = new Map<string, Record<string, number>>();
+    recoveryAcc.forEach((tMap, dk) => {
+      const rec: Record<string, number> = {};
+      tMap.forEach((v, tid) => {
+        if (v.count > 0) rec[tid] = +(v.sum / v.count).toFixed(1);
+      });
+      recoveryByDate.set(dk, rec);
+    });
+
+    const tdsByDate = new Map<string, Record<string, number>>();
+    tdsAcc.forEach((tMap, dk) => {
+      const rec: Record<string, number> = {};
+      tMap.forEach((v, tid) => {
+        if (v.count > 0) rec[tid] = Math.round(v.sum / v.count);
+      });
+      tdsByDate.set(dk, rec);
+    });
+
+    return {
+      roTrainRecoveryByDate: recoveryByDate,
+      roTrainTdsByDate: tdsByDate,
+    };
+  }, [filteredRoReadings]);
+
   const prodMeterReadingsForPivot = useMemo(
     () => (filteredProductReadings ?? []).filter((r: any) => !(productExcludedPlants?.has(r.plant_id))),
     [filteredProductReadings, productExcludedPlants],
@@ -433,6 +492,8 @@ export function DataSummaryPopup({
 
     return dates.map((dk) => {
       const existing = overviewByDate.get(dk);
+      const trainRecoveries = roTrainRecoveryByDate.get(dk);
+      const trainTds = roTrainTdsByDate.get(dk);
 
       if (metric === 'rawwater') {
         // Sum across every well entity — mirrors PivotTable rowTotals formula.
@@ -441,17 +502,19 @@ export function DataSummaryPopup({
         );
         const rawwater = pivotTotal > 0 ? pivotTotal : null;
         return existing
-          ? { ...existing, rawwater }
+          ? { ...existing, rawwater, trainRecoveries, trainTds }
           : {
               date: format(new Date(dk + 'T00:00:00'), 'MMM d'),
               isoDate: dk + 'T00:00:00.000Z',
               production: null, consumption: null, rawwater,
               recovery: null, tds: null, kwh: null, solarKwh: null,
               nrw: null, powerCost: null, chemCost: null, totalCost: null,
+              trainRecoveries,
+              trainTds,
             };
       }
 
-      if (existing) return existing;
+      if (existing) return { ...existing, trainRecoveries, trainTds };
       // Stub row for a day with no readings — all metrics null / 0
       return {
         date: format(new Date(dk + 'T00:00:00'), 'MMM d'),
@@ -459,9 +522,11 @@ export function DataSummaryPopup({
         production: null, consumption: null, rawwater: null,
         recovery: null, tds: null, kwh: null, solarKwh: null,
         nrw: null, powerCost: null, chemCost: null, totalCost: null,
+        trainRecoveries,
+        trainTds,
       };
     });
-  }, [overviewDates, overviewByDate, metric, prodDates, prodEntities, prodPivotMap]);
+  }, [overviewDates, overviewByDate, metric, prodDates, prodEntities, prodPivotMap, roTrainRecoveryByDate, roTrainTdsByDate]);
 
   // Tab guard: if active tab becomes irrelevant, reset
   const activeTab: DSMTab =
@@ -611,12 +676,22 @@ export function DataSummaryPopup({
         const rows = overviewChartRows.map((r) => [r.date, r.rawwater ?? ''].join(','));
         csvContent = [headers.join(','), ...rows].join('\n');
       } else if (metric === 'recovery') {
-        const headers = ['Date', 'Recovery (%)'];
-        const rows = overviewChartRows.map((r) => [r.date, r.recovery != null ? `${r.recovery}%` : ''].join(','));
+        const trainCols = roTrainEntities.map((e) => `"${e.label.replace(/"/g, '""')} (%)"`);
+        const headers = ['Date', ...trainCols, ...(roTrainEntities.length > 1 ? ['Avg Recovery (%)'] : ['Recovery (%)'])];
+        const rows = overviewChartRows.map((r) => {
+          const trainVals = roTrainEntities.map((e) => r.trainRecoveries?.[e.id] != null ? `${r.trainRecoveries[e.id]}%` : '');
+          const avgVal = r.recovery != null ? `${r.recovery}%` : '';
+          return [r.date, ...trainVals, avgVal].join(',');
+        });
         csvContent = [headers.join(','), ...rows].join('\n');
       } else if (metric === 'tds') {
-        const headers = ['Date', 'Permeate TDS (ppm)'];
-        const rows = overviewChartRows.map((r) => [r.date, r.tds != null ? `${r.tds} ppm` : ''].join(','));
+        const trainCols = roTrainEntities.map((e) => `"${e.label.replace(/"/g, '""')} (ppm)"`);
+        const headers = ['Date', ...trainCols, ...(roTrainEntities.length > 1 ? ['Avg Permeate TDS (ppm)'] : ['Permeate TDS (ppm)'])];
+        const rows = overviewChartRows.map((r) => {
+          const trainVals = roTrainEntities.map((e) => r.trainTds?.[e.id] != null ? `${r.trainTds[e.id]} ppm` : '');
+          const avgVal = r.tds != null ? `${r.tds} ppm` : '';
+          return [r.date, ...trainVals, avgVal].join(',');
+        });
         csvContent = [headers.join(','), ...rows].join('\n');
       } else {
         const headers = ['Date', 'Production (m3)', 'Consumption (m3)', ...(metric === 'nrw' ? ['NRW (%)'] : [])];
@@ -1067,7 +1142,11 @@ export function DataSummaryPopup({
         <div className="flex-1 overflow-hidden min-h-0 flex flex-col">
           <div className="flex-1 overflow-hidden min-h-0 flex flex-col">
             {activeTab === 'overview' && (
-              <OverviewTable metric={metric} chartData={overviewChartRows} />
+              <OverviewTable
+                metric={metric}
+                chartData={overviewChartRows}
+                roTrainEntities={roTrainEntities}
+              />
             )}
             {activeTab === 'grid-by-meter' && hasGridTab && (
               <GridMeterBreakdownTable dates={overviewDates} breakdown={gridBreakdown} />

@@ -234,9 +234,11 @@ export function PivotTable({
 export function OverviewTable({
   metric,
   chartData,
+  roTrainEntities,
 }: {
   metric: string;
   chartData: any[];
+  roTrainEntities?: { id: string; label: string }[];
 }) {
   if (chartData.length === 0) {
     return <div className="flex items-center justify-center h-24 text-xs text-muted-foreground">No data in selected range.</div>;
@@ -270,15 +272,39 @@ export function OverviewTable({
     });
   }
   if (metric === 'recovery') {
+    if (roTrainEntities && roTrainEntities.length > 0) {
+      roTrainEntities.forEach((e) => {
+        cols.push({
+          key: `train_recovery_${e.id}`,
+          label: `${e.label} (%)`,
+          fmt: (d) => d.trainRecoveries?.[e.id] != null
+            ? <span className={d.trainRecoveries[e.id] < 0 ? 'text-destructive font-semibold' : ''}>{d.trainRecoveries[e.id]}%</span>
+            : <span className="text-muted-foreground/40">—</span>,
+        });
+      });
+    }
     cols.push({
-      key: 'recovery', label: 'Recovery (%)',
-      fmt: (d) => d.recovery != null ? d.recovery + '%' : '—',
+      key: 'recovery',
+      label: roTrainEntities && roTrainEntities.length > 1 ? 'Avg Recovery (%)' : 'Overall Recovery (%)',
+      fmt: (d) => d.recovery != null ? d.recovery + '%' : <span className="text-muted-foreground/40">—</span>,
     });
   }
   if (metric === 'tds') {
+    if (roTrainEntities && roTrainEntities.length > 0) {
+      roTrainEntities.forEach((e) => {
+        cols.push({
+          key: `train_tds_${e.id}`,
+          label: `${e.label} (ppm)`,
+          fmt: (d) => d.trainTds?.[e.id] != null
+            ? <span className={d.trainTds[e.id] < 0 ? 'text-destructive font-semibold' : ''}>{d.trainTds[e.id]} ppm</span>
+            : <span className="text-muted-foreground/40">—</span>,
+        });
+      });
+    }
     cols.push({
-      key: 'tds', label: 'Permeate TDS (ppm)',
-      fmt: (d) => d.tds != null ? d.tds + ' ppm' : '—',
+      key: 'tds',
+      label: roTrainEntities && roTrainEntities.length > 1 ? 'Avg Permeate TDS (ppm)' : 'Permeate TDS (ppm)',
+      fmt: (d) => d.tds != null ? d.tds + ' ppm' : <span className="text-muted-foreground/40">—</span>,
     });
   }
   if (metric === 'pv') {
