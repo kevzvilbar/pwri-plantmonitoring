@@ -8,7 +8,7 @@ SET search_path = public, extensions;
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 CREATE EXTENSION IF NOT EXISTS pgtap;
 
-SELECT plan(16);
+SELECT plan(20);
 
 -- ── 1. Structural Checks ─────────────────────────────────────────────────────
 
@@ -233,10 +233,104 @@ BEGIN
   VALUES (v_loc_id, v_plant_id, '2026-08-21 07:30:00+08', 9036.0, false);
 END $$;
 
--- Run sweep again
+-- Test 17: Intra-day Anchor Selection: Aug 31 with 3 readings:
+-- 06:00 (148,470), 07:00 (148,470), and 21:56 (148,700). Gap on Sep 01.
+-- Sep 02 06:06 reading is 148,902. Backfill for Sep 01 must choose 148,700 as anchor A,
+-- producing 148,801.00 (delta +101.00 m³), NOT 148,686.00 (-14.00 m³).
+DO $$
+DECLARE
+  v_plant_id uuid := gen_random_uuid();
+  v_loc_id   uuid := gen_random_uuid();
+BEGIN
+  INSERT INTO public.plants (id, name, status)
+  VALUES (v_plant_id, 'Test Plant Amalfi Anchor', 'Active'::plant_status);
+
+  INSERT INTO public.locators (id, plant_id, name, status, is_derived)
+  VALUES (v_loc_id, v_plant_id, 'Test Amalfi Locator', 'Active', false);
+
+  -- Aug 31: 3 readings (06:00, 07:00, 21:56 PHT)
+  INSERT INTO public.locator_readings (locator_id, plant_id, reading_datetime, current_reading, is_estimated)
+  VALUES
+    (v_loc_id, v_plant_id, '2026-08-31 06:00:00+08', 148470.00, false),
+    (v_loc_id, v_plant_id, '2026-08-31 07:00:00+08', 148470.00, false),
+    (v_loc_id, v_plant_id, '2026-08-31 21:56:00+08', 148700.00, false);
+
+  -- Sep 02: 06:06 PHT reading
+  INSERT INTO public.locator_readings (locator_id, plant_id, reading_datetime, current_reading, is_estimated)
+  VALUES (v_loc_id, v_plant_id, '2026-09-02 06:06:00+08', 148902.00, false);
+END $$;
+
+-- Run sweep for Sep 02
 SELECT ok(
-  (public.fn_backfill_missing_readings('2026-08-25'::date, 25) ->> 'ok')::boolean = true,
-  'Sweep runs and automatically purges orphaned estimated row on Aug 21'
+  (public.fn_backfill_missing_readings('2026-09-02'::date, 5) ->> 'ok')::boolean = true,
+  'Sweep runs over Amalfi multi-reading test range'
+);
+
+SELECT results_eq(
+  $$
+    SELECT round(current_reading, 2), is_estimated
+    FROM public.locator_readings lr
+    JOIN public.locators l ON l.id = lr.locator_id
+    WHERE l.name = 'Test Amalfi Locator' AND lr.is_estimated = true
+  $$,
+  $$
+    VALUES (148801.00::numeric, true)
+  $$,
+  'Intra-day anchor selects latest reading of date (148700), giving positive monotonic backfill (148801)'
+);
+
+-- Test 18: Monotonicity violation rejection & audit logging:
+-- A backward reading sequence without rollover must be rejected and logged to backfill_sweep_log
+DO $$
+DECLARE
+  v_plant_id uuid := gen_random_uuid();
+  v_loc_id   uuid := gen_random_uuid();
+BEGIN
+  INSERT INTO public.plants (id, name, status)
+  VALUES (v_plant_id, 'Test Plant Non-Monotonic', 'Active'::plant_status);
+
+  INSERT INTO public.locators (id, plant_id, name, status, is_derived)
+  VALUES (v_loc_id, v_plant_id, 'Test Decreasing Locator', 'Active', false);
+
+  -- Sep 10 = 5000, Sep 12 = 4900 (decreasing without rollover)
+  INSERT INTO public.locator_readings (locator_id, plant_id, reading_datetime, current_reading, is_estimated)
+  VALUES
+    (v_loc_id, v_plant_id, '2026-09-10 08:00:00+08', 5000.00, false),
+    (v_loc_id, v_plant_id, '2026-09-12 08:00:00+08', 4900.00, false);
+END $$;
+
+SELECT ok(
+  (public.fn_backfill_missing_readings('2026-09-12'::date, 5) ->> 'ok')::boolean = true,
+  'Sweep executes without throwing on decreasing sequence'
+);
+
+SELECT is(
+  (
+    SELECT count(*)::integer
+    FROM public.locator_readings lr
+    JOIN public.locators l ON l.id = lr.locator_id
+    WHERE l.name = 'Test Decreasing Locator' AND lr.is_estimated = true
+  ),
+  0,
+  'Decreasing sequence generates 0 estimated readings'
+);
+
+-- Test 19: backfill_sweep_log records monotonicity_rejected for the invalid gap
+SELECT ok(
+  EXISTS (
+    SELECT 1 FROM public.backfill_sweep_log bsl
+    JOIN public.locators l ON l.id = bsl.entity_fk_val
+    WHERE l.name = 'Test Decreasing Locator' AND bsl.method = 'monotonicity_rejected'
+  ),
+  'Monotonicity violation is recorded in backfill_sweep_log with method = monotonicity_rejected'
+);
+
+-- Test 20: Security permissions check: EXECUTE on fn_backfill_missing_readings is revoked from anon
+SELECT hasnt_function_privilege(
+  'anon',
+  'public.fn_backfill_missing_readings(date, integer)',
+  'execute',
+  'fn_backfill_missing_readings execute privilege is revoked from anon'
 );
 
 SELECT * FROM finish();

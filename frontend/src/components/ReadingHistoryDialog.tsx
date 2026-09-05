@@ -376,15 +376,13 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
     staleTime: 0,
   });
 
-  const purgedEstIdsRef = useRef<Set<string>>(new Set());
-
-  // Self-healing filter: If the database contains an auto-backfilled estimate (is_estimated = true)
-  // that violates monotonicity against its chronological predecessor or successor (creating a negative delta),
-  // it is provably corrupted. Filter it out from display immediately and delete it from the DB.
+  // Pure in-memory display filter: If the database contains an auto-backfilled estimate (is_estimated = true)
+  // that violates monotonicity against its chronological predecessor or successor (which would display as a negative delta),
+  // exclude it from display so users never see corrupt estimates.
+  // This hook is strictly pure and performs no side-effects or network mutations.
   const rows = useMemo(() => {
     if (!rawRows || rawRows.length === 0) return [];
     const valid: any[] = [];
-    const staleEstimatedIds: string[] = [];
 
     const getVal = (row: any): number | null => {
       if (!row) return null;
@@ -408,14 +406,13 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
           const predVal = getVal(pred);
           const succVal = getVal(succ);
 
-          // Monotonicity checks for non-rollover meters:
-          // 1. If predecessor exists, cur cannot be lower than predecessor (cur < predVal produces a negative delta!)
-          // 2. If successor exists, cur cannot be higher than successor (cur > succVal forces successor into negative delta!)
-          const violatesPred = predVal != null && !pred?.is_meter_rollover && !r.is_meter_replacement && cur < predVal;
-          const violatesSucc = succVal != null && !r.is_meter_rollover && !succ?.is_meter_replacement && cur > succVal;
+          // Unified monotonicity checks (consistent with resyncLocatorChain):
+          // 1. If predecessor exists, cur cannot be <= predecessor (cur <= predVal produces non-positive / negative delta!)
+          // 2. If successor exists, cur cannot be >= successor (cur >= succVal forces successor into non-positive / negative delta!)
+          const violatesPred = predVal != null && !pred?.is_meter_rollover && !r.is_meter_replacement && cur <= predVal;
+          const violatesSucc = succVal != null && !r.is_meter_rollover && !succ?.is_meter_replacement && cur >= succVal;
 
           if (violatesPred || violatesSucc) {
-            staleEstimatedIds.push(r.id);
             continue; // Exclude from display immediately
           }
         }
@@ -423,26 +420,8 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
       valid.push(r);
     }
 
-    // Auto-purge stale estimates in the background so the DB is cleaned up
-    const toDelete = staleEstimatedIds.filter(id => !purgedEstIdsRef.current.has(id));
-    if (toDelete.length > 0) {
-      toDelete.forEach(id => purgedEstIdsRef.current.add(id));
-      const table =
-        module === 'locator' ? 'locator_readings' :
-        module === 'well' ? 'well_readings' :
-        module === 'power' ? 'power_readings' :
-        module === 'blending' ? 'blending_events' : null;
-      if (table) {
-        supabase.from(table as any).delete().in('id', toDelete).then(({ error }) => {
-          if (!error) {
-            (supabase.rpc as any)('fn_backfill_missing_readings', { p_lookback_days: 14 }).catch(() => {});
-          }
-        });
-      }
-    }
-
     return valid;
-  }, [rawRows, module]);
+  }, [rawRows]);
 
   const startEdit = (r: any) => {
     if (!canEditEntry(r, hasFullAccess, activeOperatorId)) {
@@ -567,12 +546,6 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
     // Trigger sweep to re-interpolate any valid bounded gaps
     (supabase.rpc as any)('fn_backfill_missing_readings', { p_lookback_days: 14 }).catch(() => {});
   };
-
-  useEffect(() => {
-    if (module === 'locator' && entityId) {
-      resyncLocatorChain(entityId);
-    }
-  }, [module, entityId]);
 
   // One-click toggle for shared (non-power) meter replacement.
   // For well/locator, CHECKING opens ReplaceMeterDialog so the swap gets
