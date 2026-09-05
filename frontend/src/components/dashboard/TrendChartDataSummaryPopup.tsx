@@ -7,7 +7,10 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { format } from 'date-fns';
-import { Download, Droplet, Receipt, Gauge, TableProperties, Percent, Zap, Sun } from 'lucide-react';
+import {
+  Download, Droplet, Receipt, Gauge, TableProperties, Percent, Zap, Sun,
+  Coins, Activity, TrendingUp, FlaskConical, Calendar,
+} from 'lucide-react';
 import {
   DSMTab, buildEntityPivot, fillDateRange, fmtDateKey,
   computeGridMeterBreakdown, buildKwhSummaryCsv, type GridPowerReadingRow,
@@ -484,13 +487,59 @@ export function DataSummaryPopup({
     const daysCount = Math.max(1, tabDates.length);
     const avgDailyProd = totalProd / daysCount;
     const avgDailyCons = totalCons / daysCount;
+    const avgDailyRaw  = totalRaw / daysCount;
     const peakRow = overviewChartRows.reduce((max, r) => (r.production ?? 0) > (max?.production ?? 0) ? r : max, null as any);
+    const peakRaw = overviewChartRows.reduce((max, r) => (r.rawwater ?? 0) > max ? (r.rawwater ?? 0) : max, 0);
     const nrwPct = totalProd > 0 ? Math.max(0, ((totalProd - totalCons) / totalProd) * 100) : 0;
 
+    // Power / kWh & PV stats
     const totalSolar = overviewChartRows.reduce((s, r) => s + (r.solarKwh ?? 0), 0);
     const totalGrid  = overviewChartRows.reduce((s, r) => s + (r.kwh ?? 0), 0);
     const totalKwh   = totalSolar + totalGrid;
     const solarPct   = totalKwh > 0 ? (totalSolar / totalKwh) * 100 : 0;
+    const gridPvRatio = totalProd > 0 && totalGrid > 0 ? totalGrid / totalProd : null;
+    const totalPvRatio = totalProd > 0 && totalKwh > 0 ? totalKwh / totalProd : null;
+
+    // Production Cost stats (₱/m³)
+    const prodCostRows = overviewChartRows.filter((r) => r.totalCost != null);
+    const powerCostRows = overviewChartRows.filter((r) => r.powerCost != null);
+    const chemCostRows = overviewChartRows.filter((r) => r.chemCost != null);
+    const avgProdCost = prodCostRows.length > 0
+      ? prodCostRows.reduce((s, r) => s + (r.totalCost ?? 0), 0) / prodCostRows.length
+      : null;
+    const avgPowerCost = powerCostRows.length > 0
+      ? powerCostRows.reduce((s, r) => s + (r.powerCost ?? 0), 0) / powerCostRows.length
+      : null;
+    const avgChemCost = chemCostRows.length > 0
+      ? chemCostRows.reduce((s, r) => s + (r.chemCost ?? 0), 0) / chemCostRows.length
+      : null;
+    const totalCostOutput = totalProd > 0 ? totalProd : totalRaw;
+
+    // Recovery stats (%)
+    const recoveryRows = overviewChartRows.filter((r) => r.recovery != null && r.recovery > 0);
+    const avgRecovery = recoveryRows.length > 0
+      ? recoveryRows.reduce((s, r) => s + r.recovery, 0) / recoveryRows.length
+      : null;
+    const minRecovery = recoveryRows.length > 0
+      ? Math.min(...recoveryRows.map((r) => r.recovery))
+      : null;
+    const maxRecovery = recoveryRows.length > 0
+      ? Math.max(...recoveryRows.map((r) => r.recovery))
+      : null;
+    const recoveryDays = recoveryRows.length;
+
+    // Permeate TDS stats (ppm)
+    const tdsRows = overviewChartRows.filter((r) => r.tds != null && r.tds > 0);
+    const avgTds = tdsRows.length > 0
+      ? tdsRows.reduce((s, r) => s + r.tds, 0) / tdsRows.length
+      : null;
+    const minTds = tdsRows.length > 0
+      ? Math.min(...tdsRows.map((r) => r.tds))
+      : null;
+    const maxTds = tdsRows.length > 0
+      ? Math.max(...tdsRows.map((r) => r.tds))
+      : null;
+    const tdsDays = tdsRows.length;
 
     return {
       totalProd,
@@ -498,13 +547,29 @@ export function DataSummaryPopup({
       totalRaw,
       avgDailyProd,
       avgDailyCons,
+      avgDailyRaw,
       peakProd: peakRow?.production ?? 0,
       peakDate: peakRow?.date ?? '—',
+      peakRaw,
       nrwPct,
       totalSolar,
       totalGrid,
       totalKwh,
       solarPct,
+      gridPvRatio,
+      totalPvRatio,
+      avgProdCost,
+      avgPowerCost,
+      avgChemCost,
+      totalCostOutput,
+      avgRecovery,
+      minRecovery,
+      maxRecovery,
+      recoveryDays,
+      avgTds,
+      minTds,
+      maxTds,
+      tdsDays,
     };
   }, [overviewChartRows, tabDates]);
 
@@ -521,16 +586,45 @@ export function DataSummaryPopup({
           return [r.date, solar > 0 ? solar.toFixed(1) : '', grid > 0 ? grid.toFixed(1) : '', total > 0 ? total.toFixed(1) : '', pct].join(',');
         });
         csvContent = [headers.join(','), ...rows].join('\n');
+      } else if (metric === 'pv') {
+        const headers = ['Date', 'Production (m3)', 'Grid (kWh)', 'Solar (kWh)', 'Grid PV (kWh/m3)', '(Grid+Solar) PV (kWh/m3)'];
+        const rows = overviewChartRows.map((r) => {
+          const prod = r.production != null ? (+r.production).toFixed(2) : '';
+          const grid = r.kwh != null ? (+r.kwh).toFixed(2) : '';
+          const solar = (r.solarKwh ?? 0) !== 0 ? (+r.solarKwh).toFixed(2) : '';
+          const pvGrid = r.production > 0 && r.kwh != null ? (r.kwh / r.production).toFixed(2) : '';
+          const pvTot = r.production > 0 && ((r.kwh ?? 0) + (r.solarKwh ?? 0)) > 0 ? (((r.kwh ?? 0) + (r.solarKwh ?? 0)) / r.production).toFixed(2) : '';
+          return [r.date, prod, grid, solar, pvGrid, pvTot].join(',');
+        });
+        csvContent = [headers.join(','), ...rows].join('\n');
+      } else if (metric === 'productionCost' || metric === 'chemCost' || metric === 'powerCost') {
+        const headers = ['Date', 'Power (PHP/m3)', 'Chem (PHP/m3)', 'Prod Cost (PHP/m3)'];
+        const rows = overviewChartRows.map((r) => [
+          r.date,
+          r.powerCost != null ? (+r.powerCost).toFixed(4) : '',
+          r.chemCost != null ? (+r.chemCost).toFixed(4) : '',
+          r.totalCost != null ? (+r.totalCost).toFixed(4) : '',
+        ].join(','));
+        csvContent = [headers.join(','), ...rows].join('\n');
+      } else if (metric === 'rawwater') {
+        const headers = ['Date', 'Raw Water (m3)'];
+        const rows = overviewChartRows.map((r) => [r.date, r.rawwater ?? ''].join(','));
+        csvContent = [headers.join(','), ...rows].join('\n');
+      } else if (metric === 'recovery') {
+        const headers = ['Date', 'Recovery (%)'];
+        const rows = overviewChartRows.map((r) => [r.date, r.recovery != null ? `${r.recovery}%` : ''].join(','));
+        csvContent = [headers.join(','), ...rows].join('\n');
+      } else if (metric === 'tds') {
+        const headers = ['Date', 'Permeate TDS (ppm)'];
+        const rows = overviewChartRows.map((r) => [r.date, r.tds != null ? `${r.tds} ppm` : ''].join(','));
+        csvContent = [headers.join(','), ...rows].join('\n');
       } else {
-        const headers = ['Date', 'Production (m3)', 'Consumption (m3)', 'NRW (%)', 'Raw Water (m3)', 'Recovery (%)', 'Permeate TDS (ppm)'];
+        const headers = ['Date', 'Production (m3)', 'Consumption (m3)', ...(metric === 'nrw' ? ['NRW (%)'] : [])];
         const rows = overviewChartRows.map(r => [
           r.date,
           r.production ?? '',
           r.consumption ?? '',
-          r.nrw ?? '',
-          r.rawwater ?? '',
-          r.recovery ?? '',
-          r.tds ?? ''
+          ...(metric === 'nrw' ? [r.nrw != null ? `${r.nrw}%` : ''] : []),
         ].join(','));
         csvContent = [headers.join(','), ...rows].join('\n');
       }
@@ -659,6 +753,216 @@ export function DataSummaryPopup({
                   </div>
                   <div className="font-mono text-sm font-bold text-foreground mt-0.5">
                     {summaryStats.totalKwh > 0 ? `${summaryStats.solarPct.toFixed(1)}%` : '—'}
+                  </div>
+                </div>
+              </>
+            ) : metric === 'productionCost' || metric === 'chemCost' || metric === 'powerCost' ? (
+              <>
+                <div className="p-2 rounded-lg bg-muted/40 border border-border/50">
+                  <div className="text-2xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+                    <Coins className="h-3 w-3 text-primary" />
+                    <span>Avg Prod Cost</span>
+                  </div>
+                  <div className="font-mono text-sm font-bold text-foreground mt-0.5">
+                    {summaryStats.avgProdCost != null ? `₱${summaryStats.avgProdCost.toFixed(4)}` : '—'} <span className="text-3xs font-normal text-muted-foreground">/m³</span>
+                  </div>
+                </div>
+
+                <div className="p-2 rounded-lg bg-muted/40 border border-border/50">
+                  <div className="text-2xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+                    <Zap className="h-3 w-3 text-amber-500" />
+                    <span>Avg Power Cost</span>
+                  </div>
+                  <div className="font-mono text-sm font-bold text-foreground mt-0.5">
+                    {summaryStats.avgPowerCost != null ? `₱${summaryStats.avgPowerCost.toFixed(4)}` : '—'} <span className="text-3xs font-normal text-muted-foreground">/m³</span>
+                  </div>
+                </div>
+
+                <div className="p-2 rounded-lg bg-muted/40 border border-border/50">
+                  <div className="text-2xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+                    <FlaskConical className="h-3 w-3 text-cyan-500" />
+                    <span>Avg Chem Cost</span>
+                  </div>
+                  <div className="font-mono text-sm font-bold text-foreground mt-0.5">
+                    {summaryStats.avgChemCost != null ? `₱${summaryStats.avgChemCost.toFixed(4)}` : '—'} <span className="text-3xs font-normal text-muted-foreground">/m³</span>
+                  </div>
+                </div>
+
+                <div className="p-2 rounded-lg bg-muted/40 border border-border/50">
+                  <div className="text-2xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+                    <Droplet className="h-3 w-3 text-sky-500" />
+                    <span>Total Output</span>
+                  </div>
+                  <div className="font-mono text-sm font-bold text-foreground mt-0.5">
+                    {summaryStats.totalCostOutput > 0 ? summaryStats.totalCostOutput.toLocaleString(undefined, { maximumFractionDigits: 1 }) : '—'} <span className="text-3xs font-normal text-muted-foreground">m³</span>
+                  </div>
+                </div>
+              </>
+            ) : metric === 'pv' ? (
+              <>
+                <div className="p-2 rounded-lg bg-muted/40 border border-border/50">
+                  <div className="text-2xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+                    <Droplet className="h-3 w-3 text-primary" />
+                    <span>Total Production</span>
+                  </div>
+                  <div className="font-mono text-sm font-bold text-foreground mt-0.5">
+                    {summaryStats.totalProd > 0 ? summaryStats.totalProd.toLocaleString(undefined, { maximumFractionDigits: 1 }) : '—'} <span className="text-3xs font-normal text-muted-foreground">m³</span>
+                  </div>
+                </div>
+
+                <div className="p-2 rounded-lg bg-muted/40 border border-border/50">
+                  <div className="text-2xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+                    <Zap className="h-3 w-3 text-amber-500" />
+                    <span>Total Power</span>
+                  </div>
+                  <div className="font-mono text-sm font-bold text-foreground mt-0.5">
+                    {summaryStats.totalKwh > 0 ? summaryStats.totalKwh.toLocaleString(undefined, { maximumFractionDigits: 1 }) : '—'} <span className="text-3xs font-normal text-muted-foreground">kWh</span>
+                  </div>
+                </div>
+
+                <div className="p-2 rounded-lg bg-muted/40 border border-border/50">
+                  <div className="text-2xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+                    <Gauge className="h-3 w-3 text-sky-500" />
+                    <span>Grid PV Ratio</span>
+                  </div>
+                  <div className="font-mono text-sm font-bold text-foreground mt-0.5">
+                    {summaryStats.gridPvRatio != null ? summaryStats.gridPvRatio.toFixed(2) : '—'} <span className="text-3xs font-normal text-muted-foreground">kWh/m³</span>
+                  </div>
+                </div>
+
+                <div className="p-2 rounded-lg bg-muted/40 border border-border/50">
+                  <div className="text-2xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+                    <TrendingUp className="h-3 w-3 text-emerald-500" />
+                    <span>Overall PV Ratio</span>
+                  </div>
+                  <div className="font-mono text-sm font-bold text-foreground mt-0.5">
+                    {summaryStats.totalPvRatio != null ? summaryStats.totalPvRatio.toFixed(2) : '—'} <span className="text-3xs font-normal text-muted-foreground">kWh/m³</span>
+                  </div>
+                </div>
+              </>
+            ) : metric === 'recovery' ? (
+              <>
+                <div className="p-2 rounded-lg bg-muted/40 border border-border/50">
+                  <div className="text-2xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+                    <Activity className="h-3 w-3 text-primary" />
+                    <span>Avg Recovery</span>
+                  </div>
+                  <div className="font-mono text-sm font-bold text-foreground mt-0.5">
+                    {summaryStats.avgRecovery != null ? `${summaryStats.avgRecovery.toFixed(1)}%` : '—'}
+                  </div>
+                </div>
+
+                <div className="p-2 rounded-lg bg-muted/40 border border-border/50">
+                  <div className="text-2xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+                    <TrendingUp className="h-3 w-3 text-amber-500" />
+                    <span>Min Recovery</span>
+                  </div>
+                  <div className="font-mono text-sm font-bold text-foreground mt-0.5">
+                    {summaryStats.minRecovery != null ? `${summaryStats.minRecovery.toFixed(1)}%` : '—'}
+                  </div>
+                </div>
+
+                <div className="p-2 rounded-lg bg-muted/40 border border-border/50">
+                  <div className="text-2xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+                    <TrendingUp className="h-3 w-3 text-emerald-500" />
+                    <span>Max Recovery</span>
+                  </div>
+                  <div className="font-mono text-sm font-bold text-foreground mt-0.5">
+                    {summaryStats.maxRecovery != null ? `${summaryStats.maxRecovery.toFixed(1)}%` : '—'}
+                  </div>
+                </div>
+
+                <div className="p-2 rounded-lg bg-muted/40 border border-border/50">
+                  <div className="text-2xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+                    <Calendar className="h-3 w-3 text-sky-500" />
+                    <span>Recorded Days</span>
+                  </div>
+                  <div className="font-mono text-sm font-bold text-foreground mt-0.5">
+                    {summaryStats.recoveryDays > 0 ? `${summaryStats.recoveryDays} days` : '—'}
+                  </div>
+                </div>
+              </>
+            ) : metric === 'tds' ? (
+              <>
+                <div className="p-2 rounded-lg bg-muted/40 border border-border/50">
+                  <div className="text-2xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+                    <Activity className="h-3 w-3 text-primary" />
+                    <span>Avg Permeate TDS</span>
+                  </div>
+                  <div className="font-mono text-sm font-bold text-foreground mt-0.5">
+                    {summaryStats.avgTds != null ? `${Math.round(summaryStats.avgTds)}` : '—'} <span className="text-3xs font-normal text-muted-foreground">ppm</span>
+                  </div>
+                </div>
+
+                <div className="p-2 rounded-lg bg-muted/40 border border-border/50">
+                  <div className="text-2xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+                    <TrendingUp className="h-3 w-3 text-emerald-500" />
+                    <span>Min TDS</span>
+                  </div>
+                  <div className="font-mono text-sm font-bold text-foreground mt-0.5">
+                    {summaryStats.minTds != null ? `${summaryStats.minTds}` : '—'} <span className="text-3xs font-normal text-muted-foreground">ppm</span>
+                  </div>
+                </div>
+
+                <div className="p-2 rounded-lg bg-muted/40 border border-border/50">
+                  <div className="text-2xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+                    <TrendingUp className="h-3 w-3 text-rose-500" />
+                    <span>Max TDS</span>
+                  </div>
+                  <div className="font-mono text-sm font-bold text-foreground mt-0.5">
+                    {summaryStats.maxTds != null ? `${summaryStats.maxTds}` : '—'} <span className="text-3xs font-normal text-muted-foreground">ppm</span>
+                  </div>
+                </div>
+
+                <div className="p-2 rounded-lg bg-muted/40 border border-border/50">
+                  <div className="text-2xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+                    <Calendar className="h-3 w-3 text-sky-500" />
+                    <span>Recorded Days</span>
+                  </div>
+                  <div className="font-mono text-sm font-bold text-foreground mt-0.5">
+                    {summaryStats.tdsDays > 0 ? `${summaryStats.tdsDays} days` : '—'}
+                  </div>
+                </div>
+              </>
+            ) : metric === 'rawwater' ? (
+              <>
+                <div className="p-2 rounded-lg bg-muted/40 border border-border/50">
+                  <div className="text-2xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+                    <Droplet className="h-3 w-3 text-primary" />
+                    <span>Total Raw Intake</span>
+                  </div>
+                  <div className="font-mono text-sm font-bold text-foreground mt-0.5">
+                    {summaryStats.totalRaw > 0 ? summaryStats.totalRaw.toLocaleString(undefined, { maximumFractionDigits: 1 }) : '—'} <span className="text-3xs font-normal text-muted-foreground">m³</span>
+                  </div>
+                </div>
+
+                <div className="p-2 rounded-lg bg-muted/40 border border-border/50">
+                  <div className="text-2xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+                    <Gauge className="h-3 w-3 text-sky-500" />
+                    <span>Daily Avg Intake</span>
+                  </div>
+                  <div className="font-mono text-sm font-bold text-foreground mt-0.5">
+                    {summaryStats.avgDailyRaw > 0 ? summaryStats.avgDailyRaw.toLocaleString(undefined, { maximumFractionDigits: 1 }) : '—'} <span className="text-3xs font-normal text-muted-foreground">m³/day</span>
+                  </div>
+                </div>
+
+                <div className="p-2 rounded-lg bg-muted/40 border border-border/50">
+                  <div className="text-2xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+                    <TrendingUp className="h-3 w-3 text-amber-500" />
+                    <span>Peak Daily Intake</span>
+                  </div>
+                  <div className="font-mono text-sm font-bold text-foreground mt-0.5">
+                    {summaryStats.peakRaw > 0 ? summaryStats.peakRaw.toLocaleString(undefined, { maximumFractionDigits: 1 }) : '—'} <span className="text-3xs font-normal text-muted-foreground">m³</span>
+                  </div>
+                </div>
+
+                <div className="p-2 rounded-lg bg-muted/40 border border-border/50">
+                  <div className="text-2xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+                    <Activity className="h-3 w-3 text-emerald-500" />
+                    <span>Active Wells</span>
+                  </div>
+                  <div className="font-mono text-sm font-bold text-foreground mt-0.5">
+                    {prodEntities.length > 0 ? `${prodEntities.length} wells` : '—'}
                   </div>
                 </div>
               </>
