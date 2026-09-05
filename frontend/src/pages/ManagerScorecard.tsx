@@ -8,6 +8,7 @@
  */
 
 import { useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { format, subDays, differenceInHours } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
@@ -149,12 +150,22 @@ function useCorrectionApprovals(days: number) {
   return useQuery({
     queryKey: ['manager-scorecard-corr-reqs', from],
     queryFn: async () => {
-      const { data, error } = await (supabase
+      // 1. All currently pending correction requests (live state — never filter out by created_at)
+      const { data: pendingData, error: pErr } = await (supabase
         .from('correction_requests' as any) as any)
         .select('id, plant_id, status, submitted_by, resolved_by, created_at, resolved_at')
+        .eq('status', 'pending');
+      if (pErr) console.error('Error fetching pending correction_requests:', pErr);
+
+      // 2. Resolved requests within the window (for approval velocity / history)
+      const { data: resolvedData, error: rErr } = await (supabase
+        .from('correction_requests' as any) as any)
+        .select('id, plant_id, status, submitted_by, resolved_by, created_at, resolved_at')
+        .neq('status', 'pending')
         .gte('created_at', from);
-      if (error) return [];
-      return (data ?? []) as CorrectionRequestRow[];
+      if (rErr) console.error('Error fetching resolved correction_requests:', rErr);
+
+      return [...(pendingData ?? []), ...(resolvedData ?? [])] as CorrectionRequestRow[];
     },
     staleTime: 2 * 60_000,
   });
@@ -163,6 +174,7 @@ function useCorrectionApprovals(days: number) {
 // ── Page Root ─────────────────────────────────────────────────────────────────
 
 export default function ManagerScorecard() {
+  const navigate = useNavigate();
   const canView = usePermission('manager_scorecard', 'view');
   const [days, setDays] = useState<number>(30);
   const [viewBy, setViewBy] = useState<'plant' | 'manager'>('plant');
@@ -170,33 +182,74 @@ export default function ManagerScorecard() {
   const { data: rows = [], isLoading, error, refetch, isFetching } = useScorecard(days);
   const { data: corrReqs = [], refetch: refetchCorr } = useCorrectionApprovals(days);
 
-  // Group correction requests by plant
+  // Group correction requests & pending reviews by plant
   const plantCorrMap = useMemo(() => {
-    const map: Record<string, { pending: number; approved: number; rejected: number; total: number; avgHours: number | null; oldestPendingHours: number }> = {};
+    const map: Record<string, {
+      pending: number;
+      pendingReviews: number;
+      pendingReqs: number;
+      approved: number;
+      rejected: number;
+      total: number;
+      avgHours: number | null;
+      oldestPendingHours: number;
+    }> = {};
     const now = new Date();
 
+    // 1. Seed from RPC scorecard rows (handles both flagged readings and open correction requests from DB)
+    rows.forEach((r) => {
+      const pendingReviews = r.open_pending_review_count ?? 0;
+      const pendingReqs = r.open_correction_count ?? 0;
+      const oldestDays = Math.max(r.open_pending_review_oldest_days ?? 0, r.open_correction_oldest_days ?? 0);
+      map[r.plant_id] = {
+        pending: pendingReviews + pendingReqs,
+        pendingReviews,
+        pendingReqs,
+        approved: 0,
+        rejected: 0,
+        total: pendingReviews + pendingReqs,
+        avgHours: null,
+        oldestPendingHours: oldestDays * 24,
+      };
+    });
+
+    // 2. Overlay live correction_requests records (approved/rejected history in window, plus exact pending hours)
+    const clientReqsPendingByPlant: Record<string, number> = {};
     corrReqs.forEach((r) => {
       if (!map[r.plant_id]) {
-        map[r.plant_id] = { pending: 0, approved: 0, rejected: 0, total: 0, avgHours: null, oldestPendingHours: 0 };
+        map[r.plant_id] = {
+          pending: 0, pendingReviews: 0, pendingReqs: 0,
+          approved: 0, rejected: 0, total: 0, avgHours: null, oldestPendingHours: 0,
+        };
       }
       const entry = map[r.plant_id];
-      entry.total++;
 
       if (r.status === 'pending') {
-        entry.pending++;
+        clientReqsPendingByPlant[r.plant_id] = (clientReqsPendingByPlant[r.plant_id] ?? 0) + 1;
         const hoursWaiting = differenceInHours(now, new Date(r.created_at));
         if (hoursWaiting > entry.oldestPendingHours) {
           entry.oldestPendingHours = hoursWaiting;
         }
       } else if (r.status === 'approved') {
         entry.approved++;
+        entry.total++;
       } else if (r.status === 'rejected') {
         entry.rejected++;
+        entry.total++;
+      }
+    });
+
+    // If client query found more pending correction requests than RPC snapshot, ensure consistency
+    Object.entries(clientReqsPendingByPlant).forEach(([plantId, count]) => {
+      const entry = map[plantId];
+      if (entry && count > entry.pendingReqs) {
+        entry.pendingReqs = count;
+        entry.pending = entry.pendingReviews + count;
       }
     });
 
     return map;
-  }, [corrReqs]);
+  }, [rows, corrReqs]);
 
   // Manager-centric aggregation rollup
   const managerRollup = useMemo(() => {
@@ -250,13 +303,11 @@ export default function ManagerScorecard() {
           m.completenessCount++;
         }
         m.errorRateSum += (r.error_rate_pct ?? 0);
-        m.openExceptions += r.unexplained_gaps_in_window + r.open_pending_review_count;
-        m.statusCounts[r.status] = (m.statusCounts[r.status] ?? 0) + 1;
-
         const corr = plantCorrMap[r.plant_id];
-        if (corr) {
-          m.pendingCorrections += corr.pending;
-        }
+        const plantPending = corr ? corr.pending : ((r.open_pending_review_count ?? 0) + (r.open_correction_count ?? 0));
+        m.pendingCorrections += plantPending;
+        m.openExceptions += (r.unexplained_gaps_in_window ?? 0) + plantPending;
+        m.statusCounts[r.status] = (m.statusCounts[r.status] ?? 0) + 1;
       });
     });
 
@@ -302,10 +353,9 @@ export default function ManagerScorecard() {
     const avgCompleteness = withCompleteness.length
       ? withCompleteness.reduce((sum, r) => sum + (r.overall_completeness_pct ?? 0), 0) / withCompleteness.length
       : null;
-    const openExceptions = rows.reduce(
-      (sum, r) => sum + r.unexplained_gaps_in_window + r.open_pending_review_count + r.open_correction_count, 0,
-    );
     const totalPendingCorrections = Object.values(plantCorrMap).reduce((sum, c) => sum + c.pending, 0);
+    const totalUnexplainedGaps = rows.reduce((sum, r) => sum + (r.unexplained_gaps_in_window ?? 0), 0);
+    const openExceptions = totalUnexplainedGaps + totalPendingCorrections;
     const atRisk = rows.filter((r) => r.status === 'at_risk' || r.status === 'unmonitored').length;
 
     const fleetOversight = computeManagerOversightScore(avgCompleteness, null, openExceptions, totalPendingCorrections);
@@ -528,12 +578,18 @@ export default function ManagerScorecard() {
           value={fmtPct(summary.avgCompleteness)}
           tone={summary.avgCompleteness !== null && summary.avgCompleteness < 80 ? 'danger' : undefined}
         />
-        <StatCard
-          icon={CheckSquare}
-          label="Pending Correction Approvals"
-          value={summary.totalPendingCorrections.toLocaleString()}
-          tone={summary.totalPendingCorrections > 0 ? 'warn' : undefined}
-        />
+        <div
+          onClick={() => navigate('/data-corrections')}
+          className="cursor-pointer transition-transform active:scale-[0.99]"
+          title="Click to review pending corrections in Data Corrections Hub"
+        >
+          <StatCard
+            icon={CheckSquare}
+            label="Pending Correction Approvals"
+            value={summary.totalPendingCorrections.toLocaleString()}
+            tone={summary.totalPendingCorrections > 0 ? 'warn' : undefined}
+          />
+        </div>
         <StatCard
           icon={ShieldAlert}
           label="Open Gaps & Exceptions"
@@ -556,7 +612,7 @@ export default function ManagerScorecard() {
           loading={isLoading}
           error={error}
           isEmpty={rows.length === 0}
-          emptyTitle="No plants or managers to show"
+          emptyTitle="No plant scorecard data available."
           onRetry={handleRefresh}
         >
           {/* ── Mobile / Tablet Card View (<768px) ── */}
@@ -565,10 +621,16 @@ export default function ManagerScorecard() {
               sorted.map((r) => {
                 const meta = STATUS_META[r.status];
                 const StatusIcon = meta.icon;
-                const oldestOpenDays = Math.max(r.open_pending_review_oldest_days, r.open_correction_oldest_days);
-                const openCount = r.unexplained_gaps_in_window + r.open_pending_review_count + r.open_correction_count;
-                const corr = plantCorrMap[r.plant_id] ?? { pending: 0, approved: 0, rejected: 0, total: 0, oldestPendingHours: 0 };
-                const plantOversight = computeManagerOversightScore(r.overall_completeness_pct, r.error_rate_pct, openCount, corr.pending);
+                const corr = plantCorrMap[r.plant_id] ?? {
+                  pending: (r.open_pending_review_count ?? 0) + (r.open_correction_count ?? 0),
+                  pendingReviews: r.open_pending_review_count ?? 0,
+                  pendingReqs: r.open_correction_count ?? 0,
+                  approved: 0, rejected: 0, total: 0,
+                  oldestPendingHours: Math.max(r.open_pending_review_oldest_days ?? 0, r.open_correction_oldest_days ?? 0) * 24,
+                };
+                const openExceptions = (r.unexplained_gaps_in_window ?? 0) + corr.pending;
+                const plantOversight = computeManagerOversightScore(r.overall_completeness_pct, r.error_rate_pct, openExceptions, corr.pending);
+                const oldestDays = Math.round(corr.oldestPendingHours / 24);
 
                 return (
                   <div key={r.plant_id} className="p-3.5 rounded-xl border border-border/70 bg-card shadow-2xs space-y-2.5">
@@ -601,7 +663,14 @@ export default function ManagerScorecard() {
                         <span className="text-3xs text-muted-foreground uppercase font-bold tracking-wide">Corrections</span>
                         <div className="flex items-center gap-1.5 flex-wrap">
                           {corr.pending > 0 ? (
-                            <StatusPill tone="warn">{corr.pending} pending ({corr.oldestPendingHours}h)</StatusPill>
+                            <button
+                              type="button"
+                              onClick={() => navigate('/data-corrections')}
+                              className="cursor-pointer hover:opacity-80 transition-opacity"
+                              title="Click to review pending corrections in Data Corrections Hub"
+                            >
+                              <StatusPill tone="warn">{corr.pending} pending {oldestDays > 0 ? `(${oldestDays}d)` : ''}</StatusPill>
+                            </button>
                           ) : (
                             <span className="text-2xs text-muted-foreground">0 pending</span>
                           )}
@@ -614,7 +683,7 @@ export default function ManagerScorecard() {
                       <div className="p-2 rounded-lg bg-muted/40 border border-border/40 space-y-0.5">
                         <span className="text-3xs text-muted-foreground uppercase font-bold tracking-wide">Exceptions &amp; Error</span>
                         <div className="flex items-center justify-between text-2xs">
-                          <span>Gaps: <strong className={openCount > 0 ? 'text-warn' : 'text-foreground'}>{openCount}</strong></span>
+                          <span>Gaps: <strong className={(r.unexplained_gaps_in_window ?? 0) > 0 ? 'text-warn' : 'text-foreground'}>{r.unexplained_gaps_in_window ?? 0}</strong></span>
                           <span>Err: <strong className={(r.error_rate_pct ?? 0) >= 5 ? 'text-destructive' : 'text-foreground'}>{r.error_rate_pct === null ? '—' : `${r.error_rate_pct.toFixed(1)}%`}</strong></span>
                         </div>
                       </div>
@@ -646,7 +715,14 @@ export default function ManagerScorecard() {
                     <div className="p-1.5 rounded-lg bg-muted/40">
                       <div className="font-mono-num font-bold text-xs text-foreground">
                         {m.pendingCorrections > 0 ? (
-                          <span className="text-warn">{m.pendingCorrections} pend</span>
+                          <button
+                            type="button"
+                            onClick={() => navigate('/data-corrections')}
+                            className="cursor-pointer text-warn hover:underline"
+                            title="Click to review pending corrections in Data Corrections Hub"
+                          >
+                            {m.pendingCorrections} pend
+                          </button>
                         ) : (
                           <span className="text-accent">✓ {m.approvedCorrections}</span>
                         )}
@@ -686,10 +762,16 @@ export default function ManagerScorecard() {
                   {sorted.map((r) => {
                     const meta = STATUS_META[r.status];
                     const StatusIcon = meta.icon;
-                    const oldestOpenDays = Math.max(r.open_pending_review_oldest_days, r.open_correction_oldest_days);
-                    const openCount = r.unexplained_gaps_in_window + r.open_pending_review_count + r.open_correction_count;
-                    const corr = plantCorrMap[r.plant_id] ?? { pending: 0, approved: 0, rejected: 0, total: 0, oldestPendingHours: 0 };
-                    const plantOversight = computeManagerOversightScore(r.overall_completeness_pct, r.error_rate_pct, openCount, corr.pending);
+                    const corr = plantCorrMap[r.plant_id] ?? {
+                      pending: (r.open_pending_review_count ?? 0) + (r.open_correction_count ?? 0),
+                      pendingReviews: r.open_pending_review_count ?? 0,
+                      pendingReqs: r.open_correction_count ?? 0,
+                      approved: 0, rejected: 0, total: 0,
+                      oldestPendingHours: Math.max(r.open_pending_review_oldest_days ?? 0, r.open_correction_oldest_days ?? 0) * 24,
+                    };
+                    const openExceptions = (r.unexplained_gaps_in_window ?? 0) + corr.pending;
+                    const plantOversight = computeManagerOversightScore(r.overall_completeness_pct, r.error_rate_pct, openExceptions, corr.pending);
+                    const oldestDays = Math.round(corr.oldestPendingHours / 24);
 
                     return (
                       <tr key={r.plant_id} className="border-b hover:bg-muted/20 transition-colors">
@@ -707,7 +789,7 @@ export default function ManagerScorecard() {
                           <div className="flex flex-col items-center gap-1.5 min-w-[170px]">
                             <div className="flex items-center justify-between w-full gap-2">
                               <AppraisalBadge tier={plantOversight.tier} size="sm" showScore={false} />
-                              <span className="text-xs font-bold text-foreground font-mono-num shrink-0" title="Telemetry Completeness">
+                              <span className="text-xs font-bold text-foreground font-mono-num" title="Telemetry Completeness">
                                 {fmtPct(r.overall_completeness_pct)}
                               </span>
                             </div>
@@ -724,9 +806,16 @@ export default function ManagerScorecard() {
                         <td className="px-3 py-2.5 text-center whitespace-nowrap">
                           <div className="flex items-center justify-center gap-1.5 text-2xs">
                             {corr.pending > 0 ? (
-                              <StatusPill tone="warn">
-                                {corr.pending} pending ({corr.oldestPendingHours}h)
-                              </StatusPill>
+                              <button
+                                type="button"
+                                onClick={() => navigate('/data-corrections')}
+                                className="cursor-pointer hover:opacity-80 transition-opacity"
+                                title="Click to review pending corrections in Data Corrections Hub"
+                              >
+                                <StatusPill tone="warn">
+                                  {corr.pending} pending {oldestDays > 0 ? `(${oldestDays}d old)` : ''}
+                                </StatusPill>
+                              </button>
                             ) : (
                               <span className="text-muted-foreground font-medium">0 pending</span>
                             )}
@@ -738,12 +827,9 @@ export default function ManagerScorecard() {
                         </td>
 
                         <td className="px-3 py-2.5 text-center whitespace-nowrap">
-                          {openCount > 0 ? (
-                            <span title="Unexplained gaps + pending reviews" className="font-semibold text-warn font-mono-num">
-                              {openCount}
-                              {oldestOpenDays > 0 && (
-                                <span className="text-muted-foreground font-normal text-3xs"> ({oldestOpenDays}d old)</span>
-                              )}
+                          {r.unexplained_gaps_in_window > 0 ? (
+                            <span title="Unexplained gaps in telemetry readings" className="font-semibold text-warn font-mono-num">
+                              {r.unexplained_gaps_in_window}
                             </span>
                           ) : (
                             <span className="text-muted-foreground font-mono-num">0</span>
@@ -825,9 +911,16 @@ export default function ManagerScorecard() {
                         <div className="flex flex-col items-center justify-center gap-0.5 text-2xs">
                           <div className="flex items-center justify-center gap-1.5">
                             {m.pendingCorrections > 0 ? (
-                              <StatusPill tone="warn">
-                                {m.pendingCorrections} pending
-                              </StatusPill>
+                              <button
+                                type="button"
+                                onClick={() => navigate('/data-corrections')}
+                                className="cursor-pointer hover:opacity-80 transition-opacity"
+                                title="Click to review pending corrections in Data Corrections Hub"
+                              >
+                                <StatusPill tone="warn">
+                                  {m.pendingCorrections} pending
+                                </StatusPill>
+                              </button>
                             ) : (
                               <span className="text-accent font-semibold inline-flex items-center gap-0.5">
                                 <CheckCircle2 className="h-3 w-3" /> 0 pending

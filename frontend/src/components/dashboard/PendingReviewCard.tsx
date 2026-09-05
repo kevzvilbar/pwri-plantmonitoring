@@ -26,14 +26,24 @@ export function PendingReviewCard({ plantIds }: Props) {
   const { data: pendingCount = 0 } = useQuery({
     queryKey: ['dashboard-pending-review-count', plantIds],
     queryFn: async () => {
-      const counts = await Promise.all(
-        PENDING_REVIEW_TABLES.map((t) => {
-          let q = supabase.from(t as any).select('id', { count: 'exact', head: true }).eq('norm_status', 'pending_review');
+      const [tableCounts, corrReqCount] = await Promise.all([
+        Promise.all(
+          PENDING_REVIEW_TABLES.map((t) => {
+            let q = supabase.from(t as any).select('id', { count: 'exact', head: true }).eq('norm_status', 'pending_review');
+            if (plantIds.length) q = q.in('plant_id', plantIds);
+            return q as any;
+          }),
+        ),
+        (() => {
+          let q = supabase.from('correction_requests' as any).select('id', { count: 'exact', head: true }).eq('status', 'pending');
           if (plantIds.length) q = q.in('plant_id', plantIds);
           return q as any;
-        }),
-      );
-      return counts.reduce((sum, r) => sum + (r.count ?? 0), 0);
+        })(),
+      ]);
+
+      const flaggedSum = tableCounts.reduce((sum, r) => sum + (r.count ?? 0), 0);
+      const corrSum = (corrReqCount as any)?.count ?? 0;
+      return flaggedSum + corrSum;
     },
     // FIX (egress): staleTime matched to refetchInterval — was relying on the 30s
     // global default, so the app-wide background-sync sweep force-refetched this
@@ -46,7 +56,7 @@ export function PendingReviewCard({ plantIds }: Props) {
     return (
       <Card className="p-3 flex items-center gap-2 text-xs text-muted-foreground">
         <FileSearch className="h-4 w-4 shrink-0" aria-hidden />
-        No readings awaiting review.
+        No readings or corrections awaiting review.
       </Card>
     );
   }
@@ -57,12 +67,12 @@ export function PendingReviewCard({ plantIds }: Props) {
         <FileSearch className="h-4 w-4 text-warn shrink-0" aria-hidden />
         <span className="text-xs font-medium">Pending review</span>
         <span className="ml-auto inline-flex items-center px-1.5 py-0.5 rounded-full bg-warn-soft text-warn border border-warn/70 text-2xs font-medium">
-          {pendingCount} reading{pendingCount > 1 ? 's' : ''}
+          {pendingCount} item{pendingCount > 1 ? 's' : ''}
         </span>
       </div>
 
       <p className="text-xs text-muted-foreground">
-        Flagged as backward or a spike, waiting on Admin/Data Analyst review before they normalize.
+        Flagged readings or operator correction requests awaiting review and approval.
       </p>
 
       <div className="flex justify-end pt-0.5 border-t border-border/40">
