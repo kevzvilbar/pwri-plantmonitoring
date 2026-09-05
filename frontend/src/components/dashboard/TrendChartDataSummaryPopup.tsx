@@ -206,7 +206,7 @@ export function DataSummaryPopup({
   }, [powerReadings, powerConfigMap, billMultiplierMap, plantNames, gridMeterMeta, filterFrom, filterTo]);
 
   // Determine which secondary tabs are relevant for this metric
-  const hasProdTab = metric === 'production' || metric === 'nrw' || metric === 'pv' || metric === 'rawwater';
+  const hasProdTab = metric === 'production' || metric === 'nrw' || metric === 'pv';
   const hasConsTab = metric === 'production' || metric === 'nrw';
   const hasGridTab = metric === 'kwh';
 
@@ -672,8 +672,12 @@ export function DataSummaryPopup({
         ].join(','));
         csvContent = [headers.join(','), ...rows].join('\n');
       } else if (metric === 'rawwater') {
-        const headers = ['Date', 'Raw Water (m3)'];
-        const rows = overviewChartRows.map((r) => [r.date, r.rawwater ?? ''].join(','));
+        const headers = ['Date', ...prodEntities.map((e) => `"${e.label.replace(/"/g, '""')}"`), 'Total Raw (m3)'];
+        const rows = [...prodDates].reverse().map((d) => {
+          const entityVals = prodEntities.map((e) => prodPivotMap.get(d)?.get(e.id) ?? 0);
+          const rowTot = entityVals.reduce((a, b) => a + b, 0);
+          return [fmtDateKey(d), ...entityVals, rowTot > 0 ? rowTot : ''].join(',');
+        });
         csvContent = [headers.join(','), ...rows].join('\n');
       } else if (metric === 'recovery') {
         const trainCols = roTrainEntities.map((e) => `"${e.label.replace(/"/g, '""')} (%)"`);
@@ -1142,11 +1146,23 @@ export function DataSummaryPopup({
         <div className="flex-1 overflow-hidden min-h-0 flex flex-col">
           <div className="flex-1 overflow-hidden min-h-0 flex flex-col">
             {activeTab === 'overview' && (
-              <OverviewTable
-                metric={metric}
-                chartData={overviewChartRows}
-                roTrainEntities={roTrainEntities}
-              />
+              metric === 'rawwater' ? (
+                <PivotTable
+                  dates={prodDates}
+                  entities={prodEntities}
+                  pivot={prodPivotMap}
+                  totalLabel="Total Raw (m³)"
+                  unit="m³"
+                  colorClass="text-primary"
+                  entityType="well"
+                />
+              ) : (
+                <OverviewTable
+                  metric={metric}
+                  chartData={overviewChartRows}
+                  roTrainEntities={roTrainEntities}
+                />
+              )
             )}
             {activeTab === 'grid-by-meter' && hasGridTab && (
               <GridMeterBreakdownTable dates={overviewDates} breakdown={gridBreakdown} />
@@ -1179,7 +1195,7 @@ export function DataSummaryPopup({
         {/* Footer info bar */}
         <div className="px-5 py-2 border-t shrink-0 flex items-center gap-3 text-2xs text-muted-foreground bg-muted/20">
           <span className="font-medium">{tabDates.length} days in range</span>
-          {activeTab === 'production' && hasProdTab && (
+          {((activeTab === 'production' && hasProdTab) || (activeTab === 'overview' && metric === 'rawwater')) && (
             <span>· {
               metric === 'rawwater' || metric === 'pv'
                 ? `${prodEntities.length} wells`
