@@ -1609,3 +1609,4 @@ GRANT EXECUTE ON FUNCTION public.fn_backfill_missing_readings(date, integer) TO 
 -- ─── 5. Immediate Repair Sweep & Schema Cache Reload ──────────────────────────
 SELECT public.fn_backfill_missing_readings((now() AT TIME ZONE 'Asia/Manila')::date, 30);
 NOTIFY pgrst, 'reload schema';
+
