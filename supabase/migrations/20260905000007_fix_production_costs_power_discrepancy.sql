@@ -1,4 +1,4 @@
-﻿-- =============================================================================
+-- =============================================================================
 -- Migration: 20260905000007_fix_production_costs_power_discrepancy.sql
 --
 -- FIX DAILY PRODUCTION COSTS DISCREPANCY & POWER SPIKE:
@@ -65,7 +65,7 @@ DECLARE
   v_srp_id uuid;
   v_rate numeric;
 BEGIN
-  SELECT id INTO v_srp_id FROM public.plants WHERE code = 'SRP' OR name ILIKE '%SRP%' LIMIT 1;
+  SELECT id INTO v_srp_id FROM public.plants WHERE name ILIKE '%SRP%' LIMIT 1;
   IF v_srp_id IS NOT NULL THEN
     -- Get current tariff rate for SRP
     SELECT rate_per_kwh INTO v_rate

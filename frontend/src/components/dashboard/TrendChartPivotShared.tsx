@@ -251,9 +251,20 @@ export function interpolateMissingGridMeterReadings<T extends GridPowerReadingRo
 
       let gmrCopy: Record<string, number> | null = r.grid_meter_readings ? { ...r.grid_meter_readings } : null;
 
+      // Ensure meter 0 is explicitly in gmrCopy if present on row
+      if (r.meter_reading_kwh != null && Number.isFinite(+r.meter_reading_kwh)) {
+        if (!gmrCopy) gmrCopy = {};
+        if (gmrCopy['0'] == null) gmrCopy['0'] = Number(r.meter_reading_kwh);
+      }
+
       for (const mi of meterIndices) {
         const direct = gmrCopy?.[String(mi)] ?? (mi === 0 ? r.meter_reading_kwh : null);
-        if (direct != null && Number.isFinite(+direct)) continue;
+        if (direct != null && Number.isFinite(+direct)) {
+          if (mi === 0 && gmrCopy && gmrCopy['0'] == null) {
+            gmrCopy['0'] = Number(direct);
+          }
+          continue;
+        }
 
         // Search backward (j < i) for nearest earlier row with valid reading for mi
         let earlierVal: number | null = null;
@@ -365,7 +376,11 @@ export function computeGridMeterBreakdown(
     const pid = r.plant_id ?? '__';
     const isMR = !!r.is_meter_replacement;
     const gridCurrent = r.meter_reading_kwh != null ? +r.meter_reading_kwh : null;
-    const rGmr = r.grid_meter_readings ?? null;
+    let rGmr = r.grid_meter_readings ? { ...r.grid_meter_readings } : null;
+    if (gridCurrent != null) {
+      if (!rGmr) rGmr = {};
+      if (rGmr['0'] == null) rGmr['0'] = gridCurrent;
+    }
 
     if (isMR) {
       // Replacement row: zero this day, reset baselines for the next delta.
