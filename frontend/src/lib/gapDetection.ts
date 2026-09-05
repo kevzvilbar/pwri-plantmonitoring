@@ -173,10 +173,15 @@ export function detectGaps(
     if (options?.directModeIds && (options.directModeIds.has(groupKey) || options.directModeIds.has(String(rows[0]?.plant_id)))) {
       return;
     }
-    // rows already sorted ascending by reading_datetime
-    for (let i = 0; i < rows.length - 1; i++) {
-      const rowA = rows[i];
-      const rowB = rows[i + 1];
+    // Only real (human) readings should serve as boundary anchors — estimated rows must not anchor new estimates.
+    // Ensure rows are sorted ascending by timestamp so boundary anchors align chronologically.
+    const realRows = rows
+      .filter(r => !r.is_estimated)
+      .sort((a, b) => new Date(a.reading_datetime).getTime() - new Date(b.reading_datetime).getTime());
+
+    for (let i = 0; i < realRows.length - 1; i++) {
+      const rowA = realRows[i];
+      const rowB = realRows[i + 1];
 
       // Reset / rollover handling: if rowB is marked as replacement/rollover, don't interpolate across reset
       if (rowB.is_meter_replacement || rowB.is_meter_rollover) continue;
@@ -206,7 +211,7 @@ export function detectGaps(
         let oldestPrecedingRow: RawReading | null = null;
         let count = 0;
         for (let j = i - 1; j >= 0 && count < 7; j--) {
-          const r = rows[j];
+          const r = realRows[j];
           const rDateMs = new Date(fmtIsoDate(r.reading_datetime)).getTime();
           if (rDateMs < windowStartMs) break;
           const rVal = r[column] != null ? Number(r[column]) : null;
@@ -260,6 +265,10 @@ export function detectGaps(
         }
 
         const interpolated = interpolatedValues[d - 1];
+        // Monotonicity guard: for cumulative meter columns, interpolated must be strictly between valA and valB
+        if (!isRateCol && (interpolated <= valA || interpolated >= valB)) {
+          continue;
+        }
 
         fills.push({
           reading_id:       `${GAP_FILL_PREFIX}:${groupKey}:${missingDateStr}`,

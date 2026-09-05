@@ -298,5 +298,85 @@ describe('gapDetection', () => {
       const fills = detectGaps(readings, 'current_reading', 'locator_readings', mockFkLookup, { isDirectReading: true });
       expect(fills).toHaveLength(0);
     });
+
+    it('correctly uses the latest reading of a date when multiple intra-day readings exist', () => {
+      // Worked example matching production incident:
+      // Aug 31 has 3 readings: 06:00 (148,470), 07:00 (148,470), 21:56 (148,700)
+      // Sep 02 has reading: 06:06 (148,902)
+      // Pre-gap anchor MUST be Aug 31 21:56 (148,700), NOT 06:00 (148,470)!
+      // Sep 01 interpolated value = 148,700 + (148,902 - 148,700)/2 = 148,801.00 (positive delta +101.00)
+      const readings: RawReading[] = [
+        {
+          id: 'r1',
+          locator_id: 'loc-amalfi',
+          plant_id: 'plant-amalfi',
+          reading_datetime: '2026-08-31T06:00:00+08:00',
+          current_reading: 148470,
+        },
+        {
+          id: 'r2',
+          locator_id: 'loc-amalfi',
+          plant_id: 'plant-amalfi',
+          reading_datetime: '2026-08-31T07:00:00+08:00',
+          current_reading: 148470,
+        },
+        {
+          id: 'r3',
+          locator_id: 'loc-amalfi',
+          plant_id: 'plant-amalfi',
+          reading_datetime: '2026-08-31T21:56:00+08:00',
+          current_reading: 148700,
+        },
+        {
+          id: 'r4',
+          locator_id: 'loc-amalfi',
+          plant_id: 'plant-amalfi',
+          reading_datetime: '2026-09-02T06:06:00+08:00',
+          current_reading: 148902,
+        },
+      ];
+
+      const fills = detectGaps(readings, 'current_reading', 'locator_readings', mockFkLookup);
+      expect(fills).toHaveLength(1);
+      expect(fills[0].reading_id).toBe(`${GAP_FILL_PREFIX}:loc-amalfi:2026-09-01`);
+      expect(fills[0].corrected_value).toBe(148801.00);
+      expect(fills[0].corrected_value).toBeGreaterThan(148700); // delta vs Aug 31 21:56 is +101.00, not -14.00
+      expect(fills[0].corrected_value).toBeLessThan(148902);
+    });
+
+    it('excludes existing estimated rows from anchoring gap fills', () => {
+      const readings: RawReading[] = [
+        {
+          id: 'r1',
+          locator_id: 'loc-1',
+          plant_id: 'plant-1',
+          reading_datetime: '2026-08-31T21:56:00+08:00',
+          current_reading: 148700,
+          is_estimated: false,
+        },
+        {
+          id: 'r-stale-est',
+          locator_id: 'loc-1',
+          plant_id: 'plant-1',
+          reading_datetime: '2026-09-01T12:00:00+08:00',
+          current_reading: 148686, // Stale / buggy estimate
+          is_estimated: true,
+        },
+        {
+          id: 'r2',
+          locator_id: 'loc-1',
+          plant_id: 'plant-1',
+          reading_datetime: '2026-09-02T06:06:00+08:00',
+          current_reading: 148902,
+          is_estimated: false,
+        },
+      ];
+
+      // Because the Sep 01 row is estimated, detectGaps must look across it between r1 and r2
+      const fills = detectGaps(readings, 'current_reading', 'locator_readings', mockFkLookup);
+      expect(fills).toHaveLength(1);
+      expect(fills[0].reading_id).toBe(`${GAP_FILL_PREFIX}:loc-1:2026-09-01`);
+      expect(fills[0].corrected_value).toBe(148801.00);
+    });
   });
 });

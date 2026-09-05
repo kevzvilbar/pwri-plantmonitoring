@@ -455,20 +455,34 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
   const resyncLocatorChain = async (locatorId: string) => {
     const { data: all, error } = await supabase
       .from('locator_readings')
-      .select('id, current_reading, previous_reading, reading_datetime')
+      .select('id, current_reading, previous_reading, reading_datetime, is_estimated')
       .eq('locator_id', locatorId)
       .order('reading_datetime', { ascending: true });
     if (error || !all) return;
 
     let last: number | null = null;
     const updates: { id: string; previous_reading: number | null }[] = [];
+    const staleEstimatedIds: string[] = [];
+
     for (const row of all as any[]) {
+      const cur = +row.current_reading;
+      // If this is an auto-backfilled estimate and its value violates monotonicity
+      // against the preceding reading (creating a negative delta), it is provably invalid and must be purged.
+      if (row.is_estimated && last != null && cur <= last) {
+        staleEstimatedIds.push(row.id);
+        continue;
+      }
       const newPrev = last;
       if (row.previous_reading !== newPrev) {
         updates.push({ id: row.id, previous_reading: newPrev });
       }
-      last = +row.current_reading;
+      last = cur;
     }
+
+    if (staleEstimatedIds.length) {
+      await supabase.from('locator_readings').delete().in('id', staleEstimatedIds);
+    }
+
     if (updates.length) {
       // daily_volume is intentionally omitted — GENERATED ALWAYS AS recomputes
       // it automatically once previous_reading is corrected.
@@ -477,6 +491,9 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
         .update({ previous_reading: u.previous_reading } as any)
         .eq('id', u.id)));
     }
+
+    // Trigger sweep to re-interpolate any valid bounded gaps
+    (supabase.rpc as any)('fn_backfill_missing_readings', { p_lookback_days: 14 }).catch(() => {});
   };
 
   // One-click toggle for shared (non-power) meter replacement.
