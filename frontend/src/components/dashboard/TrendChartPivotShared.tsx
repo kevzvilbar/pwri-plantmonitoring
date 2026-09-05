@@ -52,8 +52,9 @@ export function buildEntityPivot(
   const lastSeen = new Map<string, number>();
 
   // Sanitize readings: exclude retracted rows, discard orphan estimates on dates
-  // where confirmed human readings exist, and discard non-monotonic backward estimates.
-  const cleanReadings = sanitizeReadings(readings, entityField);
+  // where confirmed human readings exist, and discard non-monotonic backward estimates
+  // (skipping monotonicity checks on direct-mode/derived meters like HAMAS).
+  const cleanReadings = sanitizeReadings(readings, entityField, directModeIds);
 
   cleanReadings.forEach((r) => {
     if (r.is_meter_replacement) {

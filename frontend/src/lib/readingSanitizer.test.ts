@@ -109,5 +109,62 @@ describe('readingSanitizer', () => {
     const sanitized = sanitizeReadings(readings, 'locator_id');
     expect(sanitized).toHaveLength(2);
   });
+
+  it('preserves fluctuating daily volumes for direct-mode / derived meters like HAMAS (is_estimated = true)', () => {
+    const hamasReadings = [
+      {
+        locator_id: 'hamas-loc',
+        reading_datetime: '2026-08-25T16:00:00.000Z',
+        current_reading: 4132.10,
+        is_estimated: true,
+      },
+      {
+        locator_id: 'hamas-loc',
+        reading_datetime: '2026-08-26T16:00:00.000Z',
+        current_reading: 4659.80,
+        is_estimated: true,
+      },
+      {
+        locator_id: 'hamas-loc',
+        reading_datetime: '2026-08-27T16:00:00.000Z',
+        current_reading: 4782.80,
+        is_estimated: true,
+      },
+      {
+        locator_id: 'hamas-loc',
+        reading_datetime: '2026-08-28T16:00:00.000Z',
+        current_reading: 4491.20, // Lower than yesterday — perfectly normal for direct-volume HAMAS!
+        is_estimated: true,
+      },
+      {
+        locator_id: 'hamas-loc',
+        reading_datetime: '2026-08-29T16:00:00.000Z',
+        current_reading: 4879.23,
+        is_estimated: true,
+      },
+      {
+        locator_id: 'hamas-loc',
+        reading_datetime: '2026-09-01T16:00:00.000Z',
+        current_reading: 5577.20,
+        is_estimated: true,
+      },
+      {
+        locator_id: 'hamas-loc',
+        reading_datetime: '2026-09-02T16:00:00.000Z',
+        current_reading: 1923.25, // Lower than yesterday — must NOT be dropped!
+        is_estimated: true,
+      },
+    ];
+
+    const directModeIds = new Set(['hamas-loc']);
+    const sanitized = sanitizeReadings(hamasReadings, 'locator_id', directModeIds);
+
+    // All 7 direct-mode daily volume entries must be preserved
+    expect(sanitized).toHaveLength(7);
+    expect(sanitized.map((r) => r.current_reading)).toEqual([
+      4132.10, 4659.80, 4782.80, 4491.20, 4879.23, 5577.20, 1923.25,
+    ]);
+  });
 });
+
 

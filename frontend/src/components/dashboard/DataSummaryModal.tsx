@@ -80,7 +80,7 @@ export function computePivotFromReadingsNoCache(
   directModeIds?: Set<string>,
 ): Map<string, Map<string, number>> {
   const byEntity = new Map<string, any[]>();
-  const cleanReadings = sanitizeReadings(readings, entityKeyField);
+  const cleanReadings = sanitizeReadings(readings, entityKeyField, directModeIds);
   cleanReadings.forEach((r) => {
     const k = r[entityKeyField] ?? '__';
     if (!byEntity.has(k)) byEntity.set(k, []);
@@ -180,7 +180,7 @@ function computePivotFromReadings(
   directModeIds?: Set<string>,
 ): Map<string, Map<string, number>> {
   const byEntity = new Map<string, any[]>();
-  const cleanReadings = sanitizeReadings(readings, entityKeyField);
+  const cleanReadings = sanitizeReadings(readings, entityKeyField, directModeIds);
   cleanReadings.forEach((r) => {
     const k = r[entityKeyField] ?? '__';
     if (!byEntity.has(k)) byEntity.set(k, []);
