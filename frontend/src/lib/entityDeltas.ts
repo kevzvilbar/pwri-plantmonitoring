@@ -66,7 +66,7 @@ export function computeEntityDeltas(
   const skipAfterRepl = options?.skipAfterRepl ?? false;
   const directModeIds = options?.directModeIds;
 
-  const sorted = sanitizeReadings(readings, entityKeyField);
+  const sorted = sanitizeReadings(readings, entityKeyField, directModeIds);
 
   const lastReading = new Map<string, number>(); // entityKey → last current_reading
   const afterRepl   = new Set<string>();          // entities whose next row is zeroed
