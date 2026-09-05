@@ -247,7 +247,7 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
 
   const queryKey = ['reading-history', module, entityId, days, appliedFrom, appliedTo];
 
-  const { data: rows, isLoading } = useQuery({
+  const { data: rawRows = [], isLoading } = useQuery({
     queryKey,
     queryFn: async () => {
       // Use date-only strings (YYYY-MM-DD) for all filters — avoids UTC offset
@@ -376,6 +376,74 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
     staleTime: 0,
   });
 
+  const purgedEstIdsRef = useRef<Set<string>>(new Set());
+
+  // Self-healing filter: If the database contains an auto-backfilled estimate (is_estimated = true)
+  // that violates monotonicity against its chronological predecessor or successor (creating a negative delta),
+  // it is provably corrupted. Filter it out from display immediately and delete it from the DB.
+  const rows = useMemo(() => {
+    if (!rawRows || rawRows.length === 0) return [];
+    const valid: any[] = [];
+    const staleEstimatedIds: string[] = [];
+
+    const getVal = (row: any): number | null => {
+      if (!row) return null;
+      if (row.current_reading != null) return +row.current_reading;
+      if (row.meter_reading_kwh != null) return +row.meter_reading_kwh;
+      if (row.raw_meter_reading != null) return +row.raw_meter_reading;
+      return null;
+    };
+
+    // rawRows are sorted descending by reading_datetime:
+    // rawRows[i] is current row, rawRows[i+1] is chronologically PRECEDING row,
+    // rawRows[i-1] is chronologically SUCCEEDING row.
+    for (let i = 0; i < rawRows.length; i++) {
+      const r = rawRows[i];
+      if (r.is_estimated && !r.is_meter_rollover && !r.is_meter_replacement) {
+        const cur = getVal(r);
+        if (cur != null) {
+          const pred = rawRows[i + 1];
+          const succ = rawRows[i - 1];
+
+          const predVal = getVal(pred);
+          const succVal = getVal(succ);
+
+          // Monotonicity checks for non-rollover meters:
+          // 1. If predecessor exists, cur cannot be lower than predecessor (cur < predVal produces a negative delta!)
+          // 2. If successor exists, cur cannot be higher than successor (cur > succVal forces successor into negative delta!)
+          const violatesPred = predVal != null && !pred?.is_meter_rollover && !r.is_meter_replacement && cur < predVal;
+          const violatesSucc = succVal != null && !r.is_meter_rollover && !succ?.is_meter_replacement && cur > succVal;
+
+          if (violatesPred || violatesSucc) {
+            staleEstimatedIds.push(r.id);
+            continue; // Exclude from display immediately
+          }
+        }
+      }
+      valid.push(r);
+    }
+
+    // Auto-purge stale estimates in the background so the DB is cleaned up
+    const toDelete = staleEstimatedIds.filter(id => !purgedEstIdsRef.current.has(id));
+    if (toDelete.length > 0) {
+      toDelete.forEach(id => purgedEstIdsRef.current.add(id));
+      const table =
+        module === 'locator' ? 'locator_readings' :
+        module === 'well' ? 'well_readings' :
+        module === 'power' ? 'power_readings' :
+        module === 'blending' ? 'blending_events' : null;
+      if (table) {
+        supabase.from(table as any).delete().in('id', toDelete).then(({ error }) => {
+          if (!error) {
+            (supabase.rpc as any)('fn_backfill_missing_readings', { p_lookback_days: 14 }).catch(() => {});
+          }
+        });
+      }
+    }
+
+    return valid;
+  }, [rawRows, module]);
+
   const startEdit = (r: any) => {
     if (!canEditEntry(r, hasFullAccess, activeOperatorId)) {
       toast.error('You can only edit your own entries, within 8 hours of submitting them.');
@@ -492,9 +560,19 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
         .eq('id', u.id)));
     }
 
+    if (staleEstimatedIds.length || updates.length) {
+      qc.invalidateQueries({ queryKey });
+    }
+
     // Trigger sweep to re-interpolate any valid bounded gaps
     (supabase.rpc as any)('fn_backfill_missing_readings', { p_lookback_days: 14 }).catch(() => {});
   };
+
+  useEffect(() => {
+    if (module === 'locator' && entityId) {
+      resyncLocatorChain(entityId);
+    }
+  }, [module, entityId]);
 
   // One-click toggle for shared (non-power) meter replacement.
   // For well/locator, CHECKING opens ReplaceMeterDialog so the swap gets
