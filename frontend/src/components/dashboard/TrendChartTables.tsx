@@ -409,41 +409,39 @@ export function GridMeterBreakdownTable({
   }, [dates, byDate]);
 
   return (
-    <div className="h-full overflow-auto p-2">
-      <table className="w-full max-w-4xl mx-auto border-collapse text-xs border border-border/50 rounded-lg overflow-hidden">
+    <div className="h-full overflow-auto">
+      <table className="w-full border-collapse text-xs">
         <thead className="bg-muted/95">
           <tr>
             <th className={TH_DATE}>Date</th>
-            {cols.map((c) => (
-              <th key={c.key} className={`${TH} px-4`} title={c.title}>
-                {c.label}
-              </th>
-            ))}
-            <th className={TH_TOTAL}>Total (kWh)</th>
+            {cols.map((c) => <th key={c.key} className={TH} title={c.title}>{c.label}</th>)}
+            <th className={TH}>Total (kWh)</th>
           </tr>
         </thead>
         <tbody>
           {[...dates].reverse().map((dk, i) => {
             const row = byDate.get(dk);
-            const zebra = i % 2 === 0 ? 'bg-background' : 'bg-muted/10';
             return (
-              <tr key={dk} className={`${zebra} hover:bg-muted/25`}>
-                <td className={`px-3.5 py-1.5 whitespace-nowrap font-medium text-xs text-muted-foreground sticky left-0 z-10 ${zebra}`}>
+              <tr key={dk} className={i % 2 === 0 ? 'bg-background hover:bg-muted/15' : 'bg-muted/10 hover:bg-muted/25'}>
+                <td className={[
+                  'px-3.5 py-1.5 whitespace-nowrap font-medium text-xs text-muted-foreground sticky left-0 z-10',
+                  i % 2 === 0 ? 'bg-background' : 'bg-muted/10',
+                ].join(' ')}>
                   {fmtDateKey(dk)}
                 </td>
                 {cols.map((c) => {
                   const v = row?.values[c.key];
                   return (
-                    <td key={c.key} className={`${TD} px-4`}>
+                    <td key={c.key} className={TD}>
                       {v != null
                         ? <span className={v < 0 ? 'text-destructive font-semibold' : ''}>{v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                         : <span className="text-muted-foreground/40">—</span>}
                     </td>
                   );
                 })}
-                <td className={TD_TOTAL_COL}>
+                <td className={TD}>
                   {row && row.total > 0
-                    ? row.total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                    ? <span className="font-semibold text-primary">{row.total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                     : <span className="text-muted-foreground/40">—</span>}
                 </td>
               </tr>
@@ -458,14 +456,14 @@ export function GridMeterBreakdownTable({
             {cols.map((c) => {
               const colSum = colTotals[c.key] ?? 0;
               return (
-                <td key={c.key} className="px-4 py-2 text-right font-bold font-mono tabular-nums text-xs text-foreground sticky bottom-0 z-20 bg-card/95 backdrop-blur-sm border-t border-border">
+                <td key={c.key} className="px-3 py-2 text-right font-bold font-mono tabular-nums text-xs text-foreground sticky bottom-0 z-20 bg-card/95 backdrop-blur-sm border-t border-border">
                   {colSum > 0
                     ? colSum.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
                     : <span className="text-muted-foreground/40">—</span>}
                 </td>
               );
             })}
-            <td className="px-3 py-2 text-right font-extrabold font-mono tabular-nums text-xs text-primary sticky right-0 bottom-0 z-30 border-l border-t border-border/80 bg-primary-soft">
+            <td className="px-3 py-2 text-right font-bold font-mono tabular-nums text-xs text-primary sticky bottom-0 z-20 bg-card/95 backdrop-blur-sm border-t border-border">
               {grandTotal > 0
                 ? grandTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
                 : <span className="text-muted-foreground/40">—</span>}
