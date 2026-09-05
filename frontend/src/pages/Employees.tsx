@@ -1771,7 +1771,8 @@ function KpiTab({ staff, roles, plants }: { staff: StaffMember[]; roles: any[]; 
     queryFn: async () => {
       const { data } = await supabase.from('chemical_dosing_logs')
         .select('plant_id, log_datetime, recorded_by').gte('log_datetime', since);
-      return (data ?? []) as { plant_id: string; log_datetime: string; recorded_by: string | null }[];
+      return ((data ?? []) as any[])
+        .filter(r => r.recorded_by != null) as { plant_id: string; log_datetime: string; recorded_by: string }[];
     },
     staleTime: 3 * 60_000,
   });

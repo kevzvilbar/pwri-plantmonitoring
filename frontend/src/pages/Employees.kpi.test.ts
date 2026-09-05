@@ -79,4 +79,28 @@ describe('computeEntityOverallScore (Phase 1 KPI scoring redesign)', () => {
     expect(res.scorePct).toBe(100);
     expect(res.tier.tier).toBe('Outstanding');
   });
+
+  it('penalizes score when backfilled/missing readings result in 0% on duty days ("minus on their part")', () => {
+    // Day 1 & 2: Operator was on duty.
+    // On Day 1, operator read everything (100% RO, 100% shared).
+    // On Day 2, operator neglected RO readings (0 readings taken, backfill handled it in DB, so operator RO score is 0).
+    // Shared on Day 2 was 100%.
+    // Day 1: RO 1.0, Shared 1.0
+    // Day 2: RO 0.0, Shared 1.0
+    // RO avg: (1.0 + 0.0) / 2 = 0.5 (50%)
+    // Shared avg: (1.0 + 1.0) / 2 = 1.0 (100%)
+    // Overall: 0.6 * 0.5 + 0.4 * 1.0 = 0.30 + 0.40 = 0.70 -> 70% (Needs Improvement)
+    const ts: EntityTypeScore = {
+      wells: { '2026-09-01': 1.0, '2026-09-02': 1.0 },
+      locator: { '2026-09-01': 1.0, '2026-09-02': 1.0 },
+      ro_train: { '2026-09-01': 1.0, '2026-09-02': 0.0 },
+    };
+
+    const res = computeEntityOverallScore(ts, ['2026-09-01', '2026-09-02'], todayStr);
+    expect(res.roAvg).toBeCloseTo(0.5);
+    expect(res.sharedAvg).toBeCloseTo(1.0);
+    expect(res.scorePct).toBe(70);
+    expect(res.tier.tier).toBe('Meets Target');
+  });
 });
+
