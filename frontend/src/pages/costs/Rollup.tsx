@@ -16,7 +16,7 @@ import { PlantPicker } from '@/components/costs/PlantPicker';
 import { DateRangePicker } from '@/components/ui/date-picker';
 import { useMonthlyOpex, opexVarianceTone } from '@/hooks/useOpexBudget';
 import { fmtNum } from '@/lib/calculations';
-import { format, startOfMonth, endOfMonth, subMonths, parseISO, subDays } from 'date-fns';
+import { format, startOfMonth, endOfMonth, subMonths, parseISO, subDays, eachDayOfInterval } from 'date-fns';
 import { XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend, BarChart, Bar } from 'recharts';
 import { CostInsights } from './CostInsights';
 
@@ -70,17 +70,38 @@ export function Rollup() {
   });
 
   // Reconcile power cost: preserve all historical daily values from production_costs,
-  // but smooth out unlogged multi-day spikes where preceding days had 0 power cost
+  // ensure all calendar dates exist in range (so missing days like Sep 3 are not skipped),
+  // and smooth out unlogged multi-day spikes where preceding days had 0 power cost
   // (e.g. Sep 3/4 at ₱0 followed by Sep 5 lump sum of ~₱760k across 66,243 kWh).
   const rows = useMemo(() => {
-    if (!data || data.length === 0) return [];
-    const out = data.map((x: any) => ({
-      ...x,
-      chem_cost: +x.chem_cost || 0,
-      power_cost: +x.power_cost || 0,
-      production_m3: +x.production_m3 || 0,
-      cost_per_m3: x.cost_per_m3 != null ? +x.cost_per_m3 : null,
-    }));
+    if (!plantId || !from || !to) return [];
+
+    // Create a lookup map of existing production_costs rows by cost_date
+    const byDate = new Map<string, any>();
+    (data ?? []).forEach((x: any) => {
+      if (x.cost_date) byDate.set(x.cost_date, x);
+    });
+
+    // Generate all calendar dates in range so missing days (e.g. Sep 3) are represented
+    let allDates: string[] = [];
+    try {
+      allDates = eachDayOfInterval({ start: parseISO(from), end: parseISO(to) }).map(d => format(d, 'yyyy-MM-dd'));
+    } catch {
+      allDates = (data ?? []).map((x: any) => x.cost_date).filter(Boolean);
+    }
+
+    const out = allDates.map((dStr) => {
+      const x = byDate.get(dStr);
+      return {
+        id: x?.id ?? `synthetic-${dStr}`,
+        plant_id: plantId,
+        cost_date: dStr,
+        chem_cost: x ? (+x.chem_cost || 0) : 0,
+        power_cost: x ? (+x.power_cost || 0) : 0,
+        production_m3: x ? (+x.production_m3 || 0) : 0,
+        cost_per_m3: x?.cost_per_m3 != null ? +x.cost_per_m3 : null,
+      };
+    });
 
     // Find runs of days where power_cost is 0 followed by an accumulated spike
     for (let i = 0; i < out.length; i++) {
@@ -123,7 +144,7 @@ export function Rollup() {
     }
 
     return out;
-  }, [data]);
+  }, [data, plantId, from, to]);
 
   const totals = useMemo(() => {
     const r = rows.reduce((acc: any, x: any) => {
