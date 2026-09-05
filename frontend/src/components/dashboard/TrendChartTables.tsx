@@ -147,9 +147,8 @@ export function PivotTable({
                     <td key={e.id} className={TD}>
                       {val != null ? (
                         reason ? (
-                          // Both value (backfilled or real) and reason note exist
+                          // Both value (backfilled or real) and reason note exist: icon first, then number so decimals align
                           <div className="inline-flex items-center justify-end gap-1 w-full">
-                            <span className={val != null && val < 0 ? 'text-destructive font-semibold' : ''}>{fmtV(val)}</span>
                             <button
                               type="button"
                               onClick={() => setGapTarget({ entityId: e.id, entityLabel: e.label, dateKey: date, existing: reason })}
@@ -159,6 +158,7 @@ export function PivotTable({
                             >
                               <MessageCircleOff className="h-3 w-3" />
                             </button>
+                            <span className={val != null && val < 0 ? 'text-destructive font-semibold' : ''}>{fmtV(val)}</span>
                           </div>
                         ) : (
                           val != null && val < 0 ? <span className="text-destructive font-semibold">{fmtV(val)}</span> : fmtV(val)
