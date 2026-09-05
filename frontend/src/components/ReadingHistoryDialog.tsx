@@ -1365,16 +1365,16 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                           {/* Reading */}
                           <td className="px-3 py-1.5 text-right font-mono-num whitespace-nowrap text-2xs">
                             <span className={isSolar ? 'text-kpi-solar' : 'text-kpi-grid'}>
-                              {curr != null ? fmtNum(curr, 1) : '—'}
+                              {curr != null ? fmtNum(curr, 2) : '—'}
                             </span>
                           </td>
                           {/* Δ raw */}
                           <td className="px-3 py-1.5 text-right font-mono-num whitespace-nowrap text-2xs">
                             {isRepl
-                              ? <span className={isSolar ? 'text-kpi-solar font-medium' : 'text-kpi-grid font-medium'}>0.0</span>
+                              ? <span className={isSolar ? 'text-kpi-solar font-medium' : 'text-kpi-grid font-medium'}>0.00</span>
                               : solarDirect
                                 ? <span className="text-muted-foreground" title="Direct kWh input — no delta to compute">n/a</span>
-                                : rawDelta != null ? <span className={rawDelta < 0 ? 'text-destructive font-semibold' : ''}>{fmtNum(rawDelta, 1)}</span> : '—'
+                                : rawDelta != null ? <span className={rawDelta < 0 ? 'text-destructive font-semibold' : ''}>{fmtNum(rawDelta, 2)}</span> : '—'
                             }
                           </td>
                           {/* × multiplier */}
@@ -1385,7 +1385,7 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                           <td className={['px-3 py-1.5 text-right font-mono-num whitespace-nowrap font-medium text-2xs',
                             effective != null && effective < 0 ? 'text-destructive font-semibold' : isSolar ? 'text-kpi-solar' : 'text-kpi-grid',
                           ].join(' ')}>
-                            {effective != null ? fmtNum(effective, 1) : '—'}
+                            {effective != null ? fmtNum(effective, 2) : '—'}
                           </td>
                           {/* Repl. toggle */}
                           <td className="px-2 py-1.5 text-center whitespace-nowrap">
@@ -1502,13 +1502,13 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                               </td>
                               {/* Reading */}
                               <td className="px-3 py-1 text-right font-mono-num text-kpi-grid text-2xs">
-                                {curr != null ? fmtNum(curr, 1) : '—'}
+                                {curr != null ? fmtNum(curr, 2) : '—'}
                               </td>
                               {/* Δ raw */}
                               <td className="px-3 py-1 text-right font-mono-num text-2xs">
                                 {isGridRepl
-                                  ? <span className="text-kpi-grid font-medium">0.0</span>
-                                  : rawDelta != null ? <span className={rawDelta < 0 ? 'text-destructive font-semibold' : ''}>{fmtNum(rawDelta, 1)}</span> : '—'
+                                  ? <span className="text-kpi-grid font-medium">0.00</span>
+                                  : rawDelta != null ? <span className={rawDelta < 0 ? 'text-destructive font-semibold' : ''}>{fmtNum(rawDelta, 2)}</span> : '—'
                                 }
                               </td>
                               {/* × multiplier */}
@@ -1520,7 +1520,7 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                                 'px-3 py-1 text-right font-mono-num font-medium text-2xs',
                                 effective != null && effective < 0 ? 'text-destructive font-semibold' : 'text-kpi-grid',
                               ].join(' ')}>
-                                {effective != null ? fmtNum(effective, 1) : '—'}
+                                {effective != null ? fmtNum(effective, 2) : '—'}
                               </td>
                               {/* Grid Repl. toggle — only on first meter; shared flag applies to all */}
                               <td className="px-2 py-1 text-center">
@@ -1562,25 +1562,25 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                             </td>
                             {/* Reading */}
                             <td className="px-3 py-1 text-right font-mono-num text-kpi-solar text-2xs">
-                              {solarDisplayVal != null ? fmtNum(solarDisplayVal, 1) : '—'}
+                              {solarDisplayVal != null ? fmtNum(solarDisplayVal, 2) : '—'}
                             </td>
                             {/* Δ Solar */}
                             <td className="px-3 py-1 text-right font-mono-num text-2xs">
                               {isSolarRepl
-                                ? <span className="text-kpi-solar font-medium">0.0</span>
+                                ? <span className="text-kpi-solar font-medium">0.00</span>
                                 : isSolarDirectMode
                                   // Direct kWh: never diff two readings — this IS the
                                   // day's kWh already, not a cumulative meter value.
                                   ? (solarDisplayVal != null
-                                      ? <span className={solarDisplayVal < 0 ? 'text-destructive font-semibold' : 'text-kpi-solar'}>{fmtNum(solarDisplayVal, 1)}</span>
+                                      ? <span className={solarDisplayVal < 0 ? 'text-destructive font-semibold' : 'text-kpi-solar'}>{fmtNum(solarDisplayVal, 2)}</span>
                                       : '—')
                                   : (predecessor?.solar_meter_reading != null && r.solar_meter_reading != null)
                                     ? (() => {
                                         const sDelta = r.solar_meter_reading - predecessor.solar_meter_reading;
-                                        return <span className={sDelta < 0 ? 'text-destructive font-semibold' : 'text-kpi-solar'}>{fmtNum(sDelta, 1)}</span>;
+                                        return <span className={sDelta < 0 ? 'text-destructive font-semibold' : 'text-kpi-solar'}>{fmtNum(sDelta, 2)}</span>;
                                       })()
                                     : r.daily_solar_kwh != null && +r.daily_solar_kwh !== 0
-                                      ? <span className={+r.daily_solar_kwh < 0 ? 'text-destructive font-semibold' : 'text-kpi-solar'}>{fmtNum(+r.daily_solar_kwh, 1)}</span>
+                                      ? <span className={+r.daily_solar_kwh < 0 ? 'text-destructive font-semibold' : 'text-kpi-solar'}>{fmtNum(+r.daily_solar_kwh, 2)}</span>
                                       : '—'
                               }
                             </td>
@@ -1687,15 +1687,15 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                       </td>
 
                       {module === 'locator' && (isDirectMode ? <>
-                        <td className="px-3 py-1.5 text-right font-mono-num whitespace-nowrap">{fmtNum(r.current_reading, 1)}</td>
+                        <td className="px-3 py-1.5 text-right font-mono-num whitespace-nowrap">{fmtNum(r.current_reading, 2)}</td>
                         {replCell}
                         {flagsCell}
                       </> : <>
-                        <td className="px-3 py-1.5 text-right font-mono-num whitespace-nowrap">{fmtNum(r.current_reading, 1)}</td>
+                        <td className="px-3 py-1.5 text-right font-mono-num whitespace-nowrap">{fmtNum(r.current_reading, 2)}</td>
                         <td className="px-3 py-1.5 text-right font-mono-num whitespace-nowrap">
                           {isMeterReplacement
-                            ? <span className="text-kpi-solar font-medium">0.0</span>
-                            : rawDelta != null ? <span className={rawDelta < 0 ? 'text-destructive font-semibold' : ''}>{fmtNum(rawDelta, 1)}</span> : '—'
+                            ? <span className="text-kpi-solar font-medium">0.00</span>
+                            : rawDelta != null ? <span className={rawDelta < 0 ? 'text-destructive font-semibold' : ''}>{fmtNum(rawDelta, 2)}</span> : '—'
                           }
                         </td>
                         {replCell}
@@ -1703,52 +1703,52 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                       </>)}
 
                       {module === 'well' && (isDirectMode ? <>
-                        <td className="px-3 py-1.5 text-right font-mono-num whitespace-nowrap">{fmtNum(r.current_reading, 1)}</td>
+                        <td className="px-3 py-1.5 text-right font-mono-num whitespace-nowrap">{fmtNum(r.current_reading, 2)}</td>
                         {replCell}
                         <td className="px-3 py-1.5 text-right font-mono-num whitespace-nowrap">
-                          {r.power_meter_reading != null ? fmtNum(r.power_meter_reading, 1) : '—'}
+                          {r.power_meter_reading != null ? fmtNum(r.power_meter_reading, 2) : '—'}
                         </td>
                         <td className="px-3 py-1.5 text-right font-mono-num whitespace-nowrap">
-                          {r.tds_ppm != null ? fmtNum(r.tds_ppm, 1) : '—'}
+                          {r.tds_ppm != null ? fmtNum(r.tds_ppm, 2) : '—'}
                         </td>
                         <td className="px-3 py-1.5 text-right font-mono-num whitespace-nowrap">
                           {(r as any).turbidity_ntu != null ? (+((r as any).turbidity_ntu)).toFixed(2) : '—'}
                         </td>
                         <td className="px-3 py-1.5 text-right font-mono-num whitespace-nowrap">
-                          {r.pressure_psi != null ? fmtNum(r.pressure_psi, 1) : '—'}
+                          {r.pressure_psi != null ? fmtNum(r.pressure_psi, 2) : '—'}
                         </td>
                         {flagsCell}
                       </> : <>
-                        <td className="px-3 py-1.5 text-right font-mono-num whitespace-nowrap">{fmtNum(r.current_reading, 1)}</td>
+                        <td className="px-3 py-1.5 text-right font-mono-num whitespace-nowrap">{fmtNum(r.current_reading, 2)}</td>
                         <td className="px-3 py-1.5 text-right font-mono-num whitespace-nowrap">
                           {isMeterReplacement
-                            ? <span className="text-kpi-solar font-medium">0.0</span>
-                            : rawDelta != null ? <span className={rawDelta < 0 ? 'text-destructive font-semibold' : ''}>{fmtNum(rawDelta, 1)}</span> : '—'
+                            ? <span className="text-kpi-solar font-medium">0.00</span>
+                            : rawDelta != null ? <span className={rawDelta < 0 ? 'text-destructive font-semibold' : ''}>{fmtNum(rawDelta, 2)}</span> : '—'
                           }
                         </td>
                         {replCell}
                         <td className="px-3 py-1.5 text-right font-mono-num whitespace-nowrap">
-                          {r.power_meter_reading != null ? fmtNum(r.power_meter_reading, 1) : '—'}
+                          {r.power_meter_reading != null ? fmtNum(r.power_meter_reading, 2) : '—'}
                         </td>
                         <td className="px-3 py-1.5 text-right font-mono-num whitespace-nowrap">
-                          {r.tds_ppm != null ? fmtNum(r.tds_ppm, 1) : '—'}
+                          {r.tds_ppm != null ? fmtNum(r.tds_ppm, 2) : '—'}
                         </td>
                         <td className="px-3 py-1.5 text-right font-mono-num whitespace-nowrap">
                           {(r as any).turbidity_ntu != null ? (+((r as any).turbidity_ntu)).toFixed(2) : '—'}
                         </td>
                         <td className="px-3 py-1.5 text-right font-mono-num whitespace-nowrap">
-                          {r.pressure_psi != null ? fmtNum(r.pressure_psi, 1) : '—'}
+                          {r.pressure_psi != null ? fmtNum(r.pressure_psi, 2) : '—'}
                         </td>
                         {flagsCell}
                       </>)}
 
                       {module === 'blending' && <>
                         <td className="px-3 py-1.5 text-right font-mono-num whitespace-nowrap text-muted-foreground">
-                          {r.raw_meter_reading != null ? fmtNum(r.raw_meter_reading, 1) : '—'}
+                          {r.raw_meter_reading != null ? fmtNum(r.raw_meter_reading, 2) : '—'}
                         </td>
                         <td className="px-3 py-1.5 text-right font-mono-num whitespace-nowrap">
                           <span className={(r.volume_m3 ?? 0) < 0 ? 'text-destructive font-semibold' : ''}>
-                            {fmtNum(r.volume_m3 ?? 0, 1)}
+                            {fmtNum(r.volume_m3 ?? 0, 2)}
                           </span>
                         </td>
                         {replCell}

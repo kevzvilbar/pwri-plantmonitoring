@@ -210,7 +210,7 @@ export function PivotTable({
                   colorClass,
                   isEven ? 'bg-background' : 'bg-muted/10',
                 ].join(' ')}>
-                  {rowTotal !== 0 ? <span className={rowTotal < 0 ? 'text-destructive font-semibold' : ''}>{rowTotal.toLocaleString(undefined, { maximumFractionDigits: 1 })}</span> : '—'}
+                  {rowTotal !== 0 ? <span className={rowTotal < 0 ? 'text-destructive font-semibold' : ''}>{rowTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span> : '—'}
                 </td>
               </tr>
             );
@@ -255,11 +255,11 @@ export function OverviewTable({
   if (metric === 'production' || metric === 'nrw') {
     cols.push({
       key: 'production', label: 'Production (m³)',
-      fmt: (d) => d.production != null ? <span className={d.production < 0 ? 'text-destructive font-semibold' : ''}>{d.production.toLocaleString(undefined, { maximumFractionDigits: 1 })}</span> : '—',
+      fmt: (d) => d.production != null ? <span className={d.production < 0 ? 'text-destructive font-semibold' : ''}>{d.production.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span> : '—',
     });
     cols.push({
       key: 'consumption', label: 'Consumption (m³)',
-      fmt: (d) => d.consumption != null ? <span className={d.consumption < 0 ? 'text-destructive font-semibold' : ''}>{d.consumption.toLocaleString(undefined, { maximumFractionDigits: 1 })}</span> : '—',
+      fmt: (d) => d.consumption != null ? <span className={d.consumption < 0 ? 'text-destructive font-semibold' : ''}>{d.consumption.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span> : '—',
     });
   }
   if (metric === 'nrw') {
@@ -271,7 +271,7 @@ export function OverviewTable({
   if (metric === 'rawwater') {
     cols.push({
       key: 'rawwater', label: 'Raw Water (m³)',
-      fmt: (d) => d.rawwater != null ? <span className={d.rawwater < 0 ? 'text-destructive font-semibold' : ''}>{d.rawwater.toLocaleString(undefined, { maximumFractionDigits: 1 })}</span> : '—',
+      fmt: (d) => d.rawwater != null ? <span className={d.rawwater < 0 ? 'text-destructive font-semibold' : ''}>{d.rawwater.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span> : '—',
     });
   }
   if (metric === 'recovery') {
@@ -288,9 +288,9 @@ export function OverviewTable({
   }
   if (metric === 'pv') {
     cols.push(
-      { key: 'production', label: 'Production (m³)', fmt: (d) => d.production != null ? <span className={d.production < 0 ? 'text-destructive font-semibold' : ''}>{d.production.toLocaleString(undefined, { maximumFractionDigits: 1 })}</span> : '—' },
-      { key: 'kwh', label: 'Grid (kWh)', fmt: (d) => d.kwh != null ? <span className={d.kwh < 0 ? 'text-destructive font-semibold' : ''}>{d.kwh.toLocaleString(undefined, { maximumFractionDigits: 1 })}</span> : '—' },
-      { key: 'solarKwh', label: 'Solar (kWh)', fmt: (d) => (d.solarKwh ?? 0) !== 0 ? <span className={d.solarKwh < 0 ? 'text-destructive font-semibold' : ''}>{d.solarKwh.toLocaleString(undefined, { maximumFractionDigits: 1 })}</span> : '—' },
+      { key: 'production', label: 'Production (m³)', fmt: (d) => d.production != null ? <span className={d.production < 0 ? 'text-destructive font-semibold' : ''}>{d.production.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span> : '—' },
+      { key: 'kwh', label: 'Grid (kWh)', fmt: (d) => d.kwh != null ? <span className={d.kwh < 0 ? 'text-destructive font-semibold' : ''}>{d.kwh.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span> : '—' },
+      { key: 'solarKwh', label: 'Solar (kWh)', fmt: (d) => (d.solarKwh ?? 0) !== 0 ? <span className={d.solarKwh < 0 ? 'text-destructive font-semibold' : ''}>{d.solarKwh.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span> : '—' },
       { key: 'pvGrid', label: 'Grid PV (kWh/m³)', fmt: (d) => d.production > 0 ? (d.kwh / d.production).toFixed(2) : '—' },
       { key: 'pvTotal', label: '(Grid+Solar) PV (kWh/m³)', fmt: (d) => d.production > 0 && (d.kwh + d.solarKwh) > 0 ? ((d.kwh + d.solarKwh) / d.production).toFixed(2) : '—' },
     );
@@ -309,14 +309,14 @@ export function OverviewTable({
         key: 'solarKwh',
         label: '☀ Solar (kWh)',
         fmt: (d) => (d.solarKwh ?? 0) !== 0
-          ? <span className={+d.solarKwh < 0 ? 'text-destructive font-semibold' : ''}>{(+d.solarKwh).toLocaleString(undefined, { maximumFractionDigits: 1 })}</span>
+          ? <span className={+d.solarKwh < 0 ? 'text-destructive font-semibold' : ''}>{(+d.solarKwh).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
           : <span className="text-muted-foreground/40">—</span>,
       },
       {
         key: 'kwh',
         label: '⚡ Grid (kWh)',
         fmt: (d) => (d.kwh ?? 0) !== 0
-          ? <span className={+d.kwh < 0 ? 'text-destructive font-semibold' : ''}>{(+d.kwh).toLocaleString(undefined, { maximumFractionDigits: 1 })}</span>
+          ? <span className={+d.kwh < 0 ? 'text-destructive font-semibold' : ''}>{(+d.kwh).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
           : <span className="text-muted-foreground/40">—</span>,
       },
       {
@@ -325,7 +325,7 @@ export function OverviewTable({
         fmt: (d) => {
           const t = (d.solarKwh ?? 0) + (d.kwh ?? 0);
           return t > 0
-            ? <span className="font-semibold text-primary">{t.toLocaleString(undefined, { maximumFractionDigits: 1 })}</span>
+            ? <span className="font-semibold text-primary">{t.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
             : <span className="text-muted-foreground/40">—</span>;
         },
       },
@@ -416,14 +416,14 @@ export function GridMeterBreakdownTable({
                   return (
                     <td key={c.key} className={TD}>
                       {v != null
-                        ? <span className={v < 0 ? 'text-destructive font-semibold' : ''}>{v.toLocaleString(undefined, { maximumFractionDigits: 1 })}</span>
+                        ? <span className={v < 0 ? 'text-destructive font-semibold' : ''}>{v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                         : <span className="text-muted-foreground/40">—</span>}
                     </td>
                   );
                 })}
                 <td className={TD_TOTAL_COL}>
                   {row && row.total > 0
-                    ? row.total.toLocaleString(undefined, { maximumFractionDigits: 1 })
+                    ? row.total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
                     : <span className="text-muted-foreground/40">—</span>}
                 </td>
               </tr>

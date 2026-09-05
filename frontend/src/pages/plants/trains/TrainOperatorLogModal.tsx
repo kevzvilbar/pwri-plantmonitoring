@@ -250,7 +250,7 @@ export function TrainOperatorLogModal({
   const fmtVal = (v: any, unit = '') =>
     v != null && v !== '' ? (
       <span className="font-mono tabular-nums whitespace-nowrap">
-        {Number(v).toLocaleString(undefined, { maximumFractionDigits: 1 })}
+        {Number(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
         {unit && <span className="text-muted-foreground/60 ml-0.5 text-3xs font-sans">{unit}</span>}
       </span>
     ) : (
@@ -458,10 +458,10 @@ export function TrainOperatorLogModal({
                           // _computed_delta is null (e.g. first-ever reading for this train).
                           const d = r._computed_delta ?? (r.permeate_meter_delta != null ? +r.permeate_meter_delta : null);
                           if (d == null) return <span className="text-muted-foreground/30">—</span>;
-                          if (isRepl) return <span className="text-kpi-solar font-medium">0</span>;
+                          if (isRepl) return <span className="text-kpi-solar font-medium">0.00</span>;
                           return d > 0
-                            ? <span className="text-primary font-semibold">+{d.toLocaleString(undefined,{maximumFractionDigits:1})}</span>
-                            : <span className="text-muted-foreground/40">0</span>;
+                            ? <span className="text-primary font-semibold">+{d.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                            : <span className="text-muted-foreground/40">0.00</span>;
                         })()}
                       </td>
                       {/* Meter replacement toggle — next to Perm Meter / Δ */}

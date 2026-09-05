@@ -931,18 +931,18 @@ function WellDetail({ wellId, onBack }: { wellId: string; onBack: () => void }) 
                       <td className="px-1 py-1 text-muted-foreground whitespace-nowrap">
                         {r.reading_datetime ? format(new Date(r.reading_datetime), 'MMM d HH:mm') : '—'}
                       </td>
-                      <td className="px-1 py-1 text-right font-mono-num">{r.current_reading != null ? fmtNum(+r.current_reading) : '—'}</td>
-                      <td className="px-1 py-1 text-right font-mono-num text-muted-foreground">{delta != null ? fmtNum(delta) : '—'}</td>
+                      <td className="px-1 py-1 text-right font-mono-num">{r.current_reading != null ? fmtNum(+r.current_reading, 2) : '—'}</td>
+                      <td className="px-1 py-1 text-right font-mono-num text-muted-foreground">{delta != null ? fmtNum(delta, 2) : '—'}</td>
                       {well.has_power_meter && (
                         <td className="px-1 py-1 text-right font-mono-num text-warn">
-                          {r.power_meter_reading != null ? fmtNum(+r.power_meter_reading) : '—'}
+                          {r.power_meter_reading != null ? fmtNum(+r.power_meter_reading, 2) : '—'}
                         </td>
                       )}
                       <td className="px-1 py-1 text-right font-mono-num">
-                        {r.tds_ppm != null ? fmtNum(+r.tds_ppm) : '—'}
+                        {r.tds_ppm != null ? fmtNum(+r.tds_ppm, 2) : '—'}
                       </td>
                       <td className="px-1 py-1 text-right font-mono-num">
-                        {r.pressure_psi != null ? fmtNum(+r.pressure_psi) : '—'}
+                        {r.pressure_psi != null ? fmtNum(+r.pressure_psi, 2) : '—'}
                       </td>
                     </tr>
                   );

@@ -139,9 +139,9 @@ export const TD = 'px-3 py-2 text-center font-mono tabular-nums text-xs text-for
 export const TD_TOTAL_ROW = 'px-3 py-2 text-center font-bold font-mono tabular-nums text-xs text-primary bg-primary/5';
 export const TD_TOTAL_COL = 'px-3 py-2 text-center font-bold font-mono tabular-nums text-xs text-primary sticky right-0 z-10 border-l border-border/60 bg-primary-soft/40 w-[90px] min-w-[90px]';
 
-export function fmtV(v: number | null | undefined, dec = 1) {
+export function fmtV(v: number | null | undefined, dec = 2) {
   if (v == null || v === 0) return <span className="text-muted-foreground/40">—</span>;
-  return v.toLocaleString(undefined, { maximumFractionDigits: dec });
+  return v.toLocaleString(undefined, { minimumFractionDigits: dec, maximumFractionDigits: dec });
 }
 
 // ─── Grid-by-meter breakdown (Power Consumption & Energy Mix data summary) ───

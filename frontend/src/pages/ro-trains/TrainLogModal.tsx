@@ -721,7 +721,7 @@ export function TrainLogModal({ trainId, trainLabel, plantId, onClose, initialTa
 
   const fmtVal = (v: any, unit = '') =>
     v != null
-      ? <span className="font-mono tabular-nums whitespace-nowrap">{Number(v).toLocaleString(undefined, { maximumFractionDigits: 1 })}<span className="text-muted-foreground/60 ml-0.5 text-2xs">{unit}</span></span>
+      ? <span className="font-mono tabular-nums whitespace-nowrap">{Number(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}<span className="text-muted-foreground/60 ml-0.5 text-2xs">{unit}</span></span>
       : <span className="text-muted-foreground/30">—</span>;
 
   const exportCSV = () => {
@@ -1046,25 +1046,25 @@ export function TrainLogModal({ trainId, trainLabel, plantId, onClose, initialTa
                         <td className="px-2 py-2 text-right font-mono tabular-nums whitespace-nowrap">{fmtVal(r.chlorine_residual_mg_l, 'mg/L')}</td>
                         <td className="px-2 py-2 text-right font-mono tabular-nums whitespace-nowrap">{fmtVal(r.recovery_pct, '%')}</td>
                         <td className="px-2 py-2 text-right font-mono tabular-nums whitespace-nowrap text-xs">
-                          {r.feed_meter != null ? Number(r.feed_meter).toLocaleString() : <span className="text-muted-foreground/30">—</span>}
+                          {r.feed_meter != null ? Number(r.feed_meter).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : <span className="text-muted-foreground/30">—</span>}
                         </td>
                         <td className="px-2 py-2 text-right font-mono tabular-nums whitespace-nowrap text-xs">
-                          {r.permeate_meter != null ? Number(r.permeate_meter).toLocaleString() : <span className="text-muted-foreground/30">—</span>}
+                          {r.permeate_meter != null ? Number(r.permeate_meter).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : <span className="text-muted-foreground/30">—</span>}
                         </td>
                         <td className={cn('px-2 py-2 text-right font-mono tabular-nums whitespace-nowrap text-xs', isRepl && 'text-kpi-solar')}>
-                          {isRepl ? <span className="text-kpi-solar font-semibold">★ 0</span>
-                            : delta != null ? <span className={+delta < 0 ? 'text-destructive font-semibold' : ''}>{Number(delta).toLocaleString()}<span className="text-muted-foreground/60 ml-0.5 text-3xs">m³</span></span>
+                          {isRepl ? <span className="text-kpi-solar font-semibold">★ 0.00</span>
+                            : delta != null ? <span className={+delta < 0 ? 'text-destructive font-semibold' : ''}>{Number(delta).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}<span className="text-muted-foreground/60 ml-0.5 text-3xs">m³</span></span>
                             : <span className="text-muted-foreground/30">—</span>}
                         </td>
                         <td className="px-2 py-2 text-right font-mono tabular-nums whitespace-nowrap text-xs">
-                          {r.reject_meter != null ? Number(r.reject_meter).toLocaleString() : <span className="text-muted-foreground/30">—</span>}
+                          {r.reject_meter != null ? Number(r.reject_meter).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : <span className="text-muted-foreground/30">—</span>}
                         </td>
                         <td className={cn('px-2 py-2 text-right font-mono tabular-nums whitespace-nowrap text-xs', r.is_reject_meter_replacement && 'text-kpi-solar')}>
                           {(() => {
                             const isRejRepl = !!(r.is_reject_meter_replacement);
                             const rejDelta  = r._computed_rej_delta ?? (r.reject_meter_delta != null ? +r.reject_meter_delta : null);
-                            if (isRejRepl)         return <span className="text-kpi-solar font-semibold">★ 0</span>;
-                            if (rejDelta != null)   return <span className={+rejDelta < 0 ? 'text-destructive font-semibold' : ''}>{Number(rejDelta).toLocaleString()}<span className="text-muted-foreground/60 ml-0.5 text-3xs">m³</span></span>;
+                            if (isRejRepl)         return <span className="text-kpi-solar font-semibold">★ 0.00</span>;
+                            if (rejDelta != null)   return <span className={+rejDelta < 0 ? 'text-destructive font-semibold' : ''}>{Number(rejDelta).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}<span className="text-muted-foreground/60 ml-0.5 text-3xs">m³</span></span>;
                             return <span className="text-muted-foreground/30">—</span>;
                           })()}
                         </td>
