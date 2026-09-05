@@ -192,7 +192,7 @@ export function useTrendChartQueries({
       if (!locatorIds.length) return [];
       const { data, error } = await supabase
         .from('locator_readings')
-        .select('locator_id,daily_volume,current_reading,previous_reading,reading_datetime,is_meter_replacement,norm_status')
+        .select('locator_id,daily_volume,current_reading,previous_reading,reading_datetime,is_meter_replacement,norm_status,is_estimated')
         .in('locator_id', locatorIds)
         .gte('reading_datetime', startISO)
         .lte('reading_datetime', endISO)
@@ -218,12 +218,12 @@ export function useTrendChartQueries({
       const { data, error } = await (supabase.from('product_meter_readings' as never) as any)
         // Bug fix: include daily_volume so computeEntityDeltas can use it directly,
         // matching how locator_readings are handled (avoids boundary-read delta = 0).
-        .select('meter_id,daily_volume,current_reading,previous_reading,reading_datetime,is_meter_replacement,plant_id,norm_status')
+        .select('meter_id,daily_volume,current_reading,previous_reading,reading_datetime,is_meter_replacement,plant_id,norm_status,is_estimated')
         .in('plant_id', plantIds)
         .gte('reading_datetime', startISO)
         .lte('reading_datetime', endISO);
       if (error) {
-        if (error.message?.includes('is_meter_replacement')) {
+        if (error.message?.includes('is_meter_replacement') || error.message?.includes('is_estimated')) {
           const { data: d2, error: e2 } = await (supabase.from('product_meter_readings' as never) as any)
             .select('meter_id,daily_volume,current_reading,previous_reading,reading_datetime,plant_id,norm_status')
             .in('plant_id', plantIds)
@@ -262,10 +262,11 @@ export function useTrendChartQueries({
         is_meter_replacement?: boolean | null;
         plant_id: string;
         norm_status?: string | null;
+        is_estimated?: boolean | null;
       };
       const inWindow = await supaSelect<WellReadingRow>(
         'well_readings',
-        'well_id,current_reading,previous_reading,daily_volume,reading_datetime,is_meter_replacement,plant_id,norm_status',
+        'well_id,current_reading,previous_reading,daily_volume,reading_datetime,is_meter_replacement,plant_id,norm_status,is_estimated',
       );
 
       // Resolve wells for these plants to fetch pre-window baseline rows
@@ -281,7 +282,7 @@ export function useTrendChartQueries({
           wellIds.map(async (wid) => {
             const { data } = await supabase
               .from('well_readings')
-              .select('well_id,current_reading,previous_reading,daily_volume,reading_datetime,is_meter_replacement,plant_id,norm_status')
+              .select('well_id,current_reading,previous_reading,daily_volume,reading_datetime,is_meter_replacement,plant_id,norm_status,is_estimated')
               .eq('well_id', wid)
               .lt('reading_datetime', startISO)
               .order('reading_datetime', { ascending: false })

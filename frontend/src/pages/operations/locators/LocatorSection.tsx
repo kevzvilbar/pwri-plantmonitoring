@@ -1023,6 +1023,24 @@ function LocatorRow({
           is_meter_replacement: !!meterReplacePending,
         };
 
+    // Purge any orphan auto-backfill estimate on the same date so it cannot coexist with the human reading
+    if (!editingId) {
+      try {
+        const dt = new Date(customDt);
+        const dayStart = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate(), 0, 0, 0, 0).toISOString();
+        const dayEnd = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate(), 23, 59, 59, 999).toISOString();
+        await supabase
+          .from('locator_readings')
+          .delete()
+          .eq('locator_id', locator.id)
+          .eq('is_estimated', true)
+          .gte('reading_datetime', dayStart)
+          .lte('reading_datetime', dayEnd);
+      } catch (err) {
+        console.warn('[Operations] Failed to purge orphan estimate on same day:', err);
+      }
+    }
+
     const { data: savedRow, error } = editingId
       ? await (supabase.from('locator_readings').update(payload).eq('id', editingId).select('id,norm_status,current_reading,previous_reading,daily_volume').single() as any)
       : await (supabase.from('locator_readings').insert(payload).select('id,norm_status,current_reading,previous_reading,daily_volume').single() as any);

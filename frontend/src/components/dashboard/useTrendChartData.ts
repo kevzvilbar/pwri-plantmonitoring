@@ -14,6 +14,7 @@
 import { useMemo } from 'react';
 import { calc } from '@/lib/calculations';
 import { format } from 'date-fns';
+import { sanitizeReadings } from '@/lib/readingSanitizer';
 import { fillDateRange, interpolateMissingGridMeterReadings } from './TrendChartPivotShared';
 import { buildTrendRows, type Granularity, type TrendFieldConfig } from './TrendChartAggregate';
 
@@ -174,9 +175,7 @@ export function useTrendChartData({
       const skipAfterRepl = options?.skipAfterRepl ?? false;
       const directModeIds = options?.directModeIds;
 
-      const sorted = [...readings].sort(
-        (a, b) => new Date(a.reading_datetime).getTime() - new Date(b.reading_datetime).getTime(),
-      );
+      const sorted = sanitizeReadings(readings, entityKeyField);
 
       const lastReading = new Map<string, number>(); // entityKey → last current_reading
       const afterRepl   = new Set<string>();          // entities whose next row is zeroed

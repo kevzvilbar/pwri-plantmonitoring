@@ -1,3 +1,5 @@
+import { sanitizeReadings } from './readingSanitizer';
+
 // ─── Shared meter-replacement-aware delta helper ────────────────────────────
 // This is a byte-for-byte copy of the local `computeEntityDeltas` function
 // defined inside TrendChart.tsx's `chartData` useMemo (the function backing
@@ -64,11 +66,7 @@ export function computeEntityDeltas(
   const skipAfterRepl = options?.skipAfterRepl ?? false;
   const directModeIds = options?.directModeIds;
 
-  const sorted = [...readings]
-    .filter((r) => r.norm_status !== 'retracted')
-    .sort(
-      (a, b) => new Date(a.reading_datetime).getTime() - new Date(b.reading_datetime).getTime(),
-    );
+  const sorted = sanitizeReadings(readings, entityKeyField);
 
   const lastReading = new Map<string, number>(); // entityKey → last current_reading
   const afterRepl   = new Set<string>();          // entities whose next row is zeroed

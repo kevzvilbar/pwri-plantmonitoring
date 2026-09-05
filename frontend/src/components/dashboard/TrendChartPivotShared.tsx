@@ -14,6 +14,7 @@ import { useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
+import { sanitizeReadings } from '@/lib/readingSanitizer';
 
 /** Resolve a single reading row → delta volume (m³). */
 export function resolveReadingDelta(r: any): number {
@@ -50,7 +51,11 @@ export function buildEntityPivot(
   // Readings must be sorted asc by reading_datetime for this to be correct.
   const lastSeen = new Map<string, number>();
 
-  readings.forEach((r) => {
+  // Sanitize readings: exclude retracted rows, discard orphan estimates on dates
+  // where confirmed human readings exist, and discard non-monotonic backward estimates.
+  const cleanReadings = sanitizeReadings(readings, entityField);
+
+  cleanReadings.forEach((r) => {
     if (r.is_meter_replacement) {
       // Reset sequential tracking on meter replacement so the new meter's
       // first reading doesn't produce a huge delta vs the old meter.

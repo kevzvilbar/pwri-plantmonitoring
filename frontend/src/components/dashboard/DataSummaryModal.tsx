@@ -15,6 +15,7 @@ import {
   CalendarDays, Loader2,
 } from 'lucide-react';
 import { deltaCache, hydrateFromStoredDeltas } from '@/lib/deltaCache';
+import { sanitizeReadings } from '@/lib/readingSanitizer';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
@@ -79,7 +80,8 @@ export function computePivotFromReadingsNoCache(
   directModeIds?: Set<string>,
 ): Map<string, Map<string, number>> {
   const byEntity = new Map<string, any[]>();
-  readings.filter((r) => r.norm_status !== 'retracted').forEach((r) => {
+  const cleanReadings = sanitizeReadings(readings, entityKeyField);
+  cleanReadings.forEach((r) => {
     const k = r[entityKeyField] ?? '__';
     if (!byEntity.has(k)) byEntity.set(k, []);
     byEntity.get(k)!.push(r);
@@ -87,9 +89,7 @@ export function computePivotFromReadingsNoCache(
   const pivot = new Map<string, Map<string, number>>();
   byEntity.forEach((rows, entityKey) => {
     const isDirect = directModeIds?.has(entityKey) ?? false;
-    const sorted = [...rows].sort(
-      (a, b) => new Date(a.reading_datetime).getTime() - new Date(b.reading_datetime).getTime(),
-    );
+    const sorted = rows; // already sorted and sanitized by sanitizeReadings
     const lastReading = new Map<string, number>();
     const afterRepl   = new Set<string>();
     sorted.forEach((r) => {
@@ -180,7 +180,8 @@ function computePivotFromReadings(
   directModeIds?: Set<string>,
 ): Map<string, Map<string, number>> {
   const byEntity = new Map<string, any[]>();
-  readings.filter((r) => r.norm_status !== 'retracted').forEach((r) => {
+  const cleanReadings = sanitizeReadings(readings, entityKeyField);
+  cleanReadings.forEach((r) => {
     const k = r[entityKeyField] ?? '__';
     if (!byEntity.has(k)) byEntity.set(k, []);
     byEntity.get(k)!.push(r);
@@ -188,9 +189,7 @@ function computePivotFromReadings(
   const pivot = new Map<string, Map<string, number>>();
   byEntity.forEach((rows, entityKey) => {
     const isDirect = directModeIds?.has(entityKey) ?? false;
-    const sorted = [...rows].sort(
-      (a, b) => new Date(a.reading_datetime).getTime() - new Date(b.reading_datetime).getTime(),
-    );
+    const sorted = rows; // already sorted and sanitized by sanitizeReadings
     const lastReading = new Map<string, number>();
     const afterRepl   = new Set<string>();
     sorted.forEach((r) => {

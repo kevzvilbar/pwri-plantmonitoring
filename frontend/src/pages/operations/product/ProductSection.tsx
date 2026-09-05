@@ -616,6 +616,23 @@ function ProductMeterRow({
     }
     setSaving(true);
     const dt = new Date(customDt).toISOString();
+
+    // Purge any orphan auto-backfill estimate on the same date so it cannot coexist with the human reading
+    try {
+      const dayObj = new Date(customDt);
+      const dayStart = new Date(dayObj.getFullYear(), dayObj.getMonth(), dayObj.getDate(), 0, 0, 0, 0).toISOString();
+      const dayEnd = new Date(dayObj.getFullYear(), dayObj.getMonth(), dayObj.getDate(), 23, 59, 59, 999).toISOString();
+      await supabase
+        .from('product_meter_readings' as any)
+        .delete()
+        .eq('meter_id', meter.id)
+        .eq('is_estimated', true)
+        .gte('reading_datetime', dayStart)
+        .lte('reading_datetime', dayEnd);
+    } catch (err) {
+      console.warn('[Operations] Failed to purge orphan estimate on same day:', err);
+    }
+
     // Bug fix: persist daily_volume so Dashboard/TrendChart can sum it directly,
     // mirroring the same fix already applied to locator_readings and well_readings.
     const dailyVol = previous != null ? cur - previous : null;
