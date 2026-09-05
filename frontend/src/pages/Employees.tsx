@@ -1374,68 +1374,106 @@ export function getAppraisalTier(scorePct: number): AppraisalTier {
   return APPRAISAL_TIERS[APPRAISAL_TIERS.length - 1];
 }
 
-// Computes overall weighted KPI score across all active categories and days in range
+// Each input type column definition — same 7-category taxonomy as the
+// app's kpi-* dashboard tokens (Wells/Locator/RO/Meter/Solar/Grid/Chem),
+// classified into shared facility duties and individual shift duties.
+export const INPUT_COLS = [
+  { key: 'wells',         label: 'Wells',       full: 'Wells Reading',    color: 'hsl(var(--kpi-wells))',   type: 'shared' },
+  { key: 'locator',       label: 'Locator',     full: 'Locator Reading',  color: 'hsl(var(--kpi-locator))', type: 'shared' },
+  { key: 'ro_train',      label: 'RO Train',    full: 'RO Train (hourly)',color: 'hsl(var(--kpi-ro))',      type: 'individual' },
+  { key: 'product_meter', label: 'Prod. Meter', full: 'Product Meter',    color: 'hsl(var(--kpi-meter))',   type: 'shared' },
+  { key: 'solar',         label: 'Solar',       full: 'Solar Reading',    color: 'hsl(var(--kpi-solar))',   type: 'shared' },
+  { key: 'grid',          label: 'Grid',        full: 'Grid Reading',     color: 'hsl(var(--kpi-grid))',    type: 'shared' },
+  { key: 'chemicals',     label: 'Chemicals',   full: 'Chemical Dosing',  color: 'hsl(var(--kpi-chem))',    type: 'shared' },
+] as const;
+
+export type InputColKey = typeof INPUT_COLS[number]['key'];
+
+// Compliance 0–1 (null = N/A for this plant/type combination)
+export type DayScore2 = number | null;
+export type ScoreMap2 = Record<string, DayScore2>;                       // dayStr → score
+export type EntityTypeScore = Partial<Record<InputColKey, ScoreMap2>>;   // inputKey → ScoreMap
+export type ScoreMatrix = Record<string, EntityTypeScore>;               // key → scores
+
+export const SHARED_COLS: InputColKey[] = ['wells', 'locator', 'product_meter', 'solar', 'grid', 'chemicals'];
+
+// Computes overall weighted KPI score:
+// 60% Individual (RO Train diligence) + 40% Shared (average of the 6 facility-shared categories).
+// - If both exist: 0.6 * roAvg + 0.4 * sharedAvg
+// - If only one exists: 100% weight on whichever exists (e.g. facility with 0 RO trains)
+// - If both null: returns N/A (totalValid: 0, scorePct: 0) to be excluded from rollups
 export function computeEntityOverallScore(ts: EntityTypeScore, days: string[], todayStr: string): {
   scorePct: number;
   totalValid: number;
   totalComplete: number;
   tier: AppraisalTier;
+  sharedAvg: number | null;
+  roAvg: number | null;
 } {
-  let scoreSum = 0;
-  let scoreCount = 0;
+  const catAvgs: number[] = [];
   let totalComplete = 0;
+  let totalValid = 0;
 
-  for (const col of INPUT_COLS) {
-    const dayMap = ts[col.key];
+  for (const colKey of SHARED_COLS) {
+    const dayMap = ts[colKey];
     if (!dayMap) continue;
+    const validVals: number[] = [];
     for (const day of days) {
       const s = dayMap[day];
-      if (s === null || s === undefined) continue;
-      scoreCount++;
-      const val = typeof s === 'number' ? Math.min(1, Math.max(0, s)) : 0;
-      scoreSum += val;
-      if (val >= 1.0) totalComplete++;
+      if (typeof s === 'number') {
+        totalValid++;
+        const val = Math.min(1, Math.max(0, s));
+        validVals.push(val);
+        if (val >= 1.0) totalComplete++;
+      }
+    }
+    if (validVals.length > 0) {
+      catAvgs.push(validVals.reduce((a, b) => a + b, 0) / validVals.length);
     }
   }
 
-  const scorePct = scoreCount > 0 ? Math.round((scoreSum / scoreCount) * 100) : 0;
+  const roDayMap = ts.ro_train;
+  const roVals: number[] = [];
+  if (roDayMap) {
+    for (const day of days) {
+      const s = roDayMap[day];
+      if (typeof s === 'number') {
+        totalValid++;
+        const val = Math.min(1, Math.max(0, s));
+        roVals.push(val);
+        if (val >= 1.0) totalComplete++;
+      }
+    }
+  }
+
+  const sharedAvg = catAvgs.length > 0 ? catAvgs.reduce((a, b) => a + b, 0) / catAvgs.length : null;
+  const roAvg = roVals.length > 0 ? roVals.reduce((a, b) => a + b, 0) / roVals.length : null;
+
+  let finalScore: number | null = null;
+  if (roAvg !== null && sharedAvg !== null) {
+    finalScore = 0.6 * roAvg + 0.4 * sharedAvg;
+  } else if (roAvg !== null) {
+    finalScore = roAvg;
+  } else if (sharedAvg !== null) {
+    finalScore = sharedAvg;
+  }
+
+  const scorePct = finalScore !== null ? Math.round(finalScore * 100) : 0;
   return {
     scorePct,
-    totalValid: scoreCount,
+    totalValid,
     totalComplete,
     tier: getAppraisalTier(scorePct),
+    sharedAvg,
+    roAvg,
   };
 }
 
-// Each input type column definition — same 7-category taxonomy as the
-// app's kpi-* dashboard tokens (Wells/Locator/RO/Meter/Solar/Grid/Chem),
-// so a reading type reads as the same color here as it does everywhere
-// else in the app.
-const INPUT_COLS = [
-  { key: 'wells',         label: 'Wells',       full: 'Wells Reading',    color: 'hsl(var(--kpi-wells))' },
-  { key: 'locator',       label: 'Locator',     full: 'Locator Reading',  color: 'hsl(var(--kpi-locator))' },
-  { key: 'ro_train',      label: 'RO Train',    full: 'RO Train (hourly)',color: 'hsl(var(--kpi-ro))' },
-  { key: 'product_meter', label: 'Prod. Meter', full: 'Product Meter',    color: 'hsl(var(--kpi-meter))' },
-  { key: 'solar',         label: 'Solar',       full: 'Solar Reading',    color: 'hsl(var(--kpi-solar))' },
-  { key: 'grid',          label: 'Grid',        full: 'Grid Reading',     color: 'hsl(var(--kpi-grid))' },
-  { key: 'chemicals',     label: 'Chemicals',   full: 'Chemical Dosing',  color: 'hsl(var(--kpi-chem))' },
-] as const;
-
-type InputColKey = typeof INPUT_COLS[number]['key'];
-
-// Compliance 0–1 (null = N/A for this plant/type combination)
-type DayScore2 = number | null;
-type ScoreMap2 = Record<string, DayScore2>;                       // dayStr → score
-type EntityTypeScore = Partial<Record<InputColKey, ScoreMap2>>;   // inputKey → ScoreMap
-type ScoreMatrix = Record<string, EntityTypeScore>;               // key → scores
-
-// How many RO Train readings are expected per train per day. Reads
-// `plant.ro_hourly_target` if a plant row has one set (future-proofing for a
-// per-plant cadence, once that column exists); otherwise falls back to the
-// default below. Verify this against your actual SOP — hourly (24/day) is a
-// strict bar, and if real practice is e.g. every 2–4h the default should be
-// lowered or made configurable per plant.
+// Plant-level target: 24 readings/train/day (full 3 shifts)
 const DEFAULT_RO_HOURLY_TARGET = 24;
+// Individual operator shift target: ~8 readings/train per 8-hour shift
+const DEFAULT_RO_OPERATOR_SHIFT_TARGET = 8;
+
 function roTargetForPlant(plant: { ro_hourly_target?: number | string | null } | null | undefined): number {
   const v = Number(plant?.ro_hourly_target);
   return Number.isFinite(v) && v > 0 ? v : DEFAULT_RO_HOURLY_TARGET;
@@ -1489,7 +1527,8 @@ function MiniHeatmap({ scores, days, label, todayStr, onHover }: {
 
   if (isSingleDay) {
     const day = days[0];
-    const score = scores[day] ?? 0;
+    const raw = scores[day];
+    const score: DayScore2 = raw === undefined ? null : raw;
     const isToday = day === todayStr;
     const status = scoreStatus(score, isToday);
     const pct = score === null ? null : Math.round((score as number) * 100);
@@ -1501,7 +1540,7 @@ function MiniHeatmap({ scores, days, label, todayStr, onHover }: {
           className="flex items-center justify-center rounded-md font-bold text-2xs text-white cursor-default select-none transition-transform hover:scale-105"
           style={{ background: color, width: 44, height: 22, opacity: status === 'na' ? 0.5 : 1 }}
           onMouseEnter={(e) => onHover(
-            status === 'na' ? `${label}\nNot applicable`
+            status === 'na' ? `${label}\nOff duty / Not applicable`
               : status === 'pending' ? `${label} — ${day}\n⏳ Pending — day in progress`
               : `${label} — ${day}\n${pct === 100 ? '✓ Complete' : pct === 0 ? '✗ Missed' : pct + '% done'}`,
             e
@@ -1520,11 +1559,11 @@ function MiniHeatmap({ scores, days, label, todayStr, onHover }: {
     <div className="flex items-center gap-0.5 px-1.5 py-1.5">
       {days.map((day) => {
         const raw = scores[day];
-        const score: DayScore2 = raw === undefined ? 0 : raw;
+        const score: DayScore2 = raw === undefined ? null : raw;
         const isToday = day === todayStr;
         const status = scoreStatus(score, isToday);
         const pct = score === null ? null : Math.round((score as number) * 100);
-        const tooltipText = `${label} — ${day}\n${status === 'na' ? 'N/A' : status === 'pending' ? 'Pending — day in progress' : pct + '% complete'}`;
+        const tooltipText = `${label} — ${day}\n${status === 'na' ? 'Off duty / N/A' : status === 'pending' ? 'Pending — day in progress' : pct + '% complete'}`;
         return (
           <div
             key={day}
@@ -1552,6 +1591,10 @@ function KpiLegend2() {
           <span className="text-2xs text-muted-foreground">{cfg.label}</span>
         </div>
       ))}
+      <span className="text-muted-foreground/40 hidden sm:inline">·</span>
+      <span className="text-2xs text-muted-foreground">
+        Individual weighting: <strong className="text-foreground">60% RO Train</strong> (~8/shift) + <strong className="text-foreground">40% Shared Duties</strong> (facility compliance on active shift days)
+      </span>
     </div>
   );
 }
@@ -1761,14 +1804,11 @@ function KpiTab({ staff, roles, plants }: { staff: StaffMember[]; roles: any[]; 
     const team: ScoreMatrix = {};
     const daySet = new Set(days);
 
-    // op:plant:day → Set/count   (individual — requires recorded_by)
-    const wellMap:  Record<string, Set<string>> = {};
-    const locMap:   Record<string, Set<string>> = {};
-    const roMap:    Record<string, number>       = {};
-    const meterMap: Record<string, Set<string>> = {};
-    const solarMap: Record<string, number>       = {};
-    const gridMap:  Record<string, number>       = {};
-    const chemMap:  Record<string, number>       = {};
+    // Track active days per operator at plant: `${opId}:${plantId}:${day}` (Attendance proxy)
+    const opDutySet = new Set<string>();
+
+    // op:plant:day:train -> count (individual RO train readings)
+    const roMap: Record<string, number> = {};
 
     // plant:day → Set/count   (team coverage — attribution-agnostic)
     const twellMap:  Record<string, Set<string>> = {};
@@ -1784,9 +1824,9 @@ function KpiTab({ staff, roles, plants }: { staff: StaffMember[]; roles: any[]; 
       if (!daySet.has(day)) return;
       const tk = `${r.plant_id}:${day}`;
       (twellMap[tk] = twellMap[tk] ?? new Set()).add(r.well_id);
-      if (!r.recorded_by) return;
-      const k = `${r.recorded_by}:${r.plant_id}:${day}`;
-      (wellMap[k] = wellMap[k] ?? new Set()).add(r.well_id);
+      if (r.recorded_by) {
+        opDutySet.add(`${r.recorded_by}:${r.plant_id}:${day}`);
+      }
     });
 
     locReadings.forEach((r) => {
@@ -1794,9 +1834,9 @@ function KpiTab({ staff, roles, plants }: { staff: StaffMember[]; roles: any[]; 
       if (!daySet.has(day)) return;
       const tk = `${r.plant_id}:${day}`;
       (tlocMap[tk] = tlocMap[tk] ?? new Set()).add(r.locator_id);
-      if (!r.recorded_by) return;
-      const k = `${r.recorded_by}:${r.plant_id}:${day}`;
-      (locMap[k] = locMap[k] ?? new Set()).add(r.locator_id);
+      if (r.recorded_by) {
+        opDutySet.add(`${r.recorded_by}:${r.plant_id}:${day}`);
+      }
     });
 
     roReadings.forEach((r) => {
@@ -1804,9 +1844,11 @@ function KpiTab({ staff, roles, plants }: { staff: StaffMember[]; roles: any[]; 
       if (!daySet.has(day)) return;
       const tk = `${r.plant_id}:${day}:${r.train_id}`;
       troMap[tk] = (troMap[tk] ?? 0) + 1;
-      if (!r.recorded_by) return;
-      const k = `${r.recorded_by}:${r.plant_id}:${day}:${r.train_id}`;
-      roMap[k] = (roMap[k] ?? 0) + 1;
+      if (r.recorded_by) {
+        opDutySet.add(`${r.recorded_by}:${r.plant_id}:${day}`);
+        const k = `${r.recorded_by}:${r.plant_id}:${day}:${r.train_id}`;
+        roMap[k] = (roMap[k] ?? 0) + 1;
+      }
     });
 
     meterReadings.forEach((r) => {
@@ -1814,9 +1856,9 @@ function KpiTab({ staff, roles, plants }: { staff: StaffMember[]; roles: any[]; 
       if (!daySet.has(day)) return;
       const tk = `${r.plant_id}:${day}`;
       (tmeterMap[tk] = tmeterMap[tk] ?? new Set()).add(r.meter_id);
-      if (!r.recorded_by) return;
-      const k = `${r.recorded_by}:${r.plant_id}:${day}`;
-      (meterMap[k] = meterMap[k] ?? new Set()).add(r.meter_id);
+      if (r.recorded_by) {
+        opDutySet.add(`${r.recorded_by}:${r.plant_id}:${day}`);
+      }
     });
 
     powerReadings.forEach((r) => {
@@ -1825,10 +1867,9 @@ function KpiTab({ staff, roles, plants }: { staff: StaffMember[]; roles: any[]; 
       const tk = `${r.plant_id}:${day}`;
       if (r.daily_solar_kwh !== null) tsolarMap[tk] = (tsolarMap[tk] ?? 0) + 1;
       if (r.daily_grid_kwh  !== null) tgridMap[tk]  = (tgridMap[tk]  ?? 0) + 1;
-      if (!r.recorded_by) return;
-      const k = `${r.recorded_by}:${r.plant_id}:${day}`;
-      if (r.daily_solar_kwh !== null) solarMap[k] = (solarMap[k] ?? 0) + 1;
-      if (r.daily_grid_kwh  !== null) gridMap[k]  = (gridMap[k]  ?? 0) + 1;
+      if (r.recorded_by) {
+        opDutySet.add(`${r.recorded_by}:${r.plant_id}:${day}`);
+      }
     });
 
     chemReadings.forEach((r) => {
@@ -1836,9 +1877,9 @@ function KpiTab({ staff, roles, plants }: { staff: StaffMember[]; roles: any[]; 
       if (!daySet.has(day)) return;
       const tk = `${r.plant_id}:${day}`;
       tchemMap[tk] = (tchemMap[tk] ?? 0) + 1;
-      if (!r.recorded_by) return;
-      const k = `${r.recorded_by}:${r.plant_id}:${day}`;
-      chemMap[k] = (chemMap[k] ?? 0) + 1;
+      if (r.recorded_by) {
+        opDutySet.add(`${r.recorded_by}:${r.plant_id}:${day}`);
+      }
     });
 
     blendingReadings.forEach((r) => {
@@ -1846,9 +1887,9 @@ function KpiTab({ staff, roles, plants }: { staff: StaffMember[]; roles: any[]; 
       if (!daySet.has(day)) return;
       const tk = `${r.plant_id}:${day}`;
       (twellMap[tk] = twellMap[tk] ?? new Set()).add(r.well_id);
-      if (!r.recorded_by) return;
-      const k = `${r.recorded_by}:${r.plant_id}:${day}`;
-      (wellMap[k] = wellMap[k] ?? new Set()).add(r.well_id);
+      if (r.recorded_by) {
+        opDutySet.add(`${r.recorded_by}:${r.plant_id}:${day}`);
+      }
     });
 
     // ── Team coverage: one entry per plant ──
@@ -1888,42 +1929,57 @@ function KpiTab({ staff, roles, plants }: { staff: StaffMember[]; roles: any[]; 
       team[plantId] = ts;
     });
 
-    // ── Individual activity: one entry per operator × plant, still scored
-    //    against the FULL plant target (unchanged philosophy — see the info
-    //    banner and chat discussion for the caveat this carries) ──
+    // ── Individual activity: one entry per operator × plant ──
+    // Phase 1 Redesign:
+    // 1. Shared categories (wells, locator, product_meter, solar, grid, chemicals)
+    //    inherit team coverage for that plant on days the operator was on duty.
+    // 2. Individual category (ro_train) measures the operator's own diligence
+    //    against an 8-reading shift target.
+    // 3. Attendance proxy: on days with no recorded activity by this operator at
+    //    this plant, all categories are null (excluded from denominator / off-duty),
+    //    preventing rest days from dragging down appraisal KPI.
     operators.forEach((op) => {
       (op.plant_assignments ?? []).forEach((plantId) => {
         const matKey = `${op.id}:${plantId}`;
-        const plant = plantById[plantId];
-        const numWells  = wellsPerPlant[plantId]    ?? 0;
-        const numLocs   = locatorsPerPlant[plantId] ?? 0;
         const trainIds  = trainsPerPlant[plantId]   ?? [];
-        const numMeters = metersPerPlant[plantId]   ?? 0;
-        const hasSolar  = plantFlags[plantId]?.has_solar ?? false;
-        const hasGrid   = plantFlags[plantId]?.has_grid  ?? true;
-        const roTarget  = roTargetForPlant(plant);
+        const plantTeam = team[plantId];
 
-        const ts: EntityTypeScore = { wells: {}, locator: {}, ro_train: {}, product_meter: {}, solar: {}, grid: {}, chemicals: {} };
+        const ts: EntityTypeScore = {
+          wells: {}, locator: {}, ro_train: {}, product_meter: {}, solar: {}, grid: {}, chemicals: {},
+        };
 
         days.forEach((day) => {
           const isToday = day === todayStr;
-          const k = `${op.id}:${plantId}:${day}`;
+          const dutyKey = `${op.id}:${plantId}:${day}`;
+          const isOnDuty = opDutySet.has(dutyKey);
 
-          ts.wells![day]   = numWells  === 0 ? null : Math.min(1, (wellMap[k]?.size  ?? 0) / numWells);
-          ts.locator![day] = numLocs   === 0 ? null : Math.min(1, (locMap[k]?.size   ?? 0) / numLocs);
+          if (!isOnDuty) {
+            // Off-duty / rest day: exclude from denominators
+            SHARED_COLS.forEach((col) => {
+              ts[col]![day] = null;
+            });
+            ts.ro_train![day] = null;
+            return;
+          }
 
+          // Operator was on duty: credit plant-wide shared monitoring
+          SHARED_COLS.forEach((col) => {
+            ts[col]![day] = plantTeam?.[col]?.[day] ?? null;
+          });
+
+          // RO Train: measure personal diligence against shift target (8 readings/shift)
           if (trainIds.length === 0) {
             ts.ro_train![day] = null;
           } else {
-            const target = isToday ? Math.max(1, Math.ceil(roTarget * elapsedFraction)) : roTarget;
-            const perTrain = trainIds.map((tid) => Math.min(1, (roMap[`${k}:${tid}`] ?? 0) / target));
+            const shiftTarget = isToday
+              ? Math.max(1, Math.ceil(DEFAULT_RO_OPERATOR_SHIFT_TARGET * elapsedFraction))
+              : DEFAULT_RO_OPERATOR_SHIFT_TARGET;
+            const perTrain = trainIds.map((tid) => {
+              const count = roMap[`${dutyKey}:${tid}`] ?? 0;
+              return Math.min(1, count / shiftTarget);
+            });
             ts.ro_train![day] = perTrain.reduce((a, b) => a + b, 0) / perTrain.length;
           }
-
-          ts.product_meter![day] = numMeters === 0 ? null : Math.min(1, (meterMap[k]?.size ?? 0) / numMeters);
-          ts.solar![day] = !hasSolar ? null : (solarMap[k] ?? 0) >= 1 ? 1 : 0;
-          ts.grid![day]  = !hasGrid  ? null : (gridMap[k]  ?? 0) >= 1 ? 1 : 0;
-          ts.chemicals![day] = (chemMap[k] ?? 0) >= 1 ? 1 : 0;
         });
 
         indiv[matKey] = ts;
@@ -2008,8 +2064,8 @@ function KpiTab({ staff, roles, plants }: { staff: StaffMember[]; roles: any[]; 
           `"${op.username ?? ''}"`,
           `"${plant.name}"`,
           ...catScores.map((s) => `"${s}"`),
-          `"${overall.scorePct}%"`,
-          `"${overall.tier.tier}"`,
+          `"${overall.totalValid > 0 ? `${overall.scorePct}%` : 'N/A'}"`,
+          `"${overall.totalValid > 0 ? overall.tier.tier : 'N/A'}"`,
           `"${range === 'today' ? 'Today' : `${range} Days`}"`,
         ]);
       });
@@ -2037,6 +2093,7 @@ function KpiTab({ staff, roles, plants }: { staff: StaffMember[]; roles: any[]; 
         const matKey = `${op.id}:${plant.id}`;
         const ts = individual[matKey] ?? {};
         const overall = computeEntityOverallScore(ts, days, todayStr);
+        if (overall.totalValid === 0) return; // Exclude N/A off-duty operators from rollups
         operatorScores.push({ op, plantName: plant.name, scorePct: overall.scorePct, tier: overall.tier });
 
         if (overall.scorePct >= 90) outstanding++;
@@ -2186,9 +2243,9 @@ function KpiTab({ staff, roles, plants }: { staff: StaffMember[]; roles: any[]; 
           {viewMode === 'team' ? (
             <><strong>Team Coverage Lens:</strong> Verifies if each asset was logged by anyone on schedule (operator shift or automated feed). This evaluates overall plant compliance.</>
           ) : (
-            <><strong>Individual Activity Lens (Annual Appraisal Metric):</strong> Evaluates individual operator diligence across all logging responsibilities. The <strong>Overall Appraisal KPI</strong> score provides a weighted percentage and rating tier (🏆 Outstanding to ❌ Unsatisfactory) for annual appraisals.</>
+            <><strong>Individual Activity Lens (Annual Appraisal Metric):</strong> Evaluates individual operator performance with a <strong>60% Individual (RO Train diligence, ~8/shift) + 40% Shared Duties (facility monitoring on active shift days)</strong> weighted score. Rest days and off-duty periods are excluded via attendance proxy.</>
           )}
-          {' '}Targets: Wells ≥1/well/day · Locators ≥1/day · RO Train {DEFAULT_RO_HOURLY_TARGET}/train/day · Prod. Meters ≥1/day · Power ≥1/day · Chemicals ≥1/day.
+          {' '}Targets: Shared facility duties ≥1/day (Wells, Locators, Meters, Power, Chemicals) · RO Train ~{DEFAULT_RO_OPERATOR_SHIFT_TARGET}/shift (hourly per train).
         </span>
       </div>
 
@@ -2210,20 +2267,36 @@ function KpiTab({ staff, roles, plants }: { staff: StaffMember[]; roles: any[]; 
                     {viewMode === 'team' ? 'Plant Facility' : 'Operator / Facility'}
                   </th>
                   {/* Overall KPI Column */}
-                  <th className="py-2.5 px-3 font-bold text-center bg-muted/80 border-x border-border/60 min-w-[140px]">
+                  <th className="py-2.5 px-3 font-bold text-center bg-muted/80 border-x border-border/60 min-w-[150px]">
                     <div className="flex flex-col items-center">
                       <span className="text-2xs font-extrabold uppercase tracking-wide text-foreground">Overall KPI Score</span>
-                      <span className="text-2xs text-muted-foreground font-normal">Appraisal Rating</span>
+                      <span className="text-3xs text-muted-foreground font-normal">
+                        {viewMode === 'individual' ? '60% Indiv · 40% Shared' : 'Facility Appraisal'}
+                      </span>
                     </div>
                   </th>
                   {INPUT_COLS.map((col) => (
-                    <th key={col.key} className="py-2.5 px-1 font-semibold text-center">
-                      <span
-                        className="inline-block px-2 py-0.5 rounded text-white text-3xs font-bold whitespace-nowrap shadow-2xs"
-                        style={{ background: col.color }}
-                      >
-                        {col.label}
-                      </span>
+                    <th key={col.key} className="py-2 px-1 font-semibold text-center">
+                      <div className="flex flex-col items-center gap-0.5">
+                        <span
+                          className="inline-block px-2 py-0.5 rounded text-white text-3xs font-bold whitespace-nowrap shadow-2xs"
+                          style={{ background: col.color }}
+                        >
+                          {col.label}
+                        </span>
+                        {viewMode === 'individual' && (
+                          <span
+                            className={cn(
+                              'text-3xs font-semibold px-1 rounded',
+                              col.key === 'ro_train'
+                                ? 'bg-primary-soft text-primary font-bold border border-primary/30'
+                                : 'text-muted-foreground'
+                            )}
+                          >
+                            {col.key === 'ro_train' ? 'Indiv 60%' : 'Shared'}
+                          </span>
+                        )}
+                      </div>
                     </th>
                   ))}
                 </tr>
@@ -2285,11 +2358,14 @@ function KpiTab({ staff, roles, plants }: { staff: StaffMember[]; roles: any[]; 
                     const isExpanded = expandedPlants.has(plant.id);
                     const rows: React.ReactNode[] = [];
 
-                    // Compute plant aggregate score
-                    const plantOpScores = plantOps.map((op) => {
-                      const matKey = `${op.id}:${plant.id}`;
-                      return computeEntityOverallScore(individual[matKey] ?? {}, days, todayStr).scorePct;
-                    });
+                    // Compute plant aggregate score across active operators
+                    const plantOpScores = plantOps
+                      .map((op) => {
+                        const matKey = `${op.id}:${plant.id}`;
+                        return computeEntityOverallScore(individual[matKey] ?? {}, days, todayStr);
+                      })
+                      .filter((res) => res.totalValid > 0)
+                      .map((res) => res.scorePct);
                     const plantAvgScore = plantOpScores.length > 0
                       ? Math.round(plantOpScores.reduce((a, b) => a + b, 0) / plantOpScores.length)
                       : 0;
@@ -2339,7 +2415,7 @@ function KpiTab({ staff, roles, plants }: { staff: StaffMember[]; roles: any[]; 
                           const allDayScores = plantOps.flatMap((op) =>
                             days.map((d) => {
                               const s = individual[`${op.id}:${plant.id}`]?.[col.key]?.[d];
-                              return s === undefined ? 0 : s;
+                              return (s !== undefined && s !== null) ? s : null;
                             })
                           ).filter((s): s is number => s !== null);
                           const avg = allDayScores.length > 0
@@ -2351,6 +2427,7 @@ function KpiTab({ staff, roles, plants }: { staff: StaffMember[]; roles: any[]; 
                                 <div
                                   className="h-2.5 w-2.5 rounded-sm shadow-2xs"
                                   style={{ background: scoreColor(avg), opacity: 0.9 }}
+                                  title={avg !== null ? `${Math.round(avg * 100)}% on active shifts` : 'Off duty / N/A'}
                                 />
                               </div>
                             </td>
@@ -2389,20 +2466,30 @@ function KpiTab({ staff, roles, plants }: { staff: StaffMember[]; roles: any[]; 
 
                             {/* Operator Overall KPI score */}
                             <td className="py-1.5 px-3 border-x border-border/60 bg-muted/15 text-center">
-                              <div className="flex flex-col items-center gap-0.5">
-                                <div className="flex items-center gap-1">
-                                  <span className="font-extrabold text-xs text-foreground">{opOverall.scorePct}%</span>
-                                  <span className={cn('text-3xs px-1.5 py-0.2 rounded-md border font-semibold truncate max-w-[100px]', opOverall.tier.badge)}>
-                                    {opOverall.tier.icon} {opOverall.tier.tier}
+                              {opOverall.totalValid > 0 ? (
+                                <div
+                                  className="flex flex-col items-center gap-0.5"
+                                  title={`Overall: ${opOverall.scorePct}% (60% RO Train: ${opOverall.roAvg !== null ? Math.round(opOverall.roAvg * 100) + '%' : 'N/A'} + 40% Shared: ${opOverall.sharedAvg !== null ? Math.round(opOverall.sharedAvg * 100) + '%' : 'N/A'})`}
+                                >
+                                  <div className="flex items-center gap-1">
+                                    <span className="font-extrabold text-xs text-foreground">{opOverall.scorePct}%</span>
+                                    <span className={cn('text-3xs px-1.5 py-0.2 rounded-md border font-semibold truncate max-w-[100px]', opOverall.tier.badge)}>
+                                      {opOverall.tier.icon} {opOverall.tier.tier}
+                                    </span>
+                                  </div>
+                                  <div className="w-24 h-1.5 rounded-full bg-muted/80 overflow-hidden border border-border/40">
+                                    <div
+                                      className={cn('h-full transition-all', opOverall.tier.dot)}
+                                      style={{ width: `${opOverall.scorePct}%` }}
+                                    />
+                                  </div>
+                                  <span className="text-3xs text-muted-foreground/80 font-mono-num">
+                                    RO {opOverall.roAvg !== null ? Math.round(opOverall.roAvg * 100) + '%' : '—'} · Sh {opOverall.sharedAvg !== null ? Math.round(opOverall.sharedAvg * 100) + '%' : '—'}
                                   </span>
                                 </div>
-                                <div className="w-24 h-1.5 rounded-full bg-muted/80 overflow-hidden border border-border/40">
-                                  <div
-                                    className={cn('h-full transition-all', opOverall.tier.dot)}
-                                    style={{ width: `${opOverall.scorePct}%` }}
-                                  />
-                                </div>
-                              </div>
+                              ) : (
+                                <span className="text-3xs text-muted-foreground italic">N/A (Off duty)</span>
+                              )}
                             </td>
 
                             {INPUT_COLS.map((col) => (
