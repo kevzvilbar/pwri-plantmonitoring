@@ -1655,18 +1655,13 @@ function PendingReviewTab() {
   };
 
   const resolveOne = async (row: FlaggedRow, decision: 'normal' | 'retracted') => {
-    // If approving a quarantined anomaly, require an explained reason (from operator remark, edit log, note, or custom reason)
+    // Check if an anomaly reason or note was documented
     const hasReason = Boolean(
       row.anomaly_remark?.text ||
       row.edit_reason?.text ||
       customReasons[row.id]?.trim() ||
       notes[row.id]?.trim()
     );
-
-    if (decision === 'normal' && !hasReason && (row.flag_reason === 'spike' || row.is_backward || row.is_unchanged || row.flag_reason === 'needs_remark')) {
-      toast.warning('An anomaly reason is required before approving this reading. Please use the "Set Reason" button or provide a note.');
-      return;
-    }
 
     setBusy(p => ({ ...p, [row.id]: true }));
     // NOTE: .select('id') is required here, not cosmetic. Without it, a
@@ -1703,7 +1698,15 @@ function PendingReviewTab() {
           ? 'Superseded — reading approved directly from Pending Review'
           : 'Superseded — reading rejected directly from Pending Review',
       );
-      toast.success(decision === 'normal' ? `${row.entity_name}: approved` : `${row.entity_name}: rejected`);
+      if (decision === 'normal') {
+        if (!hasReason && (row.flag_reason === 'spike' || row.is_backward || row.is_unchanged || row.flag_reason === 'needs_remark')) {
+          toast.warning(`${row.entity_name}: approved with no documented reason/note`);
+        } else {
+          toast.success(`${row.entity_name}: approved`);
+        }
+      } else {
+        toast.success(`${row.entity_name}: rejected`);
+      }
       invalidate();
     }
     setBusy(p => ({ ...p, [row.id]: false }));
@@ -1765,7 +1768,24 @@ function PendingReviewTab() {
     }
     const ok = succeeded.length;
     if (ok) {
-      toast.success(`${ok} of ${targets.length} readings ${decision === 'normal' ? 'approved' : 'rejected'}`);
+      if (decision === 'normal') {
+        const withoutReasonCount = succeeded.filter(row => {
+          const hasReason = Boolean(
+            row.anomaly_remark?.text ||
+            row.edit_reason?.text ||
+            customReasons[row.id]?.trim() ||
+            notes[row.id]?.trim()
+          );
+          return !hasReason && (row.flag_reason === 'spike' || row.is_backward || row.is_unchanged || row.flag_reason === 'needs_remark');
+        }).length;
+        if (withoutReasonCount > 0) {
+          toast.warning(`${ok} of ${targets.length} readings approved (${withoutReasonCount} with no documented reason/note)`);
+        } else {
+          toast.success(`${ok} of ${targets.length} readings approved`);
+        }
+      } else {
+        toast.success(`${ok} of ${targets.length} readings rejected`);
+      }
     }
     if (failed.length) {
       toast.error(
