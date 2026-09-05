@@ -18,6 +18,7 @@ import { useMonthlyOpex, opexVarianceTone } from '@/hooks/useOpexBudget';
 import { fmtNum } from '@/lib/calculations';
 import { format, startOfMonth, endOfMonth, subMonths, parseISO, subDays } from 'date-fns';
 import { XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend, BarChart, Bar } from 'recharts';
+import { computeGridMeterBreakdown, type GridPowerReadingRow } from '@/components/dashboard/TrendChartPivotShared';
 import { CostInsights } from './CostInsights';
 
 export function Rollup() {
@@ -69,14 +70,142 @@ export function Rollup() {
     enabled: !!plantId,
   });
 
+  const { data: powerReadings } = useQuery<GridPowerReadingRow[]>({
+    queryKey: ['cost-rollup-power', plantId, from, to],
+    queryFn: async () => {
+      if (!plantId) return [];
+      const { data: inWindow } = await supabase.from('power_readings')
+        .select('daily_consumption_kwh,daily_solar_kwh,daily_grid_kwh,meter_reading_kwh,grid_meter_readings,multiplier,reading_datetime,is_meter_replacement,plant_id,is_estimated')
+        .eq('plant_id', plantId)
+        .gte('reading_datetime', `${from}T00:00:00`)
+        .lte('reading_datetime', `${to}T23:59:59`)
+        .order('reading_datetime', { ascending: true });
+
+      const { data: preWindow } = await supabase.from('power_readings')
+        .select('daily_consumption_kwh,daily_solar_kwh,daily_grid_kwh,meter_reading_kwh,grid_meter_readings,multiplier,reading_datetime,is_meter_replacement,plant_id,is_estimated')
+        .eq('plant_id', plantId)
+        .lt('reading_datetime', `${from}T00:00:00`)
+        .order('reading_datetime', { ascending: false })
+        .limit(1);
+
+      return [...(preWindow ?? []), ...(inWindow ?? [])] as unknown as GridPowerReadingRow[];
+    },
+    enabled: !!plantId,
+  });
+
+  const { data: tariffs } = useQuery({
+    queryKey: ['cost-rollup-tariffs', plantId],
+    queryFn: async () => {
+      if (!plantId) return [];
+      const { data } = await supabase.from('power_tariffs')
+        .select('effective_date,rate_per_kwh')
+        .eq('plant_id', plantId)
+        .order('effective_date', { ascending: true });
+      return data ?? [];
+    },
+    enabled: !!plantId,
+  });
+
+  const { data: powerConfigMap } = useQuery({
+    queryKey: ['cost-rollup-power-config', plantId],
+    queryFn: async () => {
+      if (!plantId) return new Map<string, number[]>();
+      const { data } = await (supabase.from('plant_power_config' as any) as any)
+        .select('plant_id, multipliers')
+        .eq('plant_id', plantId);
+      const m = new Map<string, number[]>();
+      (data ?? []).forEach((r: any) => {
+        if (r.multipliers?.length) m.set(r.plant_id, r.multipliers);
+      });
+      return m;
+    },
+    enabled: !!plantId,
+  });
+
+  const { data: billMultiplierMap } = useQuery({
+    queryKey: ['cost-rollup-bill-mult', plantId],
+    queryFn: async () => {
+      const m = new Map<string, number>();
+      if (!plantId) return m;
+      const { data } = await (supabase.from('electric_bills' as never) as any)
+        .select('plant_id,multiplier')
+        .eq('plant_id', plantId)
+        .order('billing_month', { ascending: false })
+        .limit(1);
+      if (data?.[0]?.multiplier) m.set(plantId, +data[0].multiplier);
+      return m;
+    },
+    enabled: !!plantId,
+  });
+
+  const dailyGridMap = useMemo(() => {
+    if (!powerReadings || powerReadings.length === 0) return new Map<string, number>();
+    const fromMs = parseISO(from).getTime();
+    const toMs = parseISO(to).getTime() + 86400000;
+    const b = computeGridMeterBreakdown(powerReadings, {
+      powerConfigMap,
+      billMultiplierMap,
+      fromMs,
+      toMs,
+    });
+    const map = new Map<string, number>();
+    b.dates.forEach((dk) => {
+      const row = b.byDate.get(dk);
+      if (row && row.total > 0) {
+        map.set(dk, row.total);
+      }
+    });
+    return map;
+  }, [powerReadings, powerConfigMap, billMultiplierMap, from, to]);
+
+  const getRate = (dateKey: string) => {
+    if (!tariffs || tariffs.length === 0) return null;
+    let rate: number | null = null;
+    for (const t of tariffs) {
+      if (t.effective_date <= dateKey && t.rate_per_kwh != null) {
+        rate = +t.rate_per_kwh;
+      } else if (t.effective_date > dateKey) {
+        break;
+      }
+    }
+    return rate;
+  };
+
+  const rows = useMemo(() => {
+    return (data ?? []).map((x: any) => {
+      const dateKey = x.cost_date;
+      let powerCost = +x.power_cost || 0;
+      if (dailyGridMap.has(dateKey)) {
+        const gridKwh = dailyGridMap.get(dateKey)!;
+        const rate = getRate(dateKey);
+        if (rate != null) {
+          powerCost = Math.round(gridKwh * rate);
+        }
+      }
+      const chemCost = +x.chem_cost || 0;
+      const prodM3 = +x.production_m3 || 0;
+      const totalCost = chemCost + powerCost;
+      const costPerM3 = prodM3 > 0 ? totalCost / prodM3 : null;
+
+      return {
+        ...x,
+        chem_cost: chemCost,
+        power_cost: powerCost,
+        production_m3: prodM3,
+        cost_per_m3: costPerM3,
+      };
+    });
+  }, [data, dailyGridMap, tariffs]);
+
   const totals = useMemo(() => {
-    const r = (data ?? []).reduce((acc: any, x: any) => {
-      acc.chem += +x.chem_cost || 0; acc.power += +x.power_cost || 0;
+    const r = rows.reduce((acc: any, x: any) => {
+      acc.chem += +x.chem_cost || 0;
+      acc.power += +x.power_cost || 0;
       acc.prod += +x.production_m3 || 0;
       return acc;
     }, { chem: 0, power: 0, prod: 0 });
     const total = r.chem + r.power;
-    const daysCount = (data ?? []).length || 1;
+    const daysCount = rows.length || 1;
     return {
       ...r,
       total,
@@ -85,16 +214,16 @@ export function Rollup() {
       powerPct: total ? (r.power / total) * 100 : 0,
       dailyAvgProd: r.prod / daysCount,
     };
-  }, [data]);
+  }, [rows]);
 
-  const negativePowerRows = (data ?? []).filter((d: any) => +d.power_cost < 0);
+  const negativePowerRows = rows.filter((d: any) => +d.power_cost < 0);
   const hasNegativePower = negativePowerRows.length > 0;
 
-  const chartData = (data ?? []).map((d: any) => ({
+  const chartData = rows.map((d: any) => ({
     date: d.cost_date ? format(parseISO(d.cost_date), 'MMM d') : '—',
-    chem: +d.chem_cost || 0,
-    power: +d.power_cost || 0,
-    perM3: +d.cost_per_m3 || 0,
+    chem: d.chem_cost,
+    power: d.power_cost,
+    perM3: d.cost_per_m3 ?? 0,
   }));
 
   const plantName = plants?.find(p => p.id === plantId)?.name ?? 'Selected Plant';
@@ -286,7 +415,7 @@ export function Rollup() {
             </div>
           </Card>
 
-          <CostInsights rows={data ?? []} totals={totals} from={from} to={to} />
+          <CostInsights rows={rows} totals={totals} from={from} to={to} />
         </>
       ) : (
         <Card className="p-8 text-center rounded-2xl border border-border/80 space-y-2">

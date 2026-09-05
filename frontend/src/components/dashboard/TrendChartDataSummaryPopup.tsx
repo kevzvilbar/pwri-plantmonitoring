@@ -7,7 +7,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { format } from 'date-fns';
-import { Download, Droplet, Receipt, Gauge, TableProperties, Percent } from 'lucide-react';
+import { Download, Droplet, Receipt, Gauge, TableProperties, Percent, Zap, Sun } from 'lucide-react';
 import {
   DSMTab, buildEntityPivot, fillDateRange, fmtDateKey,
   computeGridMeterBreakdown, buildKwhSummaryCsv, type GridPowerReadingRow,
@@ -487,6 +487,11 @@ export function DataSummaryPopup({
     const peakRow = overviewChartRows.reduce((max, r) => (r.production ?? 0) > (max?.production ?? 0) ? r : max, null as any);
     const nrwPct = totalProd > 0 ? Math.max(0, ((totalProd - totalCons) / totalProd) * 100) : 0;
 
+    const totalSolar = overviewChartRows.reduce((s, r) => s + (r.solarKwh ?? 0), 0);
+    const totalGrid  = overviewChartRows.reduce((s, r) => s + (r.kwh ?? 0), 0);
+    const totalKwh   = totalSolar + totalGrid;
+    const solarPct   = totalKwh > 0 ? (totalSolar / totalKwh) * 100 : 0;
+
     return {
       totalProd,
       totalCons,
@@ -496,6 +501,10 @@ export function DataSummaryPopup({
       peakProd: peakRow?.production ?? 0,
       peakDate: peakRow?.date ?? '—',
       nrwPct,
+      totalSolar,
+      totalGrid,
+      totalKwh,
+      solarPct,
     };
   }, [overviewChartRows, tabDates]);
 
@@ -611,45 +620,91 @@ export function DataSummaryPopup({
 
           {/* Quick Aggregate Snapshot Strip */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pb-3">
-            <div className="p-2 rounded-lg bg-muted/40 border border-border/50">
-              <div className="text-2xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
-                <Droplet className="h-3 w-3 text-primary" />
-                <span>Total Prod</span>
-              </div>
-              <div className="font-mono text-sm font-bold text-foreground mt-0.5">
-                {summaryStats.totalProd > 0 ? summaryStats.totalProd.toLocaleString(undefined, { maximumFractionDigits: 1 }) : '—'} <span className="text-3xs font-normal text-muted-foreground">m³</span>
-              </div>
-            </div>
+            {metric === 'kwh' ? (
+              <>
+                <div className="p-2 rounded-lg bg-muted/40 border border-border/50">
+                  <div className="text-2xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+                    <Zap className="h-3 w-3 text-primary" />
+                    <span>Total Power</span>
+                  </div>
+                  <div className="font-mono text-sm font-bold text-foreground mt-0.5">
+                    {summaryStats.totalKwh > 0 ? summaryStats.totalKwh.toLocaleString(undefined, { maximumFractionDigits: 1 }) : '—'} <span className="text-3xs font-normal text-muted-foreground">kWh</span>
+                  </div>
+                </div>
 
-            <div className="p-2 rounded-lg bg-muted/40 border border-border/50">
-              <div className="text-2xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
-                <Receipt className="h-3 w-3 text-highlight" />
-                <span>Total Cons</span>
-              </div>
-              <div className="font-mono text-sm font-bold text-foreground mt-0.5">
-                {summaryStats.totalCons > 0 ? summaryStats.totalCons.toLocaleString(undefined, { maximumFractionDigits: 1 }) : '—'} <span className="text-3xs font-normal text-muted-foreground">m³</span>
-              </div>
-            </div>
+                <div className="p-2 rounded-lg bg-muted/40 border border-border/50">
+                  <div className="text-2xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+                    <Zap className="h-3 w-3 text-amber-500" />
+                    <span>Total Grid</span>
+                  </div>
+                  <div className="font-mono text-sm font-bold text-foreground mt-0.5">
+                    {summaryStats.totalGrid > 0 ? summaryStats.totalGrid.toLocaleString(undefined, { maximumFractionDigits: 1 }) : '—'} <span className="text-3xs font-normal text-muted-foreground">kWh</span>
+                  </div>
+                </div>
 
-            <div className="p-2 rounded-lg bg-muted/40 border border-border/50">
-              <div className="text-2xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
-                <Gauge className="h-3 w-3 text-sky-500" />
-                <span>Daily Avg Output</span>
-              </div>
-              <div className="font-mono text-sm font-bold text-foreground mt-0.5">
-                {summaryStats.avgDailyProd > 0 ? summaryStats.avgDailyProd.toLocaleString(undefined, { maximumFractionDigits: 1 }) : '—'} <span className="text-3xs font-normal text-muted-foreground">m³/day</span>
-              </div>
-            </div>
+                <div className="p-2 rounded-lg bg-muted/40 border border-border/50">
+                  <div className="text-2xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+                    <Sun className="h-3 w-3 text-orange-400" />
+                    <span>Total Solar</span>
+                  </div>
+                  <div className="font-mono text-sm font-bold text-foreground mt-0.5">
+                    {summaryStats.totalSolar > 0 ? summaryStats.totalSolar.toLocaleString(undefined, { maximumFractionDigits: 1 }) : '—'} <span className="text-3xs font-normal text-muted-foreground">kWh</span>
+                  </div>
+                </div>
 
-            <div className="p-2 rounded-lg bg-muted/40 border border-border/50">
-              <div className="text-2xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
-                <Percent className="h-3 w-3 text-emerald-500" />
-                <span>Period NRW Loss</span>
-              </div>
-              <div className="font-mono text-sm font-bold text-foreground mt-0.5">
-                {summaryStats.totalProd > 0 ? `${summaryStats.nrwPct.toFixed(1)}%` : '—'}
-              </div>
-            </div>
+                <div className="p-2 rounded-lg bg-muted/40 border border-border/50">
+                  <div className="text-2xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+                    <Percent className="h-3 w-3 text-emerald-500" />
+                    <span>Solar Share</span>
+                  </div>
+                  <div className="font-mono text-sm font-bold text-foreground mt-0.5">
+                    {summaryStats.totalKwh > 0 ? `${summaryStats.solarPct.toFixed(1)}%` : '—'}
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="p-2 rounded-lg bg-muted/40 border border-border/50">
+                  <div className="text-2xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+                    <Droplet className="h-3 w-3 text-primary" />
+                    <span>Total Prod</span>
+                  </div>
+                  <div className="font-mono text-sm font-bold text-foreground mt-0.5">
+                    {summaryStats.totalProd > 0 ? summaryStats.totalProd.toLocaleString(undefined, { maximumFractionDigits: 1 }) : '—'} <span className="text-3xs font-normal text-muted-foreground">m³</span>
+                  </div>
+                </div>
+
+                <div className="p-2 rounded-lg bg-muted/40 border border-border/50">
+                  <div className="text-2xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+                    <Receipt className="h-3 w-3 text-highlight" />
+                    <span>Total Cons</span>
+                  </div>
+                  <div className="font-mono text-sm font-bold text-foreground mt-0.5">
+                    {summaryStats.totalCons > 0 ? summaryStats.totalCons.toLocaleString(undefined, { maximumFractionDigits: 1 }) : '—'} <span className="text-3xs font-normal text-muted-foreground">m³</span>
+                  </div>
+                </div>
+
+                <div className="p-2 rounded-lg bg-muted/40 border border-border/50">
+                  <div className="text-2xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+                    <Gauge className="h-3 w-3 text-sky-500" />
+                    <span>Daily Avg Output</span>
+                  </div>
+                  <div className="font-mono text-sm font-bold text-foreground mt-0.5">
+                    {summaryStats.avgDailyProd > 0 ? summaryStats.avgDailyProd.toLocaleString(undefined, { maximumFractionDigits: 1 }) : '—'} <span className="text-3xs font-normal text-muted-foreground">m³/day</span>
+                  </div>
+                </div>
+
+                <div className="p-2 rounded-lg bg-muted/40 border border-border/50">
+                  <div className="text-2xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+                    <Percent className="h-3 w-3 text-emerald-500" />
+                    <span>Period NRW Loss</span>
+                  </div>
+                  <div className="font-mono text-sm font-bold text-foreground mt-0.5">
+                    {summaryStats.totalProd > 0 ? `${summaryStats.nrwPct.toFixed(1)}%` : '—'}
+                  </div>
+                </div>
+              </>
+            )}
           </div>
 
           {/* Date range filter */}

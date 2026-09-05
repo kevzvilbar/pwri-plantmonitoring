@@ -3,7 +3,7 @@
 // TrendChart component doesn't reference either directly (verified before
 // this extraction).
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { MessageCircleOff } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
@@ -387,6 +387,27 @@ export function GridMeterBreakdownTable({
       }]
     : columns;
 
+  const colTotals = useMemo(() => {
+    const totals: Record<string, number> = {};
+    for (const c of cols) {
+      let sum = 0;
+      let hasAny = false;
+      for (const dk of dates) {
+        const v = byDate.get(dk)?.values[c.key];
+        if (v != null) {
+          sum += v;
+          hasAny = true;
+        }
+      }
+      totals[c.key] = hasAny ? sum : 0;
+    }
+    return totals;
+  }, [cols, dates, byDate]);
+
+  const grandTotal = useMemo(() => {
+    return dates.reduce((s, dk) => s + (byDate.get(dk)?.total ?? 0), 0);
+  }, [dates, byDate]);
+
   return (
     <div className="h-full overflow-auto">
       <table className="w-full border-collapse text-xs">
@@ -425,6 +446,28 @@ export function GridMeterBreakdownTable({
             );
           })}
         </tbody>
+        <tfoot className="sticky bottom-0 z-20 bg-card/95 backdrop-blur-sm border-t-2 border-border shadow-xs">
+          <tr>
+            <td className="px-3.5 py-2 text-left text-2xs font-bold text-foreground uppercase tracking-wider whitespace-nowrap sticky left-0 bottom-0 z-30 bg-card/95 backdrop-blur-sm border-t border-border">
+              Total ({dates.length}d)
+            </td>
+            {cols.map((c) => {
+              const colSum = colTotals[c.key] ?? 0;
+              return (
+                <td key={c.key} className="px-3 py-2 text-right font-bold font-mono tabular-nums text-xs text-foreground sticky bottom-0 z-20 bg-card/95 backdrop-blur-sm border-t border-border">
+                  {colSum > 0
+                    ? colSum.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                    : <span className="text-muted-foreground/40">—</span>}
+                </td>
+              );
+            })}
+            <td className="px-3 py-2 text-right font-extrabold font-mono tabular-nums text-xs text-primary sticky right-0 bottom-0 z-30 border-l border-t border-border/80 bg-primary-soft">
+              {grandTotal > 0
+                ? grandTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                : <span className="text-muted-foreground/40">—</span>}
+            </td>
+          </tr>
+        </tfoot>
       </table>
     </div>
   );

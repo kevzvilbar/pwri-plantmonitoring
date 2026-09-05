@@ -306,5 +306,19 @@ describe('buildKwhSummaryCsv — kWh Data Summary export', () => {
 
     // All kWh are fully attributed, no residual in Other!
     expect(result.hasUnattributed).toBe(false);
+
+    // Verify column totals and grand total across dates (matching Table tfoot summary)
+    const colTotals: Record<string, number> = {};
+    for (const c of result.columns) {
+      colTotals[c.key] = result.dates.reduce((s, dk) => s + (result.byDate.get(dk)?.values[c.key] ?? 0), 0);
+    }
+    const grandTotal = result.dates.reduce((s, dk) => s + (result.byDate.get(dk)?.total ?? 0), 0);
+
+    // Total Meter 0 across Sep 3, 4, 5 = 1 + 1 + 3 = 5 kWh
+    expect(colTotals['plant-srp#0']).toBe(5);
+    // Total Meter 2 across Sep 3, 4, 5 = 26400 + 20160 + 14880 = 61,440 kWh
+    expect(colTotals['plant-srp#2']).toBe(61440);
+    // Grand Total = 26401 + 20161 + 14883 = 61,445 kWh
+    expect(grandTotal).toBe(61445);
   });
 });
