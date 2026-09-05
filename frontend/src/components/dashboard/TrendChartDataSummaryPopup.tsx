@@ -1172,10 +1172,10 @@ export function DataSummaryPopup({
                 dates={prodDates}
                 entities={prodEntities}
                 pivot={prodPivotMap}
-                totalLabel={metric === 'rawwater' ? 'Total Raw (m³)' : 'Total Prod. (m³)'}
+                totalLabel="Total Prod. (m³)"
                 unit="m³"
                 colorClass="text-primary"
-                entityType={metric === 'rawwater' || metric === 'pv' ? 'well' : hasPermeateData ? 'ro_train' : 'meter'}
+                entityType={metric === 'pv' ? 'well' : hasPermeateData ? 'ro_train' : 'meter'}
               />
             )}
             {activeTab === 'consumption' && hasConsTab && (
