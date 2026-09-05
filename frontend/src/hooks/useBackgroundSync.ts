@@ -54,7 +54,7 @@ export function useBackgroundSync() {
     // EGRESS OPTIMIZATION: Do not execute network sweeps while the tab is hidden.
     // The visibilitychange listener will immediately trigger sync when tab is refocused.
     if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
-      return false;
+      return true; // Deliberately skipped — not a failure
     }
 
     setStatus('syncing');
@@ -84,6 +84,7 @@ export function useBackgroundSync() {
         return true;
       }
 
+      console.warn('[background-sync] Background refetch failed:', err);
       setStatus('error');
       return false;
     }
@@ -92,6 +93,11 @@ export function useBackgroundSync() {
   /** Schedule a retry cycle with back-off. */
   const scheduleRetry = useCallback((attempt: number) => {
     clearRetryTimeout();
+
+    // Do not schedule retries if the tab is hidden — visibilitychange handles re-sync
+    if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+      return;
+    }
 
     if (attempt >= MAX_RETRIES) {
       // All retries exhausted — surface error to user via syncStore (SyncIndicator reads it)
@@ -102,6 +108,7 @@ export function useBackgroundSync() {
 
     retryTimeoutRef.current = setTimeout(async () => {
       if (!isMountedRef.current) return;
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
       retryCountRef.current = attempt + 1;
       const ok = await runSync();
       if (!ok) scheduleRetry(attempt + 1);
@@ -111,6 +118,9 @@ export function useBackgroundSync() {
   /** Kick off a sync and handle failure via retry scheduler. */
   const triggerSync = useCallback(async () => {
     clearRetryTimeout();
+    if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+      return;
+    }
     const ok = await runSync();
     if (!ok) scheduleRetry(0);
   }, [clearRetryTimeout, runSync, scheduleRetry]);
