@@ -409,12 +409,16 @@ export function GridMeterBreakdownTable({
   }, [dates, byDate]);
 
   return (
-    <div className="h-full overflow-auto">
-      <table className="w-full border-collapse text-xs">
+    <div className="h-full overflow-auto p-2">
+      <table className="w-full max-w-4xl mx-auto border-collapse text-xs border border-border/50 rounded-lg overflow-hidden">
         <thead className="bg-muted/95">
           <tr>
             <th className={TH_DATE}>Date</th>
-            {cols.map((c) => <th key={c.key} className={TH} title={c.title}>{c.label}</th>)}
+            {cols.map((c) => (
+              <th key={c.key} className={`${TH} px-4`} title={c.title}>
+                {c.label}
+              </th>
+            ))}
             <th className={TH_TOTAL}>Total (kWh)</th>
           </tr>
         </thead>
@@ -430,7 +434,7 @@ export function GridMeterBreakdownTable({
                 {cols.map((c) => {
                   const v = row?.values[c.key];
                   return (
-                    <td key={c.key} className={TD}>
+                    <td key={c.key} className={`${TD} px-4`}>
                       {v != null
                         ? <span className={v < 0 ? 'text-destructive font-semibold' : ''}>{v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                         : <span className="text-muted-foreground/40">—</span>}
@@ -454,7 +458,7 @@ export function GridMeterBreakdownTable({
             {cols.map((c) => {
               const colSum = colTotals[c.key] ?? 0;
               return (
-                <td key={c.key} className="px-3 py-2 text-right font-bold font-mono tabular-nums text-xs text-foreground sticky bottom-0 z-20 bg-card/95 backdrop-blur-sm border-t border-border">
+                <td key={c.key} className="px-4 py-2 text-right font-bold font-mono tabular-nums text-xs text-foreground sticky bottom-0 z-20 bg-card/95 backdrop-blur-sm border-t border-border">
                   {colSum > 0
                     ? colSum.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
                     : <span className="text-muted-foreground/40">—</span>}

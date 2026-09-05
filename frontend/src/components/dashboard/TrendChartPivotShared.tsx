@@ -241,7 +241,7 @@ export function interpolateMissingGridMeterReadings<T extends GridPowerReadingRo
       }
     }
 
-    // For each estimated row, interpolate any missing meter index
+    // For each estimated row in this plant, interpolate any unpopulated meter index
     for (let i = 0; i < plantEntries.length; i++) {
       const { row: r, index: globalIdx } = plantEntries[i];
       if (!r.is_estimated) continue;
