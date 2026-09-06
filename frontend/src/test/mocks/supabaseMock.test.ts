@@ -14,7 +14,7 @@ describe('Supabase Mocks', () => {
     it('should resolve data as an array when used as a promise', async () => {
       const data = [{ id: 1 }, { id: 2 }];
       const queryMock = createSupabaseQueryMock(data);
-      const result = await queryMock;
+      const result = await (queryMock as any);
       expect(result.data).toEqual(data);
       expect(result.error).toBeNull();
     });
