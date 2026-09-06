@@ -82,8 +82,21 @@
     </script>
 
     <!-- Google Fonts: Geist & JetBrains Mono -->
+    <!--
+      ROADMAP PHASE 3: the CSS2 URL is also PRELOADED as a style so the
+      browser starts fetching the font stylesheet as early as possible
+      while it still parses index.html. The <link rel="stylesheet">
+      immediately after consumes that same cached resource, so fonts apply
+      without adding a second network round-trip and without changing the
+      render-blocking behavior. (preconnect is still hoisted above it.)
+    -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="preload"
+      href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700;800&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400;1,600&family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Cormorant+Garamond:wght@500;600;700&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&display=swap"
+      as="style"
+    />
     <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700;800&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400;1,600&family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Cormorant+Garamond:wght@500;600;700&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet" />
 
     <!-- Favicons -->
