@@ -35,8 +35,9 @@ summary.push(`BUILD_LINE=${built}`);
 summary.push(`ADMIN_1030_CHUNK_PRESENT=${/Admin-[A-Za-z0-9]+\.js\s+10[0-9][0-9][0-9]\s/.test(build.out) ? 'YES' : 'NO'}`);
 summary.push(`CHUNKS_LARGER_800_WARN=${build.out.includes('larger than 800') ? 'YES' : 'NO'}`);
 // list largest emitted JS/CSS assets from dist/assets (gzip), like check-bundle-size
-const distAssets = path.join(root, 'dist', 'assets');
-const files = readdirSync(distAssets)
+if (build.ok) {
+  const distAssets = path.join(root, 'dist', 'assets');
+  const files = readdirSync(distAssets)
     .filter((f) => /\.(js|css)$/.test(f))
     .map((f) => ({ name: f, gzipKb: gzipSync(readFileSync(path.join(distAssets, f))).length / 1024 }))
     .sort((a, b) => b.gzipKb - a.gzipKb);
