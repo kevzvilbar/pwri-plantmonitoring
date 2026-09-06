@@ -32,7 +32,7 @@ import {
   CalendarClock, MessageCircleOff, Pencil, X, History,
   AlertCircle, ArrowUpRight, Loader2, Zap,
 } from 'lucide-react';
-import { WELL_MAX_READINGS_PER_DAY, formatCooldown } from '../shared';
+import { WELL_MAX_READINGS_PER_DAY, formatCooldown } from '@/pages/operations/shared';
 
 export function WellRow({
   well, plantId, previousMeter, previousPower, previousDt, freshDt, avgVol, todayReadings, userId, isBlending, onSaved, isManagerOrAdmin, canAutoApprove, isInSharedPowerGroup,
