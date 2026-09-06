@@ -1,5 +1,5 @@
 {
-  "maxWarnings": 1933,
+  "maxWarnings": 1931,
   "lastUpdated": "2026-09-06",
   "history": [
     {
@@ -150,6 +150,11 @@
       "maxWarnings": 1933,
       "previous": 1929,
       "reason": "God-component decomposition: split DataCorrections.tsx (2,738 lines, 128.9 KB) into modular subcomponents and tabs under pages/dataCorrections/ (types.ts, api.ts, 8 components, 4 tabs: PendingReviewTab, CorrectionInboxTab, EditHistoryTab, OperatorStatsTab). DataCorrections.tsx reduced to a clean 125-line orchestrator. All 40 test suites (380 tests), tsc, and build pass cleanly."
+    },
+    {
+      "date": "2026-09-06",
+      "maxWarnings": 1931,
+      "previous": 1933
     }
   ]
 }

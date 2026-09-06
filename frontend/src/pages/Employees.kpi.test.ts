@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computeEntityOverallScore, type EntityTypeScore } from './Employees';
+import { computeEntityOverallScore, type EntityTypeScore } from './employees/tabs/KpiTab';
 
 describe('computeEntityOverallScore (Phase 1 KPI scoring redesign)', () => {
   const days = ['2026-09-01', '2026-09-02', '2026-09-03'];
