@@ -1,5 +1,6 @@
 import React from 'react';
 import { AlertTriangle, RefreshCw } from 'lucide-react';
+import { reportError } from '@/lib/monitoring';
 
 type Props = { children: React.ReactNode };
 type State = { error: Error | null; didAutoReload: boolean };
@@ -30,6 +31,13 @@ export class ErrorBoundary extends React.Component<Props, State> {
 
   componentDidCatch(error: Error, info: React.ErrorInfo) {
     console.error('[ErrorBoundary]', error, info);
+    // Report render crashes to error monitoring (no-op without a DSN —
+    // see src/lib/monitoring.ts). The component stack pinpoints which
+    // subtree blew up; console.error above keeps today's DevTools output.
+    reportError(error, {
+      where: 'react-error-boundary',
+      componentStack: info.componentStack,
+    });
 
     if (isChunkLoadError(error)) {
       const alreadyTried = sessionStorage.getItem(RELOAD_FLAG) === '1';

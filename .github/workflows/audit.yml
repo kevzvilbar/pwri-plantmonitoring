@@ -1,0 +1,45 @@
+name: Dependency audit
+
+# Roadmap Phase 2 — `npm audit` as CI, in two tiers:
+#   1. PRODUCTION dependencies (--omit=dev): blocking at high/critical.
+#      These ship to operators' browsers via the deployed bundle, so a
+#      known high CVE here is a real exposure, not hygiene.
+#   2. The FULL tree including devDependencies: visibility-only
+#      (continue-on-error). Dev-only advisories (build tooling) shouldn't
+#      block an operator-facing fix, but they should be seen.
+#
+# Runs on PRs/pushes and weekly — a new advisory against a pinned version
+# arrives on its own schedule, not anyone's PR schedule. `npm audit` needs
+# package-lock.json; it runs against the committed lockfile without
+# installing anything.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '0 7 * * 1' # Mondays, after the CodeQL sweep
+
+jobs:
+  audit:
+    name: npm audit
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Production dependencies (blocking at high)
+        working-directory: frontend
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Full tree incl. devDependencies (report-only)
+        working-directory: frontend
+        run: npm audit --audit-level=high
+        continue-on-error: true

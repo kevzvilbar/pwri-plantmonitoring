@@ -1,0 +1,39 @@
+name: CodeQL
+
+# Roadmap Phase 2 — static security analysis on every PR/push to main, plus
+# a weekly sweep so long-lived vulnerabilities in untouched code still
+# surface. Complements the dependency audit workflow (known CVEs in
+# dependencies) with analysis of THIS repo's own code paths (taint flows,
+# injection, prototype pollution). Findings appear under the repo's
+# Security tab; high-severity results should block merge review like any
+# other red CI job.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '0 6 * * 1' # Mondays 06:00 UTC
+
+jobs:
+  analyze:
+    name: Analyze (javascript-typescript)
+    runs-on: ubuntu-latest
+    permissions:
+      # required for CodeQL to upload SARIF results
+      security-events: write
+      contents: read
+      actions: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript
+          queries: security-extended
+
+      - uses: github/codeql-action/analyze@v3
+        with:
+          category: '/language:javascript-typescript'

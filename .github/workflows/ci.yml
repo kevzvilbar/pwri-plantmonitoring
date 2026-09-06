@@ -72,6 +72,17 @@ jobs:
         # someone happened to run it locally. A red test suite could merge to
         # main and nothing here would have said so.
 
+      - name: strictNullChecks ratchet (allowlisted files must stay clean)
+        working-directory: frontend
+        run: node scripts/check-strict-null-checks.mjs
+        # Roadmap Phase 1: strictNullChecks can't flip on project-wide in one
+        # change (~4 MB of scaffolded TSX written with it off), so a committed
+        # allowlist (strict-null-checks.json) holds named files to the strict
+        # standard and only grows. Errors in un-ratcheted files are ignored by
+        # design; ONE error in an allowlisted file fails this step. Grow the
+        # ratchet with `npm run check:strict-null-checks -- --suggest` plus a
+        # focused read of each candidate file.
+
       - name: Lint ceiling (ESLint warning count vs. committed baseline)
         working-directory: frontend
         run: node scripts/check-lint-ceiling.mjs
@@ -122,6 +133,60 @@ jobs:
           # config resolution time.
           VITE_SUPABASE_URL: https://placeholder.supabase.co
           VITE_SUPABASE_PUBLISHABLE_KEY: placeholder-anon-key
+
+      - name: Bundle size vs. committed baseline
+        working-directory: frontend
+        run: node scripts/check-bundle-size.mjs
+        # Roadmap Phase 2. Measures the gzipped JS/CSS this build just
+        # emitted against bundle-size.json. Any drift (up OR down, like the
+        # lint ceiling) must be re-baselined deliberately with --update and
+        # committed with a reason, so bundle growth is always a reviewed
+        # decision rather than an accumulation nobody was watching.
+
+  e2e-smoke:
+    name: E2E smoke (Playwright)
+    runs-on: ubuntu-latest
+
+    # Roadmap Phase 2: the smallest end-to-end tripwire — boots the real
+    # dev server, loads the app in a real browser, and proves the shell
+    # renders and the router sends anonymous visitors to /auth. Catches
+    # blank-page/build-artifact/router regressions that vitest (jsdom,
+    # mocked Supabase) structurally cannot. Needs no secrets and no
+    # database; deeper authenticated flows are future work against the
+    # staging project (docs/STAGING.md).
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install Playwright browsers
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Run smoke tests
+        working-directory: frontend
+        run: npx playwright test
+        env:
+          # Same placeholders as the build step: the smoke test exercises
+          # the shell + router, which must render without a backend.
+          VITE_SUPABASE_URL: https://placeholder.supabase.co
+          VITE_SUPABASE_PUBLISHABLE_KEY: placeholder-anon-key
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: frontend/playwright-report/
+          retention-days: 7
 
   rls-tests:
     name: RLS policy tests (pgTAP)

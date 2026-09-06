@@ -7,6 +7,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider } from "@/hooks/useAuth";
 import { PresenceProvider, globalStampActivity } from "@/hooks/usePresence";
 import { friendlyError } from "@/lib/supabaseErrors";
+import { reportError } from "@/lib/monitoring";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AppShell } from "@/components/AppShell";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
@@ -85,6 +86,7 @@ const queryClient = new QueryClient({
       if (query.meta?.silent) return;
       const key = Array.isArray(query.queryKey) ? String(query.queryKey[0]) : 'query';
       toast.error(`Load failed (${key}): ${msg}`);
+      reportError(error, { where: 'react-query', kind: 'query', key });
     },
   }),
   mutationCache: new MutationCache({
@@ -96,6 +98,7 @@ const queryClient = new QueryClient({
     onError: (error) => {
       const msg = friendlyError(error);
       if (msg) toast.error(msg);
+      reportError(error, { where: 'react-query', kind: 'mutation' });
     },
   }),
 });

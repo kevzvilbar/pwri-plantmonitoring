@@ -1,5 +1,5 @@
 {
-  "maxWarnings": 1932,
+  "maxWarnings": 1865,
   "lastUpdated": "2026-09-06",
   "history": [
     {
@@ -160,6 +160,12 @@
       "date": "2026-09-06",
       "maxWarnings": 1932,
       "previous": 1931
+    },
+    {
+      "date": "2026-09-06",
+      "maxWarnings": 1865,
+      "previous": 1932,
+      "reason": "Improvement-roadmap Phase 1+2 session: Sentry monitoring wiring (lib/monitoring.ts + ErrorBoundary/App/useAuth hooks), strictNullChecks ratchet (52 lib files allowlisted), filter-usage migration drift reconciliation, Playwright E2E smoke, bundle-size baseline. None of this session's new files add warnings; the -67 is drift correction from the prior session's Employees/ReadingHistoryDialog/DataCorrections decompositions being counted properly at last (previous same-day entries 1931/1932 were recorded without reasons during interrupted verification runs). Breakdown: no-explicit-any 1745, react-refresh/only-export-components 81, react-hooks/exhaustive-deps 23, jsx-a11y/label-has-associated-control 9. tsc --noEmit, 41 test files / 385 vitest tests, strict ratchet, types-sync, prod build, Playwright smoke all clean."
     }
   ]
 }

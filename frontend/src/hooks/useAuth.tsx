@@ -1,3 +1,5 @@
+import { reportError, setMonitoringUser } from '@/lib/monitoring';
+
 import { createContext, useContext, useEffect, useRef, useState, ReactNode } from 'react';
 import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
@@ -74,6 +76,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     ]);
     setProfile((prof as Profile) ?? null);
     setRoles(((roleRows ?? []) as { role: Role }[]).map((r) => r.role));
+    // Enrich error reports with the operator's role once known (no-op when
+    // monitoring isn't configured — see src/lib/monitoring.ts).
+    const roleNames = ((roleRows ?? []) as { role: Role }[]).map((r) => r.role);
+    setMonitoringUser({ id: uid, role: roleNames.join(',') || undefined });
   };
 
   // Load the selected operator's profile whenever activeOperatorId changes
@@ -100,6 +106,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       setSession(sess);
       setUser(sess?.user ?? null);
+      // Attach/clear the reporting identity for error monitoring (no-op
+      // without a DSN). Role is merged in later by loadProfileAndRoles.
+      setMonitoringUser(sess?.user ? { id: sess.user.id } : undefined);
 
       if (sess?.user) {
         // Supabase's autoRefreshToken fires TOKEN_REFRESHED (and can re-fire
@@ -131,6 +140,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     supabase.auth.getSession().then(({ data: { session: sess } }) => {
       setSession(sess);
       setUser(sess?.user ?? null);
+      // Restored session (page reload): re-attach the reporting identity.
+      setMonitoringUser(sess?.user ? { id: sess.user.id } : undefined);
       if (sess?.user) {
         userIdRef.current = sess.user.id;
         loadProfileAndRoles(sess.user.id).finally(() => setLoading(false));

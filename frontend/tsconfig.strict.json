@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.app.json",
+  "compilerOptions": {
+    "strictNullChecks": true
+  },
+  "include": [
+    "src"
+  ]
+}

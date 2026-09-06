@@ -1,7 +1,14 @@
 import { createRoot } from "react-dom/client";
 import App from "./App.tsx";
 import { supabaseConfigError } from "@/integrations/supabase/client";
+import { initMonitoring, reportError } from "@/lib/monitoring";
 import "./index.css";
+
+// ── Error monitoring bootstrap ───────────────────────────────────────────────
+// Must run before anything that can throw: a DSN-configured deployment gets
+// visibility into bootstrap-time failures too. Safe no-op without a DSN.
+initMonitoring();
+
 
 // ── Chunk-load failure handler ────────────────────────────────────────────────
 // When GitHub Pages deploys a new build, Vite generates new chunk filenames
@@ -122,6 +129,7 @@ try {
   }
 } catch (err) {
   const e = err as Error;
+  reportError(err, { where: 'main-bootstrap' });
   renderFatal(
     "An unexpected error occurred while starting the app.",
     `${e?.name ?? ""}: ${e?.message ?? String(err)}\n\n${e?.stack ?? ""}`,
