@@ -13,13 +13,36 @@ import {
   ClipboardCheck, ArrowRight, KeyRound, ShieldCheck, Download,
   Upload, Activity, Server,
 } from 'lucide-react';
+import { lazy, Suspense } from 'react';
 
-import { UsersPanel } from './admin/UsersPanel';
-import { PlantsPanel } from './admin/PlantsPanel';
-import { AuditLogPanel } from './admin/AuditLogPanel';
-import { MigrationsPanel } from './admin/MigrationsPanel';
-import { RolesPanel } from './admin/RolesPanel';
 import { PageHeader } from '@/components/PageHeader';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Lazy-load the admin sub-panels. They were previously imported eagerly, which
+// produced a single `Admin-*.js` chunk of ~1.03 MB (Vite's 800 kB
+// chunkSizeWarningLimit was exceeded). Each panel is a *named* export, so we
+// map it to a synthetic default export for React.lazy. The component is only
+// fetched when its tab becomes active (Radix TabsContent doesn't mount
+// inactive content), so the shell stays light and each panel code-splits into
+// its own chunk under the 800 kB ceiling.
+// ─────────────────────────────────────────────────────────────────────────────
+const UsersPanel = lazy(() => import('./admin/UsersPanel').then(m => ({ default: m.UsersPanel })));
+const PlantsPanel = lazy(() => import('./admin/PlantsPanel').then(m => ({ default: m.PlantsPanel })));
+const AuditLogPanel = lazy(() => import('./admin/AuditLogPanel').then(m => ({ default: m.AuditLogPanel })));
+const MigrationsPanel = lazy(() => import('./admin/MigrationsPanel').then(m => ({ default: m.MigrationsPanel })));
+const RolesPanel = lazy(() => import('./admin/RolesPanel').then(m => ({ default: m.RolesPanel })));
+
+/** Shown while a lazily-loaded admin tab is being fetched. */
+function AdminPanelFallback() {
+  return (
+    <div
+      className="p-8 flex items-center justify-center text-sm text-muted-foreground animate-pulse"
+      data-testid="admin-panel-suspense"
+    >
+      Loading panel…
+    </div>
+  );
+}
 
 export default function Admin() {
   const { isAdmin, isManager, isDataAnalyst, loading } = useAuth();
@@ -186,25 +209,35 @@ export default function Admin() {
           )}
         </TabsList>
 
-        {canViewUsers && (
+                {canViewUsers && (
           <TabsContent value="users" className="mt-4">
-            <UsersPanel />
+            <Suspense fallback={<AdminPanelFallback />}>
+              <UsersPanel />
+            </Suspense>
           </TabsContent>
         )}
         <TabsContent value="plants" className="mt-4">
-          <PlantsPanel />
+          <Suspense fallback={<AdminPanelFallback />}>
+            <PlantsPanel />
+          </Suspense>
         </TabsContent>
         <TabsContent value="audit" className="mt-4">
-          <AuditLogPanel />
+          <Suspense fallback={<AdminPanelFallback />}>
+            <AuditLogPanel />
+          </Suspense>
         </TabsContent>
         {canViewMigrations && (
           <TabsContent value="migrations" className="mt-4">
-            <MigrationsPanel />
+            <Suspense fallback={<AdminPanelFallback />}>
+              <MigrationsPanel />
+            </Suspense>
           </TabsContent>
         )}
         {canManageRoles && (
           <TabsContent value="roles" className="mt-4">
-            <RolesPanel />
+            <Suspense fallback={<AdminPanelFallback />}>
+              <RolesPanel />
+            </Suspense>
           </TabsContent>
         )}
       </Tabs>
