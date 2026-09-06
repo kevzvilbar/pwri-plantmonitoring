@@ -257,7 +257,8 @@ export function PowerForm() {
       return (minimal ?? []) as any[];
     },
     enabled: !!plantId,
-    staleTime: 0,
+    staleTime: 120_000,
+    refetchInterval: 120_000,
   });
 
   // 14-day rolling average consumption RATE (kWh/hr) for this plant — same
