@@ -13,7 +13,7 @@ const summary = [];
 function run(label, cmd, args, opts = {}) {
   let out = '', code = 0, ok = true;
   try {
-    out = execFileSync(cmd, args, { cwd: root, encoding: 'utf8', ...opts });
+    out = execFileSync(cmd, args, { cwd: root, encoding: 'utf8', shell: true, ...opts });
   } catch (e) {
     ok = false; code = e.status ?? 1;
     out = (e.stdout ? e.stdout.toString('utf8') : '') + (e.stderr ? e.stderr.toString('utf8') : '');
@@ -22,13 +22,13 @@ function run(label, cmd, args, opts = {}) {
 }
 
 // 1) typecheck gate (CI gate, ci.yml:52)
-const tsc = run('tsc', 'npx.cmd', ['tsc', '--noEmit', '-p', 'tsconfig.app.json']);
+const tsc = run('tsc', 'npx', ['tsc', '--noEmit', '-p', 'tsconfig.app.json']);
 summary.push(`## ${tsc.label}: exit=${tsc.ok ? 0 : tsc.code}`);
 const tscErrs = tsc.out.match(/^\S.*\.ts\(\d+,\d+\): error TS/gm) || [];
 summary.push(tscErrs.length ? `TSC_ERRORS=${tscErrs.length}` : 'TSC_ERRORS=0');
 
 // 2) production build
-const build = run('vite build', 'npx.cmd', ['vite', 'build']);
+const build = run('vite build', 'npx', ['vite', 'build']);
 summary.push(`## ${build.label}: exit=${build.ok ? 0 : build.code}`);
 const built = (build.out.match(/built in [\d.]+s/) || ['built in (n/a)'])[0];
 summary.push(`BUILD_LINE=${built}`);
@@ -48,13 +48,13 @@ if (build.ok) {
 }
 
 // 3) unit tests
-const tests = run('vitest', 'npx.cmd', ['vitest', 'run']);
+const tests = run('vitest', 'npx', ['vitest', 'run']);
 summary.push(`## ${tests.label}: exit=${tests.ok ? 0 : tests.code}`);
 const passLine = (tests.out.match(/Tests\s+\d+ passed/) || tests.out.match(/Test Files\s+\d+ passed/) || [''])[0];
 summary.push(`TESTS_PASS=${passLine}`);
 
 // 4) lint ceiling (changed files)
-const lint = run('eslint', 'npx.cmd', ['eslint', '--max-warnings', 'Infinity', 'src/pages/Admin.tsx', 'src/data/data.test.ts', 'src/pages/admin']);
+const lint = run('eslint', 'npx', ['eslint', 'src/pages/Admin.tsx', 'src/data/data.test.ts', 'src/pages/admin']);
 summary.push(`## ${lint.label}: exit=${lint.ok ? 0 : lint.code}`);
 const warns = (lint.out.match(/\d+ warning/));
 summary.push(`LINT_WARNINGS=${warns ? warns[0] : 'n/a'}`);
