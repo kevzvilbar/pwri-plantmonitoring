@@ -64,7 +64,7 @@ describe('lib/monitoring', () => {
     expect(sentryInit).toHaveBeenCalledWith(
       expect.objectContaining({
         dsn: 'https://examplePublicKey@o0.ingest.sentry.io/1234',
-        tracesSampleRate: 0,
+        tracesSampleRate: 0.1,
       }),
     );
 

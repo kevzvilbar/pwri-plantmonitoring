@@ -1,14 +1,9 @@
 import { createRoot } from "react-dom/client";
 import App from "./App.tsx";
 import { supabaseConfigError } from "@/integrations/supabase/client";
-import { initMonitoring, reportError } from "@/lib/monitoring";
+import { reportError } from "@/lib/monitoring";
+import "./lib/sentry";
 import "./index.css";
-
-// ── Error monitoring bootstrap ───────────────────────────────────────────────
-// Must run before anything that can throw: a DSN-configured deployment gets
-// visibility into bootstrap-time failures too. Safe no-op without a DSN.
-initMonitoring();
-
 
 // ── Chunk-load failure handler ────────────────────────────────────────────────
 // When GitHub Pages deploys a new build, Vite generates new chunk filenames

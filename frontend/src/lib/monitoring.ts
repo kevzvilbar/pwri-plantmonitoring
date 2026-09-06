@@ -23,6 +23,7 @@
  *   setMonitoringUser({ id, role });       // after auth resolves (useAuth)
  */
 import * as Sentry from '@sentry/react';
+import { captureError } from './sentry';
 
 let initialized = false;
 
@@ -46,14 +47,6 @@ export function initMonitoring(): void {
     return;
   }
   initialized = true;
-  Sentry.init({
-    dsn,
-    environment: import.meta.env.MODE as string | undefined,
-    // Performance tracing is off by default: the roadmap asks for error
-    // monitoring, not APM. Turn tracesSampleRate on deliberately once the
-    // team agrees on the free-tier quota trade-off.
-    tracesSampleRate: 0,
-  });
 }
 
 /**
@@ -64,13 +57,7 @@ export function initMonitoring(): void {
  * this is a monitoring breadcrumb, not a log dump.
  */
 export function reportError(error: unknown, context?: Record<string, unknown>): void {
-  // Keep the console output identical to what existed before monitoring:
-  // grep-able in DevTools even when Sentry is disabled.
-  if (typeof console !== 'undefined') {
-    console.error('[monitoring]', error, context ?? '');
-  }
-  if (!initialized) return;
-  Sentry.captureException(error, { extra: context });
+  captureError(error, context);
 }
 
 /**

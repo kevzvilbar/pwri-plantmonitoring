@@ -2,6 +2,9 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react-swc";
 import { VitePWA } from "vite-plugin-pwa";
 import path from "path";
+import { createRequire } from "node:module";
+
+const require = createRequire(import.meta.url);
 
 export default defineConfig(({ mode }) => ({
   base: process.env.VERCEL ? '/' : '/pwri-plantmonitoring/',
@@ -52,6 +55,25 @@ export default defineConfig(({ mode }) => ({
         navigateFallback: "index.html",
       },
     }),
+    ...(mode === 'production'
+      ? (() => {
+          try {
+            const { sentryVitePlugin } = require('@sentry/vite-plugin');
+            return [
+              sentryVitePlugin({
+                org: process.env.SENTRY_ORG,
+                project: process.env.SENTRY_PROJECT,
+                authToken: process.env.SENTRY_AUTH_TOKEN,
+                sourcemaps: {
+                  assets: './dist/**',
+                },
+              }),
+            ];
+          } catch {
+            return [];
+          }
+        })()
+      : []),
   ],
   resolve: {
     alias: {

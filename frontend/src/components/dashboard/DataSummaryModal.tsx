@@ -8,27 +8,26 @@
 import React, { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { fmtNum } from '@/lib/calculations';
 import { format, subDays } from 'date-fns';
 import {
   Droplet, Activity, Receipt, Gauge, ArrowUpRight, ArrowDownRight, Minus,
-  CalendarDays, Loader2,
 } from 'lucide-react';
 import { deltaCache, hydrateFromStoredDeltas } from '@/lib/deltaCache';
 import { sanitizeReadings } from '@/lib/readingSanitizer';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
-import { Card } from '@/components/ui/card';
-import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
+import { DataSummaryFilters } from './DataSummaryFilters';
+import { DataSummaryTable } from './DataSummaryTable';
+import { DataSummaryStats } from './DataSummaryStats';
 
 // ─── DataSummaryModal ─────────────────────────────────────────────────────────
 // Full-screen pivot-table popup. Rows = dates, columns = individual
 // locators (consumption) or product meters (production). Non-retractable —
 // closes only via the ✕ button or clicking outside the dialog.
 
-type SummaryTab = 'both' | 'production' | 'consumption' | 'current';
+export type SummaryTab = 'both' | 'production' | 'consumption' | 'current';
 
 /**
  * Replacement-aware delta pivot — mirrors TrendChart.tsx `computeEntityDeltas`.
@@ -844,620 +843,54 @@ export function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: Dat
         className="max-w-[95vw] w-full max-h-[92vh] flex flex-col p-0 gap-0 overflow-hidden"
         data-testid="data-summary-modal"
       >
-        {/* ── Header ── */}
-        <DialogHeader className="px-5 pt-4 pb-3 border-b shrink-0">
-          <div className="flex items-center justify-between gap-3 flex-wrap">
-            <DialogTitle className="text-base font-semibold flex items-center gap-2">
-              <Activity className="h-4 w-4 text-primary" />
-              Data Summary
-            </DialogTitle>
-
-            {/* Date range picker */}
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <CalendarDays className="h-3.5 w-3.5 shrink-0" />
-              <input
-                type="date"
-                value={fromStr}
-                max={toStr}
-                onChange={(e) => e.target.value && setFromStr(e.target.value)}
-                className="bg-transparent border border-border rounded px-1.5 py-0.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40"
-              />
-              <span>→</span>
-              <input
-                type="date"
-                value={toStr}
-                min={fromStr}
-                max={todayStr}
-                onChange={(e) => e.target.value && setToStr(e.target.value)}
-                className="bg-transparent border border-border rounded px-1.5 py-0.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40"
-              />
-            </div>
-          </div>
-        </DialogHeader>
-
-        {/* ── Option toggles: Prod. vs Consum. / Production / Consumption ── */}
-        <div className="flex border-b shrink-0 px-5 bg-muted/20">
-          {([
-            { key: 'both',        label: 'Prod. vs Consum.',  icon: <Activity className="h-3 w-3" /> },
-            { key: 'production',  label: 'Production',        icon: <Droplet  className="h-3 w-3" /> },
-            { key: 'consumption', label: 'Consumption',       icon: <Receipt  className="h-3 w-3" /> },
-            { key: 'current',     label: 'Current Readings',  icon: <Gauge    className="h-3 w-3" /> },
-          ] as { key: SummaryTab; label: string; icon: React.ReactNode }[]).map(({ key, label, icon }) => (
-            <button
-              key={key}
-              onClick={() => setTab(key)}
-              className={[
-                'px-4 py-2.5 text-xs font-semibold border-b-2 -mb-px transition-colors',
-                tab === key
-                  ? 'border-primary text-primary'
-                  : 'border-transparent text-muted-foreground hover:text-foreground',
-              ].join(' ')}
-            >
-              <span className="flex items-center gap-1.5">{icon}{label}</span>
-            </button>
-          ))}
-        </div>
-
-        {/* ── Current-Readings side toggle — OUTSIDE the scroll container so
-             sticky thead is never displaced when scrolling horizontally. ── */}
-        {!isLoading && tab === 'current' && (
-          <div className="flex items-center gap-1 px-4 py-2 border-b bg-muted/10 shrink-0">
-            <span className="text-2xs text-muted-foreground mr-1">Show:</span>
-            {(['consumption', 'production'] as const).map((s) => (
-              <button
-                key={s}
-                onClick={() => setCurrentSide(s)}
-                className={[
-                  'px-2.5 py-0.5 text-2xs rounded-full border transition-colors',
-                  currentSide === s
-                    ? 'bg-primary text-primary-foreground border-primary font-semibold'
-                    : 'border-border text-muted-foreground hover:text-foreground',
-                ].join(' ')}
-              >
-                {s === 'consumption' ? 'Consumption' : 'Production'}
-              </button>
-            ))}
-          </div>
-        )}
-
-        {/* ── Body: pivot table or Prod. vs Consum. comparison ── */}
-        {/* Each tab renders its own overflow-auto container so horizontal scroll
-            state resets on every tab switch — preventing the carry-over misalignment
-            that occurred when a wide Production table left a scroll offset that was
-            then inherited by the narrower Prod. vs Consum. or Current tabs. */}
+        <DataSummaryFilters
+          fromStr={fromStr}
+          toStr={toStr}
+          setFromStr={setFromStr}
+          setToStr={setToStr}
+          tab={tab}
+          setTab={setTab}
+          currentSide={currentSide}
+          setCurrentSide={setCurrentSide}
+          isLoading={isLoading}
+        />
         <div className="flex-1 overflow-hidden flex flex-col min-h-0">
-          {isLoading && (
-            <div className="p-3 space-y-2.5" data-testid="dsm-loading-skeleton">
-              {Array.from({ length: 8 }).map((_, i) => (
-                <div key={i} className="flex items-center gap-3">
-                  <Skeleton className="h-3 w-20 shrink-0" />
-                  <Skeleton className="h-3 flex-1" />
-                  <Skeleton className="h-3 flex-1" />
-                  <Skeleton className="h-3 w-16 shrink-0" />
-                  <Skeleton className="h-3 w-14 shrink-0" />
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* ── "Prod. vs Consum." combined comparison tab — own scroll context ── */}
-          {!isLoading && tab === 'both' && (
-          <div className="flex-1 overflow-auto min-h-0">
-          {(() => {
-            // Use the production pivot as the single canonical date list (fromStr→toStr).
-            // Avoid a union that can gain phantom dates if the two pivot memos recompute
-            // at slightly different times or have readings outside the selected range.
-            const activeProdPivot = combinedProdPivot;
-            // Canonical date list: production pivot dates (same fromStr→toStr as cons pivot).
-            const allDates = activeProdPivot.dates;
-
-            // ── Entity-filtered sums — MUST match detail-tab rowTotals exactly ──────────
-            // Do NOT use pivotDayTotal (which sums raw map values including any orphan
-            // train_ids not present in entities). Instead mirror the rowTotals formula:
-            //   entities.reduce((s, e) => s + (pivot.get(date)?.get(e.id) ?? 0), 0)
-            // This guarantees "Prod. vs Consum." totals == "Production" / "Consumption"
-            // row totals for every date.
-            const prodEntities = activeProdPivot.entities;
-            const consEntities = consPivot.entities;
-            const rows = [...allDates].reverse().map((date) => {
-              const prod = prodEntities.reduce((s: number, e: any) => s + (activeProdPivot.pivot.get(date)?.get(e.id) ?? 0), 0);
-              const cons = consEntities.reduce((s: number, e: any) => s + (consPivot.pivot.get(date)?.get(e.id) ?? 0), 0);
-              const bal  = prod - cons;
-              const nrw  = prod > 0 ? +((bal / prod) * 100).toFixed(1) : null;
-              return { date, prod, cons, bal, nrw };
-            });
-            // Use the tab-independent memos so the TOTAL row always matches
-            // the grand totals shown in the "Production" and "Consumption" detail tabs.
-            const totProd = prodGrandTotal;
-            const totCons = consGrandTotal;
-            const totBal  = totProd - totCons;
-            const totNRW  = totProd > 0 ? +((totBal / totProd) * 100).toFixed(1) : null;
-            return (
-              <table className="min-w-full text-xs border-collapse" data-testid="dsm-both-table">
-                <thead>
-                  <tr className="bg-muted/95 backdrop-blur-sm">
-                    <th className="sticky top-0 left-0 z-30 bg-muted/95 px-3 py-2 text-left font-semibold text-muted-foreground whitespace-nowrap border-b border-r border-border min-w-[100px]">Date</th>
-                    <th className="sticky top-0 z-20 bg-muted/95 px-3 py-2 text-right font-semibold text-primary whitespace-nowrap border-b border-border min-w-[110px]">Production (m³)</th>
-                    <th className="sticky top-0 z-20 bg-muted/95 px-3 py-2 text-right font-semibold text-highlight whitespace-nowrap border-b border-border min-w-[120px]">Consumption (m³)</th>
-                    <th className="sticky top-0 z-20 bg-muted/95 px-3 py-2 text-right font-semibold text-muted-foreground whitespace-nowrap border-b border-border min-w-[100px]">Balance (m³)</th>
-                    <th className="sticky top-0 right-0 z-30 bg-primary-soft/95 px-3 py-2 text-right font-bold text-primary whitespace-nowrap border-b border-l border-border min-w-[80px]">NRW %</th>
-                  </tr>
-                  <tr className="bg-primary-soft/60">
-                    <td className="sticky left-0 z-30 bg-primary-soft/60 px-3 py-1.5 font-semibold text-primary whitespace-nowrap border-b border-r border-border text-2xs">TOTAL</td>
-                    <td className="px-3 py-1.5 text-right font-semibold font-mono-num text-primary border-b border-border tabular-nums">{totProd !== 0 ? <span className={totProd < 0 ? 'text-destructive font-semibold' : ''}>{totProd.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 2 })}</span> : '—'}</td>
-                    <td className="px-3 py-1.5 text-right font-semibold font-mono-num text-highlight border-b border-border tabular-nums">{totCons !== 0 ? <span className={totCons < 0 ? 'text-destructive font-semibold' : ''}>{totCons.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 2 })}</span> : '—'}</td>
-                    <td className={['px-3 py-1.5 text-right font-semibold font-mono-num border-b border-border tabular-nums', totBal >= 0 ? 'text-accent' : 'text-danger'].join(' ')}>{totBal !== 0 ? totBal.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 2 }) : '—'}</td>
-                    <td className="sticky right-0 z-30 bg-primary-soft/60 px-3 py-1.5 text-right font-bold font-mono-num text-primary border-b border-l border-border tabular-nums">{totNRW != null ? `${totNRW}%` : '—'}</td>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map(({ date, prod, cons, bal, nrw }, di) => {
-                    const isEven = di % 2 === 0;
-                    return (
-                      <tr key={date} className={isEven ? 'bg-background hover:bg-muted/20' : 'bg-muted/10 hover:bg-muted/30'}>
-                        <td className={['sticky left-0 z-10 px-3 py-1.5 font-medium text-muted-foreground whitespace-nowrap border-r border-border', isEven ? 'bg-background' : 'bg-muted/10'].join(' ')}>{format(new Date(date + 'T12:00:00'), 'MMM d, yyyy')}</td>
-                        <td className="px-3 py-1.5 text-right font-mono-num tabular-nums text-primary">{prod !== 0 ? <span className={prod < 0 ? 'text-destructive font-semibold' : ''}>{prod.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 2 })}</span> : <span className="text-muted-foreground/40">—</span>}</td>
-                        <td className="px-3 py-1.5 text-right font-mono-num tabular-nums text-highlight">{cons !== 0 ? <span className={cons < 0 ? 'text-destructive font-semibold' : ''}>{cons.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 2 })}</span> : <span className="text-muted-foreground/40">—</span>}</td>
-                        <td className={['px-3 py-1.5 text-right font-mono-num tabular-nums', bal > 0 ? 'text-accent' : bal < 0 ? 'text-danger' : 'text-muted-foreground/40'].join(' ')}>{prod !== 0 || cons !== 0 ? bal.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 2 }) : '—'}</td>
-                        <td className={['sticky right-0 z-10 px-3 py-1.5 text-right font-semibold font-mono-num tabular-nums border-l border-border', isEven ? 'bg-background' : 'bg-muted/10', nrw != null && nrw > 10 ? 'text-danger' : nrw != null ? 'text-primary' : 'text-muted-foreground/40'].join(' ')}>{nrw != null ? `${nrw}%` : '—'}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            );
-          })()}
-          </div>
-          )}
-
-          {/* ── Production / Consumption detail tabs ── */}
-          {!isLoading && (tab === 'production' || tab === 'consumption') && entities.length === 0 && (
-            <div className="flex items-center justify-center h-32 text-xs text-muted-foreground">
-              No {tab === 'consumption' ? 'locators' : 'product meters or RO trains'} found.
-            </div>
-          )}
-          {!isLoading && (tab === 'production' || tab === 'consumption') && entities.length > 0 && dates.length === 0 && (
-            <div className="flex items-center justify-center h-32 text-xs text-muted-foreground">
-              No readings in this date range.
-            </div>
-          )}
-          {!isLoading && (tab === 'production' || tab === 'consumption') && entities.length > 0 && dates.length > 0 && (
-            <div className="flex-1 overflow-auto min-h-0">
-            <table className="min-w-full text-xs border-collapse" data-testid="dsm-pivot-table">
-              <thead>
-                {/* Entity name header row */}
-                <tr className="bg-muted/95 backdrop-blur-sm">
-                  <th className="sticky top-0 left-0 z-30 bg-muted/95 px-3 py-2 text-left font-semibold text-muted-foreground whitespace-nowrap border-b border-r border-border min-w-[100px]">
-                    Date
-                  </th>
-                  {entities.map((e, i) => {
-                    // Production tab can now mix product-meter columns and RO-train
-                    // columns for a single plant ('both' mode) — check the entity
-                    // itself (tagged _source during pivot construction) rather than
-                    // a single modal-wide flag. "RO{train_number}" header for RO
-                    // trains; product meter / locator: name/code.
-                    const isRoTrain = tab === 'production' && (e as any)._source === 'ro';
-                    const label = isRoTrain
-                      ? `RO${e.train_number ?? i + 1}`
-                      : (e.name ?? e.code ?? `#${i + 1}`);
-                    const sublabel = plantCodeById.get(e.plant_id) ?? '';
-                    return (
-                      <th
-                        key={e.id}
-                        className="sticky top-0 z-20 bg-muted/95 px-2 py-2 text-center font-semibold text-muted-foreground whitespace-nowrap border-b border-border min-w-[90px]"
-                        title={`${sublabel}${sublabel ? ' · ' : ''}${isRoTrain ? `Train ${e.train_number}` : (e.name ?? e.code ?? e.id)}`}
-                      >
-                        <div className="truncate max-w-[110px] mx-auto font-mono-num">{label}</div>
-                        {sublabel && (
-                          <div className="text-3xs font-normal text-muted-foreground/70 truncate">{sublabel}</div>
-                        )}
-                      </th>
-                    );
-                  })}
-                  <th className="sticky top-0 right-0 z-30 bg-primary-soft/95 px-3 py-2 text-right font-bold text-primary whitespace-nowrap border-b border-l border-border min-w-[90px]">
-                    {tab === 'production' ? 'Total Prod. (m³)' : 'Total (m³)'}
-                  </th>
-                </tr>
-
-                {/* Column totals sub-header */}
-                <tr className="bg-primary-soft/60">
-                  <td className="sticky left-0 z-30 bg-primary-soft/60 px-3 py-1.5 font-semibold text-primary whitespace-nowrap border-b border-r border-border text-2xs">
-                    TOTAL
-                  </td>
-                  {colTotals.map((tot, i) => (
-                    <td key={entities[i].id} className="px-2 py-1.5 text-center font-semibold font-mono-num text-primary border-b border-border tabular-nums">
-                      {tot > 0 ? tot.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 2 }) : <span className="text-muted-foreground/50">—</span>}
-                    </td>
-                  ))}
-                  <td className="sticky right-0 z-30 bg-primary-soft/60 px-3 py-1.5 text-right font-bold font-mono-num text-primary border-b border-l border-border tabular-nums">
-                    {grandTotal.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 2 })}
-                  </td>
-                </tr>
-              </thead>
-
-              <tbody>
-                {[...dates].reverse().map((date, di) => {
-                  const rowVols = entities.map((e) => pivot.get(date)?.get(e.id) ?? null);
-                  const rowTot = rowTotals[dates.length - 1 - di];
-                  const isEven = di % 2 === 0;
-                  return (
-                    <tr
-                      key={date}
-                      className={isEven ? 'bg-background hover:bg-muted/20' : 'bg-muted/10 hover:bg-muted/30'}
-                    >
-                      <td className={[
-                        'sticky left-0 z-10 px-3 py-1.5 font-medium text-muted-foreground whitespace-nowrap border-r border-border',
-                        isEven ? 'bg-background' : 'bg-muted/10',
-                      ].join(' ')}>
-                        {format(new Date(date + 'T12:00:00'), 'MMM d, yyyy')}
-                      </td>
-                      {rowVols.map((vol, ei) => {
-                        const entityId = entities[ei].id;
-                        const estKey = `${date}__${entityId}`;
-                        const isEst = estimatedKeys.has(estKey);
-                        return (
-                          <td
-                            key={entityId}
-                            className={[
-                              "px-2 py-1.5 text-right font-mono-num tabular-nums border-border",
-                              isEst ? "bg-warn-soft/60" : "",
-                            ].join(" ")}
-                            title={isEst ? "System-generated / Backfilled reading — no manual operator entry on file. Value will be replaced when actual data is entered." : undefined}
-                          >
-                            {vol != null && vol !== 0 ? (
-                              <span className={cn("inline-flex items-center gap-0.5", vol < 0 && "text-destructive font-semibold")}>
-                                {isEst && (
-                                  <span className="text-warn text-3xs font-bold leading-none" aria-label="estimated">~</span>
-                                )}
-                                {vol.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 2 })}
-                              </span>
-                            ) : (
-                              <span className="text-muted-foreground/40">—</span>
-                            )}
-                          </td>
-                        );
-                      })}
-                      <td className={[
-                        'sticky right-0 z-10 px-3 py-1.5 text-right font-semibold font-mono-num tabular-nums border-l border-border',
-                        tab === 'consumption' ? 'text-highlight' : 'text-primary',
-                        isEven ? 'bg-background' : 'bg-muted/10',
-                      ].join(' ')}>
-                        {rowTot !== 0 ? (
-                          <span className={rowTot < 0 ? 'text-destructive font-semibold' : ''}>
-                            {rowTot.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 2 })}
-                          </span>
-                        ) : '—'}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-
-            {/* ── Inline Current Readings section (same entities, raw meter values) ── */}
-            {(() => {
-              const inlineCurrPivot = tab === 'consumption'
-                ? consCurrentPivot
-                : combinedProdCurrentPivot;
-              const icEntities = inlineCurrPivot.entities;
-              const icDates    = inlineCurrPivot.dates;
-              const icPivot    = inlineCurrPivot.pivot;
-
-              const icEntityLatest: (number | null)[] = icEntities.map((e: any) => {
-                for (const d of [...icDates].reverse()) {
-                  const v = icPivot.get(d)?.get(e.id);
-                  if (v != null) return v;
-                }
-                return null;
-              });
-
-              return (
-                <>
-                  {/* Section divider — labels the second table clearly */}
-                  <div className="flex items-center gap-2 px-3 py-2 border-t-2 border-border/60 bg-muted/30">
-                    <Gauge className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                    <span className="text-xs font-semibold text-muted-foreground">Current Readings</span>
-                    <span className="text-2xs text-muted-foreground/60">— latest raw meter value per entity per day (absolute, not delta)</span>
-                  </div>
-
-                  <table className="min-w-full text-xs border-collapse" data-testid="dsm-current-inline-table">
-                    <thead>
-                      {/* ── Column header row ── */}
-                      <tr className="bg-muted/90 backdrop-blur-sm">
-                        <th className="sticky left-0 z-20 bg-muted/90 px-3 py-2 text-left font-semibold text-muted-foreground whitespace-nowrap border-b border-r border-border min-w-[100px]">
-                          Date
-                        </th>
-                        {icEntities.map((e: any, i: number) => {
-                          const isRoTrain = tab === 'production' && e._source === 'ro';
-                          const label    = isRoTrain ? `RO${e.train_number ?? i + 1}` : (e.name ?? e.code ?? `#${i + 1}`);
-                          const sublabel = plantCodeById.get(e.plant_id) ?? '';
-                          return (
-                            <th
-                              key={e.id}
-                              className="bg-muted/90 px-2 py-2 text-center font-semibold text-muted-foreground whitespace-nowrap border-b border-border min-w-[90px]"
-                              title={`${sublabel}${sublabel ? ' · ' : ''}${isRoTrain ? `Train ${e.train_number}` : (e.name ?? e.code ?? e.id)}`}
-                            >
-                              <div className="truncate max-w-[110px] mx-auto font-mono-num">{label}</div>
-                              {sublabel && (
-                                <div className="text-3xs font-normal text-muted-foreground/70 truncate">{sublabel}</div>
-                              )}
-                            </th>
-                          );
-                        })}
-                        <th className="sticky right-0 z-20 bg-primary-soft/95 px-3 py-2 text-right font-bold text-primary whitespace-nowrap border-b border-l border-border min-w-[80px]">
-                          Coverage
-                        </th>
-                      </tr>
-
-                      {/* ── LATEST sub-header row ── */}
-                      <tr className="bg-primary-soft/60">
-                        <td className="sticky left-0 z-20 bg-primary-soft/60 px-3 py-1.5 text-2xs font-bold text-primary whitespace-nowrap border-b border-r border-border">
-                          LATEST
-                        </td>
-                        {icEntityLatest.map((val, i) => (
-                          <td
-                            key={icEntities[i].id}
-                            className="px-2 py-1.5 text-center text-2xs font-semibold font-mono-num tabular-nums text-primary border-b border-border"
-                          >
-                            {val != null
-                              ? val.toLocaleString(undefined, { maximumFractionDigits: 2 })
-                              : <span className="text-muted-foreground/40">—</span>}
-                          </td>
-                        ))}
-                        <td className="sticky right-0 z-20 bg-primary-soft/60 px-3 py-1.5 text-right text-2xs font-bold text-primary border-b border-l border-border tabular-nums">
-                          {icEntities.length} entities
-                        </td>
-                      </tr>
-                    </thead>
-
-                    <tbody>
-                      {[...icDates].reverse().map((date: string, di: number) => {
-                        const isEven      = di % 2 === 0;
-                        const rowVals     = icEntities.map((e: any) => icPivot.get(date)?.get(e.id) ?? null);
-                        const reported    = rowVals.filter((v) => v != null).length;
-                        const total       = icEntities.length;
-                        const coveragePct = total > 0 ? Math.round((reported / total) * 100) : 0;
-                        const coverageColor =
-                          coveragePct === 100 ? 'text-accent' :
-                          coveragePct >= 50   ? 'text-warn'    :
-                                                'text-danger';
-                        return (
-                          <tr
-                            key={date}
-                            className={isEven ? 'bg-background hover:bg-muted/20' : 'bg-muted/10 hover:bg-muted/30'}
-                          >
-                            <td className={[
-                              'sticky left-0 z-10 px-3 py-1.5 font-medium text-muted-foreground whitespace-nowrap border-r border-border',
-                              isEven ? 'bg-background' : 'bg-muted/10',
-                            ].join(' ')}>
-                              {format(new Date(date + 'T12:00:00'), 'MMM d, yyyy')}
-                            </td>
-                            {rowVals.map((val, ei) => (
-                              <td
-                                key={icEntities[ei].id}
-                                className="px-2 py-1.5 text-right font-mono-num tabular-nums border-border"
-                                title={val != null ? `Raw meter reading: ${val.toLocaleString(undefined, { maximumFractionDigits: 3 })} m³` : undefined}
-                              >
-                                {val != null
-                                  ? <span className="text-foreground">{val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                                  : <span className="text-muted-foreground/40">—</span>}
-                              </td>
-                            ))}
-                            <td
-                              className={[
-                                'sticky right-0 z-10 px-3 py-1.5 text-right font-semibold font-mono-num tabular-nums text-2xs border-l border-border',
-                                isEven ? 'bg-background' : 'bg-muted/10',
-                                coverageColor,
-                              ].join(' ')}
-                              title={`${reported} of ${total} entities reported on this date`}
-                            >
-                              {reported > 0 ? `${reported}/${total}` : <span className="text-muted-foreground/40">—</span>}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </>
-              );
-            })()}
-
-            </div>
-          )}
-
-          {/* ── Current Readings tab — own scroll context ── */}
-          {!isLoading && tab === 'current' && (
-          <div className="flex-1 overflow-auto min-h-0">
-          {(() => {
-            const crEntities = currentPivotData.entities;
-            const crDates    = currentPivotData.dates;
-            const crPivot    = currentPivotData.pivot;
-
-            if (crEntities.length === 0) return (
-              <div className="flex items-center justify-center h-32 text-xs text-muted-foreground">
-                No entities found for current readings.
-              </div>
-            );
-            if (crDates.length === 0) return (
-              <div className="flex items-center justify-center h-32 text-xs text-muted-foreground">
-                No readings in this date range.
-              </div>
-            );
-
-            // Per-entity: most-recent non-null reading across the date range
-            const entityLatest: (number | null)[] = crEntities.map((e: any) => {
-              let latest: number | null = null;
-              for (const d of [...crDates].reverse()) {
-                const v = crPivot.get(d)?.get(e.id);
-                if (v != null) { latest = v; break; }
-              }
-              return latest;
-            });
-
-            return (
-              <table className="min-w-full text-xs border-collapse" data-testid="dsm-current-table">
-                <thead>
-                  {/* ── Row 1: column labels ── */}
-                  <tr className="bg-muted/95 backdrop-blur-sm">
-                    <th className="sticky top-0 left-0 z-30 bg-muted/95 px-3 py-2 text-left font-semibold text-muted-foreground whitespace-nowrap border-b border-r border-border min-w-[110px]">
-                      Date
-                    </th>
-                    {crEntities.map((e: any, i: number) => {
-                      const isRoTrain = currentSide === 'production' && e._source === 'ro';
-                      const label    = isRoTrain ? `RO${e.train_number ?? i + 1}` : (e.name ?? e.code ?? `#${i + 1}`);
-                      const sublabel = plantCodeById.get(e.plant_id) ?? '';
-                      return (
-                        <th
-                          key={e.id}
-                          className="sticky top-0 z-20 bg-muted/95 px-2 py-2 text-center font-semibold text-muted-foreground whitespace-nowrap border-b border-border min-w-[110px]"
-                          title={`${sublabel}${sublabel ? ' · ' : ''}${isRoTrain ? `Train ${e.train_number}` : (e.name ?? e.code ?? e.id)}`}
-                        >
-                          <div className="truncate max-w-[120px] mx-auto">{label}</div>
-                          {sublabel && (
-                            <div className="text-3xs font-normal text-muted-foreground/70 truncate">{sublabel}</div>
-                          )}
-                        </th>
-                      );
-                    })}
-                    {/* Coverage header — sticky right */}
-                    <th className="sticky top-0 right-0 z-30 bg-primary-soft/95 px-3 py-2 text-right font-bold text-primary whitespace-nowrap border-b border-l border-border min-w-[80px]">
-                      Coverage
-                    </th>
-                  </tr>
-
-                  {/* ── Row 2: LATEST sub-header ── */}
-                  <tr className="bg-primary-soft/60">
-                    <td className="sticky top-0 left-0 z-30 bg-primary-soft/60 px-3 py-1.5 text-2xs font-bold text-primary whitespace-nowrap border-b border-r border-border">
-                      LATEST
-                    </td>
-                    {entityLatest.map((val, i) => (
-                      <td
-                        key={crEntities[i].id}
-                        className="px-2 py-1.5 text-center text-2xs font-semibold font-mono-num tabular-nums text-primary border-b border-border"
-                      >
-                        {val != null
-                          ? val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-                          : <span className="text-muted-foreground/40">—</span>}
-                      </td>
-                    ))}
-                    <td className="sticky right-0 z-30 bg-primary-soft/60 px-3 py-1.5 text-right text-2xs font-bold text-primary border-b border-l border-border tabular-nums">
-                      {crEntities.length} entities
-                    </td>
-                  </tr>
-                </thead>
-
-                <tbody>
-                  {[...crDates].reverse().map((date: string, di: number) => {
-                    const isEven      = di % 2 === 0;
-                    const rowVals     = crEntities.map((e: any) => crPivot.get(date)?.get(e.id) ?? null);
-                    const reported    = rowVals.filter((v) => v != null).length;
-                    const total       = crEntities.length;
-                    const coveragePct = total > 0 ? Math.round((reported / total) * 100) : 0;
-                    const coverageColor =
-                      coveragePct === 100 ? 'text-accent' :
-                      coveragePct >= 50   ? 'text-warn'    :
-                                            'text-danger';
-
-                    return (
-                      <tr
-                        key={date}
-                        className={isEven ? 'bg-background hover:bg-muted/20' : 'bg-muted/10 hover:bg-muted/30'}
-                      >
-                        {/* Date cell */}
-                        <td className={[
-                          'sticky left-0 z-10 px-3 py-1.5 font-medium text-muted-foreground whitespace-nowrap border-r border-border',
-                          isEven ? 'bg-background' : 'bg-muted/10',
-                        ].join(' ')}>
-                          {format(new Date(date + 'T12:00:00'), 'MMM d, yyyy')}
-                        </td>
-
-                        {/* Entity cells */}
-                        {rowVals.map((val, ei) => (
-                          <td
-                            key={crEntities[ei].id}
-                            className="px-2 py-1.5 text-right font-mono-num tabular-nums border-border"
-                            title={val != null ? `Raw meter reading: ${val.toLocaleString(undefined, { maximumFractionDigits: 3 })} m³` : undefined}
-                          >
-                            {val != null
-                              ? <span className="text-foreground">{val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                              : <span className="text-muted-foreground/40">—</span>}
-                          </td>
-                        ))}
-
-                        {/* Coverage cell — sticky right */}
-                        <td
-                          className={[
-                            'sticky right-0 z-10 px-3 py-1.5 text-right font-semibold font-mono-num tabular-nums text-2xs border-l border-border',
-                            isEven ? 'bg-background' : 'bg-muted/10',
-                            coverageColor,
-                          ].join(' ')}
-                          title={`${reported} of ${total} entities reported on this date`}
-                        >
-                          {reported > 0 ? `${reported}/${total}` : <span className="text-muted-foreground/40">—</span>}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            );
-          })()}
-          </div>
-          )}
+          <DataSummaryTable
+            tab={tab}
+            isLoading={isLoading}
+            consPivot={consPivot}
+            prodPivot={prodPivot}
+            combinedProdPivot={combinedProdPivot}
+            consCurrentPivot={consCurrentPivot}
+            prodCurrentPivot={prodCurrentPivot}
+            combinedProdCurrentPivot={combinedProdCurrentPivot}
+            currentPivotData={currentPivotData}
+            colTotals={colTotals}
+            rowTotals={rowTotals}
+            grandTotal={grandTotal}
+            prodGrandTotal={prodGrandTotal}
+            consGrandTotal={consGrandTotal}
+            plantCodeById={plantCodeById}
+            hasRoEntities={hasRoEntities}
+            hasMeterEntities={hasMeterEntities}
+            currentSide={currentSide}
+          />
         </div>
-
-        {/* ── Footer legend ── */}
-        <div className="px-5 py-2 border-t shrink-0 flex items-center gap-4 text-2xs text-muted-foreground bg-muted/20">
-          {tab === 'both' && <><Activity className="h-3 w-3 text-primary" /> Production vs Consumption — daily totals (m³) · NRW % = (Prod − Cons) ÷ Prod</>}
-          {tab === 'consumption' && <><Receipt className="h-3 w-3 text-highlight" /> Consumption — delta volume (m³) per locator · Current Readings — raw meter values per locator per day</>}
-          {tab === 'production' && (
-            hasRoEntities && hasMeterEntities
-              ? <><Droplet className="h-3 w-3 text-primary" /> Production — delta volume (m³) per product meter + permeate_meter_delta (m³) per RO train, summed · Current Readings — raw meter values per entity per day</>
-              : hasRoEntities
-                ? <><Droplet className="h-3 w-3 text-primary" /> Production — permeate_meter_delta (m³) per RO train · Current Readings — raw permeate meter per train per day</>
-                : <><Droplet className="h-3 w-3 text-primary" /> Production — delta volume (m³) per product meter · Current Readings — raw meter values per meter per day</>
-          )}
-          {(tab === 'production' || tab === 'consumption') && estimatedKeys.size > 0 && (
-            <span className="flex items-center gap-1 ml-3 text-warn">
-              <span className="font-bold text-2xs">~</span>
-              Auto-estimated (Poly. Regression deg. 3) — hover cell for details
-            </span>
-          )}
-          {tab === 'current' && (
-            <><Gauge className="h-3 w-3 text-muted-foreground" /> Current Readings — latest raw meter value per entity per day (absolute, not delta)</>
-          )}
-          <span className="ml-auto">
-            {tab === 'both' && `${combinedProdPivot.dates.length} days in range`}
-            {tab === 'consumption' && `${entities.length} locators · ${dates.length} days`}
-            {tab === 'production' && (
-              hasRoEntities && hasMeterEntities
-                ? `${combinedProdPivot.entities.length} meters/trains · ${combinedProdPivot.dates.length} days`
-                : hasRoEntities
-                  ? `${combinedProdPivot.entities.length} RO trains · ${combinedProdPivot.dates.length} days`
-                  : `${combinedProdPivot.entities.length} meters · ${combinedProdPivot.dates.length} days`
-            )}
-            {tab === 'current' && `${currentPivotData.entities.length} entities · ${currentPivotData.dates.length} days`}
-          </span>
-        </div>
-        {/* ── TEMPORARY DIAGNOSTIC ─────────────────────────────────────────────
-            Shows exactly what this modal fetched from plant_meter_config, so we
-            can confirm whether a saved production-source change is actually
-            reaching this query or not, instead of guessing. Safe to delete once
-            the Mambaling RO-permeate issue is root-caused. */}
-        {tab === 'production' && (
-          <div className="px-4 py-1.5 text-2xs font-mono text-muted-foreground bg-warn-soft/40 border-t border-warn/30 break-all">
-            DEBUG plant_meter_config rows fetched for {plantIds.length} plant id(s) [{plantIds.join(', ')}]:{' '}
-            {configLoading
-              ? 'loading…'
-              : (modalMeterConfigs ?? []).length === 0
-                ? 'ZERO ROWS RETURNED — either no config row exists for this plant yet, or an RLS policy is silently blocking the read (Supabase returns [] on a blocked SELECT, not an error)'
-                : (modalMeterConfigs ?? []).map((c: any) =>
-                    `[plant_id=${c.plant_id}] column permeate_is_production=${String(c.permeate_is_production)} · config.permeate_is_production=${String(c.config?.permeate_is_production)} · config.ro_production_source=${String(c.config?.ro_production_source)}`,
-                  ).join('   |   ')}
-          </div>
-        )}
+        <DataSummaryStats
+          tab={tab}
+          combinedProdPivot={combinedProdPivot}
+          consPivot={consPivot}
+          currentPivotData={currentPivotData}
+          entities={entities}
+          dates={dates}
+          estimatedKeys={estimatedKeys}
+          hasRoEntities={hasRoEntities}
+          hasMeterEntities={hasMeterEntities}
+          plantIds={plantIds}
+          modalMeterConfigs={modalMeterConfigs}
+          configLoading={configLoading}
+        />
       </DialogContent>
     </Dialog>
   );
 }
-

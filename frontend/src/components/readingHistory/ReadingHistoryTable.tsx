@@ -2,13 +2,10 @@
 import React, { useState, useMemo } from 'react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useQuery } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { friendlyError } from '@/lib/supabaseErrors';
 import { useDraft } from '@/hooks/useDraft';
-import { CorrectionRequestDialog } from '@/components/CorrectionRequestDialog';
-import type { CorrectionTarget } from '@/components/CorrectionRequestDialog';
-import { CorrectionReasonField } from '@/components/CorrectionReasonField';
-import { resolveReason, isReasonComplete } from '@/lib/correctionReasons';
 import { useAuth } from '@/hooks/useAuth';
 import { useAppStore } from '@/store/appStore';
 import { usePlants } from '@/hooks/usePlants';
@@ -36,11 +33,12 @@ import {
   invalidateRODash, invalidateProductMeterDash,
 } from '@/pages/operations/shared';
 import { ReplaceMeterDialog } from '@/pages/plants/locators/LocatorDialogs';
-import { PowerMeterChangeDialog } from '@/pages/plants/config/PowerMeters';
 import { canEditEntry, logReadingEdit, diffFields } from '@/pages/ro-trains/helpers';
 import { HistoryEditState, getGridMeterVal, ReadingHistoryProps, HistoryModule } from './types';
 import { HistoryCascadeConfirmDialog } from './HistoryCascadeConfirmDialog';
-import { useQueryClient } from '@tanstack/react-query';
+import { useReadingHistoryActions } from './useReadingHistoryActions';
+import { ReadingHistoryEditForm } from './ReadingHistoryEditForm';
+import { ReadingHistoryBulkActions } from './ReadingHistoryBulkActions';
 
 export function ReadingHistoryTable(props: any) {
   const {
@@ -52,59 +50,10 @@ export function ReadingHistoryTable(props: any) {
   const qc = useQueryClient();
 
   const isDirectMode = (module === 'locator' || module === 'well') && defaultInputMode === 'direct';
-  // Plant-level solar mode (Plants → Energy Sources). See prop doc above —
-  // this must never be inferred from which column happens to be populated on
-  // a given row (that's what let the bug through originally: solar_meter_reading
-  // and daily_solar_kwh could both be non-null at once, e.g. after a row was
-  // edited through this dialog before this fix), it has to come from the
-  // plant's actual configured setting.
   const isSolarDirectMode = module === 'power' && solarInputMode === 'direct';
-  // Resolves a row's solar value under Direct kWh mode: prefer daily_solar_kwh
-  // (the column direct-mode entries are meant to live in) but fall back to
-  // solar_meter_reading for rows that still have the value there (entered
-  // before the plant switched to Direct kWh, or edited through this dialog
-  // before this fix).
   const solarDirectVal = (row: any): number | null => {
     const v = row?.daily_solar_kwh ?? row?.solar_meter_reading;
     return v != null ? +v : null;
-  };
-  
-  // Permission model: same canEditEntry primitive already used by every other
-  // reading-entry surface (RO logs, CIP, Dosing, Locator inline edit) — was
-  // previously entirely absent here (canEditDelete was hardcoded `true`, see
-  // the comment further down where that's now removed), meaning any signed-in
-  // user could edit or delete any reading in any module through this dialog
-  // regardless of role or who recorded it.
-  const { isAdmin, isManager, isDataAnalyst, user, activeOperatorId } = useAuth();
-  const hasFullAccess = isAdmin || isManager || isDataAnalyst;
-  const [editRow, setEditRow] = useState<HistoryEditState | null>(null);
-  const [editReason, setEditReason] = useState('');
-  const [editCustomReason, setEditCustomReason] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [togglingId, setTogglingId] = useState<string | null>(null);
-  // Reading id currently going through the "Replace meter" dialog (well/locator
-  // only). Checking the Repl. box — row toggle or inline edit form — opens this
-  // instead of flipping is_meter_replacement directly, so the swap actually gets
-  // logged (old/new brand, size, serial, installed date) instead of just a flag.
-  const [replaceReadingId, setReplaceReadingId] = useState<string | null>(null);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [bulkDeleting, setBulkDeleting] = useState(false);
-  const [togglingGridId, setTogglingGridId] = useState<string | null>(null);
-  // Power reading currently going through PowerMeterChangeDialog (readingId
-  // mode) — see toggleGridReplacement below for why checking opens this
-  // instead of a bare flag flip + blind multiplier reset.
-  const [replacePowerReadingId, setReplacePowerReadingId] = useState<{ id: string; gridIdx: number } | null>(null);
-  const [togglingSolarId, setTogglingSolarId] = useState<string | null>(null);
-  // Delete confirmation now goes through an AlertDialog (themed, works in iframes,
-  // unlike the native window.confirm() this previously used).
-  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
-  const [bulkDeletePending, setBulkDeletePending] = useState(false);
-
-  // Helper: parse a YYYY-MM-DD string as LOCAL midnight (avoids UTC timezone shift)
-  const localMidnight = (dateStr: string) => {
-    const [y, m, d] = dateStr.split('-').map(Number);
-    return new Date(y, m - 1, d);
   };
 
   const resolvedGridCount = Math.max(1, gridMeterCountProp);
@@ -115,10 +64,6 @@ export function ReadingHistoryTable(props: any) {
       ? +gridMultipliers[idx]
       : multiplier;
 
-  // Pure in-memory display filter: If the database contains an auto-backfilled estimate (is_estimated = true)
-  // that violates monotonicity against its chronological predecessor or successor (which would display as a negative delta),
-  // exclude it from display so users never see corrupt estimates.
-  // This hook is strictly pure and performs no side-effects or network mutations.
   const rows = useMemo(() => {
     if (!rawRows || rawRows.length === 0) return [];
     const valid: any[] = [];
@@ -131,9 +76,6 @@ export function ReadingHistoryTable(props: any) {
       return null;
     };
 
-    // rawRows are sorted descending by reading_datetime:
-    // rawRows[i] is current row, rawRows[i+1] is chronologically PRECEDING row,
-    // rawRows[i-1] is chronologically SUCCEEDING row.
     for (let i = 0; i < rawRows.length; i++) {
       const r = rawRows[i];
       if (r.is_estimated && !r.is_meter_rollover && !r.is_meter_replacement) {
@@ -145,14 +87,11 @@ export function ReadingHistoryTable(props: any) {
           const predVal = getVal(pred);
           const succVal = getVal(succ);
 
-          // Unified monotonicity checks (consistent with resyncLocatorChain):
-          // 1. If predecessor exists, cur cannot be <= predecessor (cur <= predVal produces non-positive / negative delta!)
-          // 2. If successor exists, cur cannot be >= successor (cur >= succVal forces successor into non-positive / negative delta!)
           const violatesPred = predVal != null && !pred?.is_meter_rollover && !r.is_meter_replacement && cur <= predVal;
           const violatesSucc = succVal != null && !r.is_meter_rollover && !succ?.is_meter_replacement && cur >= succVal;
 
           if (violatesPred || violatesSucc) {
-            continue; // Exclude from display immediately
+            continue;
           }
         }
       }
@@ -162,854 +101,661 @@ export function ReadingHistoryTable(props: any) {
     return valid;
   }, [rawRows]);
 
-  const startEdit = (r: any) => {
-    if (!canEditEntry(r, hasFullAccess, activeOperatorId)) {
-      toast.error('You can only edit your own entries, within 8 hours of submitting them.');
-      return;
-    }
-    setEditReason('');
-    setEditCustomReason('');
-    const dt = r.reading_datetime ?? r.created_at ?? '';
-    const dtStr = dt ? format(new Date(dt), "yyyy-MM-dd'T'HH:mm") : format(new Date(), "yyyy-MM-dd'T'HH:mm");
-    if (module === 'well') {
-      // Use undefined (not '') for optional columns that may be absent from
-      // the DB row — the saveEdit guard checks `!== undefined` to decide
-      // whether to include them in the UPDATE payload.  Setting '' instead
-      // of undefined (the old behaviour) meant the guard never fired, and
-      // every save sent tds_ppm/turbidity_ntu/pressure_psi to PostgREST
-      // even when the schema cache didn't know about those columns yet,
-      // producing the misleading "relation 'well_readings' does not exist".
-      setEditRow({
-        id: r.id,
-        datetime: dtStr,
-        value: String(r.current_reading ?? ''),
-        value2: r.power_meter_reading != null ? String(r.power_meter_reading) : '',
-        value4: 'tds_ppm'       in r ? (r.tds_ppm        != null ? String(r.tds_ppm)                  : '') : undefined,
-        value6: 'turbidity_ntu' in r ? ((r as any).turbidity_ntu != null ? String((r as any).turbidity_ntu) : '') : undefined,
-        value5: 'pressure_psi'  in r ? (r.pressure_psi   != null ? String(r.pressure_psi)              : '') : undefined,
-        // Guard is_meter_replacement the same way as the quality columns above.
-        // When the fallback SELECT was used the column is absent from r, so we
-        // must not send it in the UPDATE payload or PostgREST rejects the whole
-        // request with "relation 'well_readings' does not exist".
-        hasMeterReplacement: 'is_meter_replacement' in r,
-        isMeterReplacement: !!r.is_meter_replacement,
-      });
-    } else if (module === 'locator') {
-      setEditRow({ id: r.id, datetime: dtStr, value: String(r.current_reading ?? ''), isMeterReplacement: !!r.is_meter_replacement });
-    } else if (module === 'power') {
-      // Which grid meter is r.meter_reading_kwh even for? Before this fix it
-      // wasn't — the edit form always read/wrote index 0 (STP) regardless of
-      // which meter's history dialog was actually open, so editing e.g. Grid
-      // Meter 3 Main silently overwrote Grid Meter 1 STP instead. Derive the
-      // real index from meterFilter, same as the row display just above does.
-      const isSolarEdit = meterFilter?.type === 'solar';
-      const gridIdxForEdit = meterFilter && !isSolarEdit ? (meterFilter as { type: 'grid'; idx: number }).idx : 0;
-      const rIdx = (rows ?? []).indexOf(r);
-      const gridValueForEdit = getGridMeterVal(r, gridIdxForEdit, rIdx, rows ?? []);
-      const solarValueForEdit = isSolarDirectMode ? solarDirectVal(r) : r.solar_meter_reading;
-      setEditRow({ id: r.id, datetime: dtStr, value: String(gridValueForEdit ?? ''), value2: solarValueForEdit != null ? String(solarValueForEdit) : '', value3: r.daily_grid_kwh != null ? String(r.daily_grid_kwh) : '', gridIdx: gridIdxForEdit, isMeterReplacement: !!r.is_meter_replacement });
-    } else if (module === 'blending') {
-      const eventDt = r.event_date ?? r.noted_at ?? '';
-      const blendDtStr = eventDt ? format(new Date(eventDt), "yyyy-MM-dd'T'HH:mm") : format(new Date(), "yyyy-MM-dd'T'HH:mm");
-      setEditRow({ id: r.id, datetime: blendDtStr, value: String(r.raw_meter_reading ?? ''), isMeterReplacement: !!r.is_meter_replacement });
-    }
-  };
+  const { isAdmin, isManager, isDataAnalyst, user, activeOperatorId } = useAuth();
+  const hasFullAccess = isAdmin || isManager || isDataAnalyst;
 
-  // Re-walk the full previous_reading chain for this locator, in chronological
-  // order, and persist any link that's drifted from what's actually stored.
-  //
-  // Root cause this guards against: previous_reading is written once at insert
-  // time and nothing in this dialog's edit/delete/toggle handlers ever kept it
-  // in sync afterwards — editing an earlier reading's value, deleting a
-  // reading, or clearing a meter-replacement flag all change who a downstream
-  // row's real predecessor is, but the downstream row's stored previous_reading
-  // was never told. Because locator_readings.daily_volume is a GENERATED
-  // ALWAYS AS (current_reading - previous_reading) column, a stale
-  // previous_reading silently produces a wrong daily_volume with no error from
-  // Postgres — nothing here or in the DB flags it. That wrong daily_volume then
-  // feeds straight into fn_sweep_derived_meters' residual calc for any derived
-  // locator sharing this locator as a sibling/mother, corrupting the derived
-  // value even though the sweep function itself is correct.
-  //
-  // The Admin/Data-Analyst-only "Data Corrections" workflow already repairs
-  // this via the fn_cascade_reading_correction RPC when it's used — but that
-  // RPC is role-gated and this dialog's inline edit/delete (now gated by
-  // canEditEntry per row, same as everywhere else — previously unconditional)
-  // never calls it. This mirrors the same forward
-  // walk as a plain client-side resync instead, so it works under whatever
-  // role/RLS already permits editing a single row through this dialog.
-  const resyncLocatorChain = async (locatorId: string) => {
-    const { data: all, error } = await supabase
-      .from('locator_readings')
-      .select('id, current_reading, previous_reading, reading_datetime, is_estimated')
-      .eq('locator_id', locatorId)
-      .order('reading_datetime', { ascending: true });
-    if (error || !all) return;
-
-    let last: number | null = null;
-    const updates: { id: string; previous_reading: number | null }[] = [];
-    const staleEstimatedIds: string[] = [];
-
-    for (const row of all as any[]) {
-      const cur = +row.current_reading;
-      // If this is an auto-backfilled estimate and its value violates monotonicity
-      // against the preceding reading (creating a negative delta), it is provably invalid and must be purged.
-      if (row.is_estimated && last != null && cur <= last) {
-        staleEstimatedIds.push(row.id);
-        continue;
-      }
-      const newPrev = last;
-      if (row.previous_reading !== newPrev) {
-        updates.push({ id: row.id, previous_reading: newPrev });
-      }
-      last = cur;
-    }
-
-    if (staleEstimatedIds.length) {
-      await supabase.from('locator_readings').delete().in('id', staleEstimatedIds);
-    }
-
-    if (updates.length) {
-      // daily_volume is intentionally omitted — GENERATED ALWAYS AS recomputes
-      // it automatically once previous_reading is corrected.
-      await Promise.all(updates.map(u => supabase
-        .from('locator_readings')
-        .update({ previous_reading: u.previous_reading } as any)
-        .eq('id', u.id)));
-    }
-
-    if (staleEstimatedIds.length || updates.length) {
-      qc.invalidateQueries({ queryKey });
-    }
-
-    // Trigger sweep to re-interpolate any valid bounded gaps
-    (supabase.rpc as any)('fn_backfill_missing_readings', { p_lookback_days: 14 }).catch(() => {});
-  };
-
-  // One-click toggle for shared (non-power) meter replacement.
-  // For well/locator, CHECKING opens ReplaceMeterDialog so the swap gets
-  // logged (old/new brand, size, serial, installed date) instead of just
-  // flipping a flag with no record of what actually happened. UNCHECKING
-  // still clears the flag directly — there's nothing to "undo" a replacement
-  // record for, it's just correcting a mis-tap.
-  const toggleMeterReplacement = async (r: any) => {
-    const next = !r.is_meter_replacement;
-    if (next && (module === 'well' || module === 'locator')) {
-      setReplaceReadingId(r.id);
-      return;
-    }
-    setTogglingId(r.id);
-    let error: any = null;
-    if (module === 'well') {
-      ({ error } = await (supabase.from('well_readings') as any).update({ is_meter_replacement: next }).eq('id', r.id));
-      // is_meter_replacement may not exist yet (pending migration) — silently skip toggle
-      if (error?.message?.includes('does not exist')) error = null;
-    } else if (module === 'locator') {
-      ({ error } = await (supabase.from('locator_readings') as any).update({ is_meter_replacement: next }).eq('id', r.id));
-      if (!error) await resyncLocatorChain(entityId);
-    } else if (module === 'blending') {
-      ({ error } = await (supabase.from('blending_events' as any) as any).update({ is_meter_replacement: next }).eq('id', r.id));
-      // Column may not exist yet — silently skip (graceful degradation)
-      if (error?.message?.includes('does not exist') || error?.message?.includes('is_meter_replacement')) error = null;
-    }
-    setTogglingId(null);
-    if (error) { toast.error(friendlyError(error)); return; }
-    toast.success(next ? 'Marked as meter replacement — Δ zeroed' : 'Meter replacement flag removed');
-    qc.invalidateQueries({ queryKey });
-  };
-
-  // Power-specific: toggle grid meter replacement. Checking opens
-  // PowerMeterChangeDialog so the swap gets logged (old meter's final reading,
-  // new meter's initial reading, date changed — all required) against
-  // power_meter_changes, instead of just flipping a flag and blindly resetting
-  // the CT multiplier to 1. Mirrors how well/locator/product's Repl. checkbox
-  // opens ReplaceMeterDialog. Unchecking still clears the flag directly.
-  const toggleGridReplacement = async (r: any, gridIdx: number = 0) => {
-    // Use the same fallback as the display: is_grid_replacement ?? is_meter_replacement.
-    // Without this, when is_grid_replacement is null the toggle always evaluates
-    // !null → true and can never be unchecked.
-    const currentRepl = !!(r.is_grid_replacement ?? r.is_meter_replacement);
-    const next = !currentRepl;
-    if (next) {
-      setReplacePowerReadingId({ id: r.id, gridIdx });
-      return;
-    }
-    setTogglingGridId(r.id);
-    const { error } = await (supabase.from('power_readings') as any)
-      .update({ is_grid_replacement: next }).eq('id', r.id);
-    setTogglingGridId(null);
-    if (error) {
-      // Column may not exist yet — fall back to shared flag
-      const { error: e2 } = await (supabase.from('power_readings') as any)
-        .update({ is_meter_replacement: next }).eq('id', r.id);
-      if (e2) { toast.error(friendlyError(e2)); return; }
-    }
-    toast.success('Grid replacement flag removed');
-    qc.invalidateQueries({ queryKey });
-  };
-
-  // Power-specific: toggle solar meter replacement
-  const toggleSolarReplacement = async (r: any) => {
-    setTogglingSolarId(r.id);
-    const next = !r.is_solar_replacement;
-    const { error } = await (supabase.from('power_readings') as any)
-      .update({ is_solar_replacement: next }).eq('id', r.id);
-    setTogglingSolarId(null);
-    if (error) { toast.error(friendlyError(error)); return; }
-    toast.success(next ? 'Solar replacement marked — Δ zeroed' : 'Solar replacement flag removed');
-    qc.invalidateQueries({ queryKey });
-  };
-
-  // Row selection helpers
-  const toggleSelect = (id: string) => {
-    const row = rows?.find((r: any) => r.id === id);
-    if (!row || !canEditEntry(row, hasFullAccess, activeOperatorId)) return;
-    setSelectedIds(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
-    });
-  };
-  const toggleSelectAll = () => {
-    if (!rows?.length) return;
-    const editableIds = rows
-      .filter((r: any) => canEditEntry(r, hasFullAccess, activeOperatorId))
-      .map((r: any) => r.id);
-    setSelectedIds(prev =>
-      prev.size === editableIds.length ? new Set() : new Set(editableIds)
-    );
-  };
-
-  // Bulk delete
-  // Maps the dialog's module prop to the table_name reading_edit_audit_log
-  // actually accepts — see 20260806_reading_audit_log_add_power_blending_well.sql.
-  const auditTableName = (
-    m: HistoryModule,
-  ): 'locator_readings' | 'power_readings' | 'blending_events' | 'well_readings' =>
-    m === 'locator' ? 'locator_readings'
-    : m === 'power' ? 'power_readings'
-    : m === 'blending' ? 'blending_events'
-    : 'well_readings';
-
-  const actorLabel = () =>
-    `${activeOperator?.first_name ?? ''} ${activeOperator?.last_name ?? ''}`.trim()
-    || activeOperator?.username || null;
-
-  const bulkDelete = async () => {
-    if (selectedIds.size === 0) return;
-    const idsRequested = [...selectedIds];
-    // Defense in depth: the checkboxes that populate selectedIds already only
-    // let you select rows canEditEntry allows, but re-check here too rather
-    // than trust client-side selection state alone for something destructive.
-    const deletable = new Set(
-      (rows ?? [])
-        .filter((r: any) => canEditEntry(r, hasFullAccess, activeOperatorId))
-        .map((r: any) => r.id),
-    );
-    const ids = idsRequested.filter(id => deletable.has(id));
-    if (ids.length === 0) {
-      toast.error('None of the selected rows are yours to delete, or they\u2019re past the 8-hour edit window.');
-      return;
-    }
-    setBulkDeletePending(false);
-    setBulkDeleting(true);
-    let error: any = null;
-    if (module === 'well')
-      ({ error } = await supabase.from('well_readings').delete().in('id', ids));
-    else if (module === 'locator') {
-      ({ error } = await supabase.from('locator_readings').delete().in('id', ids));
-      if (!error) await resyncLocatorChain(entityId);
-    }
-    else if (module === 'power')
-      ({ error } = await supabase.from('power_readings').delete().in('id', ids));
-    else if (module === 'blending') {
-      const { error: _be, count: _bc } = await (supabase.from('blending_events' as any) as any)
-        .delete({ count: 'exact' }).in('id', ids);
-      error = _be ?? (_bc === 0 ? new Error('Bulk delete blocked — check RLS policy on blending_events') : null);
-    }
-    setBulkDeleting(false);
-    if (error) { toast.error(friendlyError(error)); return; }
-    const label = actorLabel();
-    for (const id of ids) {
-      await logReadingEdit({
-        table_name: auditTableName(module),
-        record_id: id,
-        plant_id: plantId ?? null,
-        action: 'delete',
-        actor_user_id: user?.id ?? null,
-        actor_label: label,
-      });
-    }
-    toast.success(`${ids.length} reading(s) deleted`);
-    setSelectedIds(new Set());
-    qc.invalidateQueries({ queryKey });
-    if (module === 'power') qc.invalidateQueries({ queryKey: ['op-power', entityId] });
-    if (module === 'locator') invalidateLocatorDash(qc);
-    else if (module === 'well') invalidateWellDash(qc);
-    else if (module === 'power') invalidatePowerDash(qc);
-    else if (module === 'blending') invalidateWellDash(qc);
-  };
-
-  const deleteRow = async (id: string) => {
-    const row = rows?.find((r: any) => r.id === id);
-    if (!row || !canEditEntry(row, hasFullAccess, activeOperatorId)) {
-      toast.error(
-        row?.norm_status === 'pending_review'
-          ? 'This reading is flagged and awaiting review in Data Corrections — it can’t be deleted until a reviewer approves or rejects it.'
-          : 'You can only delete your own entries, within 8 hours of submitting them.',
-      );
-      setPendingDeleteId(null);
-      return;
-    }
-    setPendingDeleteId(null);
-    setDeletingId(id);
-    let error: any = null;
-    if (module === 'well') ({ error } = await supabase.from('well_readings').delete().eq('id', id));
-    else if (module === 'locator') {
-      ({ error } = await supabase.from('locator_readings').delete().eq('id', id));
-      if (!error) await resyncLocatorChain(entityId);
-    }
-    else if (module === 'power') ({ error } = await supabase.from('power_readings').delete().eq('id', id));
-    else if (module === 'blending') {
-      const { error: _be, count: _bc } = await (supabase.from('blending_events' as any) as any)
-        .delete({ count: 'exact' }).eq('id', id);
-      error = _be ?? (_bc === 0 ? new Error('Delete blocked — run the missing RLS policy SQL (see console)') : null);
-      if (_bc === 0 && !_be) console.error('blending_events DELETE returned 0 rows. Add policy: CREATE POLICY "auth_delete_blending_events" ON blending_events FOR DELETE USING (auth.uid() IS NOT NULL);');
-    }
-    setDeletingId(null);
-    if (error) { toast.error(friendlyError(error)); return; }
-    await logReadingEdit({
-      table_name: auditTableName(module),
-      record_id: id,
-      plant_id: plantId ?? null,
-      action: 'delete',
-      actor_user_id: user?.id ?? null,
-      actor_label: actorLabel(),
-    });
-    toast.success('Reading deleted');
-    setSelectedIds(prev => { const n = new Set(prev); n.delete(id); return n; });
-    qc.invalidateQueries({ queryKey });
-    if (module === 'power') qc.invalidateQueries({ queryKey: ['op-power', entityId] });
-    // op-loc-recent / op-well-recent are now invalidated inside
-    // invalidateLocatorDash / invalidateWellDash themselves — see shared.tsx.
-    if (module === 'locator') invalidateLocatorDash(qc);
-    else if (module === 'well') invalidateWellDash(qc);
-    else if (module === 'power') invalidatePowerDash(qc);
-  };
-
-  const saveEdit = async () => {
-    if (!editRow) return;
-    const originalRow = rows?.find((r: any) => r.id === editRow.id);
-    if (!originalRow || !canEditEntry(originalRow, hasFullAccess, activeOperatorId)) {
-      toast.error(
-        originalRow?.norm_status === 'pending_review'
-          ? 'This reading is flagged and awaiting review in Data Corrections — it can’t be edited until a reviewer approves or rejects it.'
-          : 'You can only edit your own entries, within 8 hours of submitting them.',
-      );
-      setEditRow(null);
-      return;
-    }
-    if (!editReason) { toast.error('Select a reason for this edit'); return; }
-    if (!isReasonComplete(editReason, editCustomReason)) { toast.error('Describe the reason for this edit'); return; }
-    setSaving(true);
-    let error: any = null;
-    const dtIso = new Date(editRow.datetime).toISOString();
-
-    if (module === 'well') {
-      // Recalculate daily_volume so TrendChart/Dashboard totals stay correct after edits.
-      // NOTE: unlike locator_readings, well_readings.daily_volume is a plain stored
-      // column (not GENERATED ALWAYS AS) — the app owns it and must recompute it on
-      // every edit, the same way WellSection.tsx does on insert. Previously this was
-      // left stale after an edit, silently corrupting downstream totals.
-      const wellRow = rows?.find((r: any) => r.id === editRow.id);
-      const wellCur = +editRow.value;
-      const wellPrev = wellRow?.previous_reading;
-      const wellDailyVol = wellPrev != null ? (editRow.isMeterReplacement ? 0 : wellCur - wellPrev) : null;
-      const wellEditPayload: Record<string, any> = {
-        current_reading: wellCur,
-        power_meter_reading: editRow.value2 ? +editRow.value2 : null,
-        reading_datetime: dtIso,
-        daily_volume: wellDailyVol,
-        is_estimated: false,
-      };
-      // Only include optional columns when they were actually present in the row
-      // returned by the SELECT query (hasMeterReplacement / value4/5/6 !== undefined).
-      // Sending a column that doesn't exist in PostgREST's schema cache causes the
-      // misleading "relation 'well_readings' does not exist" error.
-      if (editRow.hasMeterReplacement) wellEditPayload.is_meter_replacement = !!editRow.isMeterReplacement;
-      if (editRow.value4 !== undefined) wellEditPayload.tds_ppm = editRow.value4 ? +editRow.value4 : null;
-      if (editRow.value6 !== undefined) wellEditPayload.turbidity_ntu = editRow.value6 ? +editRow.value6 : null;
-      if (editRow.value5 !== undefined) wellEditPayload.pressure_psi = editRow.value5 ? +editRow.value5 : null;
-      ({ error } = await (supabase.from('well_readings') as any).update(wellEditPayload).eq('id', editRow.id));
-    } else if (module === 'locator') {
-      // Recalculate daily_volume so TrendChart/Dashboard always use an up-to-date delta.
-      // NOTE: daily_volume is GENERATED ALWAYS AS on locator_readings — cannot be set in UPDATE.
-      const locRow = rows?.find((r: any) => r.id === editRow.id);
-      const newCur = +editRow.value;
-      // daily_volume is a GENERATED ALWAYS AS column on locator_readings — omit from UPDATE.
-      // (CSV import already omits it for the same reason; this aligns saveEdit to match.)
-      ({ error } = await (supabase.from('locator_readings') as any).update({
-        current_reading: newCur,
-        reading_datetime: dtIso,
-        is_meter_replacement: !!editRow.isMeterReplacement,
-        is_estimated: false,
-        // daily_volume intentionally omitted — DB recomputes it automatically.
-      }).eq('id', editRow.id));
-      if (!error) await resyncLocatorChain(entityId);
-    } else if (module === 'power') {
-      // Which grid meter this edit actually belongs to. Captured in startEdit
-      // from meterFilter — 0 = STP, the meter the legacy meter_reading_kwh /
-      // daily_consumption_kwh / daily_grid_kwh columns represent. Editing any
-      // other meter (Pumphouse, Main, ...) must NOT touch those legacy
-      // columns — they'd silently overwrite meter 0's data with this meter's
-      // value, which is exactly the bug being fixed here (editing Grid Meter
-      // 3 Main was reflecting onto Grid Meter 1 STP).
-      const gridIdx = editRow.gridIdx ?? 0;
-      // meterFilter?.type === 'solar' means this dialog/edit is scoped to the
-      // Solar meter, not a grid meter — gridIdx above is just the 0-fallback
-      // startEdit uses when there's no real grid meter selection (see
-      // gridIdxForEdit above), NOT an actual "editing grid meter STP" signal.
-      // Every grid-meter side effect below must be skipped in that case, or
-      // the blank Grid Reading field gets coerced to 0 and overwrites
-      // meter_reading_kwh / grid_meter_readings['0'] with a fake zero reading.
-      const isSolarEditCtx = meterFilter?.type === 'solar';
-
-      // Fix #3 — daily_consumption_kwh was never recalculated on edit, so Dashboard
-      // totals would drift after any history correction.  Re-derive it the same way
-      // the initial insert does: find the predecessor row, compute Δ meter reading,
-      // then apply the CT multiplier so PV ratios stay correct. Only meaningful for
-      // meter 0, the one those legacy columns track.
-      const editedDt = new Date(dtIso).toISOString();
-      const editedDate = editedDt.slice(0, 10);
-      let recomputedConsumption: number | null = null;
-      if (gridIdx === 0 && !isSolarEditCtx) {
-        try {
-          const { data: pred } = await supabase
-            .from('power_readings')
-            .select('meter_reading_kwh')
-            .eq('plant_id', entityId)
-            .lt('reading_datetime', `${editedDate}T00:00:00.000Z`)
-            .order('reading_datetime', { ascending: false })
-            .limit(1);
-          if (pred && pred.length > 0) {
-            const delta = +editRow.value - (pred[0] as any).meter_reading_kwh;
-            if (delta >= 0) recomputedConsumption = delta * multiplier;
-          }
-        } catch { /* non-critical: proceed without updating daily_consumption_kwh */ }
-      }
-      const powerUpdatePayload: Record<string, any> = isSolarDirectMode
-        ? {
-            // Direct daily kWh: store only daily_solar_kwh, do NOT leave a
-            // value behind in solar_meter_reading — mirrors PowerSection.tsx's
-            // main entry form so edits made through this dialog don't revert
-            // the row to "raw meter" storage, which is what produced the
-            // negative/erratic Δ values in the Solar history table.
-            daily_solar_kwh: editRow.value2 ? +editRow.value2 : null,
-            solar_meter_reading: null,
-            reading_datetime: dtIso,
-            is_meter_replacement: !!editRow.isMeterReplacement,
-            is_estimated: false,
-          }
-        : {
-            solar_meter_reading: editRow.value2 ? +editRow.value2 : null,
-            reading_datetime: dtIso,
-            is_meter_replacement: !!editRow.isMeterReplacement,
-            is_estimated: false,
-          };
-      if (gridIdx === 0 && !isSolarEditCtx) {
-        powerUpdatePayload.meter_reading_kwh = +editRow.value;
-      }
-      // Keep grid_meter_readings in sync with the meter actually being edited.
-      // Fetch the existing JSONB so we don't overwrite the other meters' slots.
-      // Skipped entirely for solar edits — there's no grid meter selection to
-      // sync, and writing gridIdx's 0-fallback here would fabricate a
-      // grid_meter_readings['0'] entry (coercing the blank Grid Reading field
-      // to 0) that doesn't correspond to any meter the user actually edited.
-      if (!isSolarEditCtx) {
-        try {
-          const { data: existingPR } = await (supabase.from('power_readings') as any)
-            .select('grid_meter_readings').eq('id', editRow.id).maybeSingle();
-          const existingGmr = (existingPR?.grid_meter_readings as Record<string, number> | null) ?? {};
-          powerUpdatePayload.grid_meter_readings = { ...existingGmr, [String(gridIdx)]: +editRow.value };
-        } catch { /* non-critical: grid_meter_readings column may not exist yet */ }
-      }
-      if (recomputedConsumption != null) {
-        powerUpdatePayload.daily_consumption_kwh = recomputedConsumption;
-        // BUG C FIX: daily_grid_kwh was never updated on history edits.
-        // Plants.tsx chart reads daily_grid_kwh as its Priority-1 source, so
-        // leaving it stale after an edit caused the Operations "Last 7 readings"
-        // (dynamic recompute) and the Plants chart (stored column) to diverge.
-        powerUpdatePayload.daily_grid_kwh = recomputedConsumption;
-      }
-      ({ error } = await (supabase.from('power_readings') as any).update(powerUpdatePayload).eq('id', editRow.id));
-    }
-
-    if (module === 'blending') {
-      const blendPayload: Record<string, any> = {
-        raw_meter_reading: +editRow.value,
-        event_date: editRow.datetime.slice(0, 10),
-        reading_datetime: new Date(editRow.datetime).toISOString(),
-        is_meter_replacement: !!editRow.isMeterReplacement,
-        is_estimated: false,
-        // previous_reading intentionally omitted — trg_blending_set_reading
-        // (20260729_blending_previous_reading_trigger.sql) only auto-resolves
-        // it on INSERT, so it carries forward unchanged on UPDATE and
-        // volume_m3 is recomputed from it plus the corrected raw_meter_reading.
-      };
-      const { error: _ue, count: _uc } = await (supabase.from('blending_events' as any) as any)
-        .update(blendPayload, { count: 'exact' })
-        .eq('id', editRow.id);
-      error = _ue ?? (_uc === 0 ? new Error('Update blocked — run the missing RLS policy SQL (see console)') : null);
-      if (_uc === 0 && !_ue) console.error('blending_events UPDATE returned 0 rows. Add policy: CREATE POLICY "auth_update_blending_events" ON blending_events FOR UPDATE USING (auth.uid() IS NOT NULL) WITH CHECK (auth.uid() IS NOT NULL);');
-    }
-    setSaving(false);
-    if (error) { toast.error(friendlyError(error)); return; }
-    await logReadingEdit({
-      table_name: auditTableName(module),
-      record_id: editRow.id,
-      plant_id: plantId ?? null,
-      action: 'update',
-      actor_user_id: user?.id ?? null,
-      actor_label: actorLabel(),
-      changes: diffFields(
-        {
-          current_reading: originalRow.current_reading,
-          reading_datetime: originalRow.reading_datetime,
-          is_meter_replacement: !!originalRow.is_meter_replacement,
-        },
-        {
-          current_reading: +editRow.value,
-          reading_datetime: dtIso,
-          is_meter_replacement: !!editRow.isMeterReplacement,
-        },
-      ),
-      reason: resolveReason(editReason, editCustomReason),
-    });
-    toast.success('Reading updated');
-    setEditRow(null);
-    setEditReason('');
-    setEditCustomReason('');
-    qc.invalidateQueries({ queryKey });
-    // Also invalidate the parent form queries so "Last 7 readings" refreshes.
-    // op-loc-recent / op-well-recent are now invalidated inside
-    // invalidateLocatorDash / invalidateWellDash themselves — see shared.tsx.
-    if (module === 'power') qc.invalidateQueries({ queryKey: ['op-power', entityId] });
-    if (module === 'locator') invalidateLocatorDash(qc);
-    else if (module === 'well') invalidateWellDash(qc);
-    else if (module === 'power') invalidatePowerDash(qc);
-    else if (module === 'blending') invalidateWellDash(qc);
-  };
-
+  const actions = useReadingHistoryActions({
+    module, entityId, plantId, queryKey, qc, rows,
+    hasFullAccess, activeOperatorId, user, activeOperator,
+    assetMeterSerial, multiplier,
+    gridMeterCountProp, gridMeterNames, gridMultipliers,
+    defaultInputMode, solarInputMode, isSolarDirectMode,
+    meterFilter, solarDirectVal, getGridMeterVal, getHistGridLabel,
+  });
 
   const anyEditable = !!rows?.some((r: any) => canEditEntry(r, hasFullAccess, activeOperatorId));
+
   return (
     <>
-        {/* Inline edit form */}
-        {editRow && (
-          <div className="rounded-md border bg-muted/30 p-3 space-y-2 text-xs">
-            <p className="font-medium text-foreground">Editing reading</p>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <Label htmlFor="readinghistorydialog-date-amp-time" className="text-2xs">Date &amp; Time</Label>
-                <Input type="datetime-local" value={editRow.datetime}
-                  onChange={e => setEditRow({ ...editRow, datetime: e.target.value })}
-                  className="h-8 text-xs" id="readinghistorydialog-date-amp-time"/>
-              </div>
-              {!(module === 'power' && meterFilter?.type === 'solar') && (
-                <div>
-                  <Label htmlFor="readinghistorydialog-reading-kwh" className="text-2xs">
-                    {module === 'well' ? (isDirectMode ? 'Volume (m³)' : 'Water (unitless)') : module === 'locator' ? (isDirectMode ? 'Volume (m³)' : 'Reading') : module === 'blending' ? 'Reading (cumulative)' : `${meterFilter?.type === 'grid' ? getHistGridLabel(meterFilter.idx) : 'Grid'} Reading (kWh)`}
-                  </Label>
-                  <Input type="number" step="any" value={editRow.value}
-                    onChange={e => setEditRow({ ...editRow, value: e.target.value })}
-                    className="h-8 text-xs" id="readinghistorydialog-reading-kwh"/>
-                </div>
-              )}
-              {module === 'well' && (
-                <div>
-                  <Label htmlFor="readinghistorydialog-power-meter-kwh" className="text-2xs">Power Meter (kWh)</Label>
-                  <Input type="number" step="any" value={editRow.value2 ?? ''}
-                    onChange={e => setEditRow({ ...editRow, value2: e.target.value })}
-                    className="h-8 text-xs" placeholder="optional" id="readinghistorydialog-power-meter-kwh"/>
-                </div>
-              )}
-              {module === 'well' && (
-                <div>
-                  <Label htmlFor="readinghistorydialog-tds-ppm" className="text-2xs">TDS (ppm)</Label>
-                  <Input type="number" step="any" value={editRow.value4 ?? ''}
-                    onChange={e => setEditRow({ ...editRow, value4: e.target.value })}
-                    className="h-8 text-xs" placeholder="optional" id="readinghistorydialog-tds-ppm"/>
-                </div>
-              )}
-              {module === 'well' && (
-                <div>
-                  <Label htmlFor="readinghistorydialog-ntu" className="text-2xs">NTU</Label>
-                  <Input type="number" step="any" value={editRow.value6 ?? ''}
-                    onChange={e => setEditRow({ ...editRow, value6: e.target.value })}
-                    className="h-8 text-xs" placeholder="optional" id="readinghistorydialog-ntu"/>
-                </div>
-              )}
-              {module === 'well' && (
-                <div>
-                  <Label htmlFor="readinghistorydialog-pressure-psi" className="text-2xs">Pressure (psi)</Label>
-                  <Input type="number" step="any" value={editRow.value5 ?? ''}
-                    onChange={e => setEditRow({ ...editRow, value5: e.target.value })}
-                    className="h-8 text-xs" placeholder="optional" id="readinghistorydialog-pressure-psi"/>
-                </div>
-              )}
-              {module === 'power' && meterFilter?.type === 'solar' && (
-                <div>
-                  <Label htmlFor="readinghistorydialog-field" className="text-2xs">{isSolarDirectMode ? 'Solar Generation (kWh, direct)' : 'Solar Meter Reading (kWh)'}</Label>
-                  <Input type="number" step="any" value={editRow.value2 ?? ''}
-                    onChange={e => setEditRow({ ...editRow, value2: e.target.value })}
-                    className="h-8 text-xs" id="readinghistorydialog-field"/>
-                </div>
-              )}
-            </div>
-            {module !== 'power' && (
-              // Power excluded here deliberately, not by omission: a power reading
-              // can hold several grid meters' values in one row (grid_meter_readings
-              // JSONB), so a single scalar "this row = replacement" checkbox would be
-              // ambiguous about which meter it means. Power's equivalent is the
-              // per-meter Repl. toggle in the table above (toggleGridReplacement),
-              // which now opens the same required PowerMeterChangeDialog.
-              <label className="flex items-center gap-2 cursor-pointer select-none w-fit">
-                <input
-                  type="checkbox"
-                  checked={!!editRow.isMeterReplacement}
-                  onChange={e => {
-                    if (e.target.checked && (module === 'well' || module === 'locator')) {
-                      setReplaceReadingId(editRow.id);
-                      return;
-                    }
-                    setEditRow({ ...editRow, isMeterReplacement: e.target.checked });
-                  }}
-                  className="h-3.5 w-3.5 accent-kpi-solar"
-                />
-                <span className="text-2xs text-muted-foreground">Meter replacement / PMS (zeroes Δ)</span>
-              </label>
-            )}
-            <CorrectionReasonField
-              reason={editReason} onReasonChange={setEditReason}
-              customReason={editCustomReason} onCustomReasonChange={setEditCustomReason}
-            />
-            <div className="flex gap-2">
-              <Button size="sm" onClick={saveEdit}
-                disabled={saving || (module === 'power' && meterFilter?.type === 'solar' ? !editRow.value2 : !editRow.value) || !isReasonComplete(editReason, editCustomReason)}
-                className="bg-primary text-primary-foreground hover:bg-primary/90 h-7 text-xs px-3">
-                {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Save changes'}
-              </Button>
-              <Button size="sm" variant="outline"
-                onClick={() => { setEditRow(null); setEditReason(''); setEditCustomReason(''); }}
-                disabled={saving} className="h-7 text-xs px-3">
-                Cancel
-              </Button>
-            </div>
-          </div>
-        )}
+      <ReadingHistoryEditForm
+        editRow={actions.editRow} editReason={actions.editReason} editCustomReason={actions.editCustomReason} saving={actions.saving}
+        setEditRow={actions.setEditRow} setEditReason={actions.setEditReason} setEditCustomReason={actions.setEditCustomReason}
+        cancelEdit={actions.cancelEdit} saveEdit={actions.saveEdit}
+        module={module} isDirectMode={isDirectMode} isSolarDirectMode={isSolarDirectMode}
+        meterFilter={meterFilter} solarInputMode={solarInputMode}
+        getHistGridLabel={getHistGridLabel}
+        replaceReadingId={actions.replaceReadingId} setReplaceReadingId={actions.setReplaceReadingId}
+        entityId={entityId} plantId={plantId} assetMeterSerial={assetMeterSerial}
+        queryKey={queryKey} qc={qc}
+      />
 
-        {/* Bulk delete toolbar — shown when rows are selected */}
-        {anyEditable && selectedIds.size > 0 && (
-          <div className="flex items-center gap-2 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2">
-            <span className="text-xs font-medium text-destructive flex-1">
-              {selectedIds.size} row{selectedIds.size > 1 ? 's' : ''} selected
-            </span>
-            <Button
-              size="sm"
-              variant="destructive"
-              className="h-7 px-3 text-xs gap-1.5"
-              onClick={() => setBulkDeletePending(true)}
-              disabled={bulkDeleting}
-            >
-              {bulkDeleting ? <Loader2 className="h-3 w-3 animate-spin" /> : <X className="h-3 w-3" />}
-              Delete selected
-            </Button>
-            <Button size="sm" variant="ghost" className="h-7 px-2 text-xs"
-              onClick={() => { setSelectedIds(new Set()); setBulkDeletePending(false); }}>
-              Clear
-            </Button>
-          </div>
-        )}
+      <ReadingHistoryBulkActions
+        selectedIds={actions.selectedIds} setSelectedIds={actions.setSelectedIds}
+        bulkDeleting={actions.bulkDeleting} bulkDeletePending={actions.bulkDeletePending}
+        setBulkDeletePending={actions.setBulkDeletePending}
+        handleSelectOne={actions.handleSelectOne} handleSelectAll={actions.handleSelectAll}
+        handleBulkDelete={actions.handleBulkDelete}
+        anyEditable={anyEditable}
+      />
 
-        {isDirectMode && (
-          <div className="flex items-center gap-1.5 rounded-md bg-primary-soft border border-primary/30 px-2.5 py-1.5 text-xs text-primary">
-            <Droplet className="h-3 w-3 shrink-0" />
-            This entity's input is already a period volume, so there's no Δ to compute — the value below is the volume itself.
-          </div>
-        )}
+      {isDirectMode && (
+        <div className="flex items-center gap-1.5 rounded-md bg-primary-soft border border-primary/30 px-2.5 py-1.5 text-xs text-primary">
+          <Droplet className="h-3 w-3 shrink-0" />
+          This entity's input is already a period volume, so there's no Δ to compute — the value below is the volume itself.
+        </div>
+      )}
 
-        {meterFilter?.type === 'solar' && isSolarDirectMode && (
-          <div className="flex items-center gap-1.5 rounded-md bg-warn-soft border border-warn/30 px-2.5 py-1.5 text-xs text-warn">
-            <Zap className="h-3 w-3 shrink-0" />
-            This plant's solar input is Direct kWh, so there's no Δ to compute — each reading is already that day's power, not a cumulative meter value.
-          </div>
-        )}
+      {meterFilter?.type === 'solar' && isSolarDirectMode && (
+        <div className="flex items-center gap-1.5 rounded-md bg-warn-soft border border-warn/30 px-2.5 py-1.5 text-xs text-warn">
+          <Zap className="h-3 w-3 shrink-0" />
+          This plant's solar input is Direct kWh, so there's no Δ to compute — each reading is already that day's power, not a cumulative meter value.
+        </div>
+      )}
 
-        {/* Table */}
-        <div className="overflow-auto max-h-[520px] rounded border text-xs">
-          {isLoading ? (
-            <div className="flex items-center justify-center p-6 text-muted-foreground gap-2">
-              <Loader2 className="h-4 w-4 animate-spin" /> Loading…
-            </div>
-          ) : !rows?.length ? (
-            <p className="p-4 text-center text-muted-foreground">
-              {days === 'custom'
-                ? `No readings from ${appliedFrom} → ${appliedTo}`
-                : `No readings in the last ${days} days`}
-            </p>
-          ) : (
-            <table className="w-full text-left border-collapse">
-              <thead className="bg-muted sticky top-0 z-20 shadow-[0_1px_2px_rgba(0,0,0,0.06)] border-b border-border/60">
-                <tr>
-                  {anyEditable && (
-                    <th className="px-2 py-2 w-8">
-                      <input type="checkbox"
-                        className="h-3.5 w-3.5 accent-primary cursor-pointer"
-                        checked={!!rows?.length && selectedIds.size > 0 &&
-                          selectedIds.size === rows.filter((r: any) => canEditEntry(r, hasFullAccess, activeOperatorId)).length}
-                        onChange={toggleSelectAll}
-                        title="Select all"
-                      />
-                    </th>
-                  )}
-                  <th className="px-3 py-2 font-medium whitespace-nowrap">Date & Time</th>
-                  {module === 'locator' && (isDirectMode ? <>
-                    <th className="px-3 py-2 font-medium text-right whitespace-nowrap">Volume (m³)</th>
-                    <th className="px-2 py-2 font-medium text-center whitespace-nowrap">Repl.</th>
-                    <th className="px-3 py-2 font-medium whitespace-nowrap">Flags</th>
-                  </> : <>
-                    <th className="px-3 py-2 font-medium text-right whitespace-nowrap">Reading</th>
-                    <th className="px-3 py-2 font-medium text-right whitespace-nowrap">Δ</th>
-                    <th className="px-2 py-2 font-medium text-center whitespace-nowrap">Repl.</th>
-                    <th className="px-3 py-2 font-medium whitespace-nowrap">Flags</th>
-                  </>)}
-                  {module === 'well' && (isDirectMode ? <>
-                    <th className="px-3 py-2 font-medium text-right whitespace-nowrap">Volume (m³)</th>
-                    <th className="px-2 py-2 font-medium text-center whitespace-nowrap">Repl.</th>
-                    <th className="px-3 py-2 font-medium text-right whitespace-nowrap">Power (kWh)</th>
-                    <th className="px-3 py-2 font-medium text-right whitespace-nowrap">TDS (ppm)</th>
-                    <th className="px-3 py-2 font-medium text-right whitespace-nowrap">NTU</th>
-                    <th className="px-3 py-2 font-medium text-right whitespace-nowrap">Pressure (psi)</th>
-                    <th className="px-3 py-2 font-medium whitespace-nowrap">Flags</th>
-                  </> : <>
-                    <th className="px-3 py-2 font-medium text-right whitespace-nowrap">Water</th>
-                    <th className="px-3 py-2 font-medium text-right whitespace-nowrap">Δ</th>
-                    <th className="px-2 py-2 font-medium text-center whitespace-nowrap">Repl.</th>
-                    <th className="px-3 py-2 font-medium text-right whitespace-nowrap">Power (kWh)</th>
-                    <th className="px-3 py-2 font-medium text-right whitespace-nowrap">TDS (ppm)</th>
-                    <th className="px-3 py-2 font-medium text-right whitespace-nowrap">NTU</th>
-                    <th className="px-3 py-2 font-medium text-right whitespace-nowrap">Pressure (psi)</th>
-                    <th className="px-3 py-2 font-medium whitespace-nowrap">Flags</th>
-                  </>)}
-                  {module === 'blending' && <>
-                    <th className="px-3 py-2 font-medium text-right whitespace-nowrap">Reading</th>
-                    <th className="px-3 py-2 font-medium text-right whitespace-nowrap">Volume (m³)</th>
-                    <th className="px-2 py-2 font-medium text-center whitespace-nowrap">Repl.</th>
-                    <th className="px-3 py-2 font-medium whitespace-nowrap">Flags</th>
-                  </>}
-                  {module === 'power' && <>
-                    <th className="px-3 py-2 font-medium whitespace-nowrap">Meter</th>
-                    <th className="px-3 py-2 font-medium text-right whitespace-nowrap">Reading</th>
-                    <th className="px-3 py-2 font-medium text-right whitespace-nowrap">Δ (kWh)</th>
-                    <th className="px-2 py-2 font-medium text-center text-muted-foreground whitespace-nowrap">×</th>
-                    <th className="px-3 py-2 font-medium text-right text-kpi-grid whitespace-nowrap">Power (kWh)</th>
-                    <th className="px-2 py-2 font-medium text-center whitespace-nowrap">Repl.</th>
-                  </>}
-                  {anyEditable && <th className="px-2 py-2 font-medium text-center w-16 sticky right-0 top-0 z-30 bg-muted border-l border-border/30 shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.12)] whitespace-nowrap">Actions</th>}
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((r: any, i: number) => {
-                  const dt = r.reading_datetime ?? r.event_date ?? r.noted_at ?? '';
-                  // Always render in Asia/Manila via fmtDate/fmtDateTime (Intl-based,
-                  // pinned timeZone) rather than date-fns' format(), which renders in
-                  // whatever timezone the viewer's own device happens to be set to.
-                  // Blending's date-only event_date previously relied on constructing
-                  // a "local midnight" Date to dodge a UTC-parsing shift — fmtDate
-                  // handles that correctly on its own (see its doc comment in
-                  // lib/format.ts) without depending on the viewer's device timezone.
-                  let dateStr: string;
-                  if (module === 'blending') {
-                    if (r.reading_datetime) {
-                      dateStr = fmtDateTime(r.reading_datetime);
-                    } else if (r.event_date) {
-                      dateStr = fmtDate(r.event_date);
-                    } else {
-                      dateStr = '—';
-                    }
+      {/* Table */}
+      <div className="overflow-auto max-h-[520px] rounded border text-xs">
+        {isLoading ? (
+          <div className="flex items-center justify-center p-6 text-muted-foreground gap-2">
+            <Loader2 className="h-4 w-4 animate-spin" /> Loading…
+          </div>
+        ) : !rows?.length ? (
+          <p className="p-4 text-center text-muted-foreground">
+            {days === 'custom'
+              ? `No readings from ${appliedFrom} → ${appliedTo}`
+              : `No readings in the last ${days} days`}
+          </p>
+        ) : (
+          <table className="w-full text-left border-collapse">
+            <thead className="bg-muted sticky top-0 z-20 shadow-[0_1px_2px_rgba(0,0,0,0.06)] border-b border-border/60">
+              <tr>
+                {anyEditable && (
+                  <th className="px-2 py-2 w-8">
+                    <input type="checkbox"
+                      className="h-3.5 w-3.5 accent-primary cursor-pointer"
+                      checked={!!rows?.length && actions.selectedIds.size > 0 &&
+                        actions.selectedIds.size === rows.filter((r: any) => canEditEntry(r, hasFullAccess, activeOperatorId)).length}
+                      onChange={actions.handleSelectAll}
+                      title="Select all"
+                    />
+                  </th>
+                )}
+                <th className="px-3 py-2 font-medium whitespace-nowrap">Date & Time</th>
+                {module === 'locator' && (isDirectMode ? <>
+                  <th className="px-3 py-2 font-medium text-right whitespace-nowrap">Volume (m³)</th>
+                  <th className="px-2 py-2 font-medium text-center whitespace-nowrap">Repl.</th>
+                  <th className="px-3 py-2 font-medium whitespace-nowrap">Flags</th>
+                </> : <>
+                  <th className="px-3 py-2 font-medium text-right whitespace-nowrap">Reading</th>
+                  <th className="px-3 py-2 font-medium text-right whitespace-nowrap">Δ</th>
+                  <th className="px-2 py-2 font-medium text-center whitespace-nowrap">Repl.</th>
+                  <th className="px-3 py-2 font-medium whitespace-nowrap">Flags</th>
+                </>)}
+                {module === 'well' && (isDirectMode ? <>
+                  <th className="px-3 py-2 font-medium text-right whitespace-nowrap">Volume (m³)</th>
+                  <th className="px-2 py-2 font-medium text-center whitespace-nowrap">Repl.</th>
+                  <th className="px-3 py-2 font-medium text-right whitespace-nowrap">Power (kWh)</th>
+                  <th className="px-3 py-2 font-medium text-right whitespace-nowrap">TDS (ppm)</th>
+                  <th className="px-3 py-2 font-medium text-right whitespace-nowrap">NTU</th>
+                  <th className="px-3 py-2 font-medium text-right whitespace-nowrap">Pressure (psi)</th>
+                  <th className="px-3 py-2 font-medium whitespace-nowrap">Flags</th>
+                </> : <>
+                  <th className="px-3 py-2 font-medium text-right whitespace-nowrap">Water</th>
+                  <th className="px-3 py-2 font-medium text-right whitespace-nowrap">Δ</th>
+                  <th className="px-2 py-2 font-medium text-center whitespace-nowrap">Repl.</th>
+                  <th className="px-3 py-2 font-medium text-right whitespace-nowrap">Power (kWh)</th>
+                  <th className="px-3 py-2 font-medium text-right whitespace-nowrap">TDS (ppm)</th>
+                  <th className="px-3 py-2 font-medium text-right whitespace-nowrap">NTU</th>
+                  <th className="px-3 py-2 font-medium text-right whitespace-nowrap">Pressure (psi)</th>
+                  <th className="px-3 py-2 font-medium whitespace-nowrap">Flags</th>
+                </>)}
+                {module === 'blending' && <>
+                  <th className="px-3 py-2 font-medium text-right whitespace-nowrap">Reading</th>
+                  <th className="px-3 py-2 font-medium text-right whitespace-nowrap">Volume (m³)</th>
+                  <th className="px-2 py-2 font-medium text-center whitespace-nowrap">Repl.</th>
+                  <th className="px-3 py-2 font-medium whitespace-nowrap">Flags</th>
+                </>}
+                {module === 'power' && <>
+                  <th className="px-3 py-2 font-medium whitespace-nowrap">Meter</th>
+                  <th className="px-3 py-2 font-medium text-right whitespace-nowrap">Reading</th>
+                  <th className="px-3 py-2 font-medium text-right whitespace-nowrap">Δ (kWh)</th>
+                  <th className="px-2 py-2 font-medium text-center text-muted-foreground whitespace-nowrap">×</th>
+                  <th className="px-3 py-2 font-medium text-right text-kpi-grid whitespace-nowrap">Power (kWh)</th>
+                  <th className="px-2 py-2 font-medium text-center whitespace-nowrap">Repl.</th>
+                </>}
+                {anyEditable && <th className="px-2 py-2 font-medium text-center w-16 sticky right-0 top-0 z-30 bg-muted border-l border-border/30 shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.12)] whitespace-nowrap">Actions</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r: any, i: number) => {
+                const dt = r.reading_datetime ?? r.event_date ?? r.noted_at ?? '';
+                let dateStr: string;
+                if (module === 'blending') {
+                  if (r.reading_datetime) {
+                    dateStr = fmtDateTime(r.reading_datetime);
+                  } else if (r.event_date) {
+                    dateStr = fmtDate(r.event_date);
                   } else {
-                    dateStr = dt ? fmtDateTime(dt) : '—';
+                    dateStr = '—';
                   }
-                  const isEditing = editRow?.id === r.id;
-                  const isDeleting = deletingId === r.id;
-                  const isToggling = togglingId === r.id;
-                  const isMeterReplacement = !!r.is_meter_replacement;
-                  const rowEditable = canEditEntry(r, hasFullAccess, activeOperatorId);
-                  // rows sorted descending → rows[i+1] is the immediately preceding reading in time
-                  const predecessor: any = rows[i + 1] ?? null;
-                  // Rollover-aware Δ for well/locator 'raw' (cumulative-meter) mode.
-                  // Prefer the immediate chronological predecessor's reading from the fetched array
-                  // so that adjacent rows in the table always show their true relative shift delta,
-                  // self-healing even if stored previous_reading in the DB suffered drift or corruption.
-                  // Fall back to stored previous_reading only for the earliest row in the loaded window
-                  // where no predecessor row is in memory.
-                  const prevReading = predecessor != null
-                    ? +predecessor.current_reading
-                    : (r.previous_reading != null ? +r.previous_reading : null);
-                  const rawDelta = prevReading != null
-                    ? calc.dailyVolume(+r.current_reading, prevReading,
-                        !!r.is_meter_rollover, r.meter_rollover_max != null ? +r.meter_rollover_max : null)
-                    : null;
+                } else {
+                  dateStr = dt ? fmtDateTime(dt) : '—';
+                }
+                const isEditing = actions.editRow?.id === r.id;
+                const isDeleting = actions.deletingId === r.id;
+                const isToggling = actions.togglingId === r.id;
+                const isMeterReplacement = !!r.is_meter_replacement;
+                const rowEditable = canEditEntry(r, hasFullAccess, activeOperatorId);
+                const predecessor: any = rows[i + 1] ?? null;
+                const prevReading = predecessor != null
+                  ? +predecessor.current_reading
+                  : (r.previous_reading != null ? +r.previous_reading : null);
+                const rawDelta = prevReading != null
+                  ? calc.dailyVolume(+r.current_reading, prevReading,
+                      !!r.is_meter_rollover, r.meter_rollover_max != null ? +r.meter_rollover_max : null)
+                  : null;
 
-                  const isGridRepl      = !!(r.is_grid_replacement  ?? r.is_meter_replacement);
-                  const isSolarRepl     = !!(r.is_solar_replacement ?? false);
-                  const isTogglingGrid  = togglingGridId  === r.id;
-                  const isTogglingSolar = togglingSolarId === r.id;
+                const isGridRepl      = !!(r.is_grid_replacement  ?? r.is_meter_replacement);
+                const isSolarRepl     = !!(r.is_solar_replacement ?? false);
+                const isTogglingGrid  = actions.togglingGridId  === r.id;
+                const isTogglingSolar = actions.togglingSolarId === r.id;
 
-                  // Shared "Repl." toggle cell — rendered for well / locator
-                  const replCell = (
-                    <td className="px-2 py-1.5 text-center">
-                      <button
-                        title={isMeterReplacement ? 'Meter replacement — click to unmark' : 'Mark as meter replacement (zeroes Δ)'}
-                        aria-label={isMeterReplacement ? 'Meter replacement — click to unmark' : 'Mark as meter replacement (zeroes Δ)'}
-                        disabled={isDeleting || isToggling}
-                        onClick={() => toggleMeterReplacement(r)}
+                const replCell = (
+                  <td className="px-2 py-1.5 text-center">
+                    <button
+                      title={isMeterReplacement ? 'Meter replacement — click to unmark' : 'Mark as meter replacement (zeroes Δ)'}
+                      aria-label={isMeterReplacement ? 'Meter replacement — click to unmark' : 'Mark as meter replacement (zeroes Δ)'}
+                      disabled={isDeleting || isToggling}
+                      onClick={() => actions.handleToggleReplacement(r)}
+                      className={[
+                        'inline-flex items-center justify-center w-5 h-5 rounded border transition-colors',
+                        'disabled:opacity-40 disabled:cursor-not-allowed',
+                        isMeterReplacement
+                          ? 'bg-kpi-solar border-kpi-solar text-white hover:bg-kpi-solar/90'
+                          : 'border-input bg-background hover:border-kpi-solar/40 hover:bg-kpi-solar/10',
+                      ].join(' ')}
+                    >
+                      {isToggling
+                        ? <Loader2 className="h-2.5 w-2.5 animate-spin" />
+                        : isMeterReplacement ? <span className="text-3xs font-bold leading-none">✓</span> : null
+                      }
+                    </button>
+                  </td>
+                );
+
+                if (module === 'power') {
+                  const gmr     = r.grid_meter_readings     as Record<string, number> | null | undefined;
+                  const prevGmr = predecessor?.grid_meter_readings as Record<string, number> | null | undefined;
+                  const hasSolar = r.solar_meter_reading != null || (r.daily_solar_kwh != null && +r.daily_solar_kwh > 0);
+                  const solarDisplayVal = isSolarDirectMode ? solarDirectVal(r) : r.solar_meter_reading;
+                  const dateCols = 7;
+                  const actionsCell = anyEditable ? (
+                    <td className="px-2 py-1 text-center align-top whitespace-nowrap sticky right-0 z-10 border-l border-border/30 shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.12)] transition-colors bg-muted/20" rowSpan={resolvedGridCount + (hasSolar ? 1 : 0) + 1}>
+                      {rowEditable && (
+                        <div className="opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-within:opacity-100 max-md:opacity-100 transition-opacity flex items-center justify-center gap-0.5 pt-0.5">
+                          <button
+                            title="Edit"
+                            aria-label="Edit"
+                            disabled={!!actions.editRow || isDeleting}
+                            onClick={() => actions.startEdit(r)}
+                            className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground disabled:opacity-40"
+                          >
+                            <Pencil className="h-3 w-3" />
+                          </button>
+                          <button
+                            title="Delete"
+                            aria-label="Delete"
+                            disabled={!!actions.editRow || isDeleting}
+                            onClick={() => actions.setPendingDeleteId(r.id)}
+                            className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive disabled:opacity-40"
+                          >
+                            {isDeleting ? <Loader2 className="h-3 w-3 animate-spin" /> : <X className="h-3 w-3" />}
+                          </button>
+                        </div>
+                      )}
+                    </td>
+                  ) : null;
+
+                  if (meterFilter) {
+                    const isSolar     = meterFilter.type === 'solar';
+                    if (isSolar && r.is_estimated && r.solar_meter_reading == null && (r.daily_solar_kwh == null || +r.daily_solar_kwh === 0)) {
+                      return null;
+                    }
+
+                    const solarDirect = isSolar && isSolarDirectMode;
+                    const gridIdx = !isSolar ? (meterFilter as { type: 'grid'; idx: number }).idx : 0;
+                    const mMult   = isSolar ? 1 : getHistGridMult(gridIdx);
+                    const curr    = isSolar
+                      ? (solarDirect ? solarDirectVal(r) : r.solar_meter_reading)
+                      : getGridMeterVal(r, gridIdx, i, rows);
+
+                    if (!isSolar && curr == null) {
+                      return null;
+                    }
+                    let prevVal   = isSolar
+                      ? predecessor?.solar_meter_reading
+                      : (predecessor ? getGridMeterVal(predecessor, gridIdx, i + 1, rows) : null);
+                    if (!isSolar && curr != null && prevVal == null) {
+                      for (let j = i + 1; j < rows.length; j++) {
+                        const v = getGridMeterVal(rows[j], gridIdx, j, rows);
+                        if (v != null) {
+                          prevVal = v;
+                          break;
+                        }
+                      }
+                    }
+                    const rawDelta   = solarDirect ? null : (curr != null && prevVal != null ? curr - prevVal : null);
+                    const isRepl     = isSolar ? isSolarRepl : isGridRepl;
+                    const effective  = isRepl ? 0 : solarDirect ? curr : (rawDelta != null ? rawDelta * mMult : null);
+                    return (
+                      <tr key={r.id ?? i}
                         className={[
-                          'inline-flex items-center justify-center w-5 h-5 rounded border transition-colors',
-                          'disabled:opacity-40 disabled:cursor-not-allowed',
-                          isMeterReplacement
-                            ? 'bg-kpi-solar border-kpi-solar text-white hover:bg-kpi-solar/90'
-                            : 'border-input bg-background hover:border-kpi-solar/40 hover:bg-kpi-solar/10',
+                          'group border-b border-border/40 transition-colors',
+                          isEditing  ? 'bg-primary-soft/60'
+                          : isRepl   ? 'bg-warn-soft/40'
+                          : r.is_estimated ? 'bg-warn-soft/20'
+                          : 'hover:bg-muted/40',
                         ].join(' ')}
                       >
-                        {isToggling
-                          ? <Loader2 className="h-2.5 w-2.5 animate-spin" />
-                          : isMeterReplacement ? <span className="text-3xs font-bold leading-none">✓</span> : null
-                        }
-                      </button>
-                    </td>
-                  );
+                        {anyEditable && (
+                          <td className="px-2 py-1.5 w-8">
+                            {rowEditable && (
+                              <input type="checkbox" className="h-3.5 w-3.5 accent-primary cursor-pointer"
+                                checked={actions.selectedIds.has(r.id)} onChange={() => actions.handleSelectOne(r.id)} />
+                            )}
+                          </td>
+                        )}
+                        <td className="px-3 py-1.5 whitespace-nowrap text-muted-foreground">
+                          <span className="flex items-center gap-1.5">
+                            {dateStr}
+                            {r.is_estimated && (
+                              <span className="text-3xs font-semibold uppercase tracking-wide text-warn bg-warn-soft/40 px-1 py-0.5 rounded leading-none border border-warn/40" title="Auto-backfilled reading">
+                                Est.
+                              </span>
+                            )}
+                            {isRepl && (
+                              <span className={`text-3xs font-semibold uppercase tracking-wide px-1 py-0.5 rounded leading-none ${isSolar ? 'text-kpi-solar bg-kpi-solar/15' : 'text-kpi-grid bg-kpi-grid/15'}`}>
+                                repl.
+                              </span>
+                            )}
+                          </span>
+                        </td>
+                        <td />
+                        <td className="px-3 py-1.5 text-right font-mono-num whitespace-nowrap text-2xs">
+                          <span className={isSolar ? 'text-kpi-solar' : 'text-kpi-grid'}>
+                            {curr != null ? fmtNum(curr, 2) : '—'}
+                          </span>
+                        </td>
+                        <td className="px-3 py-1.5 text-right font-mono-num whitespace-nowrap text-2xs">
+                          {isRepl
+                            ? <span className={isSolar ? 'text-kpi-solar font-medium' : 'text-kpi-grid font-medium'}>0.00</span>
+                            : solarDirect
+                              ? <span className="text-muted-foreground" title="Direct kWh input — no delta to compute">n/a</span>
+                              : rawDelta != null ? <span className={rawDelta < 0 ? 'text-destructive font-semibold' : ''}>{fmtNum(rawDelta, 2)}</span> : '—'
+                          }
+                        </td>
+                        <td className="px-2 py-1.5 text-center font-mono-num whitespace-nowrap text-muted-foreground text-2xs">
+                          {mMult !== 1 ? `×${mMult}` : '×1'}
+                        </td>
+                        <td className={['px-3 py-1.5 text-right font-mono-num whitespace-nowrap font-medium text-2xs',
+                          effective != null && effective < 0 ? 'text-destructive font-semibold' : isSolar ? 'text-kpi-solar' : 'text-kpi-grid',
+                        ].join(' ')}>
+                          {effective != null ? fmtNum(effective, 2) : '—'}
+                        </td>
+                        <td className="px-2 py-1.5 text-center whitespace-nowrap">
+                          <button
+                            title={isRepl ? 'Replacement — click to unmark' : 'Mark as meter replacement (zeroes Δ)'}
+                            aria-label={isRepl ? 'Replacement — click to unmark' : 'Mark as meter replacement (zeroes Δ)'}
+                            disabled={isDeleting || isTogglingGrid || isTogglingSolar}
+                            onClick={() => isSolar ? actions.handleToggleSolarReplacement(r) : actions.handleToggleGridReplacement(r, gridIdx)}
+                            className={['inline-flex items-center justify-center w-5 h-5 rounded border transition-colors',
+                              'disabled:opacity-40 disabled:cursor-not-allowed',
+                              isRepl
+                                ? (isSolar ? 'bg-kpi-solar border-kpi-solar' : 'bg-kpi-grid border-kpi-grid') + ' text-white'
+                                : 'border-input bg-background hover:border-kpi-grid/40 hover:bg-kpi-grid/10',
+                            ].join(' ')}
+                          >
+                            {(isTogglingGrid || isTogglingSolar) ? <Loader2 className="h-2.5 w-2.5 animate-spin" />
+                              : isRepl ? <span className="text-3xs font-bold leading-none">✓</span> : null}
+                          </button>
+                        </td>
+                        {anyEditable && (
+                          <td className="px-2 py-1 text-center whitespace-nowrap sticky right-0 z-10 border-l border-border/30 shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.12)] transition-colors bg-background group-hover:bg-muted/40">
+                            {rowEditable && (
+                              <div className="opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-within:opacity-100 max-md:opacity-100 transition-opacity flex items-center justify-center gap-0.5">
+                                <button title="Edit" aria-label="Edit" disabled={!!actions.editRow || isDeleting}
+                                  onClick={() => actions.startEdit(r)}
+                                  className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground disabled:opacity-40">
+                                  <Pencil className="h-3 w-3" />
+                                </button>
+                                <button title="Delete" aria-label="Delete" disabled={!!actions.editRow || isDeleting}
+                                  onClick={() => actions.setPendingDeleteId(r.id)}
+                                  className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive disabled:opacity-40">
+                                  {isDeleting ? <Loader2 className="h-3 w-3 animate-spin" /> : <X className="h-3 w-3" />}
+                                </button>
+                              </div>
+                            )}
+                          </td>
+                        )}
+                      </tr>
+                    );
+                  }
 
-                  // ── Power module: card-style rows (date header + one sub-row per meter) ──
-                  if (module === 'power') {
-                    const gmr     = r.grid_meter_readings     as Record<string, number> | null | undefined;
-                    const prevGmr = predecessor?.grid_meter_readings as Record<string, number> | null | undefined;
-                    const hasSolar = r.solar_meter_reading != null || (r.daily_solar_kwh != null && +r.daily_solar_kwh > 0);
-                    // The value to show for this row's solar reading, honoring the
-                    // plant's configured mode rather than inferring it from which
-                    // column happens to be populated (see solarDirectVal doc above).
-                    const solarDisplayVal = isSolarDirectMode ? solarDirectVal(r) : r.solar_meter_reading;
-                    // colspan for the date cell: Date + all 6 data columns
-                    const dateCols = 7;
-                    const actionsCell = anyEditable ? (
-                      <td className="px-2 py-1 text-center align-top whitespace-nowrap sticky right-0 z-10 border-l border-border/30 shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.12)] transition-colors bg-muted/20" rowSpan={resolvedGridCount + (hasSolar ? 1 : 0) + 1}>
+                  return (
+                    <React.Fragment key={r.id ?? i}>
+                      <tr className={[
+                        'border-t',
+                        isEditing ? 'bg-primary-soft/60'
+                        : isGridRepl ? 'bg-warn-soft/40'
+                        : r.is_estimated ? 'bg-warn-soft/20'
+                        : 'bg-muted/20',
+                      ].join(' ')}>
+                        {anyEditable && (
+                          <td className="px-2 py-1 w-8">
+                            {rowEditable && (
+                              <input
+                                type="checkbox"
+                                className="h-3.5 w-3.5 accent-primary cursor-pointer"
+                                checked={actions.selectedIds.has(r.id)}
+                                onChange={() => actions.handleSelectOne(r.id)}
+                              />
+                            )}
+                          </td>
+                        )}
+                        <td className="px-3 py-1.5 whitespace-nowrap text-muted-foreground font-medium" colSpan={dateCols}>
+                          <span className="flex items-center gap-1.5">
+                            {dateStr}
+                            {r.is_estimated && (
+                              <span className="text-3xs font-semibold uppercase tracking-wide text-warn bg-warn-soft/40 px-1 py-0.5 rounded leading-none border border-warn/40" title="Auto-backfilled reading">
+                                Est.
+                              </span>
+                            )}
+                            {isGridRepl && (
+                              <span className="text-3xs font-semibold uppercase tracking-wide text-kpi-grid bg-kpi-grid/15 px-1 py-0.5 rounded leading-none">
+                                grid repl.
+                              </span>
+                            )}
+                            {isSolarRepl && (
+                              <span className="text-3xs font-semibold uppercase tracking-wide text-kpi-solar bg-kpi-solar/15 px-1 py-0.5 rounded leading-none">
+                                solar repl.
+                              </span>
+                            )}
+                          </span>
+                        </td>
+                        {actionsCell}
+                      </tr>
+
+                      {Array.from({ length: resolvedGridCount }).map((_, mi) => {
+                        const mLabel = getHistGridLabel(mi);
+                        const mMult  = getHistGridMult(mi);
+                        const curr   = getGridMeterVal(r, mi, i, rows);
+                        let prev     = predecessor ? getGridMeterVal(predecessor, mi, i + 1, rows) : null;
+                        if (curr != null && prev == null) {
+                          for (let j = i + 1; j < rows.length; j++) {
+                            const v = getGridMeterVal(rows[j], mi, j, rows);
+                            if (v != null) {
+                              prev = v;
+                              break;
+                            }
+                          }
+                        }
+                        const rawDelta    = (curr != null && prev != null) ? curr - prev : null;
+                        const effective   = isGridRepl ? 0 : rawDelta != null ? rawDelta * mMult : null;
+                        return (
+                          <tr key={`g${mi}`} className="hover:bg-muted/30">
+                            {anyEditable && <td />}
+                            <td className="px-3 py-1 pl-6">
+                              <span className="flex items-center gap-1 text-2xs">
+                                <GridPylonIcon className="h-2.5 w-2.5 text-kpi-grid shrink-0" />
+                                <span className="text-muted-foreground truncate">{mLabel}</span>
+                              </span>
+                            </td>
+                            <td className="px-3 py-1 text-right font-mono-num text-kpi-grid text-2xs">
+                              {curr != null ? fmtNum(curr, 2) : '—'}
+                            </td>
+                            <td className="px-3 py-1 text-right font-mono-num text-2xs">
+                              {isGridRepl
+                                ? <span className="text-kpi-grid font-medium">0.00</span>
+                                : rawDelta != null ? <span className={rawDelta < 0 ? 'text-destructive font-semibold' : ''}>{fmtNum(rawDelta, 2)}</span> : '—'
+                              }
+                            </td>
+                            <td className="px-2 py-1 text-center font-mono-num text-muted-foreground text-2xs">
+                              {mMult !== 1 ? `×${mMult}` : '×1'}
+                            </td>
+                            <td className={[
+                              'px-3 py-1 text-right font-mono-num font-medium text-2xs',
+                              effective != null && effective < 0 ? 'text-destructive font-semibold' : 'text-kpi-grid',
+                            ].join(' ')}>
+                              {effective != null ? fmtNum(effective, 2) : '—'}
+                            </td>
+                            <td className="px-2 py-1 text-center">
+                              {mi === 0 && (
+                                <button
+                                  title={isGridRepl ? 'Grid replacement — click to unmark' : 'Mark grid meter replacement (zeroes Δ Grid)'}
+                                  aria-label={isGridRepl ? 'Grid replacement — click to unmark' : 'Mark grid meter replacement (zeroes Δ Grid)'}
+                                  disabled={isDeleting || isTogglingGrid}
+                                  onClick={() => actions.handleToggleGridReplacement(r)}
+                                  className={[
+                                    'inline-flex items-center justify-center w-5 h-5 rounded border transition-colors',
+                                    'disabled:opacity-40 disabled:cursor-not-allowed',
+                                    isGridRepl
+                                      ? 'bg-kpi-grid border-kpi-grid text-white hover:bg-kpi-grid/90'
+                                      : 'border-input bg-background hover:border-kpi-grid/40 hover:bg-kpi-grid/10',
+                                  ].join(' ')}
+                                >
+                                  {isTogglingGrid
+                                    ? <Loader2 className="h-2.5 w-2.5 animate-spin" />
+                                    : isGridRepl ? <span className="text-3xs font-bold leading-none">✓</span> : null}
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+
+                      {hasSolar && (
+                        <tr className="hover:bg-muted/30">
+                          {anyEditable && <td />}
+                          <td className="px-3 py-1 pl-6">
+                            <span className="flex items-center gap-1 text-2xs">
+                              <span className="text-kpi-solar text-xs leading-none">☀</span>
+                              <span className="text-muted-foreground">Solar</span>
+                            </span>
+                          </td>
+                          <td className="px-3 py-1 text-right font-mono-num text-kpi-solar text-2xs">
+                            {solarDisplayVal != null ? fmtNum(solarDisplayVal, 2) : '—'}
+                          </td>
+                          <td className="px-3 py-1 text-right font-mono-num text-2xs">
+                            {isSolarRepl
+                              ? <span className="text-kpi-solar font-medium">0.00</span>
+                              : isSolarDirectMode
+                                ? (solarDisplayVal != null
+                                    ? <span className={solarDisplayVal < 0 ? 'text-destructive font-semibold' : 'text-kpi-solar'}>{fmtNum(solarDisplayVal, 2)}</span>
+                                    : '—')
+                                : (predecessor?.solar_meter_reading != null && r.solar_meter_reading != null)
+                                  ? (() => {
+                                      const sDelta = r.solar_meter_reading - predecessor.solar_meter_reading;
+                                      return <span className={sDelta < 0 ? 'text-destructive font-semibold' : 'text-kpi-solar'}>{fmtNum(sDelta, 2)}</span>;
+                                    })()
+                                  : r.daily_solar_kwh != null && +r.daily_solar_kwh !== 0
+                                    ? <span className={+r.daily_solar_kwh < 0 ? 'text-destructive font-semibold' : 'text-kpi-solar'}>{fmtNum(+r.daily_solar_kwh, 2)}</span>
+                                    : '—'
+                            }
+                          </td>
+                          <td />
+                          <td />
+                          <td className="px-2 py-1 text-center">
+                            <button
+                              title={isSolarRepl ? 'Solar replacement — click to unmark' : 'Mark solar meter replacement (zeroes Δ Solar)'}
+                              aria-label={isSolarRepl ? 'Solar replacement — click to unmark' : 'Mark solar meter replacement (zeroes Δ Solar)'}
+                              disabled={isDeleting || isTogglingSolar}
+                              onClick={() => actions.handleToggleSolarReplacement(r)}
+                              className={[
+                                'inline-flex items-center justify-center w-5 h-5 rounded border transition-colors',
+                                'disabled:opacity-40 disabled:cursor-not-allowed',
+                                isSolarRepl
+                                  ? 'bg-kpi-solar border-kpi-solar text-white hover:bg-kpi-solar/90'
+                                  : 'border-input bg-background hover:border-kpi-solar/40 hover:bg-kpi-solar/10',
+                              ].join(' ')}
+                            >
+                              {isTogglingSolar
+                                ? <Loader2 className="h-2.5 w-2.5 animate-spin" />
+                                : isSolarRepl ? <span className="text-3xs font-bold leading-none">✓</span> : null}
+                            </button>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  );
+                }
+
+                const isEstimated = !!r.is_estimated;
+                const flagsList: React.ReactNode[] = [];
+                if (isEstimated) {
+                  flagsList.push(
+                    <StatusPill
+                      key="est"
+                      tone="warn"
+                      title="System-generated / Backfilled reading — no manual operator entry on file. Saving an edit converts this to a verified human reading."
+                      aria-label="Estimated reading"
+                    >
+                      Est.
+                    </StatusPill>
+                  );
+                }
+                if (r.off_location_flag) {
+                  flagsList.push(
+                    <StatusPill
+                      key="off-loc"
+                      tone="warn"
+                      title="GPS mismatch at entry"
+                      aria-label="Off location reading"
+                    >
+                      off-loc
+                    </StatusPill>
+                  );
+                }
+                const flagsCell = (
+                  <td className="px-3 py-1.5 whitespace-nowrap">
+                    {flagsList.length > 0 ? (
+                      <div className="flex items-center gap-1 flex-wrap">{flagsList}</div>
+                    ) : (
+                      <span className="text-muted-foreground/30 text-2xs">—</span>
+                    )}
+                  </td>
+                );
+
+                return (
+                  <tr
+                    key={r.id ?? i}
+                    className={[
+                      'group border-b border-border/40 transition-colors',
+                      isEditing      ? 'bg-primary-soft/60'
+                      : isMeterReplacement ? 'bg-warn-soft/40'
+                      : isEstimated  ? 'bg-warn-soft/20'
+                      : 'hover:bg-muted/40',
+                    ].join(' ')}
+                  >
+                    {anyEditable && (
+                      <td className="px-2 py-1.5 w-8">
                         {rowEditable && (
-                          <div className="opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-within:opacity-100 max-md:opacity-100 transition-opacity flex items-center justify-center gap-0.5 pt-0.5">
+                          <input
+                            type="checkbox"
+                            className="h-3.5 w-3.5 accent-primary cursor-pointer"
+                            checked={actions.selectedIds.has(r.id)}
+                            onChange={() => actions.handleSelectOne(r.id)}
+                          />
+                        )}
+                      </td>
+                    )}
+                    <td className="px-3 py-1.5 whitespace-nowrap text-muted-foreground">
+                      <span className="flex items-center gap-1.5">
+                        {dateStr}
+                        {isMeterReplacement && (
+                          <span className="text-3xs font-semibold uppercase tracking-wide text-kpi-solar bg-kpi-solar/15 px-1 py-0.5 rounded leading-none">
+                            repl.
+                          </span>
+                        )}
+                      </span>
+                    </td>
+
+                    {module === 'locator' && (isDirectMode ? <>
+                      <td className="px-3 py-1.5 text-right font-mono-num whitespace-nowrap">{fmtNum(r.current_reading, 2)}</td>
+                      {replCell}
+                      {flagsCell}
+                    </> : <>
+                      <td className="px-3 py-1.5 text-right font-mono-num whitespace-nowrap">{fmtNum(r.current_reading, 2)}</td>
+                      <td className="px-3 py-1.5 text-right font-mono-num whitespace-nowrap">
+                        {isMeterReplacement
+                          ? <span className="text-kpi-solar font-medium">0.00</span>
+                          : rawDelta != null ? <span className={rawDelta < 0 ? 'text-destructive font-semibold' : ''}>{fmtNum(rawDelta, 2)}</span> : '—'
+                        }
+                      </td>
+                      {replCell}
+                      {flagsCell}
+                    </>)}
+
+                    {module === 'well' && (isDirectMode ? <>
+                      <td className="px-3 py-1.5 text-right font-mono-num whitespace-nowrap">{fmtNum(r.current_reading, 2)}</td>
+                      {replCell}
+                      <td className="px-3 py-1.5 text-right font-mono-num whitespace-nowrap">
+                        {r.power_meter_reading != null ? fmtNum(r.power_meter_reading, 2) : '—'}
+                      </td>
+                      <td className="px-3 py-1.5 text-right font-mono-num whitespace-nowrap">
+                        {r.tds_ppm != null ? fmtNum(r.tds_ppm, 2) : '—'}
+                      </td>
+                      <td className="px-3 py-1.5 text-right font-mono-num whitespace-nowrap">
+                        {(r as any).turbidity_ntu != null ? (+((r as any).turbidity_ntu)).toFixed(2) : '—'}
+                      </td>
+                      <td className="px-3 py-1.5 text-right font-mono-num whitespace-nowrap">
+                        {r.pressure_psi != null ? fmtNum(r.pressure_psi, 2) : '—'}
+                      </td>
+                      {flagsCell}
+                    </> : <>
+                      <td className="px-3 py-1.5 text-right font-mono-num whitespace-nowrap">{fmtNum(r.current_reading, 2)}</td>
+                      <td className="px-3 py-1.5 text-right font-mono-num whitespace-nowrap">
+                        {isMeterReplacement
+                          ? <span className="text-kpi-solar font-medium">0.00</span>
+                          : rawDelta != null ? <span className={rawDelta < 0 ? 'text-destructive font-semibold' : ''}>{fmtNum(rawDelta, 2)}</span> : '—'
+                        }
+                      </td>
+                      {replCell}
+                      <td className="px-3 py-1.5 text-right font-mono-num whitespace-nowrap">
+                        {r.power_meter_reading != null ? fmtNum(r.power_meter_reading, 2) : '—'}
+                      </td>
+                      <td className="px-3 py-1.5 text-right font-mono-num whitespace-nowrap">
+                        {r.tds_ppm != null ? fmtNum(r.tds_ppm, 2) : '—'}
+                      </td>
+                      <td className="px-3 py-1.5 text-right font-mono-num whitespace-nowrap">
+                        {(r as any).turbidity_ntu != null ? (+((r as any).turbidity_ntu)).toFixed(2) : '—'}
+                      </td>
+                      <td className="px-3 py-1.5 text-right font-mono-num whitespace-nowrap">
+                        {r.pressure_psi != null ? fmtNum(r.pressure_psi, 2) : '—'}
+                      </td>
+                      {flagsCell}
+                    </>)}
+
+                    {module === 'blending' && <>
+                      <td className="px-3 py-1.5 text-right font-mono-num whitespace-nowrap text-muted-foreground">
+                        {r.raw_meter_reading != null ? fmtNum(r.raw_meter_reading, 2) : '—'}
+                      </td>
+                      <td className="px-3 py-1.5 text-right font-mono-num whitespace-nowrap">
+                        <span className={(r.volume_m3 ?? 0) < 0 ? 'text-destructive font-semibold' : ''}>
+                          {fmtNum(r.volume_m3 ?? 0, 2)}
+                        </span>
+                      </td>
+                      {replCell}
+                      {flagsCell}
+                    </>}
+
+                    {anyEditable && (
+                      <td className="px-2 py-1 text-center whitespace-nowrap sticky right-0 z-10 border-l border-border/30 shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.12)] transition-colors bg-background group-hover:bg-muted/40">
+                        {rowEditable && (
+                          <div className="opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-within:opacity-100 max-md:opacity-100 transition-opacity flex items-center justify-center gap-0.5">
                             <button
                               title="Edit"
                               aria-label="Edit"
-                              disabled={!!editRow || isDeleting}
-                              onClick={() => startEdit(r)}
+                              disabled={!!actions.editRow || isDeleting}
+                              onClick={() => actions.startEdit(r)}
                               className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground disabled:opacity-40"
                             >
                               <Pencil className="h-3 w-3" />
@@ -1017,8 +763,8 @@ export function ReadingHistoryTable(props: any) {
                             <button
                               title="Delete"
                               aria-label="Delete"
-                              disabled={!!editRow || isDeleting}
-                              onClick={() => setPendingDeleteId(r.id)}
+                              disabled={!!actions.editRow || isDeleting}
+                              onClick={() => actions.setPendingDeleteId(r.id)}
                               className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive disabled:opacity-40"
                             >
                               {isDeleting ? <Loader2 className="h-3 w-3 animate-spin" /> : <X className="h-3 w-3" />}
@@ -1026,538 +772,40 @@ export function ReadingHistoryTable(props: any) {
                           </div>
                         )}
                       </td>
-                    ) : null;
+                    )}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </div>
 
-                    // ── meterFilter: flat single-row-per-record rendering ────────────────
-                    if (meterFilter) {
-                      const isSolar     = meterFilter.type === 'solar';
-                      // Direct power exemption: Solar is exempt from automated backfill on blank dates.
-                      // Skip estimated rows created purely for grid meters so ghost "Est." rows with no
-                      // solar reading never appear in Solar history.
-                      if (isSolar && r.is_estimated && r.solar_meter_reading == null && (r.daily_solar_kwh == null || +r.daily_solar_kwh === 0)) {
-                        return null;
-                      }
-
-                      const solarDirect = isSolar && isSolarDirectMode;
-                      const gridIdx = !isSolar ? (meterFilter as { type: 'grid'; idx: number }).idx : 0;
-                      const mMult   = isSolar ? 1 : getHistGridMult(gridIdx);
-                      const curr    = isSolar
-                        ? (solarDirect ? solarDirectVal(r) : r.solar_meter_reading)
-                        : getGridMeterVal(r, gridIdx, i, rows);
-
-                      // In filtered meter view, skip rows that have no reading for this specific meter
-                      if (!isSolar && curr == null) {
-                        return null;
-                      }
-                      let prevVal   = isSolar
-                        ? predecessor?.solar_meter_reading
-                        : (predecessor ? getGridMeterVal(predecessor, gridIdx, i + 1, rows) : null);
-                      if (!isSolar && curr != null && prevVal == null) {
-                        for (let j = i + 1; j < rows.length; j++) {
-                          const v = getGridMeterVal(rows[j], gridIdx, j, rows);
-                          if (v != null) {
-                            prevVal = v;
-                            break;
-                          }
-                        }
-                      }
-                      // Direct kWh: never diff two readings — each one already IS
-                      // that period's kWh, not a cumulative odometer value. Diffing
-                      // two independent days' totals is what produced negative/
-                      // erratic "Δ" values before this fix.
-                      const rawDelta   = solarDirect ? null : (curr != null && prevVal != null ? curr - prevVal : null);
-                      const isRepl     = isSolar ? isSolarRepl : isGridRepl;
-                      const effective  = isRepl ? 0 : solarDirect ? curr : (rawDelta != null ? rawDelta * mMult : null);
-                      return (
-                        <tr key={r.id ?? i}
-                          className={[
-                            'group border-b border-border/40 transition-colors',
-                            isEditing  ? 'bg-primary-soft/60'
-                            : isRepl   ? 'bg-warn-soft/40'
-                            : r.is_estimated ? 'bg-warn-soft/20'
-                            : 'hover:bg-muted/40',
-                          ].join(' ')}
-                        >
-                          {anyEditable && (
-                            <td className="px-2 py-1.5 w-8">
-                              {rowEditable && (
-                                <input type="checkbox" className="h-3.5 w-3.5 accent-primary cursor-pointer"
-                                  checked={selectedIds.has(r.id)} onChange={() => toggleSelect(r.id)} />
-                              )}
-                            </td>
-                          )}
-                          <td className="px-3 py-1.5 whitespace-nowrap text-muted-foreground">
-                            <span className="flex items-center gap-1.5">
-                              {dateStr}
-                              {r.is_estimated && (
-                                <span className="text-3xs font-semibold uppercase tracking-wide text-warn bg-warn-soft/40 px-1 py-0.5 rounded leading-none border border-warn/40" title="Auto-backfilled reading">
-                                  Est.
-                                </span>
-                              )}
-                              {isRepl && (
-                                <span className={`text-3xs font-semibold uppercase tracking-wide px-1 py-0.5 rounded leading-none ${isSolar ? 'text-kpi-solar bg-kpi-solar/15' : 'text-kpi-grid bg-kpi-grid/15'}`}>
-                                  repl.
-                                </span>
-                              )}
-                            </span>
-                          </td>
-                          {/* Meter column placeholder (hidden in filtered view) */}
-                          <td />
-                          {/* Reading */}
-                          <td className="px-3 py-1.5 text-right font-mono-num whitespace-nowrap text-2xs">
-                            <span className={isSolar ? 'text-kpi-solar' : 'text-kpi-grid'}>
-                              {curr != null ? fmtNum(curr, 2) : '—'}
-                            </span>
-                          </td>
-                          {/* Δ raw */}
-                          <td className="px-3 py-1.5 text-right font-mono-num whitespace-nowrap text-2xs">
-                            {isRepl
-                              ? <span className={isSolar ? 'text-kpi-solar font-medium' : 'text-kpi-grid font-medium'}>0.00</span>
-                              : solarDirect
-                                ? <span className="text-muted-foreground" title="Direct kWh input — no delta to compute">n/a</span>
-                                : rawDelta != null ? <span className={rawDelta < 0 ? 'text-destructive font-semibold' : ''}>{fmtNum(rawDelta, 2)}</span> : '—'
-                            }
-                          </td>
-                          {/* × multiplier */}
-                          <td className="px-2 py-1.5 text-center font-mono-num whitespace-nowrap text-muted-foreground text-2xs">
-                            {mMult !== 1 ? `×${mMult}` : '×1'}
-                          </td>
-                          {/* Effective kWh */}
-                          <td className={['px-3 py-1.5 text-right font-mono-num whitespace-nowrap font-medium text-2xs',
-                            effective != null && effective < 0 ? 'text-destructive font-semibold' : isSolar ? 'text-kpi-solar' : 'text-kpi-grid',
-                          ].join(' ')}>
-                            {effective != null ? fmtNum(effective, 2) : '—'}
-                          </td>
-                          {/* Repl. toggle */}
-                          <td className="px-2 py-1.5 text-center whitespace-nowrap">
-                            <button
-                              title={isRepl ? 'Replacement — click to unmark' : 'Mark as meter replacement (zeroes Δ)'}
-                              aria-label={isRepl ? 'Replacement — click to unmark' : 'Mark as meter replacement (zeroes Δ)'}
-                              disabled={isDeleting || isTogglingGrid || isTogglingSolar}
-                              onClick={() => isSolar ? toggleSolarReplacement(r) : toggleGridReplacement(r, gridIdx)}
-                              className={['inline-flex items-center justify-center w-5 h-5 rounded border transition-colors',
-                                'disabled:opacity-40 disabled:cursor-not-allowed',
-                                isRepl
-                                  ? (isSolar ? 'bg-kpi-solar border-kpi-solar' : 'bg-kpi-grid border-kpi-grid') + ' text-white'
-                                  : 'border-input bg-background hover:border-kpi-grid/40 hover:bg-kpi-grid/10',
-                              ].join(' ')}
-                            >
-                              {(isTogglingGrid || isTogglingSolar) ? <Loader2 className="h-2.5 w-2.5 animate-spin" />
-                                : isRepl ? <span className="text-3xs font-bold leading-none">✓</span> : null}
-                            </button>
-                          </td>
-                          {anyEditable && (
-                            <td className="px-2 py-1 text-center whitespace-nowrap sticky right-0 z-10 border-l border-border/30 shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.12)] transition-colors bg-background group-hover:bg-muted/40">
-                              {rowEditable && (
-                                <div className="opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-within:opacity-100 max-md:opacity-100 transition-opacity flex items-center justify-center gap-0.5">
-                                  <button title="Edit" aria-label="Edit" disabled={!!editRow || isDeleting}
-                                    onClick={() => startEdit(r)}
-                                    className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground disabled:opacity-40">
-                                    <Pencil className="h-3 w-3" />
-                                  </button>
-                                  <button title="Delete" aria-label="Delete" disabled={!!editRow || isDeleting}
-                                    onClick={() => setPendingDeleteId(r.id)}
-                                    className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive disabled:opacity-40">
-                                    {isDeleting ? <Loader2 className="h-3 w-3 animate-spin" /> : <X className="h-3 w-3" />}
-                                  </button>
-                              </div>
-                              )}
-                            </td>
-                          )}
-                        </tr>
-                      );
-                    }
-
-                    return (
-                      <React.Fragment key={r.id ?? i}>
-                        {/* ── Date header row ── */}
-                        <tr className={[
-                          'border-t',
-                          isEditing ? 'bg-primary-soft/60'
-                          : isGridRepl ? 'bg-warn-soft/40'
-                          : r.is_estimated ? 'bg-warn-soft/20'
-                          : 'bg-muted/20',
-                        ].join(' ')}>
-                          {anyEditable && (
-                            <td className="px-2 py-1 w-8">
-                              {rowEditable && (
-                                <input
-                                  type="checkbox"
-                                  className="h-3.5 w-3.5 accent-primary cursor-pointer"
-                                  checked={selectedIds.has(r.id)}
-                                  onChange={() => toggleSelect(r.id)}
-                                />
-                              )}
-                            </td>
-                          )}
-                          <td className="px-3 py-1.5 whitespace-nowrap text-muted-foreground font-medium" colSpan={dateCols}>
-                            <span className="flex items-center gap-1.5">
-                              {dateStr}
-                              {r.is_estimated && (
-                                <span className="text-3xs font-semibold uppercase tracking-wide text-warn bg-warn-soft/40 px-1 py-0.5 rounded leading-none border border-warn/40" title="Auto-backfilled reading">
-                                  Est.
-                                </span>
-                              )}
-                              {isGridRepl && (
-                                <span className="text-3xs font-semibold uppercase tracking-wide text-kpi-grid bg-kpi-grid/15 px-1 py-0.5 rounded leading-none">
-                                  grid repl.
-                                </span>
-                              )}
-                              {isSolarRepl && (
-                                <span className="text-3xs font-semibold uppercase tracking-wide text-kpi-solar bg-kpi-solar/15 px-1 py-0.5 rounded leading-none">
-                                  solar repl.
-                                </span>
-                              )}
-                            </span>
-                          </td>
-                          {/* actions rowspan anchor — spans all sub-rows */}
-                          {actionsCell}
-                        </tr>
-
-                        {/* ── One sub-row per grid meter ── */}
-                        {Array.from({ length: resolvedGridCount }).map((_, mi) => {
-                          const mLabel = getHistGridLabel(mi);
-                          const mMult  = getHistGridMult(mi);
-                          const curr   = getGridMeterVal(r, mi, i, rows);
-                          let prev     = predecessor ? getGridMeterVal(predecessor, mi, i + 1, rows) : null;
-                          if (curr != null && prev == null) {
-                            for (let j = i + 1; j < rows.length; j++) {
-                              const v = getGridMeterVal(rows[j], mi, j, rows);
-                              if (v != null) {
-                                prev = v;
-                                break;
-                              }
-                            }
-                          }
-                          const rawDelta    = (curr != null && prev != null) ? curr - prev : null;
-                          const effective   = isGridRepl ? 0 : rawDelta != null ? rawDelta * mMult : null;
-                          return (
-                            <tr key={`g${mi}`} className="hover:bg-muted/30">
-                              {anyEditable && <td />}
-                              {/* Meter label */}
-                              <td className="px-3 py-1 pl-6">
-                                <span className="flex items-center gap-1 text-2xs">
-                                  <GridPylonIcon className="h-2.5 w-2.5 text-kpi-grid shrink-0" />
-                                  <span className="text-muted-foreground truncate">{mLabel}</span>
-                                </span>
-                              </td>
-                              {/* Reading */}
-                              <td className="px-3 py-1 text-right font-mono-num text-kpi-grid text-2xs">
-                                {curr != null ? fmtNum(curr, 2) : '—'}
-                              </td>
-                              {/* Δ raw */}
-                              <td className="px-3 py-1 text-right font-mono-num text-2xs">
-                                {isGridRepl
-                                  ? <span className="text-kpi-grid font-medium">0.00</span>
-                                  : rawDelta != null ? <span className={rawDelta < 0 ? 'text-destructive font-semibold' : ''}>{fmtNum(rawDelta, 2)}</span> : '—'
-                                }
-                              </td>
-                              {/* × multiplier */}
-                              <td className="px-2 py-1 text-center font-mono-num text-muted-foreground text-2xs">
-                                {mMult !== 1 ? `×${mMult}` : '×1'}
-                              </td>
-                              {/* Effective kWh */}
-                              <td className={[
-                                'px-3 py-1 text-right font-mono-num font-medium text-2xs',
-                                effective != null && effective < 0 ? 'text-destructive font-semibold' : 'text-kpi-grid',
-                              ].join(' ')}>
-                                {effective != null ? fmtNum(effective, 2) : '—'}
-                              </td>
-                              {/* Grid Repl. toggle — only on first meter; shared flag applies to all */}
-                              <td className="px-2 py-1 text-center">
-                                {mi === 0 && (
-                                  <button
-                                    title={isGridRepl ? 'Grid replacement — click to unmark' : 'Mark grid meter replacement (zeroes Δ Grid)'}
-                                    aria-label={isGridRepl ? 'Grid replacement — click to unmark' : 'Mark grid meter replacement (zeroes Δ Grid)'}
-                                    disabled={isDeleting || isTogglingGrid}
-                                    onClick={() => toggleGridReplacement(r)}
-                                    className={[
-                                      'inline-flex items-center justify-center w-5 h-5 rounded border transition-colors',
-                                      'disabled:opacity-40 disabled:cursor-not-allowed',
-                                      isGridRepl
-                                        ? 'bg-kpi-grid border-kpi-grid text-white hover:bg-kpi-grid/90'
-                                        : 'border-input bg-background hover:border-kpi-grid/40 hover:bg-kpi-grid/10',
-                                    ].join(' ')}
-                                  >
-                                    {isTogglingGrid
-                                      ? <Loader2 className="h-2.5 w-2.5 animate-spin" />
-                                      : isGridRepl ? <span className="text-3xs font-bold leading-none">✓</span> : null
-                                    }
-                                  </button>
-                                )}
-                              </td>
-                            </tr>
-                          );
-                        })}
-
-                        {/* ── Solar sub-row (only when plant has solar data) ── */}
-                        {hasSolar && (
-                          <tr className="hover:bg-muted/30">
-                            {anyEditable && <td />}
-                            {/* Meter label */}
-                            <td className="px-3 py-1 pl-6">
-                              <span className="flex items-center gap-1 text-2xs">
-                                <span className="text-kpi-solar text-xs leading-none">☀</span>
-                                <span className="text-muted-foreground">Solar</span>
-                              </span>
-                            </td>
-                            {/* Reading */}
-                            <td className="px-3 py-1 text-right font-mono-num text-kpi-solar text-2xs">
-                              {solarDisplayVal != null ? fmtNum(solarDisplayVal, 2) : '—'}
-                            </td>
-                            {/* Δ Solar */}
-                            <td className="px-3 py-1 text-right font-mono-num text-2xs">
-                              {isSolarRepl
-                                ? <span className="text-kpi-solar font-medium">0.00</span>
-                                : isSolarDirectMode
-                                  // Direct kWh: never diff two readings — this IS the
-                                  // day's kWh already, not a cumulative meter value.
-                                  ? (solarDisplayVal != null
-                                      ? <span className={solarDisplayVal < 0 ? 'text-destructive font-semibold' : 'text-kpi-solar'}>{fmtNum(solarDisplayVal, 2)}</span>
-                                      : '—')
-                                  : (predecessor?.solar_meter_reading != null && r.solar_meter_reading != null)
-                                    ? (() => {
-                                        const sDelta = r.solar_meter_reading - predecessor.solar_meter_reading;
-                                        return <span className={sDelta < 0 ? 'text-destructive font-semibold' : 'text-kpi-solar'}>{fmtNum(sDelta, 2)}</span>;
-                                      })()
-                                    : r.daily_solar_kwh != null && +r.daily_solar_kwh !== 0
-                                      ? <span className={+r.daily_solar_kwh < 0 ? 'text-destructive font-semibold' : 'text-kpi-solar'}>{fmtNum(+r.daily_solar_kwh, 2)}</span>
-                                      : '—'
-                              }
-                            </td>
-                            {/* × — n/a for solar */}
-                            <td />
-                            {/* Effective — n/a for solar (no multiplier) */}
-                            <td />
-                            {/* Solar Repl. toggle */}
-                            <td className="px-2 py-1 text-center">
-                              <button
-                                title={isSolarRepl ? 'Solar replacement — click to unmark' : 'Mark solar meter replacement (zeroes Δ Solar)'}
-                                aria-label={isSolarRepl ? 'Solar replacement — click to unmark' : 'Mark solar meter replacement (zeroes Δ Solar)'}
-                                disabled={isDeleting || isTogglingSolar}
-                                onClick={() => toggleSolarReplacement(r)}
-                                className={[
-                                  'inline-flex items-center justify-center w-5 h-5 rounded border transition-colors',
-                                  'disabled:opacity-40 disabled:cursor-not-allowed',
-                                  isSolarRepl
-                                    ? 'bg-kpi-solar border-kpi-solar text-white hover:bg-kpi-solar/90'
-                                    : 'border-input bg-background hover:border-kpi-solar/40 hover:bg-kpi-solar/10',
-                                ].join(' ')}
-                              >
-                                {isTogglingSolar
-                                  ? <Loader2 className="h-2.5 w-2.5 animate-spin" />
-                                  : isSolarRepl ? <span className="text-3xs font-bold leading-none">✓</span> : null
-                                }
-                              </button>
-                            </td>
-                          </tr>
-                        )}
-                      </React.Fragment>
-                    );
-                  }
-
-                  const isEstimated = !!r.is_estimated;
-                  const flagsList: React.ReactNode[] = [];
-                  if (isEstimated) {
-                    flagsList.push(
-                      <StatusPill
-                        key="est"
-                        tone="warn"
-                        title="System-generated / Backfilled reading — no manual operator entry on file. Saving an edit converts this to a verified human reading."
-                        aria-label="Estimated reading"
-                      >
-                        Est.
-                      </StatusPill>
-                    );
-                  }
-                  if (r.off_location_flag) {
-                    flagsList.push(
-                      <StatusPill
-                        key="off-loc"
-                        tone="warn"
-                        title="GPS mismatch at entry"
-                        aria-label="Off location reading"
-                      >
-                        off-loc
-                      </StatusPill>
-                    );
-                  }
-                  const flagsCell = (
-                    <td className="px-3 py-1.5 whitespace-nowrap">
-                      {flagsList.length > 0 ? (
-                        <div className="flex items-center gap-1 flex-wrap">{flagsList}</div>
-                      ) : (
-                        <span className="text-muted-foreground/30 text-2xs">—</span>
-                      )}
-                    </td>
-                  );
-
-                  // ── Non-power modules: original single-tr rendering ──
-                  return (
-                    <tr
-                      key={r.id ?? i}
-                      className={[
-                        'group border-b border-border/40 transition-colors',
-                        isEditing      ? 'bg-primary-soft/60'
-                        : isMeterReplacement ? 'bg-warn-soft/40'
-                        : isEstimated  ? 'bg-warn-soft/20'
-                        : 'hover:bg-muted/40',
-                      ].join(' ')}
-                    >
-                      {anyEditable && (
-                        <td className="px-2 py-1.5 w-8">
-                          {rowEditable && (
-                            <input
-                              type="checkbox"
-                              className="h-3.5 w-3.5 accent-primary cursor-pointer"
-                              checked={selectedIds.has(r.id)}
-                              onChange={() => toggleSelect(r.id)}
-                            />
-                          )}
-                        </td>
-                      )}
-                      <td className="px-3 py-1.5 whitespace-nowrap text-muted-foreground">
-                        <span className="flex items-center gap-1.5">
-                          {dateStr}
-                          {isMeterReplacement && (
-                            <span className="text-3xs font-semibold uppercase tracking-wide text-kpi-solar bg-kpi-solar/15 px-1 py-0.5 rounded leading-none">
-                              repl.
-                            </span>
-                          )}
-                        </span>
-                      </td>
-
-                      {module === 'locator' && (isDirectMode ? <>
-                        <td className="px-3 py-1.5 text-right font-mono-num whitespace-nowrap">{fmtNum(r.current_reading, 2)}</td>
-                        {replCell}
-                        {flagsCell}
-                      </> : <>
-                        <td className="px-3 py-1.5 text-right font-mono-num whitespace-nowrap">{fmtNum(r.current_reading, 2)}</td>
-                        <td className="px-3 py-1.5 text-right font-mono-num whitespace-nowrap">
-                          {isMeterReplacement
-                            ? <span className="text-kpi-solar font-medium">0.00</span>
-                            : rawDelta != null ? <span className={rawDelta < 0 ? 'text-destructive font-semibold' : ''}>{fmtNum(rawDelta, 2)}</span> : '—'
-                          }
-                        </td>
-                        {replCell}
-                        {flagsCell}
-                      </>)}
-
-                      {module === 'well' && (isDirectMode ? <>
-                        <td className="px-3 py-1.5 text-right font-mono-num whitespace-nowrap">{fmtNum(r.current_reading, 2)}</td>
-                        {replCell}
-                        <td className="px-3 py-1.5 text-right font-mono-num whitespace-nowrap">
-                          {r.power_meter_reading != null ? fmtNum(r.power_meter_reading, 2) : '—'}
-                        </td>
-                        <td className="px-3 py-1.5 text-right font-mono-num whitespace-nowrap">
-                          {r.tds_ppm != null ? fmtNum(r.tds_ppm, 2) : '—'}
-                        </td>
-                        <td className="px-3 py-1.5 text-right font-mono-num whitespace-nowrap">
-                          {(r as any).turbidity_ntu != null ? (+((r as any).turbidity_ntu)).toFixed(2) : '—'}
-                        </td>
-                        <td className="px-3 py-1.5 text-right font-mono-num whitespace-nowrap">
-                          {r.pressure_psi != null ? fmtNum(r.pressure_psi, 2) : '—'}
-                        </td>
-                        {flagsCell}
-                      </> : <>
-                        <td className="px-3 py-1.5 text-right font-mono-num whitespace-nowrap">{fmtNum(r.current_reading, 2)}</td>
-                        <td className="px-3 py-1.5 text-right font-mono-num whitespace-nowrap">
-                          {isMeterReplacement
-                            ? <span className="text-kpi-solar font-medium">0.00</span>
-                            : rawDelta != null ? <span className={rawDelta < 0 ? 'text-destructive font-semibold' : ''}>{fmtNum(rawDelta, 2)}</span> : '—'
-                          }
-                        </td>
-                        {replCell}
-                        <td className="px-3 py-1.5 text-right font-mono-num whitespace-nowrap">
-                          {r.power_meter_reading != null ? fmtNum(r.power_meter_reading, 2) : '—'}
-                        </td>
-                        <td className="px-3 py-1.5 text-right font-mono-num whitespace-nowrap">
-                          {r.tds_ppm != null ? fmtNum(r.tds_ppm, 2) : '—'}
-                        </td>
-                        <td className="px-3 py-1.5 text-right font-mono-num whitespace-nowrap">
-                          {(r as any).turbidity_ntu != null ? (+((r as any).turbidity_ntu)).toFixed(2) : '—'}
-                        </td>
-                        <td className="px-3 py-1.5 text-right font-mono-num whitespace-nowrap">
-                          {r.pressure_psi != null ? fmtNum(r.pressure_psi, 2) : '—'}
-                        </td>
-                        {flagsCell}
-                      </>)}
-
-                      {module === 'blending' && <>
-                        <td className="px-3 py-1.5 text-right font-mono-num whitespace-nowrap text-muted-foreground">
-                          {r.raw_meter_reading != null ? fmtNum(r.raw_meter_reading, 2) : '—'}
-                        </td>
-                        <td className="px-3 py-1.5 text-right font-mono-num whitespace-nowrap">
-                          <span className={(r.volume_m3 ?? 0) < 0 ? 'text-destructive font-semibold' : ''}>
-                            {fmtNum(r.volume_m3 ?? 0, 2)}
-                          </span>
-                        </td>
-                        {replCell}
-                        {flagsCell}
-                      </>}
-
-                      {anyEditable && (
-                        <td className="px-2 py-1 text-center whitespace-nowrap sticky right-0 z-10 border-l border-border/30 shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.12)] transition-colors bg-background group-hover:bg-muted/40">
-                          {rowEditable && (
-                            <div className="opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-within:opacity-100 max-md:opacity-100 transition-opacity flex items-center justify-center gap-0.5">
-                              <button
-                                title="Edit"
-                                aria-label="Edit"
-                                disabled={!!editRow || isDeleting}
-                                onClick={() => startEdit(r)}
-                                className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground disabled:opacity-40"
-                              >
-                                <Pencil className="h-3 w-3" />
-                              </button>
-                              <button
-                                title="Delete"
-                                aria-label="Delete"
-                                disabled={!!editRow || isDeleting}
-                                onClick={() => setPendingDeleteId(r.id)}
-                                className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive disabled:opacity-40"
-                              >
-                                {isDeleting ? <Loader2 className="h-3 w-3 animate-spin" /> : <X className="h-3 w-3" />}
-                              </button>
-                            </div>
-                          )}
-                        </td>
-                      )}
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          )}
-        </div>
-
-        <p className="text-2xs text-muted-foreground">
-          {days === 'custom'
-            ? `Showing ${appliedFrom} → ${appliedTo}`
-            : `Showing up to ${days} days of history`
-          } · {rows?.length ?? 0} records
-        </p>
-
+      <p className="text-2xs text-muted-foreground">
+        {days === 'custom'
+          ? `Showing ${appliedFrom} → ${appliedTo}`
+          : `Showing up to ${days} days of history`
+        } · {rows?.length ?? 0} records
+      </p>
 
       <HistoryCascadeConfirmDialog
-        pendingDeleteId={pendingDeleteId} setPendingDeleteId={setPendingDeleteId} deleteRow={deleteRow}
-        bulkDeletePending={bulkDeletePending} setBulkDeletePending={setBulkDeletePending} selectedIdsSize={selectedIds.size} bulkDelete={bulkDelete}
+        pendingDeleteId={actions.pendingDeleteId} setPendingDeleteId={actions.setPendingDeleteId} deleteRow={actions.handleDelete}
+        bulkDeletePending={actions.bulkDeletePending} setBulkDeletePending={actions.setBulkDeletePending} selectedIdsSize={actions.selectedIds.size} bulkDelete={actions.handleBulkDelete}
       />
-        {replaceReadingId && (module === 'well' || module === 'locator') && (
-          <ReplaceMeterDialog
-            kind={module}
-            assetId={entityId}
-            plantId={plantId ?? ''}
-            oldSerial={assetMeterSerial ?? null}
-            readingId={replaceReadingId}
-            onSuccess={() => {
-              // Prevent a subsequent "Save changes" from clobbering the flag
-              // ReplaceMeterDialog just set back to false with stale local state.
-              setEditRow(prev => (prev && prev.id === replaceReadingId ? { ...prev, isMeterReplacement: true } : prev));
-              qc.invalidateQueries({ queryKey });
-            }}
-            onClose={() => setReplaceReadingId(null)}
-          />
-        )}
+      {actions.replaceReadingId && (module === 'well' || module === 'locator') && (
+        <ReplaceMeterDialog
+          kind={module}
+          assetId={entityId}
+          plantId={plantId ?? ''}
+          oldSerial={assetMeterSerial ?? null}
+          readingId={actions.replaceReadingId}
+          onSuccess={() => {
+            actions.setEditRow(prev => (prev && prev.id === actions.replaceReadingId ? { ...prev, isMeterReplacement: true } : prev));
+            qc.invalidateQueries({ queryKey });
+          }}
+          onClose={() => actions.setReplaceReadingId(null)}
+        />
+      )}
     </>
   );
 }
