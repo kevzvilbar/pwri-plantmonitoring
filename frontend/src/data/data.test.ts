@@ -7,7 +7,7 @@
  *   - fetch* return rows from the table, throw on error
  *   - insert* validate client-side before touching supabase
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import { createSupabaseQueryMock } from '@/test/mocks/supabaseMock';
 
 // Mock the Supabase client. The factory is hoisted above module scope, so it
@@ -37,8 +37,14 @@ import { fetchWells, fetchWellReadings } from './queries/wells';
 import { fetchROTrains } from './queries/ro-trains';
 import { insertWellReading } from '@/data/mutations/readings';
 
-// Capture the mocked `from` (typed, single cast) for assertions.
-const fromMock = vi.mocked(supabase).from;
+// Capture the mocked `from`. The real `supabase.from` is overloaded and its
+// mockImplementation would force every mock call to return a fully-shaped
+// NormalizedPaginatoricResponse / PostgrestError. One controlled cast to a
+// permissive `Mock` lets the fixtures in this file return plain query-builder
+// objects instead — the "single controlled cast, zero as any" promised above.
+const fromMock = vi.mocked(supabase).from as unknown as Mock<
+  (table: string) => ReturnType<typeof createSupabaseQueryMock>
+>;
 
 // Rows keyed by table name; each test overrides the subset it needs.
 let rows: Record<string, unknown[]> = {};
