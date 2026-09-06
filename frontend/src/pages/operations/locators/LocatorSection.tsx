@@ -10,6 +10,7 @@ import type { CorrectionTarget } from '@/components/CorrectionRequestDialog';
 import { useAuth } from '@/hooks/useAuth';
 import { useAppStore } from '@/store/appStore';
 import { usePlants } from '@/hooks/usePlants';
+import { useLocatorsForPlant } from '@/hooks/useLocators';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -501,16 +502,7 @@ export function LocatorReadingForm({ highlightId }: { highlightId?: string | nul
   });
   const maxLocatorReadings = locatorReadingLimit ?? 3;
 
-  const { data: locators } = useQuery({
-    queryKey: ['op-locators', plantId],
-    queryFn: async () => {
-      if (!plantId) return [];
-      const { data, error } = await supabase.from('locators').select('*').eq('plant_id', plantId).eq('status', 'Active').order('name');
-      if (error) throw error;
-      return data ?? [];
-    },
-    enabled: !!plantId,
-  });
+  const { data: locators } = useLocatorsForPlant(plantId);
 
   useEffect(() => {
     if (!highlightId || isMobile) return;
@@ -522,20 +514,11 @@ export function LocatorReadingForm({ highlightId }: { highlightId?: string | nul
     return () => clearTimeout(t);
   }, [highlightId, isMobile, locators]);
 
-  // BUG FIX: locator_readings has NO plant_id column — filtering by it returns 0 rows.
-  // Two-step query: resolve active locator IDs for this plant, then fetch readings
-  // by locator_id. This mirrors the fix already applied in TrendChart and Dashboard.
-  const { data: _locatorIds } = useQuery({
-    queryKey: ['op-locator-ids', plantId],
-    queryFn: async () => {
-      if (!plantId) return [] as string[];
-      const { data, error } = await supabase
-        .from('locators').select('id').eq('plant_id', plantId).eq('status', 'Active');
-      if (error) throw error;
-      return (data ?? []).map((l: any) => l.id as string);
-    },
-    enabled: !!plantId,
-  });
+  // Resolved active locator IDs derived directly from useLocators cache — eliminates redundant query
+  const _locatorIds = useMemo(
+    () => (locators ?? []).filter(l => l.status === 'Active').map(l => l.id),
+    [locators]
+  );
 
   const { data: recentReadings } = useQuery({
     queryKey: ['op-loc-recent', plantId],

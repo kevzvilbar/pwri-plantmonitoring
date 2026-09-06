@@ -1,5 +1,5 @@
 {
-  "maxWarnings": 1930,
+  "maxWarnings": 1929,
   "lastUpdated": "2026-09-06",
   "history": [
     {
@@ -138,6 +138,12 @@
       "maxWarnings": 1930,
       "previous": 1895,
       "reason": "Zustand store decomposition (split appStore.ts into plantStore.ts, chartStore.ts, alertStore.ts, themeStore.ts with backward-compatible facade) and security/config fixes (emergency SQL migration, .env.example, Supabase client uncoupling, types:gen script). All 35 test suites (349 tests), tsc --noEmit, and production build pass cleanly."
+    },
+    {
+      "date": "2026-09-06",
+      "maxWarnings": 1929,
+      "previous": 1930,
+      "reason": "Performance and data layer pass: added 20260906000002 performance indexes migration, font preloading in index.html (eliminating render-blocking index.css @import), shared test mock harness (supabaseMock.ts), and adopted useLocatorsForPlant/useWellsForPlant/useROTrainsForPlant in WellSection.tsx, LocatorSection.tsx, and ROTrains Overview.tsx. tsc, 349 tests, and prod build all clean."
     }
   ]
 }

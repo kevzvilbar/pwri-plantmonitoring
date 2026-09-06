@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { type Database } from '@/integrations/supabase/types';
 import { useAppStore } from '@/store/appStore';
+import { useROTrainsForPlant } from '@/hooks/useROTrains';
 import { Card } from '@/components/ui/card';
 import { fmtNum } from '@/lib/calculations';
 import { cn } from '@/lib/utils';
@@ -47,13 +48,7 @@ export function Overview() {
     setSearchParams(sp, { replace: true });
   };
 
-  const { data: trains } = useQuery({
-    queryKey: ['ro-overview', plantId],
-    queryFn: async () => plantId
-      ? (await supabase.from('ro_trains').select('*').eq('plant_id', plantId).order('train_number')).data ?? []
-      : [],
-    enabled: !!plantId,
-  });
+  const { data: trains } = useROTrainsForPlant(plantId);
 
   const { data: thresholds } = useQuery({
     queryKey: ['thresholds', plantId || 'global'],

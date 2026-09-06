@@ -59,11 +59,20 @@
     <script>
       (function () {
         try {
-          var raw = localStorage.getItem('pwri-app-state');
-          if (!raw) return;
-          var parsed = JSON.parse(raw);
-          if (parsed && parsed.state && parsed.state.darkMode) {
-            document.documentElement.classList.add('dark');
+          var rawTheme = localStorage.getItem('pwri-theme-state');
+          if (rawTheme) {
+            var parsedTheme = JSON.parse(rawTheme);
+            if (parsedTheme && parsedTheme.state && parsedTheme.state.darkMode) {
+              document.documentElement.classList.add('dark');
+            }
+          } else {
+            var raw = localStorage.getItem('pwri-app-state');
+            if (raw) {
+              var parsed = JSON.parse(raw);
+              if (parsed && parsed.state && parsed.state.darkMode) {
+                document.documentElement.classList.add('dark');
+              }
+            }
           }
         } catch (e) {
           // Corrupt/inaccessible storage (e.g. private browsing) — fall back
@@ -75,7 +84,7 @@
     <!-- Google Fonts: Geist & JetBrains Mono -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700;800&family=JetBrains+Mono:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700;800&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400;1,600&family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Cormorant+Garamond:wght@500;600;700&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet" />
 
     <!-- Favicons -->
     <link rel="icon" type="image/png" sizes="any" href="%BASE_URL%favicon.png" />

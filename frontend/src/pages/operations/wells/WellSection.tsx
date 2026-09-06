@@ -11,6 +11,7 @@ import type { CorrectionTarget } from '@/components/CorrectionRequestDialog';
 import { useAuth } from '@/hooks/useAuth';
 import { useAppStore } from '@/store/appStore';
 import { usePlants } from '@/hooks/usePlants';
+import { useWellsForPlant } from '@/hooks/useWells';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -271,13 +272,7 @@ export function WellReadingForm({ highlightId }: { highlightId?: string | null }
     return m;
   }, [sharedGroups]);
 
-  const { data: wells } = useQuery({
-    queryKey: ['op-wells', plantId],
-    queryFn: async () => plantId
-      ? (await supabase.from('wells').select('*').eq('plant_id', plantId).eq('status', 'Active').order('name')).data ?? []
-      : [],
-    enabled: !!plantId,
-  });
+  const { data: wells } = useWellsForPlant(plantId);
 
   useEffect(() => {
     if (!highlightId || isMobile) return;
