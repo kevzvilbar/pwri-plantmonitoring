@@ -195,7 +195,7 @@ export function AuditLogPanel() {
             <KeyRound className="h-3.5 w-3.5" />
             <span>Sign-In Attempts</span>
             {loginStats.flaggedCount > 0 && (
-              <Badge className="bg-danger text-danger-foreground text-[10px] px-1 py-0 h-4">
+              <Badge className="bg-danger text-danger-foreground text-2xs px-1 py-0 h-4">
                 {loginStats.flaggedCount} alert{loginStats.flaggedCount > 1 ? 's' : ''}
               </Badge>
             )}

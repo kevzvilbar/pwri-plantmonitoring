@@ -1070,7 +1070,7 @@ function SignUpForm({
                           </div>
                           <div className="flex items-center gap-1.5 font-mono text-2xs text-muted-foreground">
                             <span>{acctEmail}</span>
-                            {isCompleted && <Badge className="bg-success text-success-foreground text-[10px] py-0 px-1">Created</Badge>}
+                            {isCompleted && <Badge className="bg-success text-success-foreground text-2xs py-0 px-1">Created</Badge>}
                           </div>
                         </div>
                       );

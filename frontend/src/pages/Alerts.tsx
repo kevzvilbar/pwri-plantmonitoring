@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
-import { useAppStore } from '@/store/appStore';
+import { usePlantStore } from '@/store/plantStore';
+import { useAlertStore } from '@/store/alertStore';
 import { usePlants } from '@/hooks/usePlants';
 import { useAuth } from '@/hooks/useAuth';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -84,14 +85,13 @@ export default function Alerts() {
   const qc = useQueryClient();
   const { user, profile } = useAuth();
   const { data: plants } = usePlants();
+  const { selectedPlantId, setSelectedPlantId } = usePlantStore();
   const {
     plantAlerts,
     removeAlerts,
     clearAlerts,
     snoozeAlert,
-    selectedPlantId,
-    setSelectedPlantId,
-  } = useAppStore();
+  } = useAlertStore();
 
   const [activeView, setActiveView] = useState<'active' | 'logs'>('active');
   const [tierFilter, setTierFilter] = useState<'all' | 'critical' | 'warning' | 'info'>('all');

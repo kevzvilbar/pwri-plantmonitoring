@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useRef, useState, ReactNode } from 'react';
 import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
-import { useAppStore } from '@/store/appStore';
+import { usePlantStore } from '@/store/plantStore';
 
 export type Role = 'Operator' | 'Technician' | 'Manager' | 'Admin' | 'Data Analyst';
 
@@ -58,10 +58,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [isRecovery, setIsRecovery] = useState(false);
 
-  const activeOperatorId = useAppStore((s) => s.activeOperatorId);
+  const activeOperatorId = usePlantStore((s) => s.activeOperatorId);
 
   // Stable ref so effects never re-run just because Zustand recreated the setter
-  const setActiveOperatorIdRef = useRef(useAppStore.getState().setActiveOperatorId);
+  const setActiveOperatorIdRef = useRef(usePlantStore.getState().setActiveOperatorId);
 
   // Tracks the currently signed-in user id so onAuthStateChange can tell a
   // genuine sign-in apart from a same-user event (TOKEN_REFRESHED, etc.).

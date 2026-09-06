@@ -2,8 +2,10 @@ import React, { useMemo, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { useAppStore } from '@/store/appStore';
-import type { PlantAlert, PlantAlertSeverity } from '@/store/appStore';
+import { usePlantStore } from '@/store/plantStore';
+import { useChartStore } from '@/store/chartStore';
+import { useAlertStore } from '@/store/alertStore';
+import type { PlantAlert, PlantAlertSeverity } from '@/store/alertStore';
 // ─── Hybrid Strategy: Backend + Frontend Delta Handling ───────────────────────
 // deltaCache sits in front of every raw-reading computation.
 //   • Cache hit  → return the stored value instantly (no recomputation).
@@ -89,17 +91,17 @@ export default function Dashboard() {
   // changes — NOT when addAlerts updates plantAlerts in the store.
   // Without selectors, every addAlerts() call would re-render Dashboard →
   // re-run the useEffect → call addAlerts() again → infinite loop (React #185).
-  const selectedPlantId = useAppStore((s) => s.selectedPlantId);
-  const addAlerts       = useAppStore((s) => s.addAlerts);
-  const removeAlerts    = useAppStore((s) => s.removeAlerts);
-  const chartRange      = useAppStore((s) => s.chartRange);
-  const chartFrom       = useAppStore((s) => s.chartFrom);
-  const chartTo         = useAppStore((s) => s.chartTo);
-  const chartYear       = useAppStore((s) => s.chartYear);
-  const chartMonth      = useAppStore((s) => s.chartMonth);
-  const setChartRange   = useAppStore((s) => s.setChartRange);
-  const setChartCustomDates   = useAppStore((s) => s.setChartCustomDates);
-  const setChartMonthlyPeriod = useAppStore((s) => s.setChartMonthlyPeriod);
+  const selectedPlantId = usePlantStore((s) => s.selectedPlantId);
+  const addAlerts       = useAlertStore((s) => s.addAlerts);
+  const removeAlerts    = useAlertStore((s) => s.removeAlerts);
+  const chartRange      = useChartStore((s) => s.chartRange);
+  const chartFrom       = useChartStore((s) => s.chartFrom);
+  const chartTo         = useChartStore((s) => s.chartTo);
+  const chartYear       = useChartStore((s) => s.chartYear);
+  const chartMonth      = useChartStore((s) => s.chartMonth);
+  const setChartRange   = useChartStore((s) => s.setChartRange);
+  const setChartCustomDates   = useChartStore((s) => s.setChartCustomDates);
+  const setChartMonthlyPeriod = useChartStore((s) => s.setChartMonthlyPeriod);
   const { data: plants } = usePlants();
   const navigate = useNavigate();
   const [modal, setModal] = useState<null | { metric: string; title: string }>(null);

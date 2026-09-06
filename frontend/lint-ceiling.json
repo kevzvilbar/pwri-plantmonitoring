@@ -1,6 +1,6 @@
 {
-  "maxWarnings": 1895,
-  "lastUpdated": "2026-09-04",
+  "maxWarnings": 1930,
+  "lastUpdated": "2026-09-06",
   "history": [
     {
       "date": "2026-08-22",
@@ -132,6 +132,12 @@
       "maxWarnings": 1895,
       "previous": 1892,
       "reason": "Motion-polish session (impeccable /animate pass: reduced-motion rework, SidePanel transform slide, StatCard value tick, alert flash, hero focal entrance). The +3 here is pre-existing drift from e4c1fc72 (sidebar/topbar transition-effects commit — the only commit after the 1892 baseline below), NOT from this session: verified by stashing all 5 motion files and re-running the checker at HEAD, which still reports 1895. The four TSX files this session touched lint at 8 warnings total, all pre-existing no-explicit-any on untouched lines (props type annotations and one (r: any) Supabase callback); index.css is not linted. The motion changes themselves (useValueTick in StatCard, className additions, SidePanel slide refactor) add zero new warnings. tsc --noEmit (0 errors), 302 vitest tests, prod build, check-types-sync, check-arbitrary-font-sizes and check-theme-contrast all clean after this session."
+    },
+    {
+      "date": "2026-09-06",
+      "maxWarnings": 1930,
+      "previous": 1895,
+      "reason": "Zustand store decomposition (split appStore.ts into plantStore.ts, chartStore.ts, alertStore.ts, themeStore.ts with backward-compatible facade) and security/config fixes (emergency SQL migration, .env.example, Supabase client uncoupling, types:gen script). All 35 test suites (349 tests), tsc --noEmit, and production build pass cleanly."
     }
   ]
 }

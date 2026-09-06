@@ -10,7 +10,7 @@ import { friendlyError } from "@/lib/supabaseErrors";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AppShell } from "@/components/AppShell";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
-import { useAppStore } from "@/store/appStore";
+import { useThemeStore } from "@/store/themeStore";
 
 const Auth = lazy(() => import("./pages/Auth"));
 const Onboarding = lazy(() => import("./pages/Onboarding"));
@@ -44,8 +44,8 @@ const RouteFallback = () => (
 
 /** Applies data-theme and .dark to <html> whenever the persisted preferences change. */
 function ThemeEffect() {
-  const colorTheme = useAppStore((s) => s.colorTheme);
-  const darkMode = useAppStore((s) => s.darkMode);
+  const colorTheme = useThemeStore((s) => s.colorTheme);
+  const darkMode = useThemeStore((s) => s.darkMode);
   useEffect(() => {
     const root = document.documentElement;
     if (colorTheme && colorTheme !== 'default') {
