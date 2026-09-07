@@ -1,5 +1,6 @@
 import { format } from 'date-fns';
 import { interpolateMissingGridMeterReadings } from './gridMeterInterpolation';
+export { interpolateMissingGridMeterReadings } from './gridMeterInterpolation';
 
 export interface GridPowerReadingRow {
   plant_id?: string | null;

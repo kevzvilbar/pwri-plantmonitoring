@@ -1,7 +1,7 @@
 import { useEffect, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { StaffMember, fullName, getPresence, getRoleConfig, OnlineIds } from '../types';
+import { StaffMember, fullName, getPresence, getRoleConfig, OnlineIds } from '../../types';
 import { useAuth } from '@/hooks/useAuth';
 import { usePresence } from '@/hooks/usePresence';
 import { usePlants } from '@/hooks/usePlants';

@@ -3,7 +3,7 @@ import { X, User, ShieldCheck, Building2, MapPin, Clock, MessageSquare } from 'l
 import { Button } from '@/components/ui/button';
 import { DeleteEntityMenu } from '@/components/DeleteEntityMenu';
 import { InfoRow } from './InfoRow';
-import { StaffMember, getRoleConfig, avatarColor, initials, fullName, getPresence, presenceConfig, OnlineIds } from '../types';
+import { StaffMember, getRoleConfig, avatarColor, initials, fullName, getPresence, presenceConfig, OnlineIds } from '../../types';
 import { cn } from '@/lib/utils';
 
 function DetailDrawer({ member, roles, plants, allStaff, onChat, onClose, isSelf, isAdmin, onlineIds }: {

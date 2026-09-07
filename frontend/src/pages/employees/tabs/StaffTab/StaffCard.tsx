@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { ChevronRight, MapPin, MessageSquare } from 'lucide-react';
-import { StaffMember, getRoleConfig, avatarColor, initials, fullName, getPresence, presenceConfig, OnlineIds } from '../types';
+import { StaffMember, getRoleConfig, avatarColor, initials, fullName, getPresence, presenceConfig, OnlineIds } from '../../types';
 import { cn } from '@/lib/utils';
 
 function StaffCard({ member, roles, plants, isSelf, onlineIds, onChat, onDetail }: {
