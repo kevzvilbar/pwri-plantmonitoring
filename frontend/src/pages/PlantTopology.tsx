@@ -387,6 +387,8 @@ export default function PlantTopology() {
       handleNodeClick={handleNodeClick}
       computeSnap={computeSnap}
       handleDropNode={handleDropNode}
+      saveColWidths={saveColWidths}
+      SidePanelComponent={SidePanel}
     />
   );
 }

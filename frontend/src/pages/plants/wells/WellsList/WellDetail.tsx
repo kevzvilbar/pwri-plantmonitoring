@@ -6,8 +6,8 @@ import { Card } from '@/components/ui/card';
 import { ChevronLeft, MapPin, Gauge, Zap, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { fmtNum } from '@/lib/calculations';
-import { MeterDetailButton } from '../../charts/EntityHistoryChart';
-import { EntityHistoryChart } from '../../charts/EntityHistoryChart';
+import { MeterDetailButton } from '../../charts/EntityHistoryChart/index';
+import { EntityHistoryChart } from '../../charts/EntityHistoryChart/index';
 import { ReplaceMeterDialog } from '../../locators/LocatorDialogs';
 import { EditElectricMeterDialog, EditHydraulicDialog } from '../WellDialogs';
 import { useAuth } from '@/hooks/useAuth';
@@ -271,3 +271,4 @@ export function WellDetail({ wellId, onBack }: { wellId: string; onBack: () => v
     </div>
   );
 }
+

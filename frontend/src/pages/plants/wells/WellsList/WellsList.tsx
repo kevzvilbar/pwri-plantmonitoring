@@ -26,244 +26,45 @@ import { StatusPill } from '@/components/StatusPill';
 import { DeleteEntityMenu } from '@/components/DeleteEntityMenu';
 import { ReasonDialog } from '@/components/ReasonDialog';
 import { ReasonField } from '../../locators/LocatorDialogs';
-import { EntityHistoryChart, MeterDetailButton } from '../../charts/EntityHistoryChart';
+import { EntityHistoryChart, MeterDetailButton } from '../../charts/EntityHistoryChart/index';
 import { CollapsibleSection, GridPylonIcon, usePlantMeterConfig, logStatusChange } from '../../shared';
 import { AddWellDialog, EditWellDialog, EditElectricMeterDialog, EditHydraulicDialog, WellCsvImportDialog } from '../WellDialogs';
 import { WellDetail } from './WellDetail';
+import { useWellsList, PAGE_SIZE } from './WellsList/useWellsList';
+import { WellCard } from './WellsList/WellCard';
 
 export function WellsList({ plantId, highlightId }: { plantId: string; highlightId?: string | null }) {
-  const qc = useQueryClient();
+  const {
+    isAdmin, isManager, qc,
+    wells, latestWellReadings, latestByWellId, wellCardRefs, wellPulseId,
+    wellOfflineTarget, wellOfflineBusy, blendingSet, detail, selectedWell, selected,
+    bulkDeleteOpen, bulkReason, bulkBusy, blendingBusy, powerBusy, adding,
+    wellDeleteTarget, wellDeleteReason, wellDeleteBusy, editingWell, showWellCsv,
+    meterCfg, getWellElectricMode, plant,
+    toggle, toggleAll, toggleWellStatus, toggleWellElectric, toggleBlending,
+    doWellDelete, doBulkDelete, applyWellStatusChange,
+    setDetail, setSelectedWell, setSelected,
+    setBulkDeleteOpen, setBulkReason, setBulkBusy,
+    setWellOfflineTarget, setWellOfflineBusy,
+    setAdding, setEditingWell, setShowWellCsv,
+    setWellDeleteTarget, setWellDeleteReason,
+    setWellDeleteBusy, setBlendingBusy, setPowerBusy,
+  } = useWellsList(plantId, highlightId);
+
   const navigate = useNavigate();
-  const { isManager, isAdmin, user, activeOperator } = useAuth();
-  const [wellDeleteReason, setWellDeleteReason] = useState('');
-  const [wellDeleteBusy, setWellDeleteBusy] = useState(false);
 
-  const doWellDelete = async () => {
-    if (!wellDeleteTarget) return;
-    if (wellDeleteReason.trim().length < 5) { toast.error('Reason must be at least 5 characters.'); return; }
-    setWellDeleteBusy(true);
-    try {
-      await supabase.from('deletion_audit_log' as any).insert([{ kind: 'well', entity_id: wellDeleteTarget.id, entity_label: wellDeleteTarget.name, action: 'hard', reason: wellDeleteReason.trim(), performed_by: activeOperator?.id ?? user?.id ?? null, forced: false }] as any);
-    } catch { /* audit log is best-effort */ }
-    const { error } = await supabase.from('wells').delete().eq('id', wellDeleteTarget.id);
-    setWellDeleteBusy(false);
-    if (error) { toast.error(friendlyError(error)); return; }
-    toast.success('Well deleted');
-    setWellDeleteTarget(null);
-    setWellDeleteReason('');
-    qc.invalidateQueries({ queryKey: ['wells', plantId] });
-    qc.invalidateQueries({ queryKey: ['plants-summary-counts'] });
-  };
-  const { data: wells } = useQuery({
-    queryKey: ['wells', plantId],
-    queryFn: async () => (await supabase.from('wells').select('*').eq('plant_id', plantId).order('name')).data ?? [],
-  });
-
-  const { data: latestWellReadings } = useQuery({
-    queryKey: ['wells-latest-readings', plantId],
-    queryFn: async () => {
-      const { data } = await (supabase.from('well_readings_latest' as any) as any)
-        .select('well_id, reading_datetime')
-        .eq('plant_id', plantId);
-      return (data ?? []) as { well_id: string; reading_datetime: string }[];
-    },
-  });
-  const latestByWellId = useMemo(() => {
-    const map: Record<string, string> = {};
-    latestWellReadings?.forEach(r => { map[r.well_id] = r.reading_datetime; });
-    return map;
-  }, [latestWellReadings]);
-
-  const wellCardRefs = useRef<Record<string, HTMLDivElement | null>>({});
-  const [wellPulseId, setWellPulseId] = useState<string | null>(null);
-  useEffect(() => {
-    if (!highlightId) return;
-    const el = wellCardRefs.current[highlightId];
-    if (!el) return;
-    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    setWellPulseId(highlightId);
-    const t = setTimeout(() => setWellPulseId(null), 2200);
-    return () => clearTimeout(t);
-  }, [highlightId, wells]);
-
-  const [wellOfflineTarget, setWellOfflineTarget] = useState<any>(null);
-  const [wellOfflineBusy, setWellOfflineBusy] = useState(false);
-
-  const applyWellStatusChange = async (w: any, newStatus: 'Active' | 'Inactive', reasonCategory?: string, reasonDetail?: string) => {
-    const { error } = await supabase.from('wells').update({ status: newStatus }).eq('id', w.id);
-    if (error) { toast.error(friendlyError(error)); return; }
-    await logStatusChange({
-      user_id: activeOperator?.id ?? user?.id ?? null,
-      plant_id: w.plant_id,
-      entity_type: 'Well',
-      entity_id: w.id,
-      entity_label: w.name,
-      from_status: w.status,
-      to_status: newStatus,
-      timestamp: new Date().toISOString(),
-      reason_category: reasonCategory ?? null,
-      reason_detail: reasonDetail || null,
-    });
-    qc.invalidateQueries({ queryKey: ['wells', plantId] });
-    qc.invalidateQueries({ queryKey: ['plants-summary-counts'] });
-    toast.success(`Well marked ${newStatus}`);
+  const handleCardClick = (w: any) => {
+    setSelectedWell(selectedWell === w.id ? null : w.id);
   };
 
-  const toggleWellStatus = async (w: any) => {
-    if (!isManager) return;
-    if (w.status === 'Active') { setWellOfflineTarget(w); return; }
-    await applyWellStatusChange(w, 'Active');
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>, w: any) => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleCardClick(w); }
   };
 
-  const { data: plant } = useQuery({
-    queryKey: ['plant-name', plantId],
-    queryFn: async () => (await supabase.from('plants').select('name').eq('id', plantId).single()).data,
-  });
-  const { data: blendingIds } = useQuery<string[]>({
-    queryKey: ['blending-wells-tags', plantId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('blending_wells')
-        .select('well_id')
-        .eq('plant_id', plantId);
-      if (error) return [];
-      return (data ?? []).map((r: any) => r.well_id).filter(Boolean);
-    },
-  });
-  const blendingSet = new Set(Array.isArray(blendingIds) ? blendingIds : []);
-
-  const [detail, setDetail] = useState<string | null>(null);
-  const [selectedWell, setSelectedWell] = useState<string | null>(null);
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
-  const [bulkReason, setBulkReason] = useState('');
-  const [bulkBusy, setBulkBusy] = useState(false);
-  const [blendingBusy, setBlendingBusy] = useState<Set<string>>(new Set());
-  const [powerBusy, setPowerBusy] = useState<Set<string>>(new Set());
-  const [adding, setAdding] = useState(false);
-  const [wellDeleteTarget, setWellDeleteTarget] = useState<any>(null);
-  const [editingWell, setEditingWell] = useState<any>(null);
-  const [showWellCsv, setShowWellCsv] = useState(false);
-
-  const { config: meterCfg, saveConfig: saveMeterCfg } = usePlantMeterConfig(plantId);
-
-  const getWellElectricMode = (wellId: string): 'none' | 'dedicated' | 'shared' => {
-    if (meterCfg.wells_shared_electric_groups.some(g => g.members.includes(wellId))) return 'shared';
-    if (meterCfg.wells_dedicated_electric_ids.includes(wellId)) return 'dedicated';
-    return 'none';
-  };
-
-  const toggle = (id: string) => {
-    const next = new Set(selected);
-    if (next.has(id)) next.delete(id); else next.add(id);
-    setSelected(next);
-  };
-  const toggleAll = () => {
-    if (!wells) return;
-    if (selected.size === wells.length) setSelected(new Set());
-    else setSelected(new Set(wells.map((w: any) => w.id)));
-  };
-
-  const auditWellDelete = async (rows: { id: string; name: string }[], reason: string, bulk: boolean) => {
-    try {
-      const payload = rows.map((r) => ({
-        kind: 'well',
-        entity_id: r.id,
-        entity_label: r.name ?? null,
-        action: 'hard',
-        reason: bulk ? `[BULK] ${reason}` : reason,
-        performed_by: activeOperator?.id ?? user?.id ?? null,
-        forced: false,
-      }));
-      await supabase.from('deletion_audit_log' as any).insert(payload as any);
-    } catch (err) {
-      console.warn('[Plants] deletion_audit_log insert failed (non-fatal):', err);
-    }
-  };
-
-  const doBulkDelete = async () => {
-    if (!selected.size) return;
-    if (bulkReason.trim().length < 5) {
-      toast.error('Please enter a reason of at least 5 characters.');
-      return;
-    }
-    setBulkBusy(true);
-    const ids = Array.from(selected);
-    const rows = (wells ?? []).filter((w: any) => ids.includes(w.id)).map((w: any) => ({ id: w.id, name: w.name }));
-    const { error } = await supabase.from('wells').delete().in('id', ids);
-    if (error) {
-      setBulkBusy(false);
-      toast.error(friendlyError(error));
-      return;
-    }
-    await auditWellDelete(rows, bulkReason.trim(), true);
-    setBulkBusy(false);
-    setBulkDeleteOpen(false);
-    setBulkReason('');
-    setSelected(new Set());
-    toast.success(`${ids.length} well(s) permanently deleted`);
-    qc.invalidateQueries({ queryKey: ['wells', plantId] });
-    qc.invalidateQueries({ queryKey: ['plants-summary-counts'] });
-  };
-
-  const toggleWellElectric = async (w: any) => {
-    const mode = getWellElectricMode(w.id);
-    const turningOff = mode !== 'none';
-    setPowerBusy(prev => { const n = new Set(prev); n.add(w.id); return n; });
-    const { error } = await supabase
-      .from('wells')
-      .update({ has_power_meter: !turningOff })
-      .eq('id', w.id);
-    if (error) {
-      setPowerBusy(prev => { const n = new Set(prev); n.delete(w.id); return n; });
-      toast.error(friendlyError(error));
-      return;
-    }
-    const nextCfg = { ...meterCfg };
-    if (turningOff) {
-      nextCfg.wells_dedicated_electric_ids = nextCfg.wells_dedicated_electric_ids.filter(id => id !== w.id);
-      nextCfg.wells_shared_electric_groups = nextCfg.wells_shared_electric_groups.map(g => ({
-        ...g, members: g.members.filter(m => m !== w.id),
-      }));
-    } else {
-      const alreadyShared = nextCfg.wells_shared_electric_groups.some(g => g.members.includes(w.id));
-      if (!alreadyShared && !nextCfg.wells_dedicated_electric_ids.includes(w.id)) {
-        nextCfg.wells_dedicated_electric_ids = [...nextCfg.wells_dedicated_electric_ids, w.id];
-      }
-    }
-    await saveMeterCfg(nextCfg);
-    setPowerBusy(prev => { const n = new Set(prev); n.delete(w.id); return n; });
-    toast.success(turningOff ? `${w.name}: electricity metering removed`
-      : `${w.name}: dedicated meter enabled — kWh input will appear in Operations`);
-    qc.invalidateQueries({ queryKey: ['wells', plantId] });
-  };
-
-  const toggleBlending = async (w: any, next: boolean) => {
-    if (!isManager) return;
-    setBlendingBusy((prev) => { const s = new Set(prev); s.add(w.id); return s; });
-    try {
-      if (next) {
-        const { error } = await supabase
-          .from('blending_wells')
-          .upsert({ well_id: w.id, plant_id: plantId, tagged_at: new Date().toISOString(), tagged_by: activeOperator?.id ?? user?.id ?? null }, { onConflict: 'well_id' });
-        if (error) throw new Error(error.message);
-      } else {
-        const { error } = await supabase
-          .from('blending_wells')
-          .delete()
-          .eq('well_id', w.id);
-        if (error) throw new Error(error.message);
-      }
-      toast.success(next ? `${w.name}: marked as blending — its meter feeds product line separately`
-        : `${w.name}: blending cleared`);
-      qc.invalidateQueries({ queryKey: ['blending-wells-tags', plantId] });
-      qc.invalidateQueries({ queryKey: ['blending-wells', plantId] });
-    } catch (e) {
-      toast.error(friendlyError(e));
-    } finally {
-      setBlendingBusy((prev) => { const s = new Set(prev); s.delete(w.id); return s; });
-    }
-  };
+  const handleEdit = (w: any) => { setEditingWell(w); };
+  const handleDelete = (w: any) => { setWellDeleteTarget(w); setWellDeleteReason(''); };
+  const handleDetail = (id: string) => { setDetail(id); };
+  const handleNavOperations = (w: any) => { navigate(`/operations?tab=well&highlight=${w.id}`); };
 
   if (detail) return <WellDetail wellId={detail} onBack={() => setDetail(null)} />;
   return (
@@ -304,154 +105,31 @@ export function WellsList({ plantId, highlightId }: { plantId: string; highlight
         const isBlending = blendingSet.has(w.id);
         const blendingPending = blendingBusy.has(w.id);
         return (
-          <Card key={w.id}
-            ref={(el) => { wellCardRefs.current[w.id] = el; }}
-            className={`p-3 card-interactive border-l-2 ${checked ? 'ring-1 ring-primary' : ''} ${
-              wellPulseId === w.id ? 'ring-2 ring-accent shadow-elev' : ''} ${
-              w.status === 'Active' ? 'border-l-accent' : 'border-l-muted-foreground/30'
-            } ${isBlending ? 'border-primary' : ''}`}
-            data-testid={`well-card-${w.id}`}
-          >
-            <div className="flex items-start gap-2">
-              {isAdmin && (
-                <Checkbox checked={checked} onCheckedChange={() => toggle(w.id)}
-                  className="mt-1 h-4 w-4 shrink-0 rounded-sm" data-testid={`well-select-${w.id}`} />
-              )}
-              <div role="button" tabIndex={0}
-                className="flex-1 min-w-0 cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2 rounded"
-                onClick={() => setSelectedWell(selectedWell === w.id ? null : w.id)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedWell(selectedWell === w.id ? null : w.id); }
-                }}
-              >
-                <div className="flex justify-between items-start gap-2">
-                  <div className="min-w-0">
-                    <div className="font-medium text-sm flex items-center gap-1.5 flex-wrap">
-                      <span className="truncate">{w.name}</span>
-                      <TrendingUp className={`h-3 w-3 transition-colors shrink-0 ${selectedWell === w.id ? 'text-primary' : 'text-muted-foreground/30'}`} />
-                      {w.has_power_meter && (() => {
-                        const elMode = getWellElectricMode(w.id);
-                        return (
-                          <span className={`text-3xs uppercase tracking-wide px-1.5 py-0.5 rounded inline-flex items-center gap-0.5 ${
-                            elMode === 'shared' ? 'bg-primary-soft text-primary' : 'bg-warn-soft text-warn'
-                          }`} title={elMode === 'shared' ? 'Shared kWh meter group' : 'Dedicated kWh meter'}>
-                            <Zap className="h-2.5 w-2.5" />
-                            {elMode === 'shared' ? 'Shared kWh' : 'Electric'}
-                          </span>
-                        );
-                      })()}
-                      {isBlending && (
-                        <span className="text-3xs uppercase tracking-wide bg-kpi-ro/15 text-kpi-ro px-1.5 py-0.5 rounded"
-                          title="Blending: separate water meter feeding product line">Blending</span>
-                      )}
-                    </div>
-                    <div className="mt-1 flex items-center gap-1.5 flex-wrap">
-                      {(() => {
-                        const fresh = lastReadingFreshness(latestByWellId[w.id]);
-                        return (
-                          <StatusPill tone={fresh.tone}>
-                            <CalendarClock className="h-2.5 w-2.5" />
-                            {fresh.label}
-                          </StatusPill>
-                        );
-                      })()}
-                      <button type="button" onClick={(e) => {
-                        e.stopPropagation();
-                        navigate(`/operations?tab=well&highlight=${w.id}`);
-                      }} title="Open this well in Operations"
-                        className="inline-flex items-center gap-0.5 text-2xs font-medium text-muted-foreground hover:text-foreground bg-muted hover:bg-muted/80 px-1.5 py-0.5 rounded-full transition-colors">
-                        <ArrowUpRight className="h-2.5 w-2.5" /> Operations
-                      </button>
-                    </div>
-                    <div className="text-xs text-muted-foreground flex items-center gap-2 flex-wrap">
-                      {(w.diameter != null || w.drilling_depth_m != null) && (
-                        <span>{w.diameter ?? '—'}{w.drilling_depth_m != null ? ` · ${w.drilling_depth_m} m` : ''}</span>
-                      )}
-                      {w.meter_serial && (
-                        <span className="inline-flex items-center gap-0.5">
-                          <Gauge className="h-2.5 w-2.5" /> Water SN {w.meter_serial}
-                        </span>
-                      )}
-                      {w.has_power_meter && w.electric_meter_serial && (
-                        <span className="inline-flex items-center gap-0.5">
-                          <Zap className="h-2.5 w-2.5" /> kWh SN {w.electric_meter_serial}
-                        </span>
-                      )}
-                      {(w.gps_lat != null && w.gps_lng != null) && (
-                        <span className="inline-flex items-center gap-0.5">
-                          <MapPin className="h-2.5 w-2.5" /> {(+w.gps_lat).toFixed(4)}, {(+w.gps_lng).toFixed(4)}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  <button type="button" onClick={(e) => { e.stopPropagation(); toggleWellStatus(w); }}
-                    title={isManager ? `Click to toggle status (currently ${w.status})` : w.status}
-                    className={`inline-flex items-center gap-1 text-xs font-medium px-1.5 py-0.5 rounded-full shrink-0 border transition-colors ${
-                      w.status === 'Active' ? 'text-accent bg-accent-soft border-accent hover:bg-accent-soft'
-                      : 'text-muted-foreground bg-muted border-border hover:bg-muted/80'
-                    } ${isManager ? 'cursor-pointer' : 'cursor-default'}`}>
-                    <span className={`h-1.5 w-1.5 rounded-full ${w.status === 'Active' ? 'bg-accent' : 'bg-muted-foreground'}`} />
-                    {w.status}
-                  </button>
-                </div>
-              </div>
-              {isManager && (
-                <div className="flex items-center gap-1 shrink-0">
-                  <Button size="sm" variant="ghost" className="h-7 w-7 p-0 rounded-full" title="Edit well"
-                    onClick={e => { e.stopPropagation(); setEditingWell(w); }}>
-                    <Pencil className="h-3.5 w-3.5" />
-                  </Button>
-                  <Button size="sm" variant="ghost" className="h-7 w-7 p-0 rounded-full text-destructive hover:text-destructive hover:bg-destructive/10"
-                    title="Delete well" onClick={e => { e.stopPropagation(); setWellDeleteTarget(w); setWellDeleteReason(''); }}>
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-              )}
-            </div>
-            {isManager && (
-              <div className="flex items-center gap-1.5 mt-1.5 flex-wrap" onClick={e => e.stopPropagation()}>
-                <button onClick={() => toggleBlending(w, !isBlending)} disabled={blendingPending}
-                  className={`inline-flex items-center gap-1 h-6 px-2 rounded-full text-2xs font-medium border transition-colors ${
-                    isBlending ? 'bg-primary border-primary text-primary-foreground'
-                    : 'bg-background border-border text-muted-foreground hover:bg-muted'
-                  } ${blendingPending ? 'opacity-50 cursor-wait' : 'cursor-pointer'}`}
-                  title={isBlending ? 'Blending on — click to clear' : 'Mark as blending well'}
-                  data-testid={`well-blending-${w.id}`}>
-                  {blendingPending ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : <span className={`h-1.5 w-1.5 rounded-full ${isBlending ? 'bg-primary-foreground' : 'bg-muted-foreground'}`} />}
-                  Blending
-                </button>
-                {(() => {
-                  const elMode = getWellElectricMode(w.id);
-                  return (
-                    <button onClick={() => toggleWellElectric(w)} disabled={powerBusy.has(w.id)}
-                      className={`inline-flex items-center gap-1 h-6 px-2 rounded-full text-2xs font-medium border transition-colors ${
-                        elMode === 'dedicated' ? 'bg-warn border-warn text-white'
-                        : elMode === 'shared' ? 'bg-primary border-primary text-primary-foreground'
-                        : 'bg-background border-border text-muted-foreground hover:bg-muted'
-                      } ${powerBusy.has(w.id) ? 'opacity-50 cursor-wait' : 'cursor-pointer'}`}
-                      title={
-                        elMode === 'dedicated' ? 'Dedicated meter — click to remove'
-                        : elMode === 'shared' ? 'In a shared meter group — click to remove from metering'
-                        : 'No electric meter — click to add as dedicated'
-                      }
-                      data-testid={`well-power-${w.id}`}>
-                      {powerBusy.has(w.id) ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : <Zap className="h-2.5 w-2.5" />}
-                      {elMode === 'dedicated' ? 'Dedicated' : elMode === 'shared' ? 'Shared' : 'Power'}
-                    </button>
-                  );
-                })()}
-              </div>
-            )}
-            <div className="mt-1.5 flex items-center gap-2" onClick={e => e.stopPropagation()}>
-              <button onClick={() => setDetail(w.id)}
-                className="text-xs text-primary hover:underline inline-flex items-center gap-0.5">Details →</button>
-            </div>
-            {selectedWell === w.id && (
-              <div className="mt-3 pt-3 border-t">
-                <EntityHistoryChart entityId={w.id} entityType="well" entityName={w.name} isBlendingWell={isBlending} />
-              </div>
-            )}
-          </Card>
+          <WellCard
+            key={w.id}
+            w={w}
+            checked={checked}
+            isAdmin={isAdmin}
+            isManager={isManager}
+            isBlending={isBlending}
+            blendingPending={blendingPending}
+            selectedWell={selectedWell}
+            wellPulseId={wellPulseId}
+            latestByWellId={latestByWellId}
+            onToggleSelect={() => toggle(w.id)}
+            onCardClick={() => handleCardClick(w)}
+            onKeyDown={(e) => handleKeyDown(e, w)}
+            onNavigateOperations={() => handleNavOperations(w)}
+            onToggleStatus={() => toggleWellStatus(w)}
+            onEdit={() => handleEdit(w)}
+            onDelete={() => handleDelete(w)}
+            onToggleBlending={() => toggleBlending(w, !isBlending)}
+            onToggleElectric={() => toggleWellElectric(w)}
+            onSetDetail={() => handleDetail(w.id)}
+            getWellElectricMode={getWellElectricMode}
+            powerBusy={powerBusy}
+            cardRef={(el) => { wellCardRefs.current[w.id] = el; }}
+          />
         );
       })}
       {!wells?.length && <Card className="p-4 text-center text-xs text-muted-foreground">No Wells Yet</Card>}

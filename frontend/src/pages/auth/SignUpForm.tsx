@@ -2,36 +2,30 @@ import { useState, useEffect } from 'react';
 import { z } from 'zod';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from 'sonner';
 import { friendlyError } from '@/lib/supabaseErrors';
-import { ChevronLeft, ChevronRight, Users, User, Eye, EyeOff } from 'lucide-react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import {
   DesignationCombobox,
   OPERATOR_DESIGNATION,
 } from '@/components/DesignationCombobox';
+import { StepIndicator } from './SignUpForm/StepIndicator';
+import { SignUpNavigation } from './SignUpForm/SignUpNavigation';
+import { DesignationStep } from './SignUpForm/DesignationStep';
+import { OperatorCountStep } from './SignUpForm/OperatorCountStep';
+import { OperatorEntriesView } from './SignUpForm/OperatorEntriesStep';
+import { UserDetailsStep } from './SignUpForm/UserDetailsStep';
+import { PlantAssignmentStep } from './SignUpForm/PlantAssignmentStep';
+import { ConfirmationStep } from './SignUpForm/ConfirmationStep';
+import {
+  blankOperator, type OperatorEntry, type SignUpStep,
+} from './SignUpForm/types';
 
 const emailSchema = z.string().trim().email('Enter a valid email').max(255);
 const passSchema  = z.string().min(8, 'Min 8 characters').max(72);
 const userSchema  = z.string().trim().min(2, 'Min 2 characters').max(64)
   .regex(/^[a-z0-9_.-]+$/i, 'Username: letters, numbers, _ . - only');
-
-export interface OperatorEntry {
-  username: string;
-  first_name: string;
-  last_name: string;
-  middle_name: string;
-  suffix: string;
-}
-
-export const blankOperator = (): OperatorEntry => ({
-  username: '', first_name: '', last_name: '', middle_name: '', suffix: '',
-});
-
-export type SignUpStep = 'designation' | 'count' | 'entries' | 'details' | 'plants' | 'confirm';
 
 async function logSignUpAudit(p: {
   email: string;
@@ -96,6 +90,9 @@ export function SignUpForm({
 
   const updateOp = (i: number, k: keyof OperatorEntry, v: string) =>
     setOperators((p) => p.map((o, idx) => idx === i ? { ...o, [k]: v } : o));
+
+  const setSingleField = (field: string, value: string) =>
+    setSingle((s) => ({ ...s, [field]: value }));
 
   const goNext = () => {
     if (step === 'designation') {
@@ -187,7 +184,7 @@ export function SignUpForm({
           }
           const acctEmail = i === 0 ? email : email.replace('@', `+op${i}@`);
           try {
-            await createAccount(acctEmail, op, OPERATOR_DESIGNATION, assignedPlants);
+            await createAccount(acctEmail, op, 'Operator', assignedPlants);
             newlyCreated.add(i);
             setCompletedIndices(new Set(newlyCreated));
           } catch (err: any) {
@@ -223,309 +220,60 @@ export function SignUpForm({
     }
   };
 
+  const stepContent = () => {
+    switch (step) {
+      case 'designation':
+        return (
+          <DesignationStep
+            email={email} password={password} confirmPassword={confirmPassword} designation={designation}
+            showPassword={showPassword} showConfirmPassword={showConfirmPassword}
+            onEmailChange={setEmail} onPasswordChange={setPassword}
+            onConfirmPasswordChange={setConfirmPassword} onDesignationChange={setDesignation}
+            onTogglePassword={() => setShowPassword(v => !v)}
+            onToggleConfirmPassword={() => setShowConfirmPassword(v => !v)}
+          />
+        );
+      case 'count':
+        return <OperatorCountStep email={email} operatorCount={operatorCount} onCountChange={setOperatorCount} />;
+      case 'entries':
+        return (
+          <OperatorEntriesView
+            email={email} operatorCount={operatorCount}
+            operators={operators} completedIndices={completedIndices}
+            onOperatorChange={updateOp}
+          />
+        );
+      case 'details':
+        return <UserDetailsStep single={single} onFieldChange={setSingleField} />;
+      case 'plants':
+        return (
+          <PlantAssignmentStep
+            isOperator={isOperator} designation={designation} plants={plants}
+            plantId={plantId} plantIds={plantIds}
+            onPlantIdChange={setPlantId} onTogglePlantId={(id) => setPlantIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])}
+          />
+        );
+      case 'confirm':
+        return (
+          <ConfirmationStep
+            isOperator={isOperator} email={email} designation={designation}
+            operatorCount={operatorCount} operators={operators}
+            plantId={plantId} plantIds={plantIds}
+            completedIndices={completedIndices} plants={plants}
+            busy={busy} single={single}
+            onSubmit={handleSubmit} onBack={goBack}
+          />
+        );
+      default:
+        return null;
+    }
+  };
+
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-1 flex-wrap">
-        {allSteps.map((s, i) => (
-          <span key={s} className="flex items-center gap-1">
-            <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-              s === step ? 'bg-accent text-accent-foreground'
-              : i < stepIdx ? 'bg-muted text-muted-foreground line-through'
-              : 'text-muted-foreground'
-            }`}>{stepLabel[s]}</span>
-            {i < allSteps.length - 1 && <span className="text-muted-foreground text-2xs">›</span>}
-          </span>
-        ))}
-      </div>
-
-      {step === 'designation' && (
-        <div className="space-y-3">
-          <div>
-            <Label htmlFor="signup-email">Email *</Label>
-            <Input
-              id="signup-email"
-              type="email"
-              autoComplete="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="user@example.com"
-            />
-          </div>
-          <div>
-            <Label htmlFor="signup-password">Password *</Label>
-            <div className="relative">
-              <Input
-                id="signup-password"
-                type={showPassword ? 'text' : 'password'}
-                autoComplete="new-password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Min 8 characters"
-                minLength={8}
-                className="pr-10"
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword((v) => !v)}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none rounded p-0.5"
-                aria-label={showPassword ? 'Hide password' : 'Show password'}
-              >
-                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-              </button>
-            </div>
-          </div>
-          <div>
-            <Label htmlFor="signup-confirm-password">Confirm password *</Label>
-            <div className="relative">
-              <Input
-                id="signup-confirm-password"
-                type={showConfirmPassword ? 'text' : 'password'}
-                autoComplete="new-password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                placeholder="Repeat password"
-                minLength={8}
-                className="pr-10"
-              />
-              <button
-                type="button"
-                onClick={() => setShowConfirmPassword((v) => !v)}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none rounded p-0.5"
-                aria-label={showConfirmPassword ? 'Hide confirm password' : 'Show confirm password'}
-              >
-                {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-              </button>
-            </div>
-          </div>
-          <div>
-            <Label htmlFor="signup-designation">Designation *</Label>
-            <DesignationCombobox id="signup-designation" value={designation} onChange={setDesignation} placeholder="Select designation…" data-testid="signup-designation" />
-          </div>
-          {designation && (
-            <div className={`rounded-lg p-3 text-xs flex items-start gap-2 ${
-              isOperator ? 'bg-warn-soft border border-warn text-warn' : 'bg-info-soft border border-info text-info'
-            }`}>
-              {isOperator ? <Users className="h-3.5 w-3.5 mt-0.5 shrink-0" /> : <User className="h-3.5 w-3.5 mt-0.5 shrink-0" />}
-              {isOperator
-                ? "Operator accounts share one email inbox. Each operator receives an individual login address routed to this email. Only one plant is allowed."
-                : 'This designation uses a unique email and can be assigned to multiple plants.'}
-            </div>
-          )}
-        </div>
-      )}
-
-      {step === 'count' && (
-        <div className="space-y-3">
-          <div className="rounded-lg bg-muted/60 p-3 text-xs text-muted-foreground leading-relaxed">
-            All operators receive password reset links and notifications at <strong>{email}</strong>.
-            Each operator will have their own distinct login address and username.
-          </div>
-          <div>
-            <Label htmlFor="operator-count">How many Operators will use this email? *</Label>
-            <Input id="operator-count" type="number" min={1} max={20} value={operatorCount}
-              onChange={(e) => setOperatorCount(Math.max(1, Math.min(20, +e.target.value)))} />
-            <p className="text-xs text-muted-foreground mt-1">Maximum 20 per shared email</p>
-          </div>
-        </div>
-      )}
-
-      {step === 'entries' && (
-        <div className="space-y-3 max-h-[55vh] overflow-y-auto pr-1">
-          <div className="rounded-lg bg-info-soft border border-info/30 p-2.5 text-xs text-info flex items-start gap-2">
-            <Users className="h-4 w-4 mt-0.5 shrink-0" />
-            <div className="leading-relaxed">
-              <strong>Individual Login Addresses:</strong> Operator 1 signs in using <code>{email}</code>. Additional operators use plus-aliased addresses (e.g. <code>{email.replace('@', '+op1@')}</code>) so each operator can independently reset passwords, with all notifications arriving in the shared inbox.
-            </div>
-          </div>
-
-          {Array.from({ length: operatorCount }, (_, i) => {
-            const acctEmail = i === 0 ? email : email.replace('@', `+op${i}@`);
-            const isCompleted = completedIndices.has(i);
-            return (
-              <div key={i} className={`border rounded-lg p-3 space-y-2 transition-all ${isCompleted ? 'bg-muted/40 border-success/40' : ''}`}>
-                <div className="flex items-center justify-between flex-wrap gap-1">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Operator {i + 1}</span>
-                    {isCompleted && <Badge className="bg-success text-success-foreground text-2xs py-0">✓ Account Created</Badge>}
-                  </div>
-                  <Badge variant="outline" className="text-2xs font-mono">
-                    Login: {acctEmail} {i === 0 ? '(Primary)' : `(Alias → ${email})`}
-                  </Badge>
-                </div>
-                <div>
-                  <Label className="text-xs" htmlFor={`op-${i}-username`}>Username *</Label>
-                  <Input
-                    id={`op-${i}-username`}
-                    autoComplete="username"
-                    disabled={isCompleted}
-                    value={operators[i]?.username ?? ''}
-                    onChange={(e) => updateOp(i, 'username', e.target.value)}
-                    placeholder="e.g. jdelacruz"
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <Label className="text-xs" htmlFor={`op-${i}-first`}>First name *</Label>
-                    <Input
-                      id={`op-${i}-first`}
-                      autoComplete="given-name"
-                      disabled={isCompleted}
-                      value={operators[i]?.first_name ?? ''}
-                      onChange={(e) => updateOp(i, 'first_name', e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-xs" htmlFor={`op-${i}-last`}>Last name *</Label>
-                    <Input
-                      id={`op-${i}-last`}
-                      autoComplete="family-name"
-                      disabled={isCompleted}
-                      value={operators[i]?.last_name ?? ''}
-                      onChange={(e) => updateOp(i, 'last_name', e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-xs" htmlFor={`op-${i}-middle`}>Middle name</Label>
-                    <Input
-                      id={`op-${i}-middle`}
-                      autoComplete="additional-name"
-                      disabled={isCompleted}
-                      value={operators[i]?.middle_name ?? ''}
-                      onChange={(e) => updateOp(i, 'middle_name', e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-xs" htmlFor={`op-${i}-suffix`}>Suffix</Label>
-                    <Input
-                      id={`op-${i}-suffix`}
-                      autoComplete="honorific-suffix"
-                      disabled={isCompleted}
-                      value={operators[i]?.suffix ?? ''}
-                      onChange={(e) => updateOp(i, 'suffix', e.target.value)}
-                      placeholder="Jr., Sr.…"
-                    />
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {step === 'details' && (
-        <div className="space-y-2">
-          <div><Label htmlFor="single-username">Username *</Label><Input id="single-username" autoComplete="username" value={single.username} onChange={(e) => setSingle((s) => ({ ...s, username: e.target.value }))} placeholder="e.g. jdelacruz" /></div>
-          <div className="grid grid-cols-2 gap-2">
-            <div><Label htmlFor="single-first">First name *</Label><Input id="single-first" autoComplete="given-name" value={single.first_name} onChange={(e) => setSingle((s) => ({ ...s, first_name: e.target.value }))} /></div>
-            <div><Label htmlFor="single-last">Last name *</Label><Input id="single-last" autoComplete="family-name" value={single.last_name} onChange={(e) => setSingle((s) => ({ ...s, last_name: e.target.value }))} /></div>
-            <div><Label htmlFor="single-middle">Middle name</Label><Input id="single-middle" autoComplete="additional-name" value={single.middle_name} onChange={(e) => setSingle((s) => ({ ...s, middle_name: e.target.value }))} /></div>
-            <div><Label htmlFor="single-suffix">Suffix</Label><Input id="single-suffix" autoComplete="honorific-suffix" value={single.suffix} onChange={(e) => setSingle((s) => ({ ...s, suffix: e.target.value }))} placeholder="Jr., Sr.…" /></div>
-          </div>
-        </div>
-      )}
-
-      {step === 'plants' && (
-        <div className="space-y-2">
-          {isOperator ? (
-            <>
-              <p className="text-xs text-muted-foreground">Operators are limited to a <strong>single plant</strong>.</p>
-              <div className="space-y-1.5 max-h-[40vh] overflow-y-auto">
-                {(plants ?? []).map((p) => (
-                  <label key={p.id} className={`flex items-center gap-2 p-2.5 rounded-lg border cursor-pointer transition-colors ${plantId === p.id ? 'border-accent bg-accent/5' : 'hover:bg-muted/60'}`}>
-                    <input type="radio" name="op-plant" value={p.id} checked={plantId === p.id} onChange={() => setPlantId(p.id)} className="accent-accent" />
-                    <div><div className="text-sm font-medium">{p.name}</div>{p.address && <div className="text-xs text-muted-foreground">{p.address}</div>}</div>
-                  </label>
-                ))}
-              </div>
-            </>
-          ) : (
-            <>
-              <p className="text-xs text-muted-foreground"><strong>{designation}</strong> can be assigned to multiple plants.</p>
-              <div className="space-y-1.5 max-h-[40vh] overflow-y-auto">
-                {(plants ?? []).map((p) => (
-                  <label key={p.id} className={`flex items-center gap-2 p-2.5 rounded-lg border cursor-pointer transition-colors ${plantIds.includes(p.id) ? 'border-accent bg-accent/5' : 'hover:bg-muted/60'}`}>
-                    <Checkbox checked={plantIds.includes(p.id)} onCheckedChange={() => setPlantIds((prev) => prev.includes(p.id) ? prev.filter((x) => x !== p.id) : [...prev, p.id])} />
-                    <div><div className="text-sm font-medium">{p.name}</div>{p.address && <div className="text-xs text-muted-foreground">{p.address}</div>}</div>
-                  </label>
-                ))}
-              </div>
-            </>
-          )}
-          {!(plants ?? []).length && <p className="text-xs text-muted-foreground text-center py-4">No plants available — an Admin will assign plants after approval.</p>}
-        </div>
-      )}
-
-      {step === 'confirm' && (
-        <div className="space-y-3">
-          <div className="rounded-lg border divide-y text-sm">
-            <div className="p-3 flex justify-between"><span className="text-muted-foreground">Email</span><span className="font-medium">{email}</span></div>
-            <div className="p-3 flex justify-between"><span className="text-muted-foreground">Designation</span><Badge variant="outline">{designation}</Badge></div>
-            {isOperator ? (
-              <>
-                <div className="p-3 flex justify-between"><span className="text-muted-foreground">Operators</span><span className="font-medium">{operatorCount}</span></div>
-                <div className="p-3">
-                  <span className="text-muted-foreground text-xs font-medium">Operator Accounts &amp; Login Addresses</span>
-                  <div className="mt-1 space-y-1.5">
-                    {operators.slice(0, operatorCount).map((o, i) => {
-                      const acctEmail = i === 0 ? email : email.replace('@', `+op${i}@`);
-                      const isCompleted = completedIndices.has(i);
-                      return (
-                        <div key={i} className="flex items-center justify-between text-xs p-2 rounded-lg bg-muted/40 border">
-                          <div>
-                            <span className="font-semibold text-foreground">@{o.username}</span>
-                            <span className="text-muted-foreground ml-1.5">— {o.first_name} {o.last_name}</span>
-                          </div>
-                          <div className="flex items-center gap-1.5 font-mono text-2xs text-muted-foreground">
-                            <span>{acctEmail}</span>
-                            {isCompleted && <Badge className="bg-success text-success-foreground text-2xs py-0 px-1">Created</Badge>}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-                <div className="p-3 flex justify-between"><span className="text-muted-foreground">Plant</span><span className="font-medium">{(plants ?? []).find((p) => p.id === plantId)?.name ?? plantId}</span></div>
-              </>
-            ) : (
-              <>
-                <div className="p-3 flex justify-between"><span className="text-muted-foreground">Username</span><span className="font-medium">@{single.username}</span></div>
-                <div className="p-3 flex justify-between"><span className="text-muted-foreground">Name</span><span className="font-medium">{single.first_name} {single.last_name}</span></div>
-                <div className="p-3"><span className="text-muted-foreground text-xs">Plants</span>
-                  <div className="mt-1 flex flex-wrap gap-1">
-                    {plantIds.map((id) => <Badge key={id} variant="secondary" className="text-xs">{(plants ?? []).find((p) => p.id === id)?.name ?? id}</Badge>)}
-                  </div>
-                </div>
-              </>
-            )}
-          </div>
-          <p className="text-xs text-muted-foreground text-center">
-            Account{isOperator && operatorCount > 1 ? 's' : ''} will be placed in the approval queue until an Admin activates {isOperator && operatorCount > 1 ? 'them' : 'it'}.
-          </p>
-          <Button onClick={handleSubmit} disabled={busy} className="w-full">
-            {busy
-              ? 'Creating…'
-              : isOperator && completedIndices.size > 0
-              ? `Retry remaining ${operatorCount - completedIndices.size} account${operatorCount - completedIndices.size > 1 ? 's' : ''}`
-              : `Create ${isOperator && operatorCount > 1 ? `${operatorCount} accounts` : 'account'}`}
-          </Button>
-          <Button variant="ghost" size="sm" className="w-full" onClick={goBack}>
-            <ChevronLeft className="h-3.5 w-3.5 mr-1" /> Back
-          </Button>
-        </div>
-      )}
-
-      {step !== 'confirm' && (
-        <div className="flex gap-2">
-          {step !== 'designation' && (
-            <Button variant="outline" onClick={goBack} className="flex-1">
-              <ChevronLeft className="h-4 w-4 mr-1" /> Back
-            </Button>
-          )}
-          <Button onClick={goNext} className="flex-1">
-            Next <ChevronRight className="h-4 w-4 ml-1" />
-          </Button>
-        </div>
-      )}
+      <StepIndicator steps={allSteps} currentStep={step} stepIndex={stepIdx} labels={stepLabel} />
+      {stepContent()}
+      {step !== 'confirm' && <SignUpNavigation step={step} onBack={goBack} onNext={goNext} />}
     </div>
   );
 }

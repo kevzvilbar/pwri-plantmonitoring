@@ -31,7 +31,7 @@ import { toast } from 'sonner';
 import { friendlyError } from '@/lib/supabaseErrors';
 import { format } from 'date-fns';
 
-import { EntityHistoryChart, MeterDetailButton } from '../charts/EntityHistoryChart';
+import { EntityHistoryChart, MeterDetailButton } from '../charts/EntityHistoryChart/index';
 import { usePlantMeterConfig } from '../shared';
 import { ReasonField, ReplaceMeterDialog } from '../locators/LocatorDialogs';
 import { ProductMetersStat } from './sections/ProductMetersStat';
@@ -479,3 +479,4 @@ async function logProductMeterAudit(entry: {
     await (supabase.from('product_meter_audit_log' as any) as any).insert([entry]);
   } catch { /* silently ignore */ }
 }
+

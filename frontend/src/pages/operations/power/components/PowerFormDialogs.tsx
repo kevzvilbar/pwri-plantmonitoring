@@ -2,7 +2,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { ImportReadingsDialog } from '@/components/ReadingImportDialog';
 import { ReadingHistoryDialog } from '@/components/ReadingHistoryDialog';
-import { PowerMeterChangeDialog } from '@/pages/plants/config/PowerMeters';
+import { PowerMeterChangeDialog } from '@/pages/plants/config/PowerMeters/PowerMeters';
 import { ReasonDialog } from '@/components/ReasonDialog';
 import { friendlyError } from '@/lib/supabaseErrors';
 import { invalidatePowerDash } from '../../shared';

@@ -29,45 +29,35 @@ import { Progress } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
 import { format, subDays, startOfDay, parseISO, addDays } from 'date-fns';
 import {
-  Droplet, Activity, Zap, FlaskConical, AlertTriangle, Gauge, Percent,
-  Waves, Cloud, Receipt, Banknote, LayoutGrid, ListCollapse, ExternalLink,
+  AlertTriangle, LayoutGrid, ListCollapse, ExternalLink,
   ArrowUpRight, ArrowDownRight, Minus, CalendarDays,
-  ShieldAlert, History, RefreshCw
+  History, RefreshCw
 } from 'lucide-react';
 import { useTrainAutoOffline } from '@/hooks/useTrainAutoOffline';
 import { DowntimeEventsModal } from '@/components/DowntimeEventsModal';
-import { BlendingVolumeCard } from '@/components/BlendingVolumeCard';
-import { RawWaterIcon } from '@/components/icons/water-icons';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { calc } from '@/lib/calculations';
 import {
-  StatCard, PerWellSourceCard, ClusterHeader,
-} from '@/components/dashboard/StatCard';
-import {
-  ClusterCharts, TrendModal, InlineTrendChart,
-} from '@/components/dashboard/TrendChartWrappers';
+  Dialog, DialogContent, DialogHeader, DialogTitle,
+} from '@/components/ui/dialog';
 import {
   DashboardViewMode, VIEW_MODE_KEY, readSavedViewMode, pctDelta,
   OVERVIEW_CHART_METRICS, QUALITY_CHART_METRICS, COST_CHART_METRICS, ChartMetric,
 } from '@/components/dashboard/types';
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle,
-} from '@/components/ui/dialog';
 import { PlantPulseHero }       from '@/components/dashboard/PlantPulseHero';
 import { PlantHealthStrip }    from '@/components/dashboard/PlantHealthStrip';
-import { NRWGaugeCard }        from '@/components/dashboard/NRWGaugeCard';
-import { WaterBalanceBridgeCard } from '@/components/dashboard/WaterBalanceBridgeCard';
-import { ReadingCoverageCard } from '@/components/dashboard/ReadingCoverageCard';
-import { PMDueSoonCard }       from '@/components/dashboard/PMDueSoonCard';
-import { PendingReviewCard }   from '@/components/dashboard/PendingReviewCard';
-import { DataCompletenessRadarCard } from '@/components/dashboard/DataCompletenessRadarCard';
-import { CostSunburst }        from '@/components/dashboard/CostSunburst';
 import { RangeAndMonthlyPicker } from '@/components/dashboard/RangeAndMonthlyPicker';
 import { DashboardSectionNav } from '@/components/dashboard/DashboardSectionNav';
 import { loadThresholds, DEFAULT_THRESHOLDS } from '@/pages/Compliance';
 import { useDashboardQueries } from './useDashboardQueries';
 import { useDashboardAggregates } from './useDashboardAggregates';
 import { useDashboardAlerts } from './useDashboardAlerts';
+import { OverviewCluster } from './Dashboard/OverviewCluster';
+import { QualityCluster } from './Dashboard/QualityCluster';
+import { CostCluster } from './Dashboard/CostCluster';
+import { AuditsCluster } from './Dashboard/AuditsCluster';
+import { HealthCluster } from './Dashboard/HealthCluster';
+import { TrendModal } from '@/components/dashboard/TrendChartWrappers';
 
 // ─── Dashboard ────────────────────────────────────────────────────────────────
 
@@ -257,8 +247,7 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-3 animate-fade-in">
-      
-      {/* ─── Unified Hero: Live Plant Pulse & Operations Command ─── */}
+
       <PlantPulseHero
         plantIds={plantIds}
         selectedPlantName={selectedPlantName}
@@ -273,13 +262,11 @@ export default function Dashboard() {
         onViewIncidents={() => navigate('/incidents')}
       />
 
-      {/* ① Plant health strip — per-plant status dots + last reading time */}
-      <PlantHealthStrip 
-        plantIds={plantIds} 
+      <PlantHealthStrip
+        plantIds={plantIds}
         onSelectPlant={(pid) => navigate(`/plants/${pid}`)}
       />
 
-      {/* ─── Dashboard Time Range & Monthly Period Control ─── */}
       <div className="p-2 rounded-xl border border-border/60 bg-card/70 backdrop-blur-xs flex flex-wrap items-center justify-between gap-2 shadow-2xs">
         <div className="flex items-center gap-2 flex-wrap">
           {chartRange !== 'MONTHLY' && (
@@ -311,212 +298,58 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* ─── Sticky Cluster Quick-Jump Section Navigation ─── */}
       <DashboardSectionNav />
 
-      {/* ─── Cluster 1: Overview ─── */}
-      <section id="overview-cluster" className="scroll-mt-28 space-y-2.5">
-        <ClusterHeader icon={Droplet} title="Overview" accent="text-primary" subtitle="Distribution & Sources" />
-        
-        {/* 4-Column Operational Overview Grid */}
-        <div className="grid gap-2 grid-cols-2 sm:grid-cols-2 lg:grid-cols-4">
-          {/* 1. Locators Consumption / Offtake */}
-          <StatCard
-            icon={Receipt}
-            accent="text-highlight"
-            label="Locators Consumption"
-            value={fmtNum(consumption)}
-            unit="m³"
-            trend={dConsumption}
-            onClick={handleMetricClick('production', 'Production vs Consumption')}
-          />
+      <OverviewCluster
+        consumption={consumption}
+        dConsumption={dConsumption}
+        nrw={nrw}
+        yNrw={yNrw}
+        rawWaterVol={rawWaterVol}
+        dRawWater={dRawWater}
+        blending={blending}
+        viewMode={viewMode}
+        expandedMetric={expandedMetric}
+        plantIds={plantIds}
+        onMetricClick={handleMetricClick}
+      />
 
-          {/* 2. NRW Gauge Card */}
-          <NRWGaugeCard
-            nrw={nrw}
-            yNrw={yNrw}
-            onClick={handleMetricClick('nrw', 'NRW Trend')}
-          />
+      <QualityCluster
+        avgFeedTds={avgFeedTds}
+        roByTrain={roByTrain}
+        avgPermTds={avgPermTds}
+        thresholds={thresholds}
+        wellsByQuality={wellsByQuality}
+        plantCodeById={plantCodeById}
+        plantIds={plantIds}
+        avgRecovery={avgRecovery}
+        avgRawTds={avgRawTds}
+        avgRawTurb={avgRawTurb}
+        viewMode={viewMode}
+        expandedMetric={expandedMetric}
+        onMetricClick={handleMetricClick}
+      />
 
-          {/* 3. Raw Water Extraction */}
-          <StatCard
-            icon={RawWaterIcon}
-            accent="text-info"
-            label="Raw Water"
-            value={fmtNum(rawWaterVol)}
-            unit="m³"
-            trend={dRawWater}
-            onClick={handleMetricClick('rawwater', 'Raw Water (m³)')}
-          />
+      <CostCluster
+        productionCost={productionCost}
+        costIsStale={costIsStale}
+        costDataDate={costDataDate}
+        powerCost={powerCost}
+        chemCost={chemCost}
+        kwh={kwh}
+        powerIsStale={powerIsStale}
+        dKwh={dKwh}
+        pv={pv}
+        thresholds={thresholds}
+        viewMode={viewMode}
+        expandedMetric={expandedMetric}
+        plantIds={plantIds}
+        onMetricClick={handleMetricClick}
+      />
 
-          {/* 4. Blending Volume */}
-          <StatCard
-            icon={Waves}
-            accent="text-kpi-ro"
-            label="Blending"
-            value={fmtNum(blending)}
-            unit="m³"
-          />
-        </div>
+      <AuditsCluster plantIds={plantIds} />
 
-        <ClusterCharts metrics={OVERVIEW_CHART_METRICS} viewMode={viewMode} expandedMetric={expandedMetric} plantIds={plantIds} clusterId="overview" />
-        <WaterBalanceBridgeCard plantIds={plantIds} />
-      </section>
-
-      {/* ─── Cluster 2: Quality ─── */}
-      <section id="quality-cluster" className="scroll-mt-28 space-y-2.5">
-        <ClusterHeader icon={FlaskConical} title="Quality" accent="text-accent" subtitle="RO output" />
-        <div className="stagger-grid grid gap-2 grid-cols-2 sm:[grid-template-columns:repeat(auto-fit,minmax(150px,1fr))]">
-          {/* Feed TDS — expandable per-train breakdown (chevron, hidden by default) */}
-          <StatCard
-            icon={Gauge}
-            label="Feed TDS"
-            value={avgFeedTds ?? '—'}
-            unit="ppm"
-            expandRows={roByTrain.map((r) => ({
-              label: r.train_name ?? (r.train_number != null ? `Train ${r.train_number}` : '?'),
-              value: r.feed_tds != null ? Math.round(r.feed_tds) : null,
-            }))}
-            expandUnit="ppm"
-          />
-          {/* Product TDS — expandable per-train breakdown (chevron, hidden by default) */}
-          <StatCard
-            icon={FlaskConical}
-            accent="text-accent"
-            label="Product TDS"
-            value={avgPermTds ?? '—'}
-            unit="ppm"
-            threshold={`≤${thresholds.permeate_tds_max}`}
-            calc
-            calcTooltip={`Product TDS compliance limit: ≤ ${thresholds.permeate_tds_max} ppm`}
-            onClick={handleMetricClick('tds', 'Permeate TDS Trend')}
-            expandRows={roByTrain.map((r) => ({
-              label: r.train_name ?? (r.train_number != null ? `Train ${r.train_number}` : '?'),
-              value: r.permeate_tds != null ? Math.round(r.permeate_tds) : null,
-            }))}
-            expandUnit="ppm"
-          />
-          {/* Raw TDS — per-well breakdown from well_readings.tds_ppm (Operations data) */}
-          <PerWellSourceCard
-            icon={Gauge}
-            label="Raw TDS"
-            unit="ppm"
-            aggregate={avgRawTds}
-            rows={wellsByQuality}
-            field="tds_ppm"
-            plantCodeById={plantCodeById}
-            multiPlant={plantIds.length > 1}
-            testId="raw-tds-per-well-source"
-          />
-          {/* Raw NTU — per-well breakdown from well_readings.turbidity_ntu (Operations data) */}
-          <PerWellSourceCard
-            icon={Cloud}
-            label="Raw NTU"
-            unit="NTU"
-            aggregate={avgRawTurb}
-            rows={wellsByQuality}
-            field="turbidity_ntu"
-            plantCodeById={plantCodeById}
-            multiPlant={plantIds.length > 1}
-            testId="raw-ntu-per-well-source"
-            decimals={2}
-          />
-          <StatCard
-            icon={Percent}
-            label="Recovery"
-            value={avgRecovery ?? '—'}
-            unit="%"
-            threshold={`≥${thresholds.recovery_pct_min}%`}
-            calc
-            calcTooltip={`Recovery compliance target: ≥ ${thresholds.recovery_pct_min}%`}
-            onClick={handleMetricClick('recovery', 'Recovery Trendline')}
-          />
-        </div>
-        <ClusterCharts metrics={QUALITY_CHART_METRICS} viewMode={viewMode} expandedMetric={expandedMetric} plantIds={plantIds} clusterId="quality" />
-      </section>
-
-      {/* ─── Cluster 3: Production Cost (Power + Chemical) ─── */}
-      <section id="cost-cluster" className="scroll-mt-28 space-y-2.5">
-        <ClusterHeader
-          icon={Zap}
-          title="Production Cost (Power + Chemical)"
-          accent="text-chart-6"
-          subtitle={
-            costIsStale && costDataDate
-              ? `as of ${format(new Date(costDataDate + 'T00:00:00'), 'MMM d')}`
-              : 'Today'
-          }
-        />
-        <div className="stagger-grid grid gap-2 grid-cols-2 sm:[grid-template-columns:repeat(auto-fit,minmax(150px,1fr))]">
-          <StatCard icon={Banknote} accent="text-accent" label="Total Production Cost"
-            calc
-            calcTooltip={
-              costIsStale && costDataDate
-                ? `Production Cost = (kWh × tariff rate) + Chemical Cost (latest data: ${format(new Date(costDataDate + 'T00:00:00'), 'MMM d, yyyy')})`
-                : 'Production Cost = Power Cost (kWh × ₱/kWh) + Chemical Cost (today)'
-            }
-            value={productionCost == null ? '—' : `₱${fmtNum(productionCost, 0)}`}
-            onClick={handleMetricClick('productionCost', 'Production Cost (Power + Chemical)')} />
-          <StatCard icon={Zap} accent="text-chart-6" label="Power Cost"
-            calc
-            calcTooltip="Power Cost = Power kWh × tariff rate (₱/kWh) from power_tariffs — same formula as chart"
-            value={powerCost == null ? '—' : `₱${fmtNum(powerCost, 0)}`}
-            onClick={handleMetricClick('productionCost', 'Production Cost (Power + Chemical)')} />
-          <StatCard icon={FlaskConical} accent="text-highlight" label="Chemical Cost"
-            value={chemCost == null ? '—' : `₱${fmtNum(chemCost, 0)}`}
-            onClick={handleMetricClick('productionCost', 'Production Cost (Power + Chemical)')} />
-          <StatCard icon={Zap} accent="text-chart-6" label="Power kWh"
-            value={powerIsStale || kwh > 0 ? fmtNum(kwh) : '—'}
-            unit={kwh > 0 ? 'kWh' : undefined}
-            trend={dKwh}
-            onClick={handleMetricClick('kwh', 'Power Consumption & Energy Mix')} />
-          <StatCard
-            icon={Zap}
-            accent="text-chart-6"
-            label="PV Ratio"
-            value={pv == null ? '—' : pv}
-            unit="kWh/m³"
-            calc
-            threshold={`≤${thresholds.pv_ratio_max}`}
-            calcTooltip={`PV Ratio = Power kWh ÷ Production m³ (target: ≤ ${thresholds.pv_ratio_max} kWh/m³)`}
-            onClick={handleMetricClick('pv', 'PV Ratio Trend')}
-          />
-        </div>
-        <ClusterCharts
-          metrics={[
-            ...COST_CHART_METRICS.filter((m: ChartMetric) => m.metric !== 'kwh'),
-            { metric: 'kwh', title: 'Power Consumption & Energy Mix' },
-          ] as ChartMetric[]}
-          viewMode={viewMode}
-          expandedMetric={expandedMetric}
-          plantIds={plantIds}
-          clusterId="cost"
-        />
-      </section>
-
-      {/* ─── Cluster 4: Audits & Multi-Facility Analytics ─── */}
-      <section id="audits-cluster" className="scroll-mt-28 space-y-2.5">
-        <ClusterHeader icon={ShieldAlert} title="Audits & Multi-Facility Analytics" accent="text-highlight" />
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-          <DataCompletenessRadarCard plantIds={plantIds} />
-          <CostSunburst plantIds={plantIds} />
-        </div>
-      </section>
-
-      {/* ─── Cluster 5: Operations & Plant Health ─── */}
-      <section id="health-cluster" className="scroll-mt-28 space-y-2.5">
-        <ClusterHeader icon={Activity} title="Plant Health Trend" accent="text-accent" subtitle="RO trains" />
-        <InlineTrendChart metric="plantHealth" title="Plant Health Trend" plantIds={plantIds} compact={viewMode === 'inline'} />
-
-        {/* Coverage, PM due, and review cards */}
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          <ReadingCoverageCard plantIds={plantIds} />
-          <PMDueSoonCard       plantIds={plantIds} />
-          <PendingReviewCard   plantIds={plantIds} />
-        </div>
-
-        <BlendingVolumeCard plantIds={plantIds} />
-      </section>
+      <HealthCluster plantIds={plantIds} viewMode={viewMode} />
 
       <TrendModal open={!!modal} onClose={() => setModal(null)} metric={modal?.metric ?? ''} title={modal?.title ?? ''} plantIds={plantIds} />
       <DowntimeEventsModal
