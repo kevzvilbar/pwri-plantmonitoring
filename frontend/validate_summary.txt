@@ -1,0 +1,22 @@
+## tsc: exit=2
+TSC_ERRORS=10
+## vite build: exit=0
+BUILD_LINE=built in 17.43s
+ADMIN_1030_CHUNK_PRESENT=NO
+CHUNKS_LARGER_800_WARN=NO
+DIST_TOTAL_GZ_KB=1167.4 (117 assets)
+TOP 8 ASSETS (gzip kB):
+    166.9  MigrationsPanel-CYst0VqU.js
+     99.7  generateCategoricalChart-OkDb5I6_.js
+     95.9  vendor-react-D4g4XNhD.js
+     86.4  Dashboard-CcbQSG64.js
+     82.9  Plants-AxltmsRW.js
+     70.4  index-CibXBanJ.js
+     68.8  Operations-u5ybhiYe.js
+     58.9  index-BBSx3gw6.js
+## vitest: exit=1
+TESTS_PASS=
+## eslint: exit=0
+LINT_WARNINGS=32 warning
+## check-bundle-size: exit=1
+BSC_OUT=Bundle: 1167.4 kB gzipped across 117 JS/CSS asset(s). |     166.9 kB (raw 960)  MigrationsPanel-CYst0VqU.js |      99.7 kB (raw 359)  generateCategoricalChart-OkDb5I6_.js |      95.9 kB (raw 301)  vendor-react-D4g4XNhD.js |      86.4 kB (raw 346)  Dashboard-CcbQSG64.js |      82.9 kB (raw 363)  Plants-AxltmsRW.js |      70.4 kB (raw 303)  index-CibXBanJ.js |      68.8 kB (raw 272)  Operations-u5ybhiYe.js |      58.9 kB (raw 200)  index-BBSx3gw6.js |   … 109 more | Bundle grew: baseline is 1131.2 kB gzipped, actual is 1167.4 kB (+36.2 kB). | If the growth is intended (a real feature, not an accidental dependency import), re-baseline with | `node scripts/check-bundle-size.mjs --update` and commit bundle-size.json with a reason. | 

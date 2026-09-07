@@ -5,9 +5,11 @@
 import { execFileSync } from 'node:child_process';
 import { readdirSync, statSync, readFileSync, writeFileSync } from 'node:fs';
 import { gzipSync } from 'node:zlib';
+import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
-const root = path.resolve('frontend');
+const scriptDir = path.dirname(fileURLToPath(import.meta.url));
+const root = path.resolve(scriptDir, '..'); // frontend/scripts/ → frontend/
 const summary = [];
 
 function run(label, cmd, args, opts = {}) {
