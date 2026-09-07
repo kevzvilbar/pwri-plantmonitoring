@@ -1,6 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { friendlyError } from '@/lib/supabaseErrors';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -9,10 +8,6 @@ import { toast } from '@/components/ui/sonner';
 import { DataState } from '@/components/DataState';
 import { useAuth } from '@/hooks/useAuth';
 import {
-  listMigrationStatus, markMigrationApplied, unmarkMigrationApplied, importApplyHistory,
-  type MigrationsResponse, type MigrationFile, type MigrationApplyHistory,
-} from '@/lib/migrationsStatus';
-import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
@@ -20,414 +15,28 @@ import {
   Database, Copy, CheckCircle2, AlertTriangle, Loader2, ChevronDown, ChevronUp,
   RefreshCw, FileCode, Download, ExternalLink, Search, Trash2,
 } from 'lucide-react';
-import { format, formatDistanceToNow } from 'date-fns';
+import { useMigrationsLogic } from './MigrationsPanel/useMigrationsLogic';
+import { MigrationFileCard } from './MigrationsPanel/MigrationFileCard';
+import { MigrationsUnmarkDialog } from './MigrationsPanel/MigrationsUnmarkDialog';
 
-// ---------------------------------------------------------------------------
-// Migrations panel — Admin-only. Probes the live Supabase schema against the
-// SQL files in supabase/migrations/ and offers a copy-to-clipboard for any
-// pending file so the Admin can paste it into the Supabase SQL editor.
-//
-// This used to call a FastAPI backend; the parsing/probing/state logic now
-// lives in src/lib/migrationsStatus.ts, ported to run directly against
-// Supabase from here. See that file for the full explanation.
-// ---------------------------------------------------------------------------
-
-// localStorage key for the per-file SHA snapshot the user has acknowledged.
-// We compare each fresh response against this snapshot to flag files whose
-// on-disk content changed since the user last hit Re-check (i.e. potentially
-// stale relative to a previously-downloaded bundle).
-const MIGRATIONS_SHA_KEY = 'pwri:migration-shas-v1';
+const STATUS_META: Record<string, { label: string; className: string; Icon: any }> = {
+  applied:       { label: 'Applied',       className: 'bg-accent/15 text-accent border-accent/40', Icon: CheckCircle2 },
+  pending:       { label: 'Pending',       className: 'bg-danger/15 text-danger border-danger/40',          Icon: AlertTriangle },
+  partial:       { label: 'Partial',       className: 'bg-warn/15 text-warn border-warn/40',       Icon: AlertTriangle },
+  indeterminate: { label: 'Indeterminate', className: 'bg-muted-foreground/15 text-muted-foreground border-muted-foreground/40',          Icon: FileCode },
+};
 
 export function MigrationsPanel() {
-  const { user, profile, isAdmin } = useAuth();
-  const actorLabel = [profile?.first_name, profile?.last_name].filter(Boolean).join(' ') || profile?.username || null;
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
-  const [copied, setCopied] = useState<string | null>(null);
-  const [showApplied, setShowApplied] = useState(false);
-  const [busy, setBusy] = useState<string | null>(null);
-  const [unmarkTarget, setUnmarkTarget] = useState<string | null>(null);
-  const [seenShas, setSeenShas] = useState<Record<string, string>>(() => {
-    // Stored data is non-sensitive: SHA-256 hashes of public migration
-    // files the admin has acknowledged downloading. localStorage is
-    // appropriate (no auth/PII here) and the catch swallows quota /
-    // private-mode errors silently because the worst case is the user
-    // sees the "new since last visit" badge once more.
-    try {
-      const raw = localStorage.getItem(MIGRATIONS_SHA_KEY);
-      return raw ? (JSON.parse(raw) as Record<string, string>) : {};
-    } catch (readErr) {
-      console.warn('[Admin] failed to read seen migration SHAs:', readErr);
-      return {};
-    }
-  });
-
-  const persistShas = (next: Record<string, string>) => {
-    setSeenShas(next);
-    try {
-      localStorage.setItem(MIGRATIONS_SHA_KEY, JSON.stringify(next));
-    } catch (writeErr) {
-      // Quota / private-mode — non-fatal, the dot indicator just won't persist.
-      console.warn('[Admin] failed to persist seen migration SHAs:', writeErr);
-    }
-  };
-
-  const { data, isLoading, error, refetch, isFetching } = useQuery({
-    queryKey: ['admin-migrations-status'],
-    queryFn: (): Promise<MigrationsResponse> => listMigrationStatus(),
-  });
-
-  const copySql = async (filename: string, sql: string) => {
-    try {
-      await navigator.clipboard.writeText(sql);
-      setCopied(filename);
-      toast.success(`Copied ${filename} — paste into Supabase SQL editor.`);
-      setTimeout(() => setCopied((c) => (c === filename ? null : c)), 2500);
-    } catch (e) {
-      toast.error(friendlyError(e));
-    }
-  };
-
-  // The probe is the source of truth here — we deliberately skip files marked
-  // applied via manual override (probe=pending but user said "I ran it") so
-  // the bundle only contains SQL that genuinely still needs to run.
-  // Partial files are included on the assumption that all our migrations use
-  // `if not exists` / `drop … if exists` guards, so re-running is idempotent.
-  // Indeterminate files (no probe-able statements at all) are excluded — we
-  // can't know whether they need to run, and the user should mark those by hand.
-  const pendingFiles = useMemo(() => {
-    return (data?.files ?? []).filter(
-      (f) => f.probed_status === 'pending' || f.probed_status === 'partial',
-    );
-  }, [data]);
-
-  // Map of {filename: sha256} for the files in the most recent fetch.
-  const currentShas = useMemo(() => {
-    const out: Record<string, string> = {};
-    for (const f of data?.files ?? []) {
-      if (f.sha256) out[f.filename] = f.sha256;
-    }
-    return out;
-  }, [data]);
-
-  // First-ever load: silently capture the current snapshot so we don't show a
-  // "modified" pill for every file just because the user has never used the
-  // panel before. After this point, drift is only flagged when something
-  // actually changes between Re-checks.
-  useEffect(() => {
-    if (!data) return;
-    if (Object.keys(seenShas).length === 0 && Object.keys(currentShas).length > 0) {
-      persistShas(currentShas);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data]);
-
-  const driftCount = useMemo(() => {
-    let n = 0;
-    for (const [name, sha] of Object.entries(currentShas)) {
-      if (seenShas[name] && seenShas[name] !== sha) n += 1;
-    }
-    return n;
-  }, [currentShas, seenShas]);
-
-  const handleRecheck = async () => {
-    const result = await refetch();
-    // Acknowledge the freshly-fetched state so the "modified" pills clear.
-    const fresh: Record<string, string> = {};
-    for (const f of result.data?.files ?? []) {
-      if (f.sha256) fresh[f.filename] = f.sha256;
-    }
-    if (Object.keys(fresh).length > 0) persistShas(fresh);
-
-    // Surface auto-cleanup so the user knows the override store was tidied
-    // up (otherwise the override silently disappears and they'd wonder
-    // whether their earlier Mark-applied click actually registered).
-    const purged = result.data?.purged_overrides ?? [];
-    if (purged.length > 0) {
-      const list = purged.length <= 3
-        ? purged.join(', ')
-        : `${purged.slice(0, 3).join(', ')} +${purged.length - 3} more`;
-      toast.success(
-        `Cleaned up ${purged.length} stale override${purged.length === 1 ? '' : 's'} ` +
-        `(probe now confirms applied): ${list}`,
-      );
-    }
-  };
-
-  // Build a deep link to the Supabase Dashboard SQL editor for this project.
-  // We prefer the explicit VITE_SUPABASE_PROJECT_ID (already in .env), and
-  // fall back to extracting the subdomain from VITE_SUPABASE_URL — handy if
-  // someone forgets to set the project-id var in a new environment.
-  // Returns null when neither is configured (button is then hidden rather
-  // than producing a broken supabase.com/dashboard/project//sql/new link).
-  const supabaseSqlEditorUrl = useMemo<string | null>(() => {
-    const explicit = import.meta.env.VITE_SUPABASE_PROJECT_ID as string | undefined;
-    let ref = explicit?.trim() || '';
-    if (!ref) {
-      const url = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.trim() || '';
-      const m = url.match(/^https?:\/\/([a-z0-9-]+)\.supabase\.co/i);
-      if (m) ref = m[1];
-    }
-    if (!ref) return null;
-    return `https://supabase.com/dashboard/project/${ref}/sql/new`;
-  }, []);
-
-  // Copy SQL to clipboard, then open the Supabase SQL editor in a new tab.
-  // We do the copy first so the open-in-new-tab user-gesture isn't broken by
-  // a slow clipboard write, and we toast either way so the user knows what
-  // landed in their clipboard before the editor finishes loading.
-  const openInSupabase = async (filename: string, sql: string) => {
-    if (!supabaseSqlEditorUrl) return;
-    try {
-      await navigator.clipboard.writeText(sql);
-      toast.success(`Copied ${filename} — paste into the Supabase SQL editor that just opened`);
-    } catch {
-      toast.info(`Opening Supabase SQL editor — copy ${filename}'s SQL manually from the panel`);
-    }
-    window.open(supabaseSqlEditorUrl, '_blank', 'noopener,noreferrer');
-  };
-
-  // Build the concatenated SQL bundle for the current pending/partial set.
-  // Returned as { text, sizeKb } so the caller can decide whether to push it
-  // to clipboard (copyAllPending) or download it as a file (downloadAllPending).
-  const buildPendingBundle = (): { text: string; sizeKb: string } | null => {
-    if (pendingFiles.length === 0) return null;
-    const stamp = new Date().toISOString();
-    const header = [
-      '-- ============================================================',
-      `-- PWRI Monitoring · pending Supabase migrations bundle`,
-      `-- Generated: ${stamp}`,
-      `-- Files: ${pendingFiles.length}`,
-      '-- Paste into Supabase Dashboard → SQL editor → Run.',
-      '-- All bundled files use `if not exists` / `drop … if exists` guards,',
-      '-- so re-running an already-applied file is safe.',
-      '-- ============================================================',
-      '',
-    ].join('\n');
-    const body = pendingFiles
-      .map((f) => {
-        const banner =
-          `-- ===== ${f.filename} (${f.probed_status}) ` +
-          '='.repeat(Math.max(0, 60 - f.filename.length - f.probed_status.length));
-        const trailer = `-- ===== end ${f.filename} ` + '='.repeat(40);
-        return `${banner}\n${f.sql.trimEnd()}\n${trailer}\n`;
-      })
-      .join('\n');
-    const text = `${header}${body}`;
-    return { text, sizeKb: (text.length / 1024).toFixed(1) };
-  };
-
-  const copyAllPending = async () => {
-    const bundle = buildPendingBundle();
-    if (!bundle) {
-      toast.info('Nothing to copy — no pending or partial migrations.');
-      return;
-    }
-    try {
-      await navigator.clipboard.writeText(bundle.text);
-      toast.success(
-        `Copied ${pendingFiles.length} pending migration${
-          pendingFiles.length === 1 ? '' : 's'
-        } (${bundle.sizeKb} KB).`,
-      );
-    } catch (e) {
-      toast.error(friendlyError(e));
-    }
-  };
-
-  // Export the apply-history audit trail as a JSON file. Useful for
-  // archiving "this migration ran in this environment at this time" without
-  // granting Supabase Dashboard access, and for diff-ing two environments
-  // (e.g. staging vs prod) to spot which migrations one ran but the other
-  // hasn't. Only entries with a recorded apply event are included — files
-  // applied via psql / dashboard without going through Mark-applied won't
-  // appear, mirroring backend honesty about what we actually know.
-  const downloadHistory = () => {
-    const entries: Record<string, MigrationApplyHistory> = {};
-    for (const f of data?.files ?? []) {
-      if (f.apply_history?.applied_at) {
-        entries[f.filename] = f.apply_history;
-      }
-    }
-    const count = Object.keys(entries).length;
-    if (count === 0) {
-      toast.info('No apply-history entries to export yet.');
-      return;
-    }
-    const payload = {
-      exported_at: new Date().toISOString(),
-      migrations_dir: data?.migrations_dir ?? null,
-      history: entries,
-    };
-    const stamp = new Date().toISOString().replace(/[:.]/g, '-').replace('Z', 'Z');
-    const filename = `pwri-migration-apply-history-${stamp}.json`;
-    try {
-      const text = JSON.stringify(payload, null, 2);
-      const blob = new Blob([text], { type: 'application/json;charset=utf-8' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      // Defer revoke so Safari has time to actually start the download.
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
-      toast.success(
-        `Exported ${count} apply-history entr${count === 1 ? 'y' : 'ies'} → ${filename}`,
-      );
-    } catch (e) {
-      toast.error(friendlyError(e));
-    }
-  };
-
-  // True iff at least one file has a recorded apply event — used to gate
-  // visibility of the Export-history button so we don't offer a download
-  // that would just produce {history: {}}.
-  const hasAnyHistory = useMemo(
-    () => (data?.files ?? []).some((f) => !!f.apply_history?.applied_at),
-    [data],
-  );
-
-  // Hidden <input type="file"> the Import-history button programmatically
-  // clicks. Lives in state so we can keep the input mounted (and reset
-  // .value after each pick so picking the same file twice in a row still
-  // fires onChange).
-  const [importing, setImporting] = useState(false);
-
-  const handleImportHistoryFile = async (file: File) => {
-    setImporting(true);
-    try {
-      const text = await file.text();
-      let parsed: any;
-      try {
-        parsed = JSON.parse(text);
-      } catch {
-        toast.error('Selected file is not valid JSON.');
-        return;
-      }
-      // Accept both the export format ({history: {...}}) and a bare history
-      // map ({...}) so users who copy-paste fragments still succeed.
-      const historyObj = parsed?.history ?? parsed;
-      if (!historyObj || typeof historyObj !== 'object' || Array.isArray(historyObj)) {
-        toast.error('Imported file must contain a "history" object keyed by filename.');
-        return;
-      }
-
-      const out = await importApplyHistory({ history: historyObj }, 'fill_gaps', actorLabel, user?.id ?? null);
-      const added = out.added.length;
-      const skipExist = out.skipped_existing.length;
-      const skipUnk = out.skipped_unknown.length;
-      const skipBad = out.skipped_invalid.length;
-      const parts = [
-        `${added} added`,
-        skipExist > 0 ? `${skipExist} skipped (already recorded)` : null,
-        skipUnk > 0 ? `${skipUnk} skipped (unknown filename)` : null,
-        skipBad > 0 ? `${skipBad} skipped (invalid)` : null,
-      ].filter(Boolean).join(' · ');
-      if (added > 0) toast.success(`Imported apply-history: ${parts}`);
-      else toast.info(`Nothing new imported: ${parts || 'all entries were already present'}`);
-      // Refetch so the new "applied locally" pills appear immediately.
-      await refetch();
-    } catch (e) {
-      toast.error(friendlyError(e));
-    } finally {
-      setImporting(false);
-    }
-  };
-
-  // Save the same bundle as a versioned .sql file. Filenames embed an
-  // ISO-style timestamp (no colons — Windows-friendly) so multiple runs
-  // don't overwrite each other and you have a clear audit trail of exactly
-  // what was pasted into Supabase, when, and by which session.
-  const downloadAllPending = () => {
-    const bundle = buildPendingBundle();
-    if (!bundle) {
-      toast.info('Nothing to download — no pending or partial migrations.');
-      return;
-    }
-    const stamp = new Date().toISOString().replace(/[:.]/g, '-').replace('Z', 'Z');
-    const filename = `pwri-pending-migrations-${stamp}.sql`;
-    try {
-      const blob = new Blob([bundle.text], { type: 'application/sql;charset=utf-8' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      // Defer revoke so Safari has time to actually start the download.
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
-      toast.success(
-        `Downloaded ${filename} (${pendingFiles.length} file${
-          pendingFiles.length === 1 ? '' : 's'
-        }, ${bundle.sizeKb} KB).`,
-      );
-    } catch (e) {
-      toast.error(friendlyError(e));
-    }
-  };
-
-  const markApplied = async (filename: string) => {
-    const note = window.prompt(
-      `Mark "${filename}" as applied?\n\nUse this for migrations the schema probe can't verify (RPCs, one-shot UPDATEs, pure DML).\n\nOptional note (e.g. "ran in Supabase SQL editor on 2026-04-25"):`,
-      '',
-    );
-    if (note === null) return; // user cancelled
-    try {
-      setBusy(filename);
-      await markMigrationApplied(filename, note || null, user?.id ?? null, actorLabel);
-      toast.success(`Marked ${filename} as applied.`);
-      await refetch();
-    } catch (e) {
-      toast.error(friendlyError(e));
-    } finally {
-      setBusy(null);
-    }
-  };
-
-  const unmarkApplied = async (filename: string) => {
-    try {
-      setBusy(filename);
-      await unmarkMigrationApplied(filename);
-      toast.success(`Cleared mark for ${filename}.`);
-      await refetch();
-    } catch (e) {
-      toast.error(friendlyError(e));
-    } finally {
-      setBusy(null);
-    }
-  };
-
-  // Free-text filename filter — case-insensitive substring match against
-  // the bare filename (no path). Persists nothing; resets whenever the
-  // panel unmounts. Use sparingly: small migration sets don't need it,
-  // but it pays off once the directory grows past a screenful.
-  const [nameFilter, setNameFilter] = useState('');
-
-  const visibleFiles = useMemo(() => {
-    if (!data?.files) return [];
-    let rows = showApplied ? data.files : data.files.filter((f) => f.status !== 'applied');
-    const q = nameFilter.trim().toLowerCase();
-    if (q) rows = rows.filter((f) => f.filename.toLowerCase().includes(q));
-    return rows;
-  }, [data, showApplied, nameFilter]);
-
-  // Total visible BEFORE the name filter — so we can render
-  // "showing N of M" without confusing "M" with "all files in repo".
-  const visibleBeforeFilter = useMemo(() => {
-    if (!data?.files) return 0;
-    return showApplied
-      ? data.files.length
-      : data.files.filter((f) => f.status !== 'applied').length;
-  }, [data, showApplied]);
-
-  const STATUS_META: Record<MigrationFile['status'], { label: string; className: string; Icon: any }> = {
-    applied:       { label: 'Applied',       className: 'bg-accent/15 text-accent border-accent/40', Icon: CheckCircle2 },
-    pending:       { label: 'Pending',       className: 'bg-danger/15 text-danger border-danger/40',          Icon: AlertTriangle },
-    partial:       { label: 'Partial',       className: 'bg-warn/15 text-warn border-warn/40',       Icon: AlertTriangle },
-    indeterminate: { label: 'Indeterminate', className: 'bg-muted-foreground/15 text-muted-foreground border-muted-foreground/40',          Icon: FileCode },
-  };
+  const {
+    isAdmin, isLoading, error, refetch, isFetching, data,
+    expanded, setExpanded, copied, setCopied,
+    showApplied, setShowApplied, busy, unmarkTarget, setUnmarkTarget,
+    seenShas, nameFilter, setNameFilter, importing,
+    pendingFiles, driftCount, supabaseSqlEditorUrl, hasAnyHistory,
+    visibleFiles, visibleBeforeFilter,
+    handleRecheck, copySql, openInSupabase, copyAllPending,
+    downloadHistory, downloadAllPending, markApplied, unmarkApplied, handleImportHistoryFile,
+  } = useMigrationsLogic();
 
   return (
     <div className="space-y-3" data-testid="admin-migrations-panel">
@@ -518,13 +127,6 @@ export function MigrationsPanel() {
                   </button>
                 )}
               </div>
-              {/* eslint-disable-next-line jsx-a11y/label-has-associated-control --
-                  Checkbox (Radix) renders a button[role=checkbox], not a
-                  native input, so eslint's control-recognition doesn't see
-                  it as "associated" even though it's nested inside this
-                  label — same false positive as ThemeSelector's Switch. The
-                  wrapping label IS the correct pattern here (click-target
-                  delegation for "Show applied"). */}
               <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
                 <Checkbox
                   checked={showApplied}
@@ -595,8 +197,6 @@ export function MigrationsPanel() {
                   data-testid="migrations-import-history-input"
                   onChange={(e) => {
                     const file = e.target.files?.[0];
-                    // Reset .value so picking the same file twice still
-                    // triggers onChange (browsers dedupe identical paths).
                     e.target.value = '';
                     if (file) handleImportHistoryFile(file);
                   }}
@@ -654,289 +254,30 @@ export function MigrationsPanel() {
       )}
 
       <div className="space-y-2">
-        {visibleFiles.map((f) => {
-          const meta = STATUS_META[f.status];
-          const isOpen = !!expanded[f.filename];
-          const wasCopied = copied === f.filename;
-          return (
-            <Card
-              key={f.filename}
-              className={`p-3 border-l-2 ${
-                f.status === 'pending'
-                  ? 'border-l-danger/70'
-                  : f.status === 'partial'
-                    ? 'border-l-warn/70'
-                    : f.status === 'applied'
-                      ? 'border-l-accent/60 opacity-90'
-                      : 'border-l-muted-foreground/40'
-              }`}
-              data-testid={`migration-${f.filename}`}
-            >
-              <div className="flex items-center justify-between gap-2 flex-wrap">
-                <div className="flex items-center gap-2 min-w-0 flex-1">
-                  <FileCode className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                  <code className="text-xs font-mono truncate">{f.filename}</code>
-                  <Badge variant="outline" className={`text-2xs ${meta.className}`}>
-                    <meta.Icon className="h-2.5 w-2.5 mr-1" />
-                    {meta.label}
-                  </Badge>
-                  {(() => {
-                    const seen = f.sha256 ? seenShas[f.filename] : undefined;
-                    const drifted = !!(seen && f.sha256 && seen !== f.sha256);
-                    if (!drifted) return null;
-                    return (
-                      <Badge
-                        variant="outline"
-                        className="text-2xs bg-warn/15 text-warn border-warn/40"
-                        title={
-                          `On-disk content changed since last Re-check.\n` +
-                          `was: ${seen?.slice(0, 12)}…\n` +
-                          `now: ${f.sha256?.slice(0, 12)}…\n` +
-                          `Re-download the bundle before pasting into Supabase.`
-                        }
-                        data-testid={`migration-drift-${f.filename}`}
-                      >
-                        <AlertTriangle className="h-2.5 w-2.5 mr-1" />
-                        modified since last check
-                      </Badge>
-                    );
-                  })()}
-                  {(() => {
-                    // Show "applied locally <relative>" on probe-confirmed
-                    // applied files when we have a recorded apply event in
-                    // history. Hidden when an override is currently active
-                    // (the override line below already shows that timestamp,
-                    // and we don't want two timestamp pills competing).
-                    const h = f.apply_history;
-                    if (!h?.applied_at) return null;
-                    if (f.override_applied) return null;
-                    if (f.probed_status !== 'applied') return null;
-                    const when = new Date(h.applied_at);
-                    if (Number.isNaN(when.getTime())) return null;
-                    const rel = formatDistanceToNow(when, { addSuffix: true });
-                    const abs = format(when, 'yyyy-MM-dd HH:mm');
-                    return (
-                      <Badge
-                        variant="outline"
-                        className="text-2xs bg-accent/5 text-accent border-accent/30 font-mono"
-                        title={
-                          `First marked applied locally at ${abs} (local time)` +
-                          (h.by_label ? ` by ${h.by_label}` : '') +
-                          (h.note ? `\nNote: "${h.note}"` : '') +
-                          `\nOriginal manual override has since been auto-purged ` +
-                          `because the live probe now confirms the migration.`
-                        }
-                        data-testid={`migration-applied-locally-${f.filename}`}
-                      >
-                        applied {rel}
-                      </Badge>
-                    );
-                  })()}
-                  <span className="text-2xs text-muted-foreground">
-                    {(f.size / 1024).toFixed(1)} KB
-                  </span>
-                </div>
-                <div className="flex items-center gap-1.5 shrink-0">
-                  {f.probed_status !== 'applied' && (
-                    <Button
-                      size="sm" variant="outline" className="h-7 text-xs"
-                      onClick={() => copySql(f.filename, f.sql)}
-                      data-testid={`migration-copy-${f.filename}`}
-                    >
-                      {wasCopied
-                        ? <><CheckCircle2 className="h-3 w-3 mr-1 text-accent" /> Copied</>
-                        : <><Copy className="h-3 w-3 mr-1" /> Copy SQL</>}
-                    </Button>
-                  )}
-                  {f.probed_status !== 'applied' && supabaseSqlEditorUrl && (
-                    <Button
-                      size="sm" variant="outline" className="h-7 text-xs"
-                      onClick={() => openInSupabase(f.filename, f.sql)}
-                      title="Copy this file's SQL and open the Supabase SQL editor in a new tab"
-                      data-testid={`migration-open-supabase-${f.filename}`}
-                    >
-                      <ExternalLink className="h-3 w-3 mr-1" />
-                      Open in Supabase
-                    </Button>
-                  )}
-                  {f.override_applied ? (
-                    <Button
-                      size="sm" variant="outline" className="h-7 text-xs"
-                      disabled={busy === f.filename || !isAdmin}
-                      onClick={() => setUnmarkTarget(f.filename)}
-                      data-testid={`migration-unmark-${f.filename}`}
-                    >
-                      {busy === f.filename
-                        ? <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                        : <Trash2 className="h-3 w-3 mr-1" />}
-                      Clear mark
-                    </Button>
-                  ) : (
-                    f.probed_status !== 'applied' && (
-                      <Button
-                        size="sm" variant="outline" className="h-7 text-xs"
-                        disabled={busy === f.filename || !isAdmin}
-                        onClick={() => markApplied(f.filename)}
-                        data-testid={`migration-mark-${f.filename}`}
-                      >
-                        {busy === f.filename
-                          ? <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                          : <CheckCircle2 className="h-3 w-3 mr-1" />}
-                        Mark applied
-                      </Button>
-                    )
-                  )}
-                  <Button
-                    size="sm" variant="ghost" className="h-7 text-xs"
-                    onClick={() => setExpanded((m) => ({ ...m, [f.filename]: !m[f.filename] }))}
-                  >
-                    {isOpen
-                      ? <><ChevronUp className="h-3 w-3 mr-1" /> Hide</>
-                      : <><ChevronDown className="h-3 w-3 mr-1" /> Details</>}
-                  </Button>
-                </div>
-              </div>
-              {f.override_applied && f.manual_override && (() => {
-                // Defensive parse — older overrides without marked_at would
-                // otherwise crash formatDistanceToNow with "Invalid time value".
-                const marked = new Date(f.manual_override.marked_at);
-                const validMarked = !Number.isNaN(marked.getTime());
-                const absolute = validMarked
-                  ? format(marked, 'yyyy-MM-dd HH:mm')
-                  : 'unknown time';
-                const relative = validMarked
-                  ? formatDistanceToNow(marked, { addSuffix: true })
-                  : '';
-                return (
-                  <div className="mt-1.5 text-xs text-muted-foreground italic flex items-center gap-1.5 flex-wrap">
-                    <Badge variant="outline" className="bg-info/10 text-info border-info/40 text-2xs">
-                      manual override
-                    </Badge>
-                    {validMarked && (
-                      <Badge
-                        variant="outline"
-                        className="bg-info/5 text-info border-info/30 text-2xs not-italic font-mono"
-                        title={`Marked applied at ${absolute} (local time)`}
-                        data-testid={`migration-override-age-${f.filename}`}
-                      >
-                        {relative}
-                      </Badge>
-                    )}
-                    Marked applied by <strong className="not-italic">{f.manual_override.by_label ?? 'admin'}</strong>
-                    {' on '}
-                    <span title={validMarked ? marked.toISOString() : undefined}>{absolute}</span>
-                    {f.manual_override.note ? ` — "${f.manual_override.note}"` : ''}
-                    {' · probe says '}
-                    <code>{f.probed_status}</code>
-                  </div>
-                );
-              })()}
-
-              {(f.table_probes.length > 0 || f.column_probes.length > 0) && (
-                <div className="mt-2 space-y-1.5">
-                  {f.table_probes.map((p) => {
-                    const expected = p.expected_columns ?? [];
-                    const present = (p.present_columns ?? []).length;
-                    const missing = (p.missing_columns ?? []).length;
-                    const hasDrift = p.exists && missing > 0;
-                    return (
-                      <div
-                        key={`t-${p.name}`}
-                        className={`rounded-md border px-2 py-1.5 text-xs ${
-                          !p.exists
-                            ? 'bg-danger/5 border-danger/30'
-                            : hasDrift
-                              ? 'bg-warn/5 border-warn/30'
-                              : 'bg-accent/5 border-accent/30'
-                        }`}
-                      >
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <span
-                            className={`text-2xs rounded-full px-1.5 py-0.5 border ${
-                              p.exists
-                                ? 'bg-accent-soft text-accent border-accent'
-                                : 'bg-danger-soft text-danger border-danger'
-                            }`}
-                          >
-                            table {p.name} {p.exists ? '✓ present' : '✗ missing'}
-                          </span>
-                          {expected.length > 0 && (
-                            <span className="text-muted-foreground">
-                              {p.exists
-                                ? hasDrift
-                                  ? `${present}/${expected.length} columns present · ${missing} missing`
-                                  : `all ${expected.length} columns present`
-                                : `would create ${expected.length} columns`}
-                            </span>
-                          )}
-                        </div>
-                        {hasDrift && (
-                          <div className="mt-1 flex flex-wrap gap-1">
-                            {(p.missing_columns ?? []).map((c) => (
-                              <span
-                                key={`m-${p.name}.${c}`}
-                                className="text-2xs rounded-full px-1.5 py-0.5 border bg-danger-soft text-danger border-danger"
-                                title={`Column ${p.name}.${c} declared in this migration is not present in the live table`}
-                              >
-                                {p.name}.{c} ✗
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                  {f.column_probes.length > 0 && (
-                    <div className="flex flex-wrap gap-1 pt-0.5">
-                      <span className="text-2xs uppercase tracking-wide text-muted-foreground self-center mr-1">
-                        Added columns:
-                      </span>
-                      {f.column_probes.map((p) => (
-                        <span
-                          key={`c-${p.table}.${p.column}`}
-                          className={`text-2xs rounded-full px-1.5 py-0.5 border ${
-                            p.exists
-                              ? 'bg-accent-soft text-accent border-accent'
-                              : 'bg-danger-soft text-danger border-danger'
-                          }`}
-                        >
-                          {p.table}.{p.column} {p.exists ? '✓' : '✗'}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {isOpen && (
-                <pre className="mt-2 p-2 rounded-md bg-muted/40 border text-2xs font-mono overflow-auto max-h-72">
-{f.sql}
-                </pre>
-              )}
-            </Card>
-          );
-        })}
+        {visibleFiles.map((f) => (
+          <MigrationFileCard
+            key={f.filename}
+            file={f}
+            isOpen={!!expanded[f.filename]}
+            wasCopied={copied === f.filename}
+            busy={busy}
+            isAdmin={isAdmin}
+            supabaseSqlEditorUrl={supabaseSqlEditorUrl}
+            seenShas={seenShas}
+            onToggleExpand={() => setExpanded((m) => ({ ...m, [f.filename]: !m[f.filename] }))}
+            onCopySql={() => copySql(f.filename, f.sql)}
+            onOpenInSupabase={() => openInSupabase(f.filename, f.sql)}
+            onMarkApplied={() => markApplied(f.filename)}
+            onClearMark={() => setUnmarkTarget(f.filename)}
+          />
+        ))}
       </div>
 
-      <AlertDialog open={!!unmarkTarget} onOpenChange={(o) => !o && setUnmarkTarget(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Remove applied mark?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Remove the applied mark for <strong>{unmarkTarget}</strong>? It will show as
-              pending again until re-marked or the schema probe detects it.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => unmarkTarget && unmarkApplied(unmarkTarget)}
-            >
-              Remove mark
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <MigrationsUnmarkDialog
+        unmarkTarget={unmarkTarget}
+        onUnmarkApplied={unmarkApplied}
+        onClose={() => setUnmarkTarget(null)}
+      />
     </div>
   );
 }

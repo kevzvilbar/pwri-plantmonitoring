@@ -30,7 +30,7 @@ import {
 // header comment for what moved where and why.
 import { DRILL_COLORS, ModernChartLegend } from './TrendChartLegend';
 import { buildEntityPivot, fillDateRange, fmtDateKey } from './TrendChartPivotShared';
-import { DataSummaryPopup } from './TrendChartDataSummaryPopup';
+import { DataSummaryPopup } from './TrendChartDataSummaryPopup/TrendChartDataSummaryPopup.tsx';
 import { TrendChartToolbar } from './TrendChartToolbar';
 // Foundation (Weekly-granularity improvement plan) — the shared
 // bucketing/aggregation engine. See TrendChartAggregate.ts's header comment

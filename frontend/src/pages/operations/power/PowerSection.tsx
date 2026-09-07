@@ -1,817 +1,79 @@
-import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { useSearchParams } from 'react-router-dom';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
-import { useDraft } from '@/hooks/useDraft';
-import { CorrectionRequestDialog } from '@/components/CorrectionRequestDialog';
-import type { CorrectionTarget } from '@/components/CorrectionRequestDialog';
 import { useAuth } from '@/hooks/useAuth';
-import { useAppStore } from '@/store/appStore';
 import { usePlants } from '@/hooks/usePlants';
-import { PlantSelector } from '@/components/PlantSelector';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Badge } from '@/components/ui/badge';
-import { Checkbox } from '@/components/ui/checkbox';
-import { StatusPill } from '@/components/StatusPill';
-import { PowerMeterChangeDialog } from '@/pages/plants/config/PowerMeters';
-import { ChangeMeterIcon } from '@/components/icons/water-icons';
-import { fmtNum, getCurrentPosition, isOffLocation, ALERTS } from '@/lib/calculations';
-import { computeRate, computeRollingAverageRateFromDeltas, classifyDeviation, type VolumePoint } from '@/lib/flowRateGuards';
 import { AnomalyRemarkBanner } from '@/components/AnomalyRemarkBanner';
-import { submitAnomalyRemark, isAnomalyRemarkValid } from '@/lib/anomalyRemarks';
-import { fmtSaveToast } from '@/lib/format';
-import { findExistingReading } from '@/lib/duplicateCheck';
-import { downloadCSV } from '@/lib/csv';
-import { toast } from 'sonner';
-import { friendlyError } from '@/lib/supabaseErrors';
-import { format } from 'date-fns';
-import { MapPin, Pencil, X, Droplet, Zap, Upload, Download, FileText, AlertCircle, Loader2, History, Gauge, FlaskConical, Keyboard, Sun, Lock, SquarePen, MessageCircleOff } from 'lucide-react';
-import { cn } from '@/lib/utils';
-
-// High-voltage transmission tower icon — matches Plants.tsx grid icon exactly.
-
-import { OdometerRollerInput, MobileCarousel } from '@/components/OdometerRollerInput';
-import { ReasonDialog } from '@/components/ReasonDialog';
-import { insertPowerReadings } from '@/data/mutations/power';
-import { validatePowerRow } from '@/lib/readingValidation';
-import { parseCSVText, triggerTemplateDownload,
-  clearDupDecisions, clearBulkDupDecision, ImportReadingsDialog } from '@/components/ReadingImportDialog';
-import { ReadingHistoryDialog } from '@/components/ReadingHistoryDialog';
-import {
-  GridPylonIcon, WELL_MAX_READINGS_PER_DAY,
-  formatCooldown, invalidateLocatorDash, invalidateWellDash, invalidateDashboard,
-  invalidateProductMeterDash, invalidatePowerDash, invalidateRODash, invalidateChemDash,
-} from '../shared';
-
-const POWER_SCHEMA = 'plant_name*, meter_reading_kwh*, reading_datetime* (YYYY-MM-DDTHH:mm), meter_name (optional — for plants with more than one grid meter), solar_meter_reading (optional), solar_input_mode (raw|direct, optional), daily_solar_kwh (optional), daily_grid_kwh (optional)';
-const POWER_TEMPLATE_ROW = {
-  plant_name: 'Plant A',
-  meter_reading_kwh: '12345.6',
-  reading_datetime: '2024-06-15T08:30',
-  meter_name: '',
-  solar_meter_reading: '',
-  solar_input_mode: '',
-  daily_solar_kwh: '',
-  daily_grid_kwh: '',
-};
-// Multi-row example: "Plant A" has a single grid meter, so meter_name is left
-// blank (defaults to that plant's only meter). "Plant B" stands in for a
-// multi-meter plant like SRP — one row per meter, same plant_name and same
-// reading_datetime, with meter_name set to that meter's exact configured
-// name (see Plants → Power) so all three merge into one reading instead of
-// overwriting each other.
-const POWER_TEMPLATE_ROWS = [
-  POWER_TEMPLATE_ROW,
-  { plant_name: 'Plant B', meter_reading_kwh: '597.18',  reading_datetime: '2024-06-15T08:30', meter_name: 'Grid Meter 1', solar_meter_reading: '', solar_input_mode: '', daily_solar_kwh: '', daily_grid_kwh: '' },
-  { plant_name: 'Plant B', meter_reading_kwh: '3120.00', reading_datetime: '2024-06-15T08:30', meter_name: 'Grid Meter 2', solar_meter_reading: '', solar_input_mode: '', daily_solar_kwh: '', daily_grid_kwh: '' },
-  { plant_name: 'Plant B', meter_reading_kwh: '9110.80', reading_datetime: '2024-06-15T08:30', meter_name: 'Grid Meter 3', solar_meter_reading: '', solar_input_mode: '', daily_solar_kwh: '', daily_grid_kwh: '' },
-];
-const POWER_HELP_TEXT = 'For plants with more than one grid meter: add one row per meter using the same plant_name and reading_datetime, and set meter_name to that meter\u2019s exact name from Plants \u2192 Power (or its position, e.g. "2"). Leave meter_name blank for single-meter plants.';
+import { PowerFormHeader } from './components/PowerFormHeader';
+import { SolarPowerForm } from './components/SolarPowerForm';
+import { NonSolarPowerForm } from './components/NonSolarPowerForm';
+import { PowerFormDialogs } from './components/PowerFormDialogs';
+import { GridPylonIcon, invalidatePowerDash } from '../shared';
+import { usePowerFormState } from './hooks/usePowerFormState';
+import { usePowerFormActions } from './hooks/usePowerFormActions';
 
 export function PowerForm() {
-  const qc = useQueryClient();
-  const { user, isAdmin, isManager, isDataAnalyst } = useAuth();
-  const { data: plants } = usePlants();
-  const [plantId, setPlantId]         = useState('');
-  // When showSolar: `reading` = grid meter reading, `solarReading` = solar meter reading
-  // When !showSolar: `reading` = combined meter reading
-  const [reading, setReading]         = useState('');
-  const [solarReading, setSolarReading] = useState('');
-  const [dt, setDt]                   = useState(format(new Date(), "yyyy-MM-dd'T'HH:mm"));
-  const [editingId, setEditingId]     = useState<string | null>(null);
-  const [powerHistoryOpen, setPowerHistoryOpen] = useState<{ type: 'solar'; idx: number } | { type: 'grid'; idx: number } | null>(null);
-  // "Meter replaced" — two-way wiring companion to Reading History's own
-  // toggle: previously the only way to record a power meter swap (old final /
-  // new initial kWh + date) was via Plant Settings → Power → Change Power
-  // Meter, disconnected from the live entry form. Holds the grid meter index
-  // currently going through PowerMeterChangeDialog, or null when closed.
-  const [replaceMeterIdx, setReplaceMeterIdx] = useState<number | null>(null);
-  const [importOpen, setImportOpen]   = useState(false);
-  // Multiplier: auto-populated from latest saved electric bill; editable by admin only when no bill exists
-  const [multiplierInput, setMultiplierInput] = useState('');
-  // Per-meter reading inputs: indexed arrays (index 0 = meter 1, etc.)
-  const [gridMeterReadings, setGridMeterReadings]   = useState<string[]>(['', '', '', '', '']);
-  const [solarMeterReadings, setSolarMeterReadings] = useState<string[]>(['', '', '', '', '']);
+  const state = usePowerFormState();
+  const actions = usePowerFormActions(state);
 
-  const setGridMeterReading = (idx: number, val: string) =>
-    setGridMeterReadings(prev => { const next = [...prev]; next[idx] = val; return next; });
-  const setSolarMeterReading = (idx: number, val: string) =>
-    setSolarMeterReadings(prev => { const next = [...prev]; next[idx] = val; return next; });
-  // 'raw'    = user enters cumulative kWh meter reading; Δ auto-computed from prev
-  // 'direct' = user enters daily kWh directly; stored straight as daily_solar_kwh
-  const [solarInputMode, setSolarInputMode] = useState<'raw' | 'direct'>('raw');
-  const isMobile = useIsMobile();
+  const {
+    plantId,
+    reading, setReading,
+    solarReading, setSolarReading,
+    dt, setDt,
+    editingId, setEditingId,
+    powerHistoryOpen, setPowerHistoryOpen,
+    replaceMeterIdx, setReplaceMeterIdx,
+    importOpen, setImportOpen,
+    gridMeterReadings, setGridMeterReadings,
+    solarMeterReadings, setSolarMeterReadings,
+    solarInputMode, setSolarInputMode,
+    powerAnomaly, setPowerAnomaly,
+    anomalyRemark, setAnomalyRemark,
+    savingMeter, setSavingMeter,
+    setGridMeterReading,
+    setSolarMeterReading,
+    configLoading, powerConfig,
+    gapReasonToday, todayDateStr,
+    plant, showSolar,
+    solarMeterCount, gridMeterCount,
+    getSolarLabel, getGridLabel,
+    powerMeterItems,
+    configMultiplierArr, getGridMeterMult, effectiveMultiplier,
+    deltaGrid, deltaSolar,
+    prevGrid, prevSolar, prevRow,
+    getLatestGridReading,
+    isMobile,
+    isAdmin, isManager, isDataAnalyst,
+    user,
+    plants,
+    gridMeterNames,
+    qc,
+  } = state;
 
-  const plant     = useMemo(() => plants?.find((p) => p.id === plantId), [plants, plantId]);
-  const showSolar = !!plant?.has_solar;
-  const showGrid  = plant?.has_grid !== false;
-
-  // Load meter config from plant_power_config (set in Plant → Power tab)
-  const { data: powerConfig, isLoading: configLoading } = useQuery({
-    queryKey: ['plant-power-config', plantId],
-    queryFn: async () => {
-      if (!plantId) return null;
-      try {
-        const { data, error } = await (supabase.from('plant_power_config' as any) as any)
-          .select('solar_meter_count, solar_meter_names, grid_meter_count, grid_meter_names, grid_meter_multipliers')
-          .eq('plant_id', plantId).maybeSingle();
-        if (!error && data) return data as any;
-      } catch { /* table may not exist */ }
-      try {
-        const raw = localStorage.getItem(`power_config_${plantId}`);
-        if (raw) return JSON.parse(raw);
-      } catch { /* ignore */ }
-      return null;
-    },
-    enabled: !!plantId,
-  });
-
-  // Load plant meter config to get default_solar_input_mode (set in Plants → Energy Sources)
-  const { data: meterConfig } = useQuery({
-    queryKey: ['plant-meter-config', plantId],
-    queryFn: async () => {
-      if (!plantId) return null;
-      try {
-        const { data, error } = await (supabase.from('plant_meter_config' as any) as any)
-          .select('config').eq('plant_id', plantId).maybeSingle();
-        if (!error && data?.config) return data.config as any;
-      } catch { /* table may not exist */ }
-      try {
-        const raw = localStorage.getItem(`plant_meter_config_${plantId}`);
-        if (raw) return JSON.parse(raw);
-      } catch { /* ignore */ }
-      return null;
-    },
-    enabled: !!plantId,
-  });
-
-  // When plant changes, sync solarInputMode to the plant's configured default
-  useEffect(() => {
-    const mode = meterConfig?.default_solar_input_mode;
-    if (mode === 'direct' || mode === 'raw') setSolarInputMode(mode);
-    else setSolarInputMode('raw');
-  }, [plantId, meterConfig?.default_solar_input_mode]);
-
-  const solarMeterCount = (powerConfig?.solar_meter_count as number) ?? 1;
-  const gridMeterCount  = (powerConfig?.grid_meter_count  as number) ?? 1;
-  const solarMeterNames: string[] = powerConfig?.solar_meter_names ?? [];
-  const gridMeterNames:  string[] = powerConfig?.grid_meter_names  ?? [];
-
-  const getSolarLabel = (idx: number) => solarMeterNames[idx] ?? (solarMeterCount === 1 ? 'Solar Power Reading' : `Solar Meter ${idx + 1}`);
-  const getGridLabel  = (idx: number) => gridMeterNames[idx]  ?? (gridMeterCount  === 1 ? 'Grid Power Reading'  : `Grid Meter ${idx + 1}`);
-
-  // Flat list of all meters for MobileCarousel: grid first, then solar
-  const powerMeterItems = useMemo<Array<{ type: 'grid' | 'solar'; idx: number }>>(() => {
-    const items: Array<{ type: 'grid' | 'solar'; idx: number }> = [];
-    for (let i = 0; i < gridMeterCount; i++) items.push({ type: 'grid', idx: i });
-    if (showSolar) for (let i = 0; i < solarMeterCount; i++) items.push({ type: 'solar', idx: i });
-    return items;
-  }, [gridMeterCount, solarMeterCount, showSolar]);
-
-  // Derive CT multiplier from plant_power_config (Plants → Power tab).
-  // This is the single source of truth — billing multiplier is for cost accounting only.
-  const configMultiplierArr = powerConfig?.grid_meter_multipliers;
-
-  // Per-meter helper: returns the configured multiplier for a given grid meter index,
-  // falling back to 1 when the array is absent or the entry is missing/zero.
-  const getGridMeterMult = (idx: number): number =>
-    Array.isArray(configMultiplierArr) && +configMultiplierArr[idx] > 0
-      ? +configMultiplierArr[idx]
-      : 1;
-
-  // configMultiplier (meter-0) kept for backward-compat with save helpers and
-  // legacy single-meter paths that still reference effectiveMultiplier.
-  const configMultiplier: number | null =
-    Array.isArray(configMultiplierArr) && configMultiplierArr.length > 0 && +configMultiplierArr[0] > 0
-      ? +configMultiplierArr[0]
-      : null;
-  // canEditMultiplier: Managers, Data Analysts and Admins can update CT multiplier in config
-  const canEditMultiplier = (isAdmin || isManager || isDataAnalyst) && !!plantId && !configLoading;
-  // Effective multiplier (meter-0): config value takes priority, else user's local input, else 1.
-  // Used as fallback for single-meter plants and legacy display paths.
-  const effectiveMultiplier = configMultiplier ?? (+multiplierInput || 1);
-
-  // Save multiplier edit back to plant_power_config so all pages stay in sync
-  const saveMultiplierToConfig = async (val: number) => {
-    if (!plantId || !(isAdmin || isManager || isDataAnalyst)) return;
-    try {
-      const existingArr = Array.isArray(configMultiplierArr) ? [...configMultiplierArr] : [];
-      existingArr[0] = val;
-      await (supabase.from('plant_power_config' as any) as any)
-        .upsert(
-          { plant_id: plantId, grid_meter_multipliers: existingArr, updated_at: new Date().toISOString() },
-          { onConflict: 'plant_id' }
-        );
-      qc.invalidateQueries({ queryKey: ['plant-power-config', plantId] });
-    } catch { /* non-critical */ }
-  };
-
-  // Auto-reset manual input when plant changes.
-  // useCallback gives a stable reference so PlantSelector's useEffect does NOT
-  // re-fire on every render. An inline arrow here would be a new reference each
-  // render → picker calls onChange(selectedPlantId) every cycle → error #300.
-  const handlePlantChange = useCallback((v: string) => {
-    setPlantId(v);
-    setEditingId(null);
-    setMultiplierInput('');
-    // Clear all meter inputs — the pre-fill useEffects will re-populate from
-    // the new plant's prevRow once the history query settles.
-    setReading('');
-    setSolarReading('');
-    setGridMeterReadings(['', '', '', '', '']);
-    setSolarMeterReadings(['', '', '', '', '']);
-  }, []);
-
-  const { data: history } = useQuery({
-    queryKey: ['op-power', plantId],
-    queryFn: async () => {
-      if (!plantId) return [] as any[];
-      // First try with all optional columns
-      const { data, error } = await supabase
-        .from('power_readings')
-        .select('id,plant_id,reading_datetime,meter_reading_kwh,grid_meter_readings,daily_consumption_kwh,daily_solar_kwh,daily_grid_kwh,solar_meter_reading,is_meter_replacement,is_estimated,recorded_by')
-        .eq('plant_id', plantId)
-        .order('reading_datetime', { ascending: false })
-        .limit(8);
-      if (!error && data) return data as any[];
-      // Optional columns not yet in DB — retry with base columns only
-      const { data: fallback, error: fallbackErr } = await supabase
-        .from('power_readings')
-        .select('id,plant_id,reading_datetime,meter_reading_kwh,daily_consumption_kwh,is_meter_replacement,is_estimated,recorded_by')
-        .eq('plant_id', plantId)
-        .order('reading_datetime', { ascending: false })
-        .limit(8);
-      if (!fallbackErr && fallback) return fallback as any[];
-      // Last resort: absolute minimum columns
-      const { data: minimal } = await supabase
-        .from('power_readings')
-        .select('id,plant_id,reading_datetime,meter_reading_kwh')
-        .eq('plant_id', plantId)
-        .order('reading_datetime', { ascending: false })
-        .limit(8);
-      return (minimal ?? []) as any[];
-    },
-    enabled: !!plantId,
-    staleTime: 120_000,
-    refetchInterval: 120_000,
-  });
-
-  // 14-day rolling average consumption RATE (kWh/hr) for this plant — same
-  // window/shape Dashboard's power-spike scan uses, kept as its own query
-  // since `history` above is capped at 8 rows for prefill purposes and
-  // isn't reliably a full 14-day window. Power previously had NO save-time
-  // anomaly check at all (only the read-time Dashboard scan) — this is what
-  // that gap was missing. See flowRateGuards.ts.
-  const { data: powerHistory14d } = useQuery({
-    queryKey: ['op-power-history-14d', plantId],
-    queryFn: async () => {
-      if (!plantId) return [] as any[];
-      const since = new Date();
-      since.setDate(since.getDate() - 14);
-      const { data } = await supabase
-        .from('power_readings')
-        .select('reading_datetime,daily_consumption_kwh')
-        .eq('plant_id', plantId)
-        .gte('reading_datetime', since.toISOString())
-        .not('daily_consumption_kwh', 'is', null);
-      return data ?? [];
-    },
-    enabled: !!plantId,
-    staleTime: 5 * 60_000,
-  });
-  const avgPowerRate = useMemo(() => {
-    const points: VolumePoint[] = (powerHistory14d ?? [])
-      .filter((r: any) => Number(r.daily_consumption_kwh) > 0)
-      .map((r: any) => ({ volume: Number(r.daily_consumption_kwh), at: new Date(r.reading_datetime) }));
-    return computeRollingAverageRateFromDeltas(points, 14);
-  }, [powerHistory14d]);
-
-  // Two-step confirm: submitMeter computes the deviation at click-time (it
-  // needs the fully-merged daily_consumption_kwh, which only exists once the
-  // payload is assembled) and, if outside the normal band, stops short of
-  // writing to the DB and populates this instead — the banner below then
-  // asks for a remark, and clicking Save again proceeds since anomalyRemark
-  // is no longer empty. Cleared after every successful save.
-  const [powerAnomaly, setPowerAnomaly] = useState<{
-    result: ReturnType<typeof classifyDeviation>; kind: 'grid' | 'solar'; idx: number;
-  } | null>(null);
-  const [anomalyRemark, setAnomalyRemark] = useState('');
-
-  // "No power reading today? — log why" (reading_gap_reasons)
-  const [gapDialogOpen, setGapDialogOpen] = useState(false);
-  const [gapSaving, setGapSaving] = useState(false);
-  const todayDateStr = format(new Date(), 'yyyy-MM-dd');
-  const { data: gapReasonToday } = useQuery({
-    queryKey: ['power-gap-reason-for-date', plantId, todayDateStr],
-    enabled: !!plantId,
-    queryFn: async () => {
-      const { data } = await (supabase.from('reading_gap_reasons' as any) as any)
-        .select('reason_category, reason_detail')
-        .eq('entity_type', 'power')
-        .eq('entity_id', plantId)
-        .eq('gap_date', todayDateStr)
-        .maybeSingle();
-      return data as { reason_category: string; reason_detail: string | null } | null;
-    },
-  });
-
-  const prevRow    = history?.find((r: any) => r.id !== editingId) ?? null;
-  // Combined/grid meter: previous meter_reading_kwh
-  const prevGrid   = prevRow?.meter_reading_kwh ?? null;
-  // Solar meter: previous solar_meter_reading (if tracked)
-  const prevSolar  = prevRow?.solar_meter_reading ?? null;
-
-  // Resolves the most recent reading for a given grid meter index across history,
-  // preventing baseline loss when meters are recorded intermittently on different days.
-  const getLatestGridReading = useCallback((meterIdx: number): number | null => {
-    if (!history || history.length === 0) return null;
-    for (const r of history) {
-      if (r.id === editingId) continue;
-      const gmr = r.grid_meter_readings as Record<string, number> | null | undefined;
-      const val = gmr?.[String(meterIdx)] ?? (meterIdx === 0 ? r.meter_reading_kwh : null);
-      if (val != null && !isNaN(Number(val))) return Number(val);
-    }
-    return null;
-  }, [history, editingId]);
-
-  // ── Pre-fill grid meter inputs from the most recent previous reading ──────
-  // Fires when prevRow identity changes (new row became "latest" after a save
-  // or plant change). Uses prevRow?.id as dep to avoid infinite loops — the
-  // effect only re-runs when the actual record changes, not on every render.
-  useEffect(() => {
-    if (!prevRow) return;
-    setGridMeterReadings(curr =>
-      curr.map((val, idx) => {
-        if (val !== '') return val; // user has already typed something — don't overwrite
-        const prevVal = getLatestGridReading(idx);
-        return prevVal != null ? prevVal.toFixed(2) : val;
-      }),
-    );
-    // Keep the meter-0 alias in sync
-    setReading(r => {
-      if (r !== '') return r;
-      const prevVal0 = getLatestGridReading(0);
-      return prevVal0 != null ? prevVal0.toFixed(2) : r;
-    });
-  }, [prevRow?.id, getLatestGridReading]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // ── Pre-fill solar meter inputs (raw mode only) ────────────────────────────
-  useEffect(() => {
-    if (!prevRow || solarInputMode !== 'raw') return;
-    setSolarMeterReadings(curr =>
-      curr.map((val, idx) => {
-        if (val !== '') return val;
-        if (idx === 0 && prevSolar != null) return prevSolar.toFixed(2);
-        return val;
-      }),
-    );
-    setSolarReading(r => {
-      if (r !== '') return r;
-      return prevSolar != null ? prevSolar.toFixed(2) : r;
-    });
-  }, [prevRow?.id, solarInputMode]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Delta calculations from meter readings
-  const deltaGrid  = prevGrid != null && reading       ? +reading       - prevGrid  : null;
-  // Raw mode: delta = current - prev cumulative reading
-  // Direct mode: the entered value IS the daily kWh — no subtraction, no prevSolar needed
-  const deltaSolar = solarInputMode === 'direct'
-    ? (solarReading ? +solarReading : null)
-    : (prevSolar != null && solarReading ? +solarReading  - prevSolar : null);
-  // For combined (no solar): just use the main meter delta
-  const daily      = showSolar ? deltaGrid : (prevGrid != null && reading ? +reading - prevGrid : null);
-  // Effective daily kWh = Δ reading × multiplier
-  const dailyEffective = daily != null ? daily * effectiveMultiplier : null;
-
-  // Per-meter saving state
-  const [savingMeter, setSavingMeter] = useState<string | null>(null);
-
-  // Save a single meter reading independently
-  const submitMeter = async (kind: 'solar' | 'grid', idx: number) => {
-    if (!plantId) return;
-    // Guard: block grid saves when the CT-multiplier config is unavailable.
-    //
-    // Two failure modes are handled here:
-    //   1. configLoading === true  → query is still in-flight; effectiveMultiplier
-    //      would use the local-input fallback (or 1) instead of the DB value.
-    //   2. configLoading === false but configMultiplierArr is null / empty → the
-    //      query settled without a usable multiplier (no plant_power_config row, or
-    //      grid_meter_multipliers is null/[]). effectiveMultiplier falls back to
-    //      (+multiplierInput || 1) which stores the raw delta instead of (delta × CT).
-    //
-    // Previously only case 1 was caught, so readings saved when the config had no
-    // row would silently store the raw meter delta as daily_grid_kwh, causing the
-    // Dashboard chart to display the unscaled value (e.g. 11 kWh) while the history
-    // table (which recomputes rawDelta × configMult on-the-fly) showed the correct
-    // scaled value (e.g. 12,720 kWh). Now both cases are blocked explicitly.
-    if (kind === 'grid') {
-      if (configLoading) {
-        toast.error('Meter config still loading — please wait a moment before saving.');
-        return;
-      }
-      if (!Array.isArray(configMultiplierArr) || configMultiplierArr.length === 0) {
-        toast.error(
-          'CT multiplier not configured for this plant. ' +
-          'Set it under Plants → Power → CT Multiplier before saving grid readings, ' +
-          'or enter it manually in the multiplier field above.',
-        );
-        return;
-      }
-    }
-    const meterKey = `${kind}-${idx}`;
-    const val = kind === 'solar' ? (solarMeterReadings[idx] ?? '') : (gridMeterReadings[idx] ?? '');
-    if (!val) { toast.error(`Enter a reading for ${kind === 'solar' ? getSolarLabel(idx) : getGridLabel(idx)}`); return; }
-
-    // Redundancy Guard (12 hours): identical odometer reading within 12h cannot be saved
-    if (kind === 'grid' && idx === 0 && prevGrid != null && +val === prevGrid) {
-      const hoursElapsed = prevRow?.reading_datetime
-        ? (new Date(dt).getTime() - new Date(prevRow.reading_datetime).getTime()) / 3_600_000
-        : null;
-      if (hoursElapsed != null && hoursElapsed < 12) {
-        toast.error(`Grid meter: this odometer reading (${fmtNum(+val, 1)}) was already recorded within the last 12 hours.`);
-        return;
-      }
-    }
-
-    setSavingMeter(meterKey);
-
-    // FIX (multi-meter collision): use a local `rowId` so we can resolve an existing
-    // today-row and immediately proceed to save — no second click required.
-    // The old pattern (setEditingId + early return) meant meter-2 would switch to
-    // edit mode on click-1 and then OVERWRITE meter_reading_kwh on click-2, clobbering
-    // whatever meter-1 had saved.  Now we fall through and merge into the existing row.
-    let rowId: string | null = editingId;
-
-    if (kind === 'grid' && !rowId) {
-      const dup = await findExistingReading({
-        table: 'power_readings', entityCol: 'plant_id', entityId: plantId,
-        datetime: new Date(dt), windowKind: 'day',
-      });
-      if (dup) {
-        rowId = dup;
-        setEditingId(dup);
-        // Don't return — fall through and patch only this meter's key in the existing row.
-        toast.info(`Today's power reading found — saving ${getGridLabel(idx)} into existing row.`);
-      }
-    }
-
-    // Compute deltas for the primary meter only.
-    // BUG A FIX: removed the `showSolar &&` guard — computedDailyGrid must be
-    // computed for grid-only plants too.  Previously it was always null when
-    // showSolar === false, so the else-if partial path (below) never wrote
-    // daily_grid_kwh and the Plants chart read the raw unscaled delta from
-    // daily_consumption_kwh instead of the CT-multiplied effective kWh.
-    const computedDailyGrid  = kind === 'grid'  && idx === 0 && deltaGrid  != null ? deltaGrid  * effectiveMultiplier : null;
-    // In raw mode: delta is computed from prevSolar vs current solar meter reading
-    // In direct mode: the user IS entering the delta — no prev needed, don't use deltaSolar
-    const computedDailySolar = kind === 'solar' && idx === 0 && showSolar && solarInputMode === 'raw' && deltaSolar != null ? deltaSolar : null;
-
-    const payload: any = {
-      plant_id: plantId,
-      reading_datetime: new Date(dt).toISOString(),
-      recorded_by: user?.id,
-    };
-
-    if (kind === 'grid') {
-      // ── JSONB merge: read the existing grid_meter_readings so we only patch this
-      // meter's key, leaving all other meters' readings intact.
-      let mergedGridReadings: Record<string, number> = { [String(idx)]: +val };
-      if (rowId) {
-        try {
-          const { data: existingRow } = await supabase
-            .from('power_readings')
-            .select('grid_meter_readings')
-            .eq('id', rowId)
-            .maybeSingle();
-          const existing = (existingRow?.grid_meter_readings as Record<string, number> | null) ?? {};
-          mergedGridReadings = { ...existing, [String(idx)]: +val };
-        } catch { /* non-critical — proceed with single-key payload */ }
-      }
-      payload.grid_meter_readings = mergedGridReadings;
-
-      // meter_reading_kwh: kept for backward compatibility with dashboards, CSV importer,
-      // cost pages, and trend charts that still read this column.
-      // Only update it for meter 0; secondary meters live only in grid_meter_readings.
-      if (idx === 0) payload.meter_reading_kwh = +val;
-
-      // Compute daily_grid_kwh as the sum of (Δ per meter × per-meter CT multiplier).
-      // Previous per-meter readings are resolved per meter index from history,
-      // so missing readings on the immediate previous day do not erase baselines.
-      const prevMeters: Record<string, number> = (() => {
-        const map: Record<string, number> = {};
-        for (let mi = 0; mi < gridMeterCount; mi++) {
-          const v = getLatestGridReading(mi);
-          if (v != null) map[String(mi)] = v;
-        }
-        return map;
-      })();
-
-      let totalDailyGrid = 0;
-      let allMetersPresent = true;
-      let computedMeterCount = 0;
-      for (let mi = 0; mi < gridMeterCount; mi++) {
-        const curr = mergedGridReadings[String(mi)];
-        const prev = prevMeters[String(mi)];
-        if (curr != null && prev != null) {
-          const mMult = Array.isArray(configMultiplierArr) && +configMultiplierArr[mi] > 0
-            ? +configMultiplierArr[mi]
-            : effectiveMultiplier;
-          const delta = (curr - prev) * mMult;
-          if (delta >= 0) {
-            totalDailyGrid += delta;
-            computedMeterCount++;
-          }
-        } else {
-          allMetersPresent = false;
-        }
-      }
-      if (computedMeterCount > 0) {
-        payload.daily_grid_kwh       = totalDailyGrid;
-        payload.daily_consumption_kwh = totalDailyGrid;
-      } else if (allMetersPresent) {
-        payload.daily_grid_kwh       = totalDailyGrid;
-        payload.daily_consumption_kwh = totalDailyGrid;
-      } else if (idx === 0 && deltaGrid != null) {
-        // Partial data fallback: only meter-0 is available
-        const partialKwh = computedDailyGrid ?? deltaGrid * effectiveMultiplier;
-        payload.daily_grid_kwh        = partialKwh;
-        payload.daily_consumption_kwh = partialKwh;
-      }
-    }
-    if (kind === 'solar') {
-      // Only include meter_reading_kwh from grid if the user has actually entered one —
-      // writing 0 would corrupt the cumulative grid meter sequence.
-      const gridVal = gridMeterReadings[0];
-      if (gridVal && +gridVal > 0) payload.meter_reading_kwh = +gridVal;
-      if (solarInputMode === 'direct') {
-        // Direct daily kWh: store only daily_solar_kwh, do NOT touch solar_meter_reading
-        // (writing a raw meter value would corrupt the cumulative sequence)
-        payload.daily_solar_kwh = +val;
-      } else {
-        // Raw cumulative meter: store solar_meter_reading and auto-compute daily_solar_kwh
-        payload.solar_meter_reading = +val;
-        // Only attach daily_solar_kwh when delta is actually computable (prev exists)
-        if (idx === 0 && computedDailySolar != null) payload.daily_solar_kwh = computedDailySolar;
-      }
-    }
-
-    // Flow-rate anomaly check — Power previously had no save-time guard at
-    // all (see flowRateGuards.ts). Only runs once daily_consumption_kwh is
-    // actually finalized in this payload (grid: all meters present; solar:
-    // delta computable) — a partial-data save has nothing meaningful to
-    // compare yet. Two-step: if this reading is outside the normal band and
-    // the operator hasn't written a remark yet, stop here (before touching
-    // the DB) and show the banner below instead of saving; clicking Save
-    // again after typing a remark proceeds.
-    if (payload.daily_consumption_kwh != null && prevRow?.reading_datetime) {
-      const hoursElapsed = (new Date(dt).getTime() - new Date(prevRow.reading_datetime).getTime()) / 3_600_000;
-      const rate = computeRate(payload.daily_consumption_kwh, hoursElapsed, undefined, true);
-      const result = classifyDeviation(rate, avgPowerRate, ALERTS.power_spike_multiplier);
-      if (result.tier !== 'ok' && !isAnomalyRemarkValid(anomalyRemark)) {
-        setPowerAnomaly({ result, kind, idx });
-        setSavingMeter(null);
-        toast.error(`${kind === 'grid' ? getGridLabel(idx) : getSolarLabel(idx)}: this reading is outside the normal range — add a remark before saving.`);
-        return;
-      }
-    } else if (powerAnomaly) {
-      setPowerAnomaly(null);
-    }
-
-    const runQuery = () => rowId
-      ? supabase.from('power_readings').update(payload).eq('id', rowId).select('id')
-      : supabase.from('power_readings').insert(payload).select('id');
-
-    let { data: savedRows, error } = await runQuery();
-    if (error && (
-      error.message.includes('daily_solar_kwh') ||
-      error.message.includes('daily_grid_kwh') ||
-      error.message.includes('solar_meter_reading') ||
-      error.message.includes('multiplier') ||
-      error.message.includes('grid_meter_readings')
-    )) {
-      // Column may not exist yet in older DBs — retry without optional columns
-      delete payload.daily_solar_kwh;
-      delete payload.daily_grid_kwh;
-      delete payload.solar_meter_reading;
-      delete payload.multiplier;
-      delete payload.grid_meter_readings;
-      ({ data: savedRows, error } = await runQuery());
-    }
-
-    setSavingMeter(null);
-    if (error) { toast.error(friendlyError(error)); return; }
-
-    // Best-effort — the reading itself already saved successfully above,
-    // this never blocks or rolls it back. See flowRateGuards.ts.
-    if (powerAnomaly && savedRows?.[0]?.id) {
-      const { result } = powerAnomaly;
-      void submitAnomalyRemark({
-        table_name: 'power_readings',
-        record_id: savedRows[0].id,
-        plant_id: plantId,
-        tier: result.tier as 'needs_remark' | 'critical',
-        direction: result.direction!,
-        deviation_pct: result.deviationPct!,
-        flow_rate: result.rate,
-        avg_flow_rate: result.avgRate,
-        rate_unit: 'kwh/hr',
-        remark_text: anomalyRemark,
-      });
-    }
-    setPowerAnomaly(null);
-    setAnomalyRemark('');
-
-    const label = kind === 'solar' ? getSolarLabel(idx) : getGridLabel(idx);
-    toast.success(`${label}: reading saved`);
-
-    // Clear only the saved meter's input
-    if (kind === 'grid') {
-      setGridMeterReadings(prev => { const next = [...prev]; next[idx] = ''; return next; });
-      if (idx === 0) setReading('');
-    } else {
-      setSolarMeterReadings(prev => { const next = [...prev]; next[idx] = ''; return next; });
-      if (idx === 0) setSolarReading('');
-    }
-    invalidatePowerDash(qc);
-  };
-
-  // Keep legacy submit for cancel/edit flows
-  const submit = async () => {
-    if (!plantId || !reading) return;
-    // Guard: same race-condition protection as submitMeter
-    if (configLoading) {
-      toast.error('Meter config still loading — please wait a moment before saving.');
-      return;
-    }
-    // BUG A (legacy submit): same fix as submitMeter — remove showSolar guard so
-    // grid-only plants correctly persist the CT-scaled daily_grid_kwh.
-    const computedDailyGrid  = deltaGrid  != null ? deltaGrid * effectiveMultiplier : null;
-    const computedDailySolar = showSolar && deltaSolar != null ? deltaSolar : null;
-    const payload: any = {
-      plant_id: plantId,
-      reading_datetime: new Date(dt).toISOString(),
-      meter_reading_kwh: +reading,
-      // Keep grid_meter_readings in sync so history delta calculations stay correct.
-      // For edit flows we fetch existing secondary-meter data and merge, to avoid
-      // clobbering meters 1+ that were saved via the per-meter Save buttons.
-      recorded_by: user?.id,
-    };
-    // Merge grid_meter_readings: preserve secondary meters if editing an existing row.
-    if (editingId) {
-      try {
-        const { data: existingRow } = await supabase
-          .from('power_readings')
-          .select('grid_meter_readings')
-          .eq('id', editingId)
-          .maybeSingle();
-        const existing = (existingRow?.grid_meter_readings as Record<string, number> | null) ?? {};
-        payload.grid_meter_readings = { ...existing, '0': +reading };
-      } catch {
-        payload.grid_meter_readings = { '0': +reading };
-      }
-    } else {
-      payload.grid_meter_readings = { '0': +reading };
-    }
-    if (showSolar && solarReading) payload.solar_meter_reading = +solarReading;
-    // Write daily_grid_kwh for ALL plants (not just solar+grid) — fixes Plants chart
-    // discrepancy where grid-only readings showed raw delta instead of CT-scaled kWh.
-    if (computedDailyGrid  != null) payload.daily_grid_kwh  = computedDailyGrid;
-    if (showSolar && computedDailySolar != null) payload.daily_solar_kwh = computedDailySolar;
-    // Bug 3 fix: always write daily_consumption_kwh so Dashboard kWh total and PV ratio are correct
-    if (daily != null) payload.daily_consumption_kwh = daily * effectiveMultiplier;
-    const runQuery = () => editingId
-      ? supabase.from('power_readings').update(payload).eq('id', editingId)
-      : supabase.from('power_readings').insert(payload);
-    let { error } = await runQuery();
-    if (error && (
-      error.message.includes('daily_solar_kwh') ||
-      error.message.includes('daily_grid_kwh') ||
-      error.message.includes('solar_meter_reading') ||
-      error.message.includes('multiplier')
-    )) {
-      delete payload.daily_solar_kwh; delete payload.daily_grid_kwh;
-      delete payload.solar_meter_reading; delete payload.multiplier;
-      ({ error } = await runQuery());
-    }
-    if (error) { toast.error(friendlyError(error)); return; }
-    toast.success(editingId ? 'Updated' : 'Power reading saved');
-    setReading(''); setSolarReading(''); setEditingId(null);
-    setGridMeterReadings(['', '', '', '', '']);
-    setSolarMeterReadings(['', '', '', '', '']);
-    invalidatePowerDash(qc);
-  };
-
-  const startEdit = (r: any) => {
-    setReading(String(r.meter_reading_kwh));
-    setSolarReading(r.solar_meter_reading != null ? String(r.solar_meter_reading) : '');
-    // Restore per-meter grid readings from grid_meter_readings JSONB.
-    // Falls back to meter_reading_kwh for legacy rows that pre-date the migration.
-    const gmr = (r.grid_meter_readings as Record<string, number> | null) ?? {};
-    setGridMeterReadings(prev => {
-      const next = prev.map(() => '');
-      next[0] = gmr['0'] != null ? String(gmr['0']) : String(r.meter_reading_kwh);
-      for (let i = 1; i < prev.length; i++) {
-        if (gmr[String(i)] != null) next[i] = String(gmr[String(i)]);
-      }
-      return next;
-    });
-    setSolarMeterReadings(prev => { const next = [...prev]; next[0] = r.solar_meter_reading != null ? String(r.solar_meter_reading) : ''; return next; });
-    setDt(format(new Date(r.reading_datetime), "yyyy-MM-dd'T'HH:mm"));
-    setEditingId(r.id);
-    toast.info('Editing power reading');
-  };
-
-  // Build display rows: compute Δ on the fly by pairing consecutive readings
-  const displayHistory = useMemo(() => {
-    if (!history?.length) return [];
-    return history.map((r: any, i: number) => {
-      const pred          = history[i + 1] ?? null; // predecessor = row below (older), history is DESC
-      // Grid meter Δ — for multi-meter plants, sum deltas across all meters using
-      // grid_meter_readings JSONB.  Falls back to single meter_reading_kwh for legacy rows.
-      const deltaKwh = (() => {
-        const rGmr = r.grid_meter_readings    as Record<string, number> | null | undefined;
-        const pGmr = pred?.grid_meter_readings as Record<string, number> | null | undefined;
-        if (rGmr && pGmr && Object.keys(rGmr).length > 1) {
-          let total = 0;
-          for (const k of Object.keys(rGmr)) {
-            if (pGmr[k] != null) total += rGmr[k] - pGmr[k];
-          }
-          return total;
-        }
-        return pred != null ? r.meter_reading_kwh - pred.meter_reading_kwh : (r.daily_consumption_kwh ?? null);
-      })();
-      // Solar meter Δ
-      const deltaSolarKwh = (pred?.solar_meter_reading != null && r.solar_meter_reading != null)
-        ? r.solar_meter_reading - pred.solar_meter_reading
-        : (r.daily_solar_kwh ?? null);
-      // Grid consumption = grid meter Δ × CT multiplier
-      const deltaGridKwh  = showSolar && deltaKwh != null
-        ? deltaKwh * effectiveMultiplier
-        : (r.daily_grid_kwh != null ? r.daily_grid_kwh : deltaKwh);
-      return { ...r, _deltaKwh: deltaKwh, _deltaSolar: deltaSolarKwh, _deltaGrid: deltaGridKwh };
-    });
-  }, [history, showSolar, effectiveMultiplier]);
+  const { submitMeter, handlePlantChange } = actions;
 
   return (
     <div className="space-y-3">
       <Card className="p-4 space-y-4">
-        <div className="flex items-end gap-3">
-          <div className="flex-1 space-y-1.5">
-            <Label htmlFor="powersection-plant" className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Plant</Label>
-            <PlantSelector value={plantId} onChange={handlePlantChange} id="powersection-plant" />
-          </div>
-          {plantId && (
-            <Button
-              size="sm"
-              variant="outline"
-              className={cn(
-                "shrink-0 gap-1.5 h-10 border-border/80 text-muted-foreground hover:text-foreground",
-                gapReasonToday && "border-warn/50 text-warn bg-warn-soft/20",
-              )}
-              onClick={() => setGapDialogOpen(true)}
-              data-testid="power-gap-reason-btn"
-              title={gapReasonToday ? `Reason logged: ${gapReasonToday.reason_category}` : 'No power reading today? Log reason'}
-            >
-              <MessageCircleOff className="h-3.5 w-3.5" />
-              {gapReasonToday ? 'Reason logged' : 'No reading today?'}
-            </Button>
-          )}
-          {prevRow?.is_estimated && (
-            <span
-              className="inline-flex items-center gap-1 text-2xs font-semibold px-2.5 py-1 rounded-full bg-warn-soft text-warn border border-warn/40"
-              title="Latest power reading is system-generated / backfilled — entering a reading overrides it with verified human data."
-            >
-              Estimated
-            </span>
-          )}
-          {(isAdmin || isManager || isDataAnalyst) && plantId && (
-            <Button
-              size="sm" variant="outline"
-              className="shrink-0 gap-1.5 h-10 border-primary/60 text-primary hover:bg-primary-soft hover:border-primary/90"
-              onClick={() => setImportOpen(true)}
-              data-testid="import-power-readings-btn"
-            >
-              <Upload className="h-3.5 w-3.5" />
-              Import
-            </Button>
-          )}
-        </div>
+        <PowerFormHeader
+          plantId={plantId}
+          handlePlantChange={handlePlantChange}
+          gapReasonToday={gapReasonToday}
+          setGapDialogOpen={() => state.setGapDialogOpen(true)}
+          setImportOpen={setImportOpen}
+          isAdmin={isAdmin}
+          isManager={isManager}
+          isDataAnalyst={isDataAnalyst}
+          prevRow={prevRow}
+        />
 
-        {/* ── Meter config hint ── */}
         {plantId && (
           <p className="text-xs text-muted-foreground">
             Meter count &amp; names are configured in <strong className="text-foreground/70">Plants → Power</strong>.
           </p>
         )}
 
-        {/* Flow-rate anomaly — see submitMeter's two-step confirm. Save was
-            already stopped once; filling this in and clicking Save again
-            (same button) proceeds. */}
         {powerAnomaly && (
           <AnomalyRemarkBanner
             result={powerAnomaly.result}
@@ -824,652 +86,109 @@ export function PowerForm() {
           />
         )}
 
-        {/* Meter Reading(s) + Grid Power Multiplier — shown inline with Date & Time */}
         {showSolar ? (
-          // ── Solar plant ────────────────────────────────────────────────────────
-          <div className="space-y-3">
-
-            {/* Date & Time — CT multipliers are now shown per-meter inline with each grid meter label */}
-            <div className="flex flex-wrap items-end gap-3">
-              <div>
-                <Label htmlFor="powersection-date-amp-time">Date &amp; Time</Label>
-                <Input type="datetime-local" value={dt} onChange={e => setDt(e.target.value)}
-                  className="h-10 w-full max-w-[260px] min-w-[220px] block text-center sm:text-left bg-muted/30 border-border/70 text-foreground/80" id="powersection-date-amp-time"/>
-              </div>
-            </div>
-
-            {/* ── 2-column layout: Solar (left) | Grid (right) — desktop only ── */}
-            {!isMobile && <div className="grid grid-cols-2 gap-4 items-start">
-
-              {/* ── Solar column ── */}
-              <div className="space-y-2">
-                <div className="flex items-center gap-1.5 pb-1 border-b border-warn">
-                  <Sun className="h-3.5 w-3.5 text-warn shrink-0" />
-                  <span className="text-xs font-semibold text-warn uppercase tracking-wide">Solar</span>
-                  <span className="text-2xs text-muted-foreground ml-auto">{solarMeterCount} meter{solarMeterCount !== 1 ? 's' : ''}</span>
-                </div>
-                {Array.from({ length: solarMeterCount }).map((_, idx) => {
-                  const meterLabel = getSolarLabel(idx);
-                  const val = solarMeterReadings[idx] ?? '';
-                  const isFirst = idx === 0;
-                  const handleChange = (v: string) => {
-                    setSolarMeterReading(idx, v);
-                    if (isFirst) setSolarReading(v);
-                  };
-                  const meterKey = `solar-${idx}`;
-                  const isSavingThis = savingMeter === meterKey;
-                  // In raw mode the pre-filled baseline equals prevSolar — disable Save until
-                  // the operator has actually rolled/typed a different value.
-                  const solarPrevVal = idx === 0 ? prevSolar : null;
-                  const solarMeterChanged = val !== '' && (
-                    solarInputMode === 'direct' || solarPrevVal == null || +val !== solarPrevVal
-                  );
-                  return (
-                    <div key={`solar-${idx}`}>
-                      <Label htmlFor="powersection-classname-ml-auto-p-0-5-rounded-text-muted-fore" className="flex items-center gap-1 text-xs">
-                        <Sun className="h-3 w-3 text-warn shrink-0" />
-                        {meterLabel}
-                        {isFirst && editingId && <span className="text-2xs text-warn ml-1">(editing)</span>}
-                        {prevRow?.is_estimated && (
-                          <span
-                            className="text-3xs font-semibold uppercase tracking-wide text-warn bg-warn-soft/40 px-1 py-0.5 rounded leading-none border border-warn/40 ml-1"
-                            title="Latest reading is system-generated / backfilled"
-                          >
-                            Est.
-                          </span>
-                        )}
-                        {(isAdmin || isManager || isDataAnalyst) && (
-                          <button
-                            type="button"
-                            title={`View ${meterLabel} history`}
-                            aria-label={`View ${meterLabel} history`}
-                            onClick={() => setPowerHistoryOpen({ type: 'solar', idx })}
-                            className="ml-auto p-0.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-                          >
-                            <History className="h-3 w-3" />
-                          </button>
-                        )}
-                      </Label>
-                      <div className="flex items-center gap-2">
-                        <Input type="number" step="any" value={val}
-                          onChange={e => handleChange(e.target.value)}
-                          placeholder={solarInputMode === 'direct' ? 'Daily kWh' : 'Solar reading'}
-                          className="border-warn focus-visible:ring-warn"
-                          data-testid={`power-solar-input-${idx}`} id="powersection-classname-ml-auto-p-0-5-rounded-text-muted-fore"/>
-                        <Button size="sm" disabled={isSavingThis || !solarMeterChanged}
-                          onClick={() => submitMeter('solar', idx)}
-                          className="shrink-0 h-9 px-3 text-xs bg-primary text-primary-foreground hover:bg-primary/90"
-                          data-testid={`power-solar-save-${idx}`}>
-                          {isSavingThis ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Save'}
-                        </Button>
-                      </div>
-                      {/* Input mode hint — shown below input to align with grid's prev reading */}
-                      {isFirst && (
-                        <p className="text-2xs text-muted-foreground mt-0.5">
-                          Mode: <span className="font-medium text-warn">
-                            {solarInputMode === 'direct' ? 'Direct kWh' : 'Raw Meter'}
-                          </span>
-                          <span className="opacity-60 ml-1">(configure in Plants → Energy Sources)</span>
-                        </p>
-                      )}
-                      {/* Hint line: raw mode shows prev + computed Δ; direct mode previews stored value */}
-                      {isFirst && solarInputMode === 'raw' && prevSolar != null && (
-                        <p className="text-2xs text-muted-foreground mt-0.5">
-                          prev: <span className="font-mono-num">{fmtNum(prevSolar)}</span>
-                          {val && deltaSolar != null && (
-                            <span className={`font-mono-num font-medium ml-1 ${deltaSolar >= 0 ? 'text-warn' : 'text-destructive'}`}>
-                              Δ {fmtNum(deltaSolar)} kWh
-                            </span>
-                          )}
-                          {val && prevSolar != null && deltaSolar == null && (
-                            <span className="ml-1 text-muted-foreground/60">(enter value to compute Δ)</span>
-                          )}
-                        </p>
-                      )}
-                      {isFirst && solarInputMode === 'raw' && prevSolar == null && val && (
-                        <p className="text-2xs text-muted-foreground mt-0.5">
-                          No previous solar reading — Δ will be available after next entry.
-                        </p>
-                      )}
-                      {isFirst && solarInputMode === 'direct' && val && (
-                        <p className="text-2xs text-warn font-mono-num mt-0.5">
-                          → {fmtNum(+val)} kWh will be saved as daily production
-                        </p>
-                      )}
-                    </div>
-                  );
-                })}
-
-                {/* Total Δ row — only meaningful in raw mode */}
-                {solarInputMode === 'raw' && deltaSolar != null && solarMeterCount > 1 && (
-                  <div className="rounded border border-warn bg-warn-soft/60 px-2 py-1 text-xs flex items-center gap-1.5 mt-1">
-                    <Sun className="h-3 w-3 text-warn shrink-0" />
-                    <span className="text-muted-foreground">Total Δ</span>
-                    <span className={`font-mono-num font-semibold ml-auto ${deltaSolar >= 0 ? 'text-warn' : 'text-destructive'}`}>
-                      {fmtNum(deltaSolar)} kWh
-                    </span>
-                  </div>
-                )}
-              </div>
-
-              {/* ── Grid column ── */}
-              <div className="space-y-2">
-                <div className="flex items-center gap-1.5 pb-1 border-b border-info">
-                  <GridPylonIcon className="h-3 w-3 text-info" />
-                  <span className="text-xs font-semibold text-info uppercase tracking-wide">Grid</span>
-                  <span className="text-2xs text-muted-foreground ml-auto">{gridMeterCount} meter{gridMeterCount !== 1 ? 's' : ''}</span>
-                </div>
-                {Array.from({ length: gridMeterCount }).map((_, idx) => {
-                  const meterLabel = getGridLabel(idx);
-                  const val = gridMeterReadings[idx] ?? '';
-                  const isFirst = idx === 0;
-                  const handleChange = (v: string) => {
-                    setGridMeterReading(idx, v);
-                    if (isFirst) setReading(v);
-                  };
-                  const meterKey = `grid-${idx}`;
-                  const isSavingThis = savingMeter === meterKey;
-                  const mMult = getGridMeterMult(idx);
-                  // Pre-fill baseline guard — disable Save when value hasn't changed from previous
-                  const prevMeterValSL = getLatestGridReading(idx);
-                  const gridMeterChanged = val !== '' && (prevMeterValSL == null || +val !== prevMeterValSL);
-                  return (
-                    <div key={`grid-${idx}`}>
-                      <Label htmlFor="powersection-classname-ml-auto-p-0-5-rounded-text-muted-fore-2" className="flex items-center gap-1 text-xs">
-                        <GridPylonIcon className="h-2.5 w-2.5 text-info" />
-                        {meterLabel}
-                        <span
-                          className={`text-3xs font-mono px-1 py-0 rounded ${mMult !== 1 ? 'bg-warn-soft text-warn border border-warn' : 'text-muted-foreground/40'}`}
-                          title={configLoading ? 'Loading CT multiplier from config…' : `CT multiplier for this meter (configured in Plants → Power). Consumption = Δ × ${mMult}`}
-                        >
-                          {configLoading ? <Loader2 className="h-2 w-2 animate-spin inline" /> : `×${mMult}`}
-                        </span>
-                        {isFirst && editingId && <span className="text-2xs text-warn ml-1">(editing)</span>}
-                        {prevRow?.is_estimated && (
-                          <span
-                            className="text-3xs font-semibold uppercase tracking-wide text-warn bg-warn-soft/40 px-1 py-0.5 rounded leading-none border border-warn/40 ml-1"
-                            title="Latest reading is system-generated / backfilled"
-                          >
-                            Est.
-                          </span>
-                        )}
-                        {(isAdmin || isManager || isDataAnalyst) && (
-                          <button
-                            type="button"
-                            title={`Meter replaced — ${meterLabel}`}
-                            aria-label={`Meter replaced — ${meterLabel}`}
-                            onClick={() => setReplaceMeterIdx(idx)}
-                            className="ml-auto p-0.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-                          >
-                            <ChangeMeterIcon className="h-3 w-3" />
-                          </button>
-                        )}
-                        {(isAdmin || isManager || isDataAnalyst) && (
-                          <button
-                            type="button"
-                            title={`View ${meterLabel} history`}
-                            aria-label={`View ${meterLabel} history`}
-                            onClick={() => setPowerHistoryOpen({ type: 'grid', idx })}
-                            className="p-0.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-                          >
-                            <History className="h-3 w-3" />
-                          </button>
-                        )}
-                      </Label>
-                      <div className="flex items-center gap-2">
-                        <Input type="number" step="any" value={val}
-                          onChange={e => handleChange(e.target.value)}
-                          placeholder="Grid reading"
-                          className="border-info focus-visible:ring-info"
-                          data-testid={`power-meter-input-${idx}`} id="powersection-classname-ml-auto-p-0-5-rounded-text-muted-fore-2"/>
-                        <Button
-                          size="sm"
-                          disabled={isSavingThis || !gridMeterChanged || configLoading}
-                          title={configLoading ? 'Loading meter config — please wait' : undefined}
-                          onClick={() => submitMeter('grid', idx)}
-                          className="shrink-0 h-9 px-3 text-xs bg-primary text-primary-foreground hover:bg-primary/90"
-                          data-testid={`power-grid-save-${idx}`}
-                        >
-                          {isSavingThis || configLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Save'}
-                        </Button>
-                      </div>
-                      {(() => {
-                        // Per-meter prev/delta: look up each meter's own previous reading
-                        // from prevRow.grid_meter_readings JSONB; fall back to meter_reading_kwh for meter 0.
-                        const gmrPrev = (prevRow as any)?.grid_meter_readings as Record<string, number> | null | undefined;
-                        const prevMeterVal = gmrPrev?.[String(idx)] ?? (idx === 0 ? prevGrid : null);
-                        if (prevMeterVal == null) return null;
-                        // Suppress delta while showing unchanged pre-filled baseline
-                        const perMeterDelta = gridMeterChanged ? +val - prevMeterVal : null;
-                        return (
-                          <p className="text-2xs text-muted-foreground mt-0.5">
-                            prev: <span className="font-mono-num">{fmtNum(prevMeterVal)}</span>
-                            {perMeterDelta != null && (
-                              <span className={`font-mono-num font-medium ml-1 ${perMeterDelta >= 0 ? 'text-info' : 'text-destructive'}`}>
-                                Δ {fmtNum(perMeterDelta)}
-                              </span>
-                            )}
-                          </p>
-                        );
-                      })()}
-                    </div>
-                  );
-                })}
-                {/* Grid column total Δ — sums each meter's (Δ × per-meter multiplier) */}
-                {gridMeterCount > 1 && (() => {
-                  const gmrPrev = (prevRow as any)?.grid_meter_readings as Record<string, number> | null | undefined;
-                  let totalDelta = 0;
-                  let hasAny = false;
-                  for (let mi = 0; mi < gridMeterCount; mi++) {
-                    const currVal = gridMeterReadings[mi];
-                    const prevVal = gmrPrev?.[String(mi)] ?? (mi === 0 ? prevGrid : null);
-                    if (currVal && prevVal != null) {
-                      totalDelta += (+currVal - prevVal) * getGridMeterMult(mi);
-                      hasAny = true;
-                    }
-                  }
-                  if (!hasAny) return null;
-                  return (
-                    <div className="rounded border border-info bg-info-soft/60 px-2 py-1 text-xs flex items-center gap-1.5 mt-1">
-                      <GridPylonIcon className="h-3 w-3 text-info" />
-                      <span className="text-muted-foreground">Total Δ</span>
-                      <span className={`font-mono-num font-semibold ml-auto ${totalDelta >= 0 ? 'text-info' : 'text-destructive'}`}>
-                        {fmtNum(totalDelta)} kWh
-                      </span>
-                    </div>
-                  );
-                })()}
-              </div>
-            </div>}
-
-            {/* ── Mobile: per-meter swipe carousel (grid meters first, then solar) ── */}
-            {isMobile && (
-              <MobileCarousel
-                isMobile={true}
-                items={powerMeterItems}
-                renderItem={(item: { type: 'grid' | 'solar'; idx: number }) => {
-                  /* ── Grid meter card ── */
-                  if (item.type === 'grid') {
-                    const meterLabel = getGridLabel(item.idx);
-                    const val = gridMeterReadings[item.idx] ?? '';
-                    const isFirst = item.idx === 0;
-                    const handleChange = (v: string) => { setGridMeterReading(item.idx, v); if (isFirst) setReading(v); };
-                    const isSavingThis = savingMeter === `grid-${item.idx}`;
-                    const mMult = getGridMeterMult(item.idx);
-                    const prevMeterValSL = getLatestGridReading(item.idx);
-                    const gridMeterChanged = val !== '' && (prevMeterValSL == null || +val !== prevMeterValSL);
-                    const perMeterDelta = gridMeterChanged && prevMeterValSL != null ? +val - prevMeterValSL : null;
-                    return (
-                      <div key={`grid-card-${item.idx}`} className="px-4 py-3 space-y-2">
-                        {/* Header: label + multiplier + history button */}
-                        <div className="flex items-center justify-between gap-2">
-                          <Label className="flex items-center gap-1.5 text-sm">
-                            <GridPylonIcon className="h-3 w-3 text-info" />
-                            {meterLabel}
-                            <span className={`text-3xs font-mono px-1 py-0 rounded ${mMult !== 1 ? 'bg-warn-soft text-warn border border-warn' : 'text-muted-foreground/40'}`}>
-                              {configLoading ? <Loader2 className="h-2 w-2 animate-spin inline" /> : `×${mMult}`}
-                            </span>
-                            {isFirst && editingId && <span className="text-2xs text-warn">(editing)</span>}
-                            {prevRow?.is_estimated && (
-                              <span
-                                className="text-3xs font-semibold uppercase tracking-wide text-warn bg-warn-soft/40 px-1 py-0.5 rounded leading-none border border-warn/40"
-                                title="Latest reading is system-generated / backfilled"
-                              >
-                                Est.
-                              </span>
-                            )}
-                          </Label>
-                          {(isAdmin || isManager || isDataAnalyst) && (
-                            <Button variant="ghost" size="sm"
-                              className="h-8 w-8 p-0 shrink-0 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted"
-                              onClick={() => setReplaceMeterIdx(item.idx)} title={`Meter replaced — ${meterLabel}`}>
-                              <ChangeMeterIcon className="h-3.5 w-3.5" />
-                            </Button>
-                          )}
-                          {(isAdmin || isManager || isDataAnalyst) && (
-                            <Button variant="ghost" size="sm"
-                              className="h-8 w-8 p-0 shrink-0 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted"
-                              onClick={() => setPowerHistoryOpen({ type: 'grid', idx: item.idx })} title={`View ${meterLabel} history`}>
-                              <History className="h-3.5 w-3.5" />
-                            </Button>
-                          )}
-                        </div>
-                        {/* Drum roller */}
-                        <OdometerRollerInput
-                          value={val} onChange={handleChange}
-                          alertState={gridMeterChanged ? (perMeterDelta != null && perMeterDelta < 0 ? 'warn' : 'ok') : 'neutral'}
-                          disabled={isSavingThis || configLoading}
-                          testId={`power-meter-input-${item.idx}`}
-                        />
-                        {/* prev / delta */}
-                        <div className="flex items-center justify-between text-xs px-0.5">
-                          <span className="text-muted-foreground">prev: <span className="font-mono-num">{prevMeterValSL != null ? fmtNum(prevMeterValSL) : '—'}</span></span>
-                          {perMeterDelta != null && (
-                            <span className={`font-mono-num font-medium ${perMeterDelta >= 0 ? 'text-info' : 'text-destructive'}`}>Δ {fmtNum(perMeterDelta)} kWh</span>
-                          )}
-                        </div>
-                        {/* Save */}
-                        <Button
-                          disabled={isSavingThis || !gridMeterChanged || configLoading}
-                          title={configLoading ? 'Loading meter config — please wait' : undefined}
-                          onClick={() => submitMeter('grid', item.idx)}
-                          className="w-full h-11 text-sm bg-primary text-primary-foreground hover:bg-primary/90 active:bg-primary shadow-sm"
-                          data-testid={`power-grid-save-${item.idx}`}
-                        >
-                          {isSavingThis || configLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : editingId && isFirst ? 'Update' : 'Save'}
-                        </Button>
-                      </div>
-                    );
-                  }
-                  /* ── Solar meter card ── */
-                  const meterLabel = getSolarLabel(item.idx);
-                  const val = solarMeterReadings[item.idx] ?? '';
-                  const isFirst = item.idx === 0;
-                  const handleChange = (v: string) => { setSolarMeterReading(item.idx, v); if (isFirst) setSolarReading(v); };
-                  const isSavingThis = savingMeter === `solar-${item.idx}`;
-                  const solarPrevVal = item.idx === 0 ? prevSolar : null;
-                  const solarMeterChanged = val !== '' && (solarInputMode === 'direct' || solarPrevVal == null || +val !== solarPrevVal);
-                  const solarDeltaThis = solarInputMode === 'raw' && solarMeterChanged && solarPrevVal != null ? +val - solarPrevVal : null;
-                  return (
-                    <div key={`solar-card-${item.idx}`} className="px-4 py-3 space-y-2">
-                      {/* Header: label + mode hint + history button */}
-                      <div className="flex items-center justify-between gap-2">
-                        <Label className="flex items-center gap-1.5 text-sm">
-                          <span className="text-warn">☀</span>
-                          {meterLabel}
-                          {isFirst && editingId && <span className="text-2xs text-warn">(editing)</span>}
-                          {prevRow?.is_estimated && (
-                            <span
-                              className="text-3xs font-semibold uppercase tracking-wide text-warn bg-warn-soft/40 px-1 py-0.5 rounded leading-none border border-warn/40"
-                              title="Latest reading is system-generated / backfilled"
-                            >
-                              Est.
-                            </span>
-                          )}
-                        </Label>
-                        {(isAdmin || isManager || isDataAnalyst) && (
-                          <Button variant="ghost" size="sm"
-                            className="h-8 w-8 p-0 shrink-0 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted"
-                            onClick={() => setPowerHistoryOpen({ type: 'solar', idx: item.idx })} title={`View ${meterLabel} history`}>
-                            <History className="h-3.5 w-3.5" />
-                          </Button>
-                        )}
-                      </div>
-                      {isFirst && (
-                        <p className="text-2xs text-muted-foreground -mt-1">
-                          Mode: <span className="font-medium text-warn">{solarInputMode === 'direct' ? 'Direct kWh' : 'Raw Meter'}</span>
-                          <span className="opacity-60 ml-1">(Plants → Energy Sources)</span>
-                        </p>
-                      )}
-                      {/* Input: drum for raw, regular input for direct */}
-                      {solarInputMode === 'raw' ? (
-                        <>
-                          <OdometerRollerInput
-                            value={val} onChange={handleChange}
-                            alertState={solarMeterChanged ? (solarDeltaThis != null && solarDeltaThis < 0 ? 'warn' : 'ok') : 'neutral'}
-                            disabled={isSavingThis}
-                            testId={`power-solar-input-${item.idx}`}
-                          />
-                          {isFirst && (
-                            <div className="flex items-center justify-between text-xs px-0.5">
-                              <span className="text-muted-foreground">prev: <span className="font-mono-num">{prevSolar != null ? fmtNum(prevSolar) : '—'}</span></span>
-                              {solarDeltaThis != null && <span className={`font-mono-num font-medium ${solarDeltaThis >= 0 ? 'text-warn' : 'text-destructive'}`}>Δ {fmtNum(solarDeltaThis)} kWh</span>}
-                            </div>
-                          )}
-                        </>
-                      ) : (
-                        <>
-                          <Input type="number" step="any" value={val}
-                            onChange={e => handleChange(e.target.value)}
-                            placeholder="Daily kWh"
-                            className="border-warn focus-visible:ring-warn"
-                            data-testid={`power-solar-input-${item.idx}`} />
-                          {isFirst && val && <p className="text-2xs text-warn font-mono-num">→ {fmtNum(+val)} kWh daily production</p>}
-                        </>
-                      )}
-                      {/* Save */}
-                      <Button
-                        disabled={isSavingThis || !solarMeterChanged}
-                        onClick={() => submitMeter('solar', item.idx)}
-                        className="w-full h-11 text-sm bg-primary text-primary-foreground hover:bg-primary/90 active:bg-primary shadow-sm"
-                        data-testid={`power-solar-save-${item.idx}`}
-                      >
-                        {isSavingThis ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Save'}
-                      </Button>
-                    </div>
-                  );
-                }}
-              />
-            )}
-
-            {/* Energy Source Breakdown — total Δ solar + total Δ grid */}
-            <div className="flex items-center gap-1.5 rounded border bg-muted/20 px-2.5 py-1.5 text-xs">
-              <span className="text-muted-foreground/60 font-medium uppercase tracking-wide shrink-0">Breakdown</span>
-              <span className="text-muted-foreground/40">·</span>
-              <span className="text-warn shrink-0">☀</span>
-              <span className={deltaSolar != null ? 'font-mono-num font-medium text-warn' : 'text-muted-foreground/50'}>
-                {deltaSolar != null ? `${fmtNum(deltaSolar)} kWh` : '—'}
-              </span>
-              <span className="text-muted-foreground/40 mx-0.5">|</span>
-              <GridPylonIcon className="h-3 w-3 text-info shrink-0" />
-              <span className={deltaGrid != null ? 'font-mono-num font-medium text-info' : 'text-muted-foreground/50'}>
-                {deltaGrid != null ? `${fmtNum(deltaGrid * effectiveMultiplier)} kWh` : '—'}
-              </span>
-              {effectiveMultiplier !== 1 && deltaGrid != null && (
-                <span className="text-2xs text-warn ml-0.5">×{effectiveMultiplier}</span>
-              )}
-              <span className="text-muted-foreground/30 text-2xs ml-auto">auto · read-only</span>
-            </div>
-          </div>
+          <SolarPowerForm
+            isMobile={isMobile}
+            dt={dt} setDt={setDt}
+            solarMeterCount={solarMeterCount}
+            solarMeterReadings={solarMeterReadings}
+            setSolarMeterReadings={setSolarMeterReadings}
+            setSolarMeterReading={setSolarMeterReading}
+            setSolarReading={setSolarReading}
+            gridMeterCount={gridMeterCount}
+            gridMeterReadings={gridMeterReadings}
+            setGridMeterReadings={setGridMeterReadings}
+            setGridMeterReading={setGridMeterReading}
+            setReading={setReading}
+            solarInputMode={solarInputMode}
+            savingMeter={savingMeter}
+            editingId={editingId}
+            prevRow={prevRow}
+            prevGrid={prevGrid}
+            prevSolar={prevSolar}
+            deltaSolar={deltaSolar}
+            deltaGrid={deltaGrid}
+            effectiveMultiplier={effectiveMultiplier}
+            powerMeterItems={powerMeterItems}
+            getSolarLabel={getSolarLabel}
+            getGridLabel={getGridLabel}
+            getLatestGridReading={getLatestGridReading}
+            getGridMeterMult={getGridMeterMult}
+            configLoading={configLoading}
+            isAdmin={isAdmin}
+            isManager={isManager}
+            isDataAnalyst={isDataAnalyst}
+            submitMeter={submitMeter}
+            setPowerHistoryOpen={setPowerHistoryOpen}
+            setReplaceMeterIdx={setReplaceMeterIdx}
+            powerAnomaly={powerAnomaly}
+            anomalyRemark={anomalyRemark}
+            setAnomalyRemark={setAnomalyRemark}
+          />
         ) : (
-          // Non-solar plant: Date & Time inline, then dynamic grid meter rows (per-meter multipliers shown inline)
-          <div className="space-y-3">
-            {/* Date & Time */}
-            <div className="flex flex-wrap items-end gap-3">
-              <div>
-                <Label htmlFor="powersection-date-amp-time-2">Date &amp; Time</Label>
-                <Input type="datetime-local" value={dt} onChange={e => setDt(e.target.value)}
-                  className="h-10 w-full max-w-[260px] min-w-[220px] block text-center sm:text-left bg-muted/30 border-border/70 text-foreground/80" id="powersection-date-amp-time-2"/>
-              </div>
-            </div>
-
-            {/* Dynamic grid meter rows — MobileCarousel on mobile, stacked on desktop */}
-            <MobileCarousel
-              isMobile={isMobile}
-              items={Array.from({ length: gridMeterCount }, (_, i) => i)}
-              renderItem={(idx: number) => {
-                const meterLabel = getGridLabel(idx);
-                const val = gridMeterReadings[idx] ?? '';
-                const isFirst = idx === 0;
-                const handleChange = (v: string) => { setGridMeterReading(idx, v); if (isFirst) setReading(v); };
-                const isSavingThis2 = savingMeter === `grid-${idx}`;
-                const mMult = getGridMeterMult(idx);
-                const gmrPrevNS = (prevRow as any)?.grid_meter_readings as Record<string, number> | null | undefined;
-                const prevMeterValNS = gmrPrevNS?.[String(idx)] ?? (idx === 0 ? prevGrid : null);
-                const gridMeterChangedNS = val !== '' && (prevMeterValNS == null || +val !== prevMeterValNS);
-                const perMeterDeltaNS = gridMeterChangedNS && prevMeterValNS != null ? +val - prevMeterValNS : null;
-                const perMeterEffectiveNS = perMeterDeltaNS != null ? perMeterDeltaNS * mMult : null;
-                return (
-                  <div key={`grid-ns-${idx}`} className={isMobile ? 'px-4 py-3 space-y-2' : 'space-y-1'}>
-                    {/* Header: label + CT multiplier + history button */}
-                    <div className="flex items-center justify-between gap-2">
-                      <Label className="flex items-center gap-1.5">
-                        <GridPylonIcon className="h-3 w-3 text-info" />
-                        {meterLabel}
-                        <span
-                          className={`text-3xs font-mono px-1 py-0 rounded ${mMult !== 1 ? 'bg-warn-soft text-warn border border-warn' : 'text-muted-foreground/40'}`}
-                          title={`CT multiplier for this meter (configured in Plants → Power). Consumption = Δ × ${mMult}`}
-                        >
-                          ×{mMult}
-                        </span>
-                        {isFirst && editingId && <span className="text-xs text-highlight ml-1">(editing)</span>}
-                      </Label>
-                      {(isAdmin || isManager || isDataAnalyst) && (
-                        <Button variant="ghost" size="sm"
-                          className="h-8 w-8 p-0 shrink-0 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted"
-                          onClick={() => setReplaceMeterIdx(idx)} title={`Meter replaced — ${meterLabel}`}>
-                          <ChangeMeterIcon className="h-3.5 w-3.5" />
-                        </Button>
-                      )}
-                      {(isAdmin || isManager || isDataAnalyst) && (
-                        <Button variant="ghost" size="sm"
-                          className="h-8 w-8 p-0 shrink-0 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted"
-                          onClick={() => setPowerHistoryOpen({ type: 'grid', idx })} title={`View ${meterLabel} history`}>
-                          <History className="h-3.5 w-3.5" />
-                        </Button>
-                      )}
-                    </div>
-
-                    {isMobile ? (
-                      <>
-                        <OdometerRollerInput
-                          value={val} onChange={handleChange}
-                          alertState={gridMeterChangedNS ? (perMeterDeltaNS != null && perMeterDeltaNS < 0 ? 'warn' : 'ok') : 'neutral'}
-                          disabled={isSavingThis2}
-                          testId={`power-meter-input-${idx}`}
-                        />
-                        <div className="flex items-center justify-between text-xs px-0.5">
-                          <span className="text-muted-foreground">prev: <span className="font-mono-num">{prevMeterValNS != null ? fmtNum(prevMeterValNS) : '—'}</span>
-                            {perMeterDeltaNS != null && <span className={`font-mono-num font-medium ml-1 ${perMeterDeltaNS >= 0 ? 'text-info' : 'text-destructive'}`}>Δ {fmtNum(perMeterDeltaNS)}</span>}
-                          </span>
-                          {perMeterEffectiveNS != null && mMult !== 1 && (
-                            <span className="font-mono-num text-warn">{fmtNum(perMeterEffectiveNS, 2)} kWh eff.</span>
-                          )}
-                        </div>
-                        <Button
-                          disabled={isSavingThis2 || !gridMeterChangedNS}
-                          onClick={() => submitMeter('grid', idx)}
-                          className="w-full h-11 text-sm bg-primary text-primary-foreground hover:bg-primary/90 active:bg-primary shadow-sm"
-                          data-testid={`power-grid-save-ns-${idx}`}
-                        >
-                          {isSavingThis2 ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Save'}
-                        </Button>
-                      </>
-                    ) : (
-                      <>
-                        <div className="flex items-center gap-2">
-                          <Input type="number" step="any" value={val}
-                            onChange={e => handleChange(e.target.value)}
-                            placeholder="Grid meter reading"
-                            className="border-info focus-visible:ring-info"
-                            data-testid={`power-meter-input-${idx}`} />
-                          <Button
-                            size="sm"
-                            disabled={isSavingThis2 || !gridMeterChangedNS}
-                            onClick={() => submitMeter('grid', idx)}
-                            className="shrink-0 h-9 px-3 text-xs bg-primary text-primary-foreground hover:bg-primary/90"
-                            data-testid={`power-grid-save-ns-${idx}`}
-                          >
-                            {isSavingThis2 ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Save'}
-                          </Button>
-                        </div>
-                        {prevMeterValNS != null && (() => {
-                          const perMeterEffective = perMeterDeltaNS != null ? perMeterDeltaNS * mMult : null;
-                          return (
-                            <div className="text-xs text-muted-foreground space-y-0.5 mt-0.5">
-                              <span>
-                                Previous: <span className="font-mono-num">{fmtNum(prevMeterValNS)}</span>
-                                {perMeterDeltaNS != null && <> · Δ <span className="font-mono-num">{fmtNum(perMeterDeltaNS)}</span></>}
-                              </span>
-                              {perMeterEffective != null && mMult !== 1 && (
-                                <div className="inline-flex items-center gap-1.5 ml-2 rounded bg-warn-soft border border-warn px-2 py-0.5">
-                                  <Zap className="h-3 w-3 text-warn shrink-0" />
-                                  <span className="font-mono-num font-medium text-warn">{fmtNum(perMeterEffective, 2)} kWh</span>
-                                  <span className="text-warn/70">effective (×{mMult})</span>
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })()}
-                      </>
-                    )}
-                  </div>
-                );
-              }}
-            />
-          </div>
+          <NonSolarPowerForm
+            isMobile={isMobile}
+            dt={dt} setDt={setDt}
+            gridMeterCount={gridMeterCount}
+            gridMeterReadings={gridMeterReadings}
+            setGridMeterReadings={setGridMeterReadings}
+            setGridMeterReading={setGridMeterReading}
+            setReading={setReading}
+            savingMeter={savingMeter}
+            editingId={editingId}
+            prevRow={prevRow}
+            prevGrid={prevGrid}
+            deltaGrid={deltaGrid}
+            effectiveMultiplier={effectiveMultiplier}
+            getGridLabel={getGridLabel}
+            getLatestGridReading={getLatestGridReading}
+            getGridMeterMult={getGridMeterMult}
+            configLoading={configLoading}
+            isAdmin={isAdmin}
+            isManager={isManager}
+            isDataAnalyst={isDataAnalyst}
+            submitMeter={submitMeter}
+            setPowerHistoryOpen={setPowerHistoryOpen}
+            setReplaceMeterIdx={setReplaceMeterIdx}
+          />
         )}
 
         {editingId && (
           <div className="flex gap-2">
-            <Button variant="ghost" className="flex-1" onClick={() => { setEditingId(null); setReading(''); setSolarReading(''); setGridMeterReadings(['', '', '', '', '']); setSolarMeterReadings(['', '', '', '', '']); setSolarInputMode('raw'); }}>Cancel edit</Button>
+            <Button variant="ghost" className="flex-1" onClick={() => {
+              setEditingId(null);
+              setReading('');
+              setSolarReading('');
+              setGridMeterReadings(['', '', '', '', '']);
+              setSolarMeterReadings(['', '', '', '', '']);
+              setSolarInputMode('raw');
+            }}>
+              Cancel edit
+            </Button>
           </div>
         )}
       </Card>
 
-      {importOpen && (
-        <ImportReadingsDialog
-          title="Import Power Readings from CSV"
-          module="power"
-          plantId={plantId}
-          userId={user?.id ?? null}
-          schemaHint={POWER_SCHEMA}
-          templateFilename="power_readings_template.csv"
-          templateRow={POWER_TEMPLATE_ROW}
-          templateRows={POWER_TEMPLATE_ROWS}
-          helpText={POWER_HELP_TEXT}
-          validateRow={validatePowerRow}
-          insertRows={(rows, pid) => insertPowerReadings(rows, pid, user?.id ?? null)}
-          onClose={() => setImportOpen(false)}
-          onImported={() => { setImportOpen(false); invalidatePowerDash(qc); }}
-        />
-      )}
-      {powerHistoryOpen && plantId && (
-        <ReadingHistoryDialog
-          entityName={plants?.find((p: any) => p.id === plantId)?.name ?? 'Plant'}
-          module="power"
-          entityId={plantId}
-          multiplier={effectiveMultiplier}
-          gridMeterCount={gridMeterCount}
-          gridMeterNames={gridMeterNames}
-          gridMultipliers={Array.isArray(configMultiplierArr) ? (configMultiplierArr as any[]).map(Number) : []}
-          meterFilter={powerHistoryOpen}
-          solarInputMode={solarInputMode}
-          onClose={() => setPowerHistoryOpen(null)}
-        />
-      )}
-
-      {replaceMeterIdx != null && plantId && plant && (
-        <PowerMeterChangeDialog
-          plant={plant}
-          gridMeterCount={gridMeterCount}
-          gridMeterNames={gridMeterNames}
-          currentMultipliers={Array.isArray(configMultiplierArr) ? (configMultiplierArr as any[]).map(Number) : []}
-          initialMeterIndex={replaceMeterIdx}
-          onSuccess={() => qc.invalidateQueries({ queryKey: ['plant-power-config', plantId] })}
-          onClose={() => setReplaceMeterIdx(null)}
-        />
-      )}
-
-      <ReasonDialog
-        open={gapDialogOpen}
-        onOpenChange={setGapDialogOpen}
-        title="No power reading today — why?"
-        description="This explains the gap in Data Summary for today and exempts it from automated backfill. If a reading comes in later today, it takes priority over this note."
-        confirmLabel="Log reason"
-        busy={gapSaving}
-        onConfirm={async (category, detail) => {
-          setGapSaving(true);
-          const { error } = await supabase.from('reading_gap_reasons' as any).upsert(
-            [{
-              entity_type: 'power', entity_id: plantId, plant_id: plantId,
-              gap_date: todayDateStr, reason_category: category, reason_detail: detail || null,
-              logged_by: user?.id ?? null,
-            }] as any,
-            { onConflict: 'entity_type,entity_id,gap_date' },
-          );
-          setGapSaving(false);
-          if (error) { toast.error(friendlyError(error)); return; }
-          toast.success('Power: reason logged');
-          setGapDialogOpen(false);
-          qc.invalidateQueries({ queryKey: ['power-gap-reason-for-date', plantId, todayDateStr] });
-          qc.invalidateQueries({ queryKey: ['pivot-gap-reasons'] });
-        }}
+      <PowerFormDialogs
+        importOpen={importOpen} setImportOpen={setImportOpen}
+        powerHistoryOpen={powerHistoryOpen} setPowerHistoryOpen={setPowerHistoryOpen}
+        replaceMeterIdx={replaceMeterIdx} setReplaceMeterIdx={setReplaceMeterIdx}
+        gapDialogOpen={state.gapDialogOpen} setGapDialogOpen={state.setGapDialogOpen}
+        gapSaving={state.gapSaving} setGapSaving={state.setGapSaving}
+        plantId={plantId}
+        plant={plant}
+        gridMeterCount={gridMeterCount}
+        gridMeterNames={gridMeterNames}
+        configMultiplierArr={configMultiplierArr}
+        configLoading={configLoading}
+        effectiveMultiplier={effectiveMultiplier}
+        solarInputMode={solarInputMode}
+        plants={plants}
+        powerConfig={powerConfig}
+        todayDateStr={todayDateStr}
+        userId={user?.id ?? null}
+        qc={qc}
       />
     </div>
   );
 }
-
-// ─── Reading History Dialog ───────────────────────────────────────────────────
-
-type HistoryModule = 'locator' | 'well' | 'blending' | 'power';
