@@ -33,7 +33,7 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { useAppStore } from '@/store/appStore';
 import { toast } from 'sonner';
 import { NodeType, CustomColumn, buildColSequence, buildColXMap, TopoNode, TopoLink, NodePositionOverride, DragItem, PaletteItem, TopologyState, loadCustomNodes, saveCustomNodes, loadCustomColumns, saveCustomColumns, loadPosOverrides, savePosOverrides, loadPaletteItems, savePaletteItems, loadColWidths, saveColWidths } from './plantTopology/shared';
-import PlantTopologyContent from './PlantTopology/TopologyCanvas';
+import PlantTopologyContent from './plantTopology/TopologyCanvas';
 
 export default function PlantTopology() {
   const { isAdmin, isManager } = useAuth();
