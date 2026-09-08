@@ -189,6 +189,68 @@ jobs:
           path: frontend/playwright-report/
           retention-days: 7
 
+  e2e-authenticated:
+    name: E2E authenticated (Playwright vs local Supabase)
+    runs-on: ubuntu-latest
+
+    # Roadmap Phase 2: runs the 5 critical authenticated workflows
+    # against a disposable local Supabase instance (same one used by rls-tests).
+    # Seeds test users (Operator/Manager/Admin) and sample data, then runs
+    # the full E2E suite. Catches form submission, validation, and data
+    # integrity bugs that unit tests cannot.
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Start local Supabase (applies baseline + subsequent migrations)
+        run: supabase start
+
+      - name: Seed E2E test data
+        run: |
+          # Get the local Supabase connection details
+          DB_URL=$(supabase status --output json | jq -r '.db_url')
+          psql "$DB_URL" -f supabase/e2e-seed.sql
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install Playwright browsers
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Run authenticated E2E tests
+        working-directory: frontend
+        run: npx playwright test --grep="Workflow|Dashboard|Import"
+        env:
+          # Use the local Supabase instance
+          VITE_SUPABASE_URL: http://localhost:54321
+          VITE_SUPABASE_PUBLISHABLE_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0
+          # Test credentials (matching the seeded users)
+          E2E_EMAIL: e2e-operator@test.local
+          E2E_PASSWORD: testpassword123
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-authenticated
+          path: frontend/playwright-report/
+          retention-days: 7
+
+      - name: Stop local Supabase
+        if: always()
+        run: supabase stop
+
   rls-tests:
     name: RLS policy tests (pgTAP)
     runs-on: ubuntu-latest
