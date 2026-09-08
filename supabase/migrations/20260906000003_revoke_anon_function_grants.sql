@@ -1,5 +1,5 @@
 -- =============================================================================
--- Migration: 20260906000002_revoke_anon_function_grants.sql
+-- Migration: 20260906000003_revoke_anon_function_grants.sql
 --
 -- Purpose:
 --   Closes the anon-execute hole left by 20260906000001. That migration
