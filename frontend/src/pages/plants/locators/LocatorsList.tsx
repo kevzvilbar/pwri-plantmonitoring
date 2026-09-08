@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { deltaCache } from '@/lib/deltaCache';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useLocatorsForPlant } from '@/hooks/useLocators';
 import { supabase } from '@/integrations/supabase/client';
 import { useAppStore } from '@/store/appStore';
 import { usePlants } from '@/hooks/usePlants';
@@ -47,14 +48,7 @@ export function LocatorsList({ plantId, highlightId }: { plantId: string; highli
   const navigate = useNavigate();
   const { isManager, isAdmin, user, activeOperator } = useAuth();
 
-  const { data: locators, error: locatorsError, refetch: refetchLocators } = useQuery({
-    queryKey: ['locators', plantId],
-    queryFn: async () => {
-      const { data, error } = await supabase.from('locators').select('*').eq('plant_id', plantId).order('name');
-      if (error) throw error;
-      return data ?? [];
-    },
-  });
+  const { data: locators, error: locatorsError, refetch: refetchLocators } = useLocatorsForPlant(plantId);
 
   const { data: productMeters } = useQuery({
     queryKey: ['locators-fed-by-product-meters', plantId],

@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useWellsForPlant } from '@/hooks/useWells';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { usePlantMeterConfig, logStatusChange } from '../../../shared';
@@ -36,10 +37,7 @@ export function useWellsList(plantId: string, highlightId?: string | null) {
   const [wellPulseId, setWellPulseId] = useState<string | null>(null);
   const wellCardRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
-  const { data: wells } = useQuery({
-    queryKey: ['wells', plantId],
-    queryFn: async () => (await supabase.from('wells').select('*').eq('plant_id', plantId).order('name')).data ?? [],
-  });
+  const { data: wells, error: wellsError, refetch: refetchWells } = useWellsForPlant(plantId);
 
   const { data: latestWellReadings } = useQuery({
     queryKey: ['wells-latest-readings', plantId],

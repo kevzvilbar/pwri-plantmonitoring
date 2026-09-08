@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useROTrainsForPlant } from '@/hooks/useROTrains';
 import { supabase } from '@/integrations/supabase/client';
 import { usePlants } from '@/hooks/usePlants';
 import { useAuth } from '@/hooks/useAuth';
@@ -9,11 +10,7 @@ export function useTrainsListData(plantId: string) {
   const { data: plants } = usePlants();
   const plant = plants?.find((p) => p.id === plantId);
 
-  const { data: trains } = useQuery({
-    queryKey: ['ro-trains', plantId],
-    queryFn: async () =>
-      (await supabase.from('ro_trains').select('*').eq('plant_id', plantId).order('train_number')).data ?? [],
-  });
+  const { data: trains } = useROTrainsForPlant(plantId);
 
   const trainIdsKey = (trains ?? []).map((t: any) => t.id).join(',');
   const { data: recentTrainIds } = useQuery({
