@@ -204,6 +204,11 @@ jobs:
     # this family fails CI instead of waiting for another manual pass.
     # Every test file creates its own plants/users/rows and ends in
     # ROLLBACK, so nothing here depends on (or pollutes) seed data.
+    #
+    # 2026-09-08: Migrations are now squashed to a single baseline
+    # (20260908000000_baseline_schema.sql) + subsequent migrations.
+    # This job applies the baseline + any newer migrations, verifying
+    # the full schema can be recreated from scratch.
     steps:
       - uses: actions/checkout@v4
 
@@ -211,7 +216,7 @@ jobs:
         with:
           version: latest
 
-      - name: Start local Supabase (applies every migration from scratch)
+      - name: Start local Supabase (applies baseline + subsequent migrations)
         run: supabase start
 
       - name: Run pgTAP RLS tests

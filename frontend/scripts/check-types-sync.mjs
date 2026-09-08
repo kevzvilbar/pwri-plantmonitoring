@@ -28,6 +28,8 @@ import path from 'path';
 
 const TYPES_PATH = path.resolve('src/integrations/supabase/types.ts');
 const MIGRATIONS_DIR = path.resolve('../../supabase/migrations');
+// Only check migrations from baseline timestamp forward (baseline is 20260908000000)
+const BASELINE_TIMESTAMP = 20260908000000;
 
 function readFile(p) {
   return fs.readFileSync(p, 'utf8');
@@ -123,10 +125,18 @@ function main() {
   
   console.log(`Found ${typesTables.size} tables in types.ts`);
   
-  // Read all migration files in order
+  // Read all migration files in order, but only from baseline timestamp forward
   const migrationFiles = fs.readdirSync(MIGRATIONS_DIR)
     .filter(f => f.endsWith('.sql'))
+    .filter(f => {
+      // Extract timestamp from filename (YYYYMMDDNNNNNN)
+      const timestampStr = f.substring(0, 14);
+      const timestamp = parseInt(timestampStr, 10);
+      return timestamp >= BASELINE_TIMESTAMP;
+    })
     .sort();
+  
+  console.log(`Checking ${migrationFiles.length} migration(s) from baseline forward: ${migrationFiles.join(', ')}`);
   
   let allMigrationCols = new Map();
   
@@ -141,7 +151,7 @@ function main() {
     }
   }
   
-  console.log(`Found ${allMigrationCols.size} tables referenced in migrations`);
+  console.log(`Found ${allMigrationCols.size} tables referenced in migrations (baseline+)`);
   
   // Check for tables in migrations but missing from types
   let hasDrift = false;
