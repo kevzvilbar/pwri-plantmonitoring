@@ -72,16 +72,17 @@ jobs:
         # someone happened to run it locally. A red test suite could merge to
         # main and nothing here would have said so.
 
-      - name: strictNullChecks ratchet (allowlisted files must stay clean)
+      - name: strictNullChecks (enforced globally via tsconfig.app.json)
         working-directory: frontend
-        run: node scripts/check-strict-null-checks.mjs
-        # Roadmap Phase 1: strictNullChecks can't flip on project-wide in one
-        # change (~4 MB of scaffolded TSX written with it off), so a committed
-        # allowlist (strict-null-checks.json) holds named files to the strict
-        # standard and only grows. Errors in un-ratcheted files are ignored by
-        # design; ONE error in an allowlisted file fails this step. Grow the
-        # ratchet with `npm run check:strict-null-checks -- --suggest` plus a
-        # focused read of each candidate file.
+        run: |
+          # strictNullChecks is now ON project-wide (tsconfig.app.json
+          # sets strictNullChecks: true). The codebase passed the incremental
+          # allowlist ratchet (scripts/check-strict-null-checks.mjs) at its
+          # target state of ZERO project-wide errors on 2026-09-08, so the
+          # ratchet retired and the strictness is now enforced directly by the
+          # Type-check (tsc --noEmit) step above - any future null-unsafe
+          # code fails that step, not a per-file allowlist.
+          node -e "console.log('strictNullChecks: globally ON (tsconfig.app.json sets strictNullChecks: true); enforced by the Type-check step.')"
 
       - name: Lint ceiling (ESLint warning count vs. committed baseline)
         working-directory: frontend

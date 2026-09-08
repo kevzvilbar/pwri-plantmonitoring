@@ -186,4 +186,3 @@ export function usePretreatmentFormState(_trainId: string, _train: any): Pretrea
     BOOSTER_MODE_KEY,
   };
 }
-};

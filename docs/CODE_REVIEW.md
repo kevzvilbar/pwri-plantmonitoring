@@ -66,7 +66,7 @@ All three are "lock in the number, and any change is a reviewed decision":
 | Ratchet | File | Rule |
 |---|---|---|
 | Lint warnings | `frontend/lint-ceiling.json` | CI fails if the count ≠ ceiling. `node scripts/check-lint-ceiling.mjs --update` + commit the new value **with a `reason`**. |
-| strictNullChecks | `frontend/strict-null-checks.json` | Files in the allowlist must stay at 0 errors (CI). New clean files are added via `npm run check:strict-null-checks -- --suggest` + a focused read. Never remove an entry except by deleting the file. |
+| strictNullChecks | `frontend/tsconfig.app.json` | **Global — ON for the whole project** since 2026-09-08 (previously an allowlist ratchet in `strict-null-checks.json`; the codebase reached the ratchet's target state of ZERO project-wide errors, so the ratchet retired and `strictNullChecks: true` is now enforced directly by the CI `Type-check` step). Keep it on. |
 | Bundle size | `frontend/bundle-size.json` | CI fails if gzipped JS/CSS drifts >2 kB from baseline. `node scripts/check-bundle-size.mjs --update` + reason. |
 
 ## 5. TypeScript strictness & `as any`
@@ -76,10 +76,13 @@ All three are "lock in the number, and any change is a reviewed decision":
   when migrations change). Where a shape is genuinely dynamic (hand-written
   SQL views), type it as `unknown`/a record and narrow — see the existing
   `useReadingGaps.ts` precedent.
-- strictNullChecks is off project-wide but ratcheted; new code in
-  `src/lib`, `src/data`, `src/test` should type-check under
-  `tsconfig.strict.json` from day one and be added to the allowlist
-  immediately.
+- **`strictNullChecks` is ON project-wide** (`tsconfig.app.json` sets
+  `strictNullChecks: true` since 2026-09-08). New code must type-check with
+  it on; the CI `Type-check (tsc --noEmit)` step enforces this for every
+  file, not just an allowlist. The incremental allowlist ratchet
+  (`scripts/check-strict-null-checks.mjs` + `strict-null-checks.json`) is
+  retired — it reached its target state (ZERO project-wide errors, verified
+  via `tsconfig.strict.json`).
 
 ## 6. Dead-config & dependency hygiene
 
