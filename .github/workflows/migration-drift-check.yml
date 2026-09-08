@@ -1,0 +1,53 @@
+name: Migration drift check
+
+# Roadmap Phase 1, follow-on to the 2026-09 migration squash
+# (docs/MIGRATION-SQUASH.md). That squash exists because 41 schema changes
+# had been applied directly to production over ~4 months without ever
+# being committed as a migration file — found by diffing the remote
+# project's `supabase_migrations.schema_migrations` history against
+# supabase/migrations/. Squashing once doesn't stop it happening again;
+# this job is the guardrail. It runs `supabase db diff --linked`, which
+# is read-only (no schema changes, no writes to the migration history
+# table) and fails the moment prod has anything supabase/migrations/
+# doesn't — the same day it happens, not two months and 41 changes later.
+#
+# Requires two repo secrets that no other workflow here needs, since
+# every other job either runs against a disposable local Supabase or
+# talks to the anon/service-role REST API rather than the DB directly:
+#   SUPABASE_ACCESS_TOKEN  — personal/project access token, for `supabase login`
+#   SUPABASE_DB_PASSWORD   — the project's Postgres password, for `supabase link`
+# Both are scoped to this one job and never touch the frontend build.
+
+on:
+  schedule:
+    - cron: '0 1 * * *'   # 09:00 PHT daily — after the nightly summary job
+  workflow_dispatch: {}
+
+jobs:
+  drift-check:
+    name: Diff production schema against committed migrations
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Link to production project
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: supabase link --project-ref sosfbfxovtleuvahxvpm --password "${{ secrets.SUPABASE_DB_PASSWORD }}"
+
+      - name: Diff remote schema against supabase/migrations/
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          DIFF_OUTPUT=$(supabase db diff --linked --schema public)
+          echo "$DIFF_OUTPUT"
+          if [ -n "$DIFF_OUTPUT" ]; then
+            echo ""
+            echo "::error::Production schema has diverged from supabase/migrations/ — something was applied directly to prod again. See docs/MIGRATION-SQUASH.md for how to reconcile it (supabase db pull, review, commit)."
+            exit 1
+          fi
+          echo "No drift — production schema matches supabase/migrations/."
