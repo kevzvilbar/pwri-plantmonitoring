@@ -1,0 +1,25 @@
+name: "PWRI Plant Monitoring CodeQL Config"
+
+# Disable default queries and use extended security + quality suites
+disable-default-queries: false
+
+queries:
+  - uses: security-extended
+  - uses: security-and-quality
+
+paths-ignore:
+  - "node_modules"
+  - "dist"
+  - "build"
+  - "*.config.*"
+  - "*.lock"
+  - "e2e/**"
+  - "supabase/**"
+  - "docs/**"
+  - ".github/**"
+  - "scripts/**"
+
+# Custom queries for React/TypeScript patterns
+# These are built-in CodeQL query packs
+# security-extended: includes XSS, injection, auth bypass checks
+# security-and-quality: includes maintainability, reliability checks

@@ -287,3 +287,59 @@ jobs:
       - name: Stop local Supabase
         if: always()
         run: supabase stop
+
+  npm-audit:
+    name: npm audit (dependency vulnerabilities)
+    runs-on: ubuntu-latest
+    # Roadmap Phase 2: fails CI on high/critical vulnerabilities in dependencies.
+    # Runs after install so it uses the exact lockfile. Non-blocking for
+    # moderate/low (warns only) — high/critical fails the build.
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Run npm audit
+        working-directory: frontend
+        run: npm audit --audit-level=high
+        # Use --audit-level=high to fail only on high/critical.
+        # Moderate/low are reported but don't fail CI (too noisy for
+        # this codebase's dependency tree). Adjust if policy changes.
+
+  codeql:
+    name: CodeQL analysis
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
+    # Roadmap Phase 2: static analysis for security patterns in TypeScript/React.
+    # Runs on push to main and scheduled weekly. Results uploaded to
+    # GitHub Security tab for triage. Does not block merges on first
+    # introduction (alerts only) — can be tightened to 'error' later.
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [typescript]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          config-file: ./.github/codeql/codeql-config.yml
+          queries: +security-extended,+security-and-quality
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{ matrix.language }}"
