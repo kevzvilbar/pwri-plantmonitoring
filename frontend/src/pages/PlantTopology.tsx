@@ -32,7 +32,12 @@ import { usePlants } from '@/hooks/usePlants';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useAppStore } from '@/store/appStore';
 import { toast } from 'sonner';
-import { NodeType, CustomColumn, buildColSequence, buildColXMap, TopoNode, TopoLink, NodePositionOverride, DragItem, PaletteItem, TopologyState, loadCustomNodes, saveCustomNodes, loadCustomColumns, saveCustomColumns, loadPosOverrides, savePosOverrides, loadPaletteItems, savePaletteItems, loadColWidths, saveColWidths } from './plantTopology/shared';
+import { 
+  NodeType, CustomColumn, buildColSequence, buildColXMap, TopoNode, TopoLink, NodePositionOverride, DragItem, PaletteItem, TopologyState, 
+  loadCustomNodes, saveCustomNodes, loadCustomColumns, saveCustomColumns, loadPosOverrides, savePosOverrides, loadPaletteItems, savePaletteItems, loadColWidths, saveColWidths,
+  NODE_LABELS, CANVAS_REF, NODE_W, NODE_H, ROW_GAP, START_Y, COL_GAP, canConnect, buildTopology,
+} from './plantTopology/shared';
+import { useTopologyData, useSaveTopologyLinks } from '@/data/hooks/usePlantTopology';
 import PlantTopologyContent from './plantTopology/TopologyCanvas';
 
 export default function PlantTopology() {
@@ -47,6 +52,7 @@ export default function PlantTopology() {
   const effectivePlantId = activePlantId ?? selectedPlantId ?? plants[0]?.id ?? null;
 
   const { data: rawData, isLoading, refetch } = useTopologyData(effectivePlantId);
+  const saveLinksMutation = useSaveTopologyLinks();
 
   const [editMode, setEditMode]       = useState<'connect' | 'disconnect' | null>(null);
   const [pendingFrom, setPendingFrom] = useState<{ id: string; type: NodeType } | null>(null);

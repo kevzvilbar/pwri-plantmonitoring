@@ -165,6 +165,9 @@ export const POWER_COLS: Record<string, number> = {
   gridMeter:   28 + COL_GAP,
 };
 
+// Canvas ref placeholder for drag-drop calculations
+export const CANVAS_REF = { current: null as HTMLDivElement | null };
+
 export const NODE_LABELS: Record<NodeType, string> = {
   well:        'WELL',
   rawMeter:    'RAW METER',

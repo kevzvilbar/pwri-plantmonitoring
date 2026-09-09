@@ -31,6 +31,11 @@ export const queryKeys = {
   },
   compliance: {
     snapshots: (plantId: string) => ['complianceSnapshots', plantId] as const,
+    metrics: (plantId: string, days: number, from?: string, to?: string) => ['compliance', 'metrics', plantId, days, from, to] as const,
+    chemSupply: (plantId: string, lookbackDays: number) => ['compliance', 'chem-supply', plantId, lookbackDays] as const,
+    previousMetrics: (plantId: string, days: number) => ['compliance', 'previous-metrics', plantId, days] as const,
+    thresholds: (scope: string) => ['compliance', 'thresholds', scope] as const,
+    fleet: (plants: Array<{ id: string; name: string }>, days: number) => ['compliance', 'fleet', plants.map(p => p.id).join(','), days] as const,
   },
   staff: {
     list: () => ['staff'] as const,
@@ -66,6 +71,29 @@ export const queryKeys = {
     powerReadings: (since: string, refreshKey: number) => ['kpi', 'readings', 'power', since, refreshKey] as const,
     chemReadings: (since: string, refreshKey: number) => ['kpi', 'readings', 'chemical', since, refreshKey] as const,
     blendingReadings: (since: string, refreshKey: number) => ['kpi', 'readings', 'blending', since, refreshKey] as const,
+  },
+  readingHistory: {
+    list: (options: any) => ['reading-history', options.module, options.entityId, options.days, options.appliedFrom, options.appliedTo] as const,
+  },
+  auth: {
+    plantsForSignup: () => ['auth', 'plants-for-signup'] as const,
+    operatorPeers: (plantId: string) => ['auth', 'operator-peers', plantId] as const,
+    userProfile: (userId: string) => ['auth', 'user-profile', userId] as const,
+  },
+  imports: {
+    entityNameMap: (configId: string, plantId: string) => ['imports', 'entity-map', configId, plantId] as const,
+    entityNamesForTemplate: (configId: string, plantId: string) => ['imports', 'entity-names', configId, plantId] as const,
+    currentUser: () => ['imports', 'current-user'] as const,
+  },
+  plantTopology: {
+    data: (plantId: string) => ['plant-topology', 'data', plantId] as const,
+    links: (plantId: string) => ['plant-topology', 'links', plantId] as const,
+    wells: (plantId: string) => ['plant-topology', 'wells', plantId] as const,
+    roTrains: (plantId: string) => ['plant-topology', 'ro-trains', plantId] as const,
+    locators: (plantId: string) => ['plant-topology', 'locators', plantId] as const,
+    productMeters: (plantId: string) => ['plant-topology', 'product-meters', plantId] as const,
+    powerConfig: (plantId: string) => ['plant-topology', 'power-config', plantId] as const,
+    meterConfig: (plantId: string) => ['plant-topology', 'meter-config', plantId] as const,
   },
 } as const;
 
