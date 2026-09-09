@@ -22,9 +22,38 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  baseline-check:
+    name: Baseline Migration — existence gate
+    runs-on: ubuntu-latest
+    # Fails fast if the squashed baseline migration is missing.
+    # The baseline (20260908000000_baseline_schema.sql) must exist in
+    # supabase/migrations/ before any other migration jobs run, otherwise
+    # supabase start applies only the 5 Phase-4 patches — no core schema.
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify baseline migration exists
+        run: |
+          if [ ! -f supabase/migrations/20260908000000_baseline_schema.sql ]; then
+            echo "::error::Baseline migration missing: supabase/migrations/20260908000000_baseline_schema.sql"
+            echo "Run 'node scripts/squash-baseline.mjs' after reconciling prod drift (see docs/MIGRATION-SQUASH.md)"
+            exit 1
+          fi
+          echo "✅ Baseline migration found"
+
+      - name: Verify baseline is not empty
+        run: |
+          SIZE=$(wc -c < supabase/migrations/20260908000000_baseline_schema.sql)
+          if [ "$SIZE" -lt 10000 ]; then
+            echo "::error::Baseline migration appears empty/truncated ($SIZE bytes)"
+            exit 1
+          fi
+          echo "✅ Baseline migration size: $SIZE bytes"
+
   typescript:
     name: TypeScript — type-check + build
     runs-on: ubuntu-latest
+    needs: baseline-check
 
     steps:
       - uses: actions/checkout@v4
@@ -192,6 +221,7 @@ jobs:
   e2e-authenticated:
     name: E2E authenticated (Playwright vs local Supabase)
     runs-on: ubuntu-latest
+    needs: baseline-check
 
     # Roadmap Phase 2: runs the 5 critical authenticated workflows
     # against a disposable local Supabase instance (same one used by rls-tests).
@@ -254,6 +284,7 @@ jobs:
   rls-tests:
     name: RLS policy tests (pgTAP)
     runs-on: ubuntu-latest
+    needs: baseline-check
 
     # 2026-08-18 review — "the single highest-leverage fix available": a
     # string of RLS gaps this month (well/locator/product/pump/cip/incidents
