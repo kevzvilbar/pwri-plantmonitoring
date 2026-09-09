@@ -1,9 +1,25 @@
 import { useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { useQueryClient } from '@tanstack/react-query';
 import type { ScoreMatrix, ScoreMap2, EntityTypeScore, DayScore2, KpiRange2 } from './constants';
 import type { StaffMember } from '../../types';
 import { generateDays2, SHARED_COLS, DEFAULT_RO_OPERATOR_SHIFT_TARGET, roTargetForPlant, computeEntityOverallScore } from './constants';
+import {
+  usePlantFlags,
+  useEntityCountsPerPlant,
+  useWellsConfig,
+  useLocatorsConfig,
+  useTrainsConfig,
+  useMetersConfig,
+  useWellReadings,
+  useLocatorReadings,
+  useRoTrainReadings,
+  useProductMeterReadings,
+  usePowerReadings,
+  useChemReadings,
+  useBlendingReadings,
+  type PlantFlags,
+  type EntityCountsPerPlant,
+} from '@/data/hooks/useKpi';
 
 export type UseKpiDataOptions = {
   staff: StaffMember[];
@@ -349,6 +365,7 @@ function buildAppraisalStats(
 
 export function useKpiData(opts: UseKpiDataOptions): UseKpiDataResult {
   const { staff, roles, plants, range, refreshKey, viewMode } = opts;
+  const queryClient = useQueryClient();
 
   const days = useMemo(() => generateDays2(range), [range, refreshKey]);
   const since = useMemo(() => days[0] + 'T00:00:00+08:00', [days]);
@@ -372,13 +389,15 @@ export function useKpiData(opts: UseKpiDataOptions): UseKpiDataResult {
     [plants, operators]
   );
 
-  const plantFlags = useMemo(() => {
-    const m: Record<string, { has_solar: boolean; has_grid: boolean }> = {};
-    plants.forEach((p) => {
-      m[p.id] = { has_solar: (p as any).has_solar ?? false, has_grid: (p as any).has_grid ?? true };
-    });
-    return m;
-  }, [plants]);
+  // Use data layer hooks instead of inline queries
+  const { data: plantFlagsData = {}, isLoading: plantFlagsLoading } = usePlantFlags();
+  const plantFlags = plantFlagsData as Record<string, { has_solar: boolean; has_grid: boolean }>;
+
+  const { data: entityCountsData = { wellsPerPlant: {}, locatorsPerPlant: {}, trainsPerPlant: {}, metersPerPlant: {} }, isLoading: entityCountsLoading } = useEntityCountsPerPlant();
+  const wellsPerPlant = entityCountsData.wellsPerPlant;
+  const locatorsPerPlant = entityCountsData.locatorsPerPlant;
+  const trainsPerPlant = entityCountsData.trainsPerPlant;
+  const metersPerPlant = entityCountsData.metersPerPlant;
 
   const plantById = useMemo(() => {
     const m: Record<string, { ro_hourly_target?: number | string | null }> = {};
@@ -386,129 +405,27 @@ export function useKpiData(opts: UseKpiDataOptions): UseKpiDataResult {
     return m;
   }, [plants]);
 
-  const { data: wellsCfg = [] } = useQuery({
-    queryKey: ['kpi-cfg-wells'],
-    queryFn: async () => {
-      const { data } = await supabase.from('wells').select('id, plant_id, status');
-      return (data ?? []) as { id: string; plant_id: string; status: string }[];
-    },
-    staleTime: 10 * 60_000,
-  });
+  // Config queries (can be cached longer)
+  const { data: wellsCfg = [] } = useWellsConfig();
+  const { data: locatorsCfg = [] } = useLocatorsConfig();
+  const { data: trainsCfg = [] } = useTrainsConfig();
+  const { data: metersCfg = [] } = useMetersConfig();
 
-  const { data: locatorsCfg = [] } = useQuery({
-    queryKey: ['kpi-cfg-locators'],
-    queryFn: async () => {
-      const { data } = await supabase.from('locators').select('id, plant_id, status');
-      return (data ?? []) as { id: string; plant_id: string; status: string }[];
-    },
-    staleTime: 10 * 60_000,
-  });
+  // Reading queries
+  const { data: wellReadings = [], isLoading: l1, error: e1, refetch: r1 } = useWellReadings(since, refreshKey);
+  const { data: locReadings = [], isLoading: l2, error: e2, refetch: r2 } = useLocatorReadings(since, refreshKey);
+  const { data: roReadings = [], isLoading: l3, error: e3, refetch: r3 } = useRoTrainReadings(since, refreshKey);
+  const { data: meterReadings = [], isLoading: l4, error: e4, refetch: r4 } = useProductMeterReadings(since, refreshKey);
+  const { data: powerReadings = [], isLoading: l5, error: e5, refetch: r5 } = usePowerReadings(since, refreshKey);
+  const { data: chemReadings = [], isLoading: l6, error: e6, refetch: r6 } = useChemReadings(since, refreshKey);
+  const { data: blendingReadings = [], isLoading: l7, error: e7, refetch: r7 } = useBlendingReadings(since, refreshKey);
 
-  const { data: trainsCfg = [] } = useQuery({
-    queryKey: ['kpi-cfg-trains'],
-    queryFn: async () => {
-      const { data } = await (supabase as any).from('ro_trains').select('id, plant_id, status');
-      return (data ?? []) as { id: string; plant_id: string; status: string }[];
-    },
-    staleTime: 10 * 60_000,
-  });
-
-  const { data: metersCfg = [] } = useQuery({
-    queryKey: ['kpi-cfg-meters'],
-    queryFn: async () => {
-      const { data } = await (supabase as any).from('product_meters').select('id, plant_id, status');
-      return (data ?? []) as { id: string; plant_id: string; status: string }[];
-    },
-    staleTime: 10 * 60_000,
-  });
-
-  const wellsPerPlant    = useMemo(() => { const m: Record<string,number> = {}; wellsCfg.filter(w => w.status === 'Active').forEach(w => { m[w.plant_id] = (m[w.plant_id] ?? 0) + 1; }); return m; }, [wellsCfg]);
-  const locatorsPerPlant = useMemo(() => { const m: Record<string,number> = {}; locatorsCfg.filter(l => l.status === 'Active').forEach(l => { m[l.plant_id] = (m[l.plant_id] ?? 0) + 1; }); return m; }, [locatorsCfg]);
-  const trainsPerPlant   = useMemo(() => { const m: Record<string,string[]> = {}; trainsCfg.filter(t => t.status !== 'Offline').forEach(t => { (m[t.plant_id] = m[t.plant_id] ?? []).push(t.id); }); return m; }, [trainsCfg]);
-  const metersPerPlant   = useMemo(() => { const m: Record<string,number> = {}; metersCfg.filter(x => x.status === 'Active').forEach(x => { m[x.plant_id] = (m[x.plant_id] ?? 0) + 1; }); return m; }, [metersCfg]);
-
-  const { data: wellReadings = [], isLoading: l1, error: e1, refetch: r1 } = useQuery({
-    queryKey: ['kpi-r-wells', since, refreshKey],
-    queryFn: async () => {
-      const { data } = await supabase.from('well_readings')
-        .select('plant_id, well_id, reading_datetime, recorded_by, is_estimated').gte('reading_datetime', since);
-      return ((data ?? []) as any[])
-        .filter(r => !r.is_estimated && r.recorded_by != null) as { plant_id: string; well_id: string; reading_datetime: string; recorded_by: string | null }[];
-    },
-    staleTime: 3 * 60_000,
-  });
-
-  const { data: locReadings = [], isLoading: l2, error: e2, refetch: r2 } = useQuery({
-    queryKey: ['kpi-r-loc', since, refreshKey],
-    queryFn: async () => {
-      const { data } = await supabase.from('locator_readings')
-        .select('plant_id, locator_id, reading_datetime, recorded_by, is_estimated').gte('reading_datetime', since);
-      return ((data ?? []) as any[])
-        .filter(r => !r.is_estimated && r.recorded_by != null) as { plant_id: string; locator_id: string; reading_datetime: string; recorded_by: string | null }[];
-    },
-    staleTime: 3 * 60_000,
-  });
-
-  const { data: roReadings = [], isLoading: l3, error: e3, refetch: r3 } = useQuery({
-    queryKey: ['kpi-r-ro', since, refreshKey],
-    queryFn: async () => {
-      const { data } = await (supabase as any).from('ro_train_readings')
-        .select('plant_id, train_id, reading_datetime, recorded_by, is_estimated').gte('reading_datetime', since);
-      return ((data ?? []) as any[])
-        .filter(r => !r.is_estimated && r.recorded_by != null) as { plant_id: string; train_id: string; reading_datetime: string; recorded_by: string | null }[];
-    },
-    staleTime: 3 * 60_000,
-  });
-
-  const { data: meterReadings = [], isLoading: l4, error: e4, refetch: r4 } = useQuery({
-    queryKey: ['kpi-r-meter', since, refreshKey],
-    queryFn: async () => {
-      const { data } = await (supabase as any).from('product_meter_readings')
-        .select('plant_id, meter_id, reading_datetime, recorded_by, is_estimated').gte('reading_datetime', since);
-      return ((data ?? []) as any[])
-        .filter(r => !r.is_estimated && r.recorded_by != null) as { plant_id: string; meter_id: string; reading_datetime: string; recorded_by: string | null }[];
-    },
-    staleTime: 3 * 60_000,
-  });
-
-  const { data: powerReadings = [], isLoading: l5, error: e5, refetch: r5 } = useQuery({
-    queryKey: ['kpi-r-power', since, refreshKey],
-    queryFn: async () => {
-      const { data } = await supabase.from('power_readings')
-        .select('plant_id, reading_datetime, recorded_by, daily_solar_kwh, daily_grid_kwh, is_estimated')
-        .gte('reading_datetime', since);
-      return ((data ?? []) as any[])
-        .filter(r => !r.is_estimated && r.recorded_by != null) as { plant_id: string; reading_datetime: string; recorded_by: string | null; daily_solar_kwh: number | null; daily_grid_kwh: number | null }[];
-    },
-    staleTime: 3 * 60_000,
-  });
-
-  const { data: chemReadings = [], isLoading: l6, error: e6, refetch: r6 } = useQuery({
-    queryKey: ['kpi-r-chem', since, refreshKey],
-    queryFn: async () => {
-      const { data } = await supabase.from('chemical_dosing_logs')
-        .select('plant_id, log_datetime, recorded_by').gte('log_datetime', since);
-      return ((data ?? []) as any[])
-        .filter(r => r.recorded_by != null) as { plant_id: string; log_datetime: string; recorded_by: string }[];
-    },
-    staleTime: 3 * 60_000,
-  });
-
-  const { data: blendingReadings = [], isLoading: l7, error: e7, refetch: r7 } = useQuery({
-    queryKey: ['kpi-r-blending', since, refreshKey],
-    queryFn: async () => {
-      const { data } = await supabase.from('blending_events')
-        .select('plant_id, well_id, event_date, recorded_by, is_estimated')
-        .gte('event_date', since.slice(0, 10));
-      return ((data ?? []) as any[])
-        .filter(r => !r.is_estimated && r.recorded_by != null) as { plant_id: string; well_id: string; event_date: string; recorded_by: string | null }[];
-    },
-    staleTime: 3 * 60_000,
-  });
-
-  const isLoading = l1 || l2 || l3 || l4 || l5 || l6 || l7;
+  const isLoading = plantFlagsLoading || entityCountsLoading || l1 || l2 || l3 || l4 || l5 || l6 || l7;
   const kpiError = e1 || e2 || e3 || e4 || e5 || e6 || e7;
-  const retryKpiQueries = () => { r1(); r2(); r3(); r4(); r5(); r6(); r7(); };
+
+  const retryKpiQueries = () => {
+    queryClient.invalidateQueries({ queryKey: ['kpi'] });
+  };
 
   const teamCoverage = useMemo(
     () => buildTeamMatrix(plantsWithOps, days, todayStr, elapsedFraction, wellsPerPlant, locatorsPerPlant,

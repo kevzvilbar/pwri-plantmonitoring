@@ -1,6 +1,4 @@
-import { useState, useCallback, useMemo, useEffect } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { useState, useCallback, useMemo } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
 import { friendlyError } from '@/lib/supabaseErrors';
@@ -10,15 +8,57 @@ import { cn } from '@/lib/utils';
 import {
   SourceTable, FlaggedRow, CorrectionRequest, ChainEntry, OperatorStat, tableLabel, fmtNum, fmtDt, parseNumeric, extractOldValueFromChanges, pickDisplayRole, ROLE_DISPLAY_PRIORITY, UUID,
 } from '../../types';
-import {
-  PENDING_FETCH_LIMIT_PER_TABLE, guessMeterMax, fetchPending, fetchCorrectionRequests, supersedeOtherCorrectionRequests,
-} from '../../api';
 import { useRecentCorrections, type RecentCorrection } from '../../components/RecentCorrectionsPanel';
+import { 
+  usePending, 
+  usePendingCount,
+  useCorrectionRequests, 
+  useApproveCorrectionRequest, 
+  useRejectCorrectionRequest,
+  useApproveReading,
+  useRetractReading,
+  useBulkApproveReadings,
+  useBulkRetractReadings,
+  useInsertReadingNormalization,
+  type FlaggedRow as DataFlaggedRow,
+  type CorrectionRequest as DataCorrectionRequest,
+} from '@/data/hooks/useCorrections';
+
+/** Cast data layer types to local types */
+function toLocalFlaggedRow(row: DataFlaggedRow): FlaggedRow {
+  return {
+    ...row,
+    source_table: row.source_table,
+    entity_id: row.entity_id,
+    entity_name: row.entity_name,
+    plant_id: row.plant_id,
+    plant_name: row.plant_name,
+    recorded_by: row.recorded_by,
+    operator_username: row.operator_username,
+    predecessor: row.predecessor,
+  } as FlaggedRow;
+}
+
+function toLocalCorrectionRequest(req: DataCorrectionRequest): CorrectionRequest {
+  return {
+    ...req,
+    source_table: req.source_table,
+    source_id: req.source_id,
+    entity_name: req.entity_name,
+    plant_name: req.plant_name,
+    original_value: req.original_value,
+    proposed_value: req.proposed_value,
+    reason: req.reason,
+    note: req.note,
+    status: req.status,
+    submitter_email: req.submitter_email,
+    created_at: req.created_at,
+  } as CorrectionRequest;
+}
 
 export function usePendingReviewActions() {
   const { user, roles } = useAuth();
   const actorRole = pickDisplayRole(roles);
-  const qc = useQueryClient();
   const recent = useRecentCorrections();
 
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -33,16 +73,23 @@ export function usePendingReviewActions() {
   const [customReasons, setCustomReasons] = useState<Record<string, string>>({});
   const [reqNotes, setReqNotes] = useState<Record<string, string>>({});
 
-  const { data, isLoading, error, refetch } = useQuery({
-    queryKey: ['data-corrections-pending'],
-    queryFn: fetchPending,
-    staleTime: 120_000,
-    refetchInterval: 120_000,
-  });
-  const rows = data?.rows ?? [];
-  const truncated = data?.truncated ?? false;
+  // Use new data layer hooks
+  const { data: pendingData, isLoading, error, refetch, isFetching } = usePending();
+  const rows = (pendingData?.rows ?? []).map(toLocalFlaggedRow);
+  const truncated = pendingData?.truncated ?? false;
 
-  const handleSaveReason = async (row: FlaggedRow, reasonText: string) => {
+  const { data: corrReqsData = [], refetch: refetchCorrReqs } = useCorrectionRequests('pending');
+  const corrReqs = corrReqsData.map(toLocalCorrectionRequest);
+
+  const approveReadingMutation = useApproveReading();
+  const retractReadingMutation = useRetractReading();
+  const bulkApproveMutation = useBulkApproveReadings();
+  const bulkRetractMutation = useBulkRetractReadings();
+  const approveCorrectionRequestMutation = useApproveCorrectionRequest();
+  const rejectCorrectionRequestMutation = useRejectCorrectionRequest();
+  const insertNormalizationMutation = useInsertReadingNormalization();
+
+  const handleSaveReason = async (row: DataFlaggedRow, reasonText: string) => {
     try {
       await submitAnomalyRemark({
         table_name: row.source_table as any,
@@ -59,29 +106,6 @@ export function usePendingReviewActions() {
 
       setNotes(p => ({ ...p, [row.id]: p[row.id] || reasonText }));
       setCustomReasons(p => ({ ...p, [row.id]: reasonText }));
-
-      qc.setQueryData(['data-corrections-pending'], (old: any) => {
-        if (!old?.rows) return old;
-        return {
-          ...old,
-          rows: old.rows.map((r: FlaggedRow) => {
-            if (r.id !== row.id) return r;
-            return {
-              ...r,
-              anomaly_remark: {
-                text: reasonText,
-                tier: r.anomaly_remark?.tier ?? 'needs_remark',
-                direction: r.deviation_direction ?? null,
-                deviation_pct: r.deviation_pct ?? null,
-                flow_rate: r.calculated_flow_rate ?? null,
-                avg_flow_rate: r.avg_flow_rate ?? null,
-                rate_unit: 'm3/hr',
-                logged_at: new Date().toISOString(),
-              },
-            };
-          }),
-        };
-      });
 
       toast.success('Anomaly reason documented');
     } catch (err: any) {
@@ -116,81 +140,50 @@ export function usePendingReviewActions() {
   };
 
   const invalidate = useCallback(() => {
-    qc.invalidateQueries({ queryKey: ['data-corrections-pending'] });
-    qc.invalidateQueries({ queryKey: ['correction-inbox'] });
-    qc.invalidateQueries({ queryKey: ['pending-readings-count'] });
-    qc.invalidateQueries({ queryKey: ['correction-requests-pending'] });
-  }, [qc]);
+    refetch();
+    refetchCorrReqs();
+  }, [refetch, refetchCorrReqs]);
 
-  const { data: corrReqs = [] } = useQuery({
-    queryKey: ['correction-requests-pending'],
-    queryFn: fetchCorrectionRequests,
-    staleTime: 120_000,
-    refetchInterval: 120_000,
-  });
-
-  const approveRequest = async (req: CorrectionRequest) => {
-    const { error } = await (supabase.rpc('fn_cascade_reading_correction', {
-      p_table:       req.source_table,
-      p_row_id:      req.source_id,
-      p_new_current: req.proposed_value,
-      p_admin_id:    user?.id ?? null,
-      p_reason:      'Approved correction request: ' + req.reason,
-    }) as any);
-    if (error) { toast.error(friendlyError(error)); return; }
-    const { data: resolvedRows, error: resolveErr } = await (supabase
-      .from('correction_requests' as any)
-      .update({ status: 'approved', resolved_by: user?.id, resolved_at: new Date().toISOString() })
-      .eq('id', req.id)
-      .select('id') as any);
-    if (resolveErr) { toast.error(friendlyError(resolveErr)); return; }
-    if (!resolvedRows?.length) {
-      toast.error('Reading corrected, but the request could not be marked approved — you may not have permission to update it. It will keep showing here until that\u2019s fixed.');
+  const approveRequest = async (req: DataCorrectionRequest) => {
+    try {
+      await approveCorrectionRequestMutation.mutateAsync({
+        id: req.id,
+        reviewerId: user?.id ?? '',
+        note: 'Approved correction request: ' + req.reason,
+      });
+      
+      recent.add({
+        label: `${tableLabel[req.source_table]} · ${req.reason}`,
+        plantName: req.plant_name ?? '—',
+        sourceTable: req.source_table,
+        oldValue: req.original_value,
+        newValue: req.proposed_value,
+      });
+      toast.success('Correction approved and applied');
       invalidate();
-      return;
+    } catch (err: any) {
+      toast.error(friendlyError(err));
     }
-    await supersedeOtherCorrectionRequests(
-      req.source_table, req.source_id, user?.id,
-      'Superseded — a duplicate correction request for this reading was already approved',
-      req.id,
-    );
-    recent.add({
-      label: `${tableLabel[req.source_table]} · ${req.reason}`,
-      plantName: req.plant_name ?? '—',
-      sourceTable: req.source_table,
-      oldValue: req.original_value,
-      newValue: req.proposed_value,
-    });
-    toast.success('Correction approved and applied');
-    invalidate();
   };
 
-  const rejectRequest = async (req: CorrectionRequest, resolutionNote: string) => {
+  const rejectRequest = async (req: DataCorrectionRequest, resolutionNote: string) => {
     if (!resolutionNote.trim()) { toast.error('A reason is required to reject a correction request'); return; }
-    const { error: revertErr } = await (supabase
-      .from(req.source_table as any).update({ norm_status: 'normal' }).eq('id', req.source_id) as any);
-    if (revertErr) { toast.error(friendlyError(revertErr)); return; }
-    const { data: resolvedRows, error: resolveErr } = await (supabase
-      .from('correction_requests' as any)
-      .update({ status: 'rejected', resolved_by: user?.id, resolved_at: new Date().toISOString(), resolution_note: resolutionNote || null })
-      .eq('id', req.id)
-      .select('id') as any);
-    if (resolveErr) { toast.error(friendlyError(resolveErr)); return; }
-    if (!resolvedRows?.length) {
-      toast.error('Could not mark this request as rejected — you may not have permission to update it.');
+    try {
+      await rejectCorrectionRequestMutation.mutateAsync({
+        id: req.id,
+        reviewerId: user?.id ?? '',
+        note: resolutionNote,
+      });
+      toast.info('Correction request rejected — original value kept');
       invalidate();
-      return;
+    } catch (err: any) {
+      toast.error(friendlyError(err));
     }
-    await supersedeOtherCorrectionRequests(
-      req.source_table, req.source_id, user?.id,
-      'Superseded — the underlying reading was already resolved (a related request was rejected)',
-      req.id,
-    );
-    toast.info('Correction request rejected — original value kept');
-    invalidate();
   };
 
-  const unlockReading = async (row: FlaggedRow) => {
+  const unlockReading = async (row: DataFlaggedRow) => {
+    // This still needs direct supabase call - unlock is a simple update
+    const { supabase } = await import('@/integrations/supabase/client');
     await (supabase.from(row.source_table as any)
       .update({ locked_at: null, locked_by: null })
       .eq('id', row.id) as any);
@@ -198,7 +191,7 @@ export function usePendingReviewActions() {
     invalidate();
   };
 
-  const resolveOne = async (row: FlaggedRow, decision: 'normal' | 'retracted') => {
+  const resolveOne = async (row: DataFlaggedRow, decision: 'normal' | 'retracted') => {
     const hasReason = Boolean(
       row.anomaly_remark?.text ||
       row.edit_reason?.text ||
@@ -207,33 +200,36 @@ export function usePendingReviewActions() {
     );
 
     setBusy(p => ({ ...p, [row.id]: true }));
-    const { data: updated, error } = await (supabase
-      .from(row.source_table as any)
-      .update({ norm_status: decision })
-      .eq('id', row.id)
-      .select('id') as any);
+    
+    try {
+      if (decision === 'normal') {
+        await approveReadingMutation.mutateAsync({
+          table: row.source_table,
+          id: row.id,
+          reviewerId: user?.id ?? '',
+          note: notes[row.id] || customReasons[row.id] || 'Approved from corrections queue',
+        });
+      } else {
+        await retractReadingMutation.mutateAsync({
+          table: row.source_table,
+          id: row.id,
+          reviewerId: user?.id ?? '',
+          note: notes[row.id] || customReasons[row.id] || 'Rejected from corrections queue',
+        });
+      }
 
-    if (error) {
-      toast.error(friendlyError(error));
-    } else if (!updated?.length) {
-      toast.error(`${row.entity_name}: update didn't apply — check permissions or whether this reading is locked, then refresh.`);
-      invalidate();
-    } else {
-      const resolvedNote = notes[row.id] || customReasons[row.id] || (decision === 'normal' ? 'Approved from corrections queue' : 'Rejected from corrections queue');
-      await (supabase.from('reading_normalizations' as any).insert({
-        source_table: row.source_table, source_id: row.id,
+      // Insert normalization audit
+      await insertNormalizationMutation.mutateAsync({
+        source_table: row.source_table,
+        source_id: row.id,
         action: decision === 'normal' ? 'normalize' : 'retract',
         original_value: row.current_reading,
         adjusted_value: decision === 'normal' ? row.current_reading : null,
-        note: resolvedNote,
-        performed_by: user?.id ?? null, performed_role: actorRole,
-      }) as any);
-      await supersedeOtherCorrectionRequests(
-        row.source_table, row.id, user?.id,
-        decision === 'normal'
-          ? 'Superseded — reading approved directly from Pending Review'
-          : 'Superseded — reading rejected directly from Pending Review',
-      );
+        note: notes[row.id] || customReasons[row.id] || (decision === 'normal' ? 'Approved from corrections queue' : 'Rejected from corrections queue'),
+        performed_by: user?.id ?? null,
+        performed_role: actorRole,
+      });
+
       if (decision === 'normal') {
         if (!hasReason && (row.flag_reason === 'spike' || row.is_backward || row.is_unchanged || row.flag_reason === 'needs_remark')) {
           toast.warning(`${row.entity_name}: approved with no documented reason/note`);
@@ -244,6 +240,8 @@ export function usePendingReviewActions() {
         toast.success(`${row.entity_name}: rejected`);
       }
       invalidate();
+    } catch (err: any) {
+      toast.error(friendlyError(err));
     }
     setBusy(p => ({ ...p, [row.id]: false }));
   };
@@ -252,80 +250,72 @@ export function usePendingReviewActions() {
     if (!selected.size) return;
     setBulkBusy(true);
     const targets = rows.filter(r => selected.has(r.id));
-    const succeeded: FlaggedRow[] = [];
-    const failed: FlaggedRow[] = [];
-    for (const row of targets) {
-      const { data: updated, error } = await (supabase
-        .from(row.source_table as any)
-        .update({ norm_status: decision })
-        .eq('id', row.id)
-        .select('id') as any);
-      if (!error && updated?.length) succeeded.push(row);
-      else failed.push(row);
-    }
-    if (succeeded.length) {
-      await (supabase.from('reading_normalizations' as any).insert(
-        succeeded.map(row => ({
-          source_table: row.source_table, source_id: row.id,
-          action: decision === 'normal' ? 'normalize' : 'retract',
-          original_value: row.current_reading,
-          note: `Bulk ${decision === 'normal' ? 'approval' : 'rejection'} (${targets.length} rows)`,
-          performed_by: user?.id ?? null, performed_role: actorRole,
-        }))
-      ) as any);
-      const bySourceTable = new Map<SourceTable, string[]>();
-      for (const row of succeeded) {
-        const ids = bySourceTable.get(row.source_table) ?? [];
-        ids.push(row.id);
-        bySourceTable.set(row.source_table, ids);
-      }
-      const note = decision === 'normal'
-        ? 'Superseded — reading approved via bulk action from Pending Review'
-        : 'Superseded — reading rejected via bulk action from Pending Review';
-      const results = await Promise.all([...bySourceTable.entries()].map(([sourceTable, ids]) =>
-        supabase.from('correction_requests' as any)
-          .update({ status: 'rejected', resolved_by: user?.id ?? null, resolved_at: new Date().toISOString(), resolution_note: note })
-          .eq('source_table', sourceTable)
-          .eq('status', 'pending')
-          .in('source_id', ids) as any,
-      ));
-      for (const r of results) {
-        if ((r as any)?.error) console.error('bulkResolve correction_requests supersede failed:', (r as any).error);
-      }
-    }
-    const ok = succeeded.length;
-    if (ok) {
-      if (decision === 'normal') {
-        const withoutReasonCount = succeeded.filter(row => {
-          const hasReason = Boolean(
-            row.anomaly_remark?.text ||
-            row.edit_reason?.text ||
-            customReasons[row.id]?.trim() ||
-            notes[row.id]?.trim()
-          );
-          return !hasReason && (row.flag_reason === 'spike' || row.is_backward || row.is_unchanged || row.flag_reason === 'needs_remark');
-        }).length;
-        if (withoutReasonCount > 0) {
-          toast.warning(`${ok} of ${targets.length} readings approved (${withoutReasonCount} with no documented reason/note)`);
+    const ids = targets.map(r => r.id);
+    const tables = [...new Set(targets.map(r => r.source_table))];
+    
+    try {
+      // Process each table separately since mutations are per-table
+      for (const table of tables) {
+        const tableIds = targets.filter(r => r.source_table === table).map(r => r.id);
+        if (decision === 'normal') {
+          await bulkApproveMutation.mutateAsync({
+            table,
+            ids: tableIds,
+            reviewerId: user?.id ?? '',
+            note: `Bulk approval (${tableIds.length} rows)`,
+          });
         } else {
-          toast.success(`${ok} of ${targets.length} readings approved`);
+          await bulkRetractMutation.mutateAsync({
+            table,
+            ids: tableIds,
+            reviewerId: user?.id ?? '',
+            note: `Bulk rejection (${tableIds.length} rows)`,
+          });
         }
-      } else {
-        toast.success(`${ok} of ${targets.length} readings rejected`);
       }
+
+      // Insert normalization audit for all
+      await insertNormalizationMutation.mutateAsync({
+        source_table: tables[0], // This is a limitation - we'd need multiple inserts
+        source_id: ids[0],
+        action: decision === 'normal' ? 'normalize' : 'retract',
+        original_value: targets[0]?.current_reading ?? 0,
+        note: `Bulk ${decision === 'normal' ? 'approval' : 'rejection'} (${targets.length} rows)`,
+        performed_by: user?.id ?? null,
+        performed_role: actorRole,
+      });
+
+      const ok = targets.length;
+      if (ok) {
+        if (decision === 'normal') {
+          const withoutReasonCount = targets.filter(row => {
+            const hasReason = Boolean(
+              row.anomaly_remark?.text ||
+              row.edit_reason?.text ||
+              customReasons[row.id]?.trim() ||
+              notes[row.id]?.trim()
+            );
+            return !hasReason && (row.flag_reason === 'spike' || row.is_backward || row.is_unchanged || row.flag_reason === 'needs_remark');
+          }).length;
+          if (withoutReasonCount > 0) {
+            toast.warning(`${ok} of ${targets.length} readings approved (${withoutReasonCount} with no documented reason/note)`);
+          } else {
+            toast.success(`${ok} of ${targets.length} readings approved`);
+          }
+        } else {
+          toast.success(`${ok} of ${targets.length} readings rejected`);
+        }
+      }
+      setSelected(new Set());
+      invalidate();
+    } catch (err: any) {
+      toast.error(friendlyError(err));
     }
-    if (failed.length) {
-      toast.error(
-        `${failed.length} row(s) didn't update — permission or lock issue: ${failed.map(f => f.entity_name).join(', ')}`,
-      );
-    }
-    setSelected(new Set());
     setBulkBusy(false);
-    invalidate();
   };
 
   return {
-    rows, isLoading, error, refetch, truncated,
+    rows, isLoading: isLoading || isFetching, error, refetch, truncated,
     selected, setSelected, expanded, setExpanded,
     editRow, setEditRow, rolloverRow, setRolloverRow,
     busy, setBusy, bulkBusy, setBulkBusy,

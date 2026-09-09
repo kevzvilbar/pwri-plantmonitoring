@@ -78,6 +78,7 @@ export interface FlaggedRow {
   previous_operator_username?: string | null;
   current_reading: number;
   daily_volume: number | null;
+  recorded_by: string | null;
   operator_username: string | null;
   norm_status: string;
   flag_reason?: 'backward' | 'unchanged' | 'edited' | 'spike' | string;
@@ -113,6 +114,12 @@ export interface FlaggedRow {
   deviation_direction?: 'high' | 'low' | null;
   elapsed_hours?: number | null;
   diagnostic_summary?: string;
+  /** Predecessor reading for chain context */
+  predecessor?: {
+    reading_datetime: string;
+    current_reading: number;
+    recorded_by: string | null;
+  } | null;
 }
 
 

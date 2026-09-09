@@ -1,10 +1,11 @@
 import { useEffect, useMemo } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { StaffMember, fullName, getPresence, getRoleConfig, OnlineIds } from '../../types';
 import { useAuth } from '@/hooks/useAuth';
 import { usePresence } from '@/hooks/usePresence';
 import { usePlants } from '@/hooks/usePlants';
+import { useStaff, useAllUserRoles } from '@/data/hooks/useStaff';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
@@ -14,18 +15,10 @@ export function useStaffData(onlineIds: OnlineIds) {
   const { isUserOnline } = usePresence();
   const queryClient = useQueryClient();
 
-  const { data: staff = [], refetch: refetchStaff } = useQuery<StaffMember[]>({
-    queryKey: ['staff'],
-    queryFn: async () => {
-      const { data: rpcData, error: rpcError } = await (supabase as any).rpc('get_all_staff_profiles');
-      if (!rpcError && rpcData) return rpcData as StaffMember[];
-      const { data, error } = await supabase.from('user_profiles').select('*').order('last_name');
-      if (error) throw error;
-      return (data ?? []) as StaffMember[];
-    },
-    staleTime: 0,
-  });
-
+  const { data: staffData = [], refetch: refetchStaff } = useStaff();
+  // Cast to local StaffMember type (fields are compatible)
+  const staff = staffData as StaffMember[];
+  
   useEffect(() => {
     const ch = supabase
       .channel('staff-presence')
@@ -36,17 +29,7 @@ export function useStaffData(onlineIds: OnlineIds) {
     return () => { supabase.removeChannel(ch); };
   }, [refetchStaff]);
 
-  const { data: roles = [] } = useQuery({
-    queryKey: ['all-roles'],
-    queryFn: async () => {
-      const { data: rpcData, error: rpcError } = await (supabase as any).rpc('get_all_user_roles');
-      if (!rpcError && rpcData) return rpcData as { user_id: string; role: string }[];
-      const { data } = await (supabase as any).from('user_profiles').select('id, user_roles(role)');
-      return (data ?? []).flatMap((p: any) =>
-        (p.user_roles ?? []).map((r: any) => ({ user_id: p.id, role: r.role }))
-      );
-    },
-  });
+  const { data: roles = [] } = useAllUserRoles();
 
   const onlineCount = staff.filter((s) => onlineIds.has(s.id) || getPresence(s.last_seen_at, s.status, onlineIds.has(s.id)) === 'active').length;
   const leadershipCount = staff.filter((s) => {
