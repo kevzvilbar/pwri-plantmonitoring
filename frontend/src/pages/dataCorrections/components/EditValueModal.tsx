@@ -101,19 +101,19 @@ export function EditValueModal({
     if (!isReasonComplete(reason, customReason)) { toast.error('A correction reason is required'); return; }
     setBusy(true);
     try {
-      const { data, error } = await ((supabase.rpc as any)('fn_cascade_reading_correction', {
+      const { data, error } = await supabase.rpc('fn_cascade_reading_correction', {
         p_table:       row.source_table,
         p_row_id:      row.id,
         p_new_current: parsed,
         p_admin_id:    user?.id ?? null,
         p_reason:      resolveReason(reason, customReason),
-      }) as any);
+      });
       if (error) throw error;
       await supersedeOtherCorrectionRequests(
         row.source_table, row.id, user?.id,
         'Superseded — value corrected directly from Pending Review',
       );
-      toast.success(`Corrected: ${fmtNum(row.current_reading)} → ${fmtNum(parsed)}${data?.cascade_id ? ' · next row updated' : ''}`);
+      toast.success(`Corrected: ${fmtNum(row.current_reading)} → ${fmtNum(parsed)}${(data as any)?.cascade_id ? ' · next row updated' : ''}`);
       onDone({ oldValue: row.current_reading, newValue: parsed });
     } catch (e) {
       toast.error(friendlyError(e));

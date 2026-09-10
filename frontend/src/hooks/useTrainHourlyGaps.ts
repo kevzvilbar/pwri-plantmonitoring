@@ -57,7 +57,7 @@ async function fetchTrainHourlyGaps(plantIds: string[]): Promise<TrainHourlyGap[
     // *before* it, and per-train row volume here is a handful of
     // transitions total.
     supabase.from('train_status_log').select('train_id,status,reason,confirmed_at').in('train_id', trainIds),
-    supabase.from('ro_train_data_gaps' as any).select('train_id,source_table,gap_start_at').in('train_id', trainIds),
+    supabase.from('ro_train_data_gaps').select('train_id,source_table,gap_start_at').in('train_id', trainIds),
   ]);
   if (roReadingsRes.error) throw roReadingsRes.error;
   if (preReadingsRes.error) throw preReadingsRes.error;
@@ -67,7 +67,7 @@ async function fetchTrainHourlyGaps(plantIds: string[]): Promise<TrainHourlyGap[
   // matching the tolerant pattern logStatusChange() already uses elsewhere
   // for not-yet-migrated tables.
   const existingGapKeys = new Set(
-    existingGapsRes.error ? [] : (existingGapsRes.data ?? []).map((g: any) => `${g.train_id}|${g.source_table}|${g.gap_start_at}`),
+    existingGapsRes.error ? [] : (existingGapsRes.data ?? []).map((g) => `${g.train_id}|${g.source_table}|${g.gap_start_at}`),
   );
 
   const readingsByTrain = new Map<string, { ro: string[]; pre: string[] }>();

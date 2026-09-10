@@ -278,7 +278,7 @@ export function useWellRowActions({
 
     let autoApproved = false;
     if (isPending && canAutoApprove && savedRow?.id) {
-      const { error: autoErr } = await (supabase.rpc as any)('fn_cascade_reading_correction', {
+      const { error: autoErr } = await supabase.rpc('fn_cascade_reading_correction', {
         p_table:       'well_readings',
         p_row_id:      savedRow.id,
         p_new_current: savedRow.current_reading,

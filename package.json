@@ -1,7 +1,7 @@
 {
   "name": "pwri-monitoring",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "scripts": {
     "build": "npm --prefix frontend run build"
   },

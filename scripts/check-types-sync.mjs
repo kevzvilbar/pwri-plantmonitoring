@@ -45,13 +45,7 @@ const createdTables = new Set();
 // (supabase gen types) may not have been produced yet in the same push.
 // For those cases we allow a short-lived exception so CI can run and tests
 // be fixed/landed in a follow-up. Remove entries here after regenerating
-// frontend/src/integrations/supabase/types.ts with the Supabase CLI.
-const IGNORED_TABLES = new Set([
-  'backfill_sweep_log',
-  'ro_train_data_gaps',
-  'cascade_config',
-  'cascade_depth_audit',
-]);
+const IGNORED_TABLES = new Set([]);
 
 const migrationFiles = readdirSync(MIGRATIONS_DIR).filter((f) => f.endsWith('.sql')).sort();
 for (const file of migrationFiles) {

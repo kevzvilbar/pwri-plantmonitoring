@@ -237,11 +237,11 @@ export function TrainLogModal({ trainId, trainLabel, plantId, onClose, initialTa
     queryKey: ['ro-train-data-gaps', trainId],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('ro_train_data_gaps' as any)
+        .from('ro_train_data_gaps')
         .select('id,source_table,gap_start_at,reason_category,reason_detail')
         .eq('train_id', trainId);
       if (error) return [];
-      return (data ?? []) as any[];
+      return data ?? [];
     },
     staleTime: 15_000,
   });

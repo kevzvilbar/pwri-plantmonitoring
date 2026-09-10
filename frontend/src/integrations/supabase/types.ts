@@ -157,6 +157,56 @@ export type Database = {
         }
         Relationships: []
       }
+      backfill_sweep_log: {
+        Row: {
+          changed: boolean
+          created_at: string
+          date_key: string
+          entity_fk_col: string | null
+          entity_fk_val: string | null
+          id: string
+          method: string
+          new_value: number | null
+          old_value: number | null
+          plant_id: string | null
+          table_name: string
+        }
+        Insert: {
+          changed: boolean
+          created_at?: string
+          date_key: string
+          entity_fk_col?: string | null
+          entity_fk_val?: string | null
+          id?: string
+          method: string
+          new_value?: number | null
+          old_value?: number | null
+          plant_id?: string | null
+          table_name: string
+        }
+        Update: {
+          changed?: boolean
+          created_at?: string
+          date_key?: string
+          entity_fk_col?: string | null
+          entity_fk_val?: string | null
+          id?: string
+          method?: string
+          new_value?: number | null
+          old_value?: number | null
+          plant_id?: string | null
+          table_name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "backfill_sweep_log_plant_id_fkey"
+            columns: ["plant_id"]
+            isOneToOne: false
+            referencedRelation: "plants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       blending_events: {
         Row: {
           event_date: string
@@ -3804,6 +3854,63 @@ export type Database = {
           },
           {
             foreignKeyName: "ro_pretreatment_readings_train_id_fkey"
+            columns: ["train_id"]
+            isOneToOne: false
+            referencedRelation: "ro_trains"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ro_train_data_gaps: {
+        Row: {
+          gap_end_at: string
+          gap_start_at: string
+          id: string
+          logged_at: string
+          logged_by: string | null
+          missed_hours: number
+          plant_id: string
+          reason_category: string
+          reason_detail: string | null
+          source_table: string
+          train_id: string
+        }
+        Insert: {
+          gap_end_at: string
+          gap_start_at: string
+          id?: string
+          logged_at?: string
+          logged_by?: string | null
+          missed_hours: number
+          plant_id: string
+          reason_category: string
+          reason_detail?: string | null
+          source_table: string
+          train_id: string
+        }
+        Update: {
+          gap_end_at?: string
+          gap_start_at?: string
+          id?: string
+          logged_at?: string
+          logged_by?: string | null
+          missed_hours?: number
+          plant_id?: string
+          reason_category?: string
+          reason_detail?: string | null
+          source_table?: string
+          train_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ro_train_data_gaps_plant_id_fkey"
+            columns: ["plant_id"]
+            isOneToOne: false
+            referencedRelation: "plants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ro_train_data_gaps_train_id_fkey"
             columns: ["train_id"]
             isOneToOne: false
             referencedRelation: "ro_trains"

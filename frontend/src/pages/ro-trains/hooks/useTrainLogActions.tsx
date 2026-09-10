@@ -148,7 +148,7 @@ export function useTrainLogActions(options: TrainLogActionsOptions): TrainLogAct
     if (!gapDialogTarget) return;
     setGapDialogBusy(true);
     try {
-      const { error } = await supabase.from('ro_train_data_gaps' as any).upsert({
+      const { error } = await supabase.from('ro_train_data_gaps').upsert({
         train_id: trainId,
         plant_id: plantId,
         source_table: gapDialogTarget.sourceTable,
