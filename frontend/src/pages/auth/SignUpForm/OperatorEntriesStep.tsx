@@ -25,7 +25,6 @@ export function OperatorEntriesStep({
     onOperatorChange(i, k, v);
 
   const handleValidate = useMemo(() => {
-    let lastError = '';
     return () => {
       for (let i = 0; i < operatorCount; i++) {
         const o = operators[i];

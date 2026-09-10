@@ -89,7 +89,7 @@ export function usePendingReviewActions() {
   const rejectCorrectionRequestMutation = useRejectCorrectionRequest();
   const insertNormalizationMutation = useInsertReadingNormalization();
 
-  const handleSaveReason = async (row: FlaggedRow, reasonText: string) => {
+  const handleSaveReason = async (row: DataFlaggedRow, reasonText: string) => {
     try {
       await submitAnomalyRemark({
         table_name: row.source_table as any,
@@ -181,7 +181,7 @@ export function usePendingReviewActions() {
     }
   };
 
-  const unlockReading = async (row: FlaggedRow) => {
+  const unlockReading = async (row: DataFlaggedRow) => {
     // This still needs direct supabase call - unlock is a simple update
     const { supabase } = await import('@/integrations/supabase/client');
     await (supabase.from(row.source_table as any)
@@ -191,7 +191,7 @@ export function usePendingReviewActions() {
     invalidate();
   };
 
-  const resolveOne = async (row: FlaggedRow, decision: 'normal' | 'retracted') => {
+  const resolveOne = async (row: DataFlaggedRow, decision: 'normal' | 'retracted') => {
     const hasReason = Boolean(
       row.anomaly_remark?.text ||
       row.edit_reason?.text ||
