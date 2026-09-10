@@ -144,9 +144,9 @@ export function ProductMetersCard({ plant, highlightId }: { plant: any; highligh
               .eq('meter_id', id)
               .order('reading_datetime', { ascending: false })
               .limit(1);
-            return (fb ?? []) as { meter_id: string; reading_datetime: string }[];
+            return (fb ?? []) as unknown as { meter_id: string; reading_datetime: string }[];
           }
-          return (data ?? []) as { meter_id: string; reading_datetime: string }[];
+          return (data ?? []) as unknown as { meter_id: string; reading_datetime: string }[];
         }),
       );
       return results.flatMap((r) => r);
