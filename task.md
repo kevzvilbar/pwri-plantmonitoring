@@ -3,8 +3,12 @@
 ## 🔴 Critical / High
 - [x] Fix circuit breaker SQL bug (boolean into integer variable) — `20260909000004_phase4_cascade_circuit_breaker.sql` (Committed)
 - [x] Fix N+1 power query → added DB migration `20260910000001_latest_power_readings_fn.sql`, updated both `todayPowerRaw` and `yPower` queries in `useDashboardQueries.ts` (Committed)
-- [x] Type `useDashboardAggregates` params & return values — replaced `Record<string, any>` with `DashboardAggregatesParams` interface; ensured `production`, `consumption`, `rawWaterVol`, `yProduction`, etc. are strictly typed `number` with clean narrowing (Committed)
-- [x] Type `useDashboardQueries.ts` — replaced `(supabase.from('table' as any) as any)` with typed `supabase.from('table')` across 30+ queries, reducing `as any` casts by >65% and uncovering real nullable fields (`calculated_cost`)
+- [x] Modularize Dashboard "God Component" complex into domain hooks (`useProductionStats`, `usePowerStats`, `useQualityStats`, `useCostStats`, `useDashboardAlerts`) (Committed)
+- [x] Replace `Record<string, any>` in `useDashboardAlerts` with strictly typed `DashboardAlertsParams` interface (Committed)
+- [x] Remove legacy `as any` casts in dashboard queries now enabled by 72/72 table types (Committed)
+- [x] Ratchet down ESLint warning ceiling from 2486 → 2447 (**-39 warnings total**) (Committed)
+- [x] Ratchet down bundle size from 1161.8 kB → 1161.5 kB (Committed)
+- [x] Delete dead monolithic files `useDashboardQueries.ts` (935 lines) and `useDashboardAggregates.ts` (588 lines) (Committed)
 
 ## 🟡 Medium
 - [x] Replace `next-themes` in `sonner.tsx` with Zustand `useThemeStore` (Committed)

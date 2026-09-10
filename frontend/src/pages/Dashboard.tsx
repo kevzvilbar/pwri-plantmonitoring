@@ -5,53 +5,23 @@ import { supabase } from '@/integrations/supabase/client';
 import { usePlantStore } from '@/store/plantStore';
 import { useChartStore } from '@/store/chartStore';
 import { useAlertStore } from '@/store/alertStore';
-import type { PlantAlert, PlantAlertSeverity } from '@/store/alertStore';
-// ─── Hybrid Strategy: Backend + Frontend Delta Handling ───────────────────────
-// deltaCache sits in front of every raw-reading computation.
-//   • Cache hit  → return the stored value instantly (no recomputation).
-//   • Cache miss → compute from raw rows, populate cache, return computed value.
-//   • Mutation   → Operations/ROTrains/Plants call flushDeltaCache(entityIds)
-//                  which clears affected entries so the next render recomputes.
-// hydrateFromStoredDeltas seeds the cache from DB-stored deltas (daily_volume,
-// permeate_meter_delta) so that simple reads never recompute unnecessarily.
-import { deltaCache, hydrateFromStoredDeltas, flushDeltaCache } from '@/lib/deltaCache';
 import { usePlants } from '@/hooks/usePlants';
-import { fmtNum, nrwColor, ALERTS } from '@/lib/calculations';
-import {
-  evaluateROMeterSpike, computeROAverageFlowRate, evaluatePhaseImbalance, evaluatePhaseLoss, dpPsi,
-  type ROMeterKind,
-} from '@/lib/roReadingGuards';
-import { computeRate, classifyDeviation, computeRollingAverageRateFromDeltas, type VolumePoint } from '@/lib/flowRateGuards';
-import { StatusPill } from '@/components/StatusPill';
-import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
-import { Progress } from '@/components/ui/progress';
-import { Skeleton } from '@/components/ui/skeleton';
-import { format, subDays, startOfDay, parseISO, addDays } from 'date-fns';
-import {
-  AlertTriangle, LayoutGrid, ListCollapse, ExternalLink,
-  ArrowUpRight, ArrowDownRight, Minus, CalendarDays,
-  History, RefreshCw
-} from 'lucide-react';
-import { useTrainAutoOffline } from '@/hooks/useTrainAutoOffline';
+import { format, subDays } from 'date-fns';
+import { CalendarDays } from 'lucide-react';
 import { DowntimeEventsModal } from '@/components/DowntimeEventsModal';
-import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
-import { calc } from '@/lib/calculations';
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle,
-} from '@/components/ui/dialog';
-import {
-  DashboardViewMode, VIEW_MODE_KEY, readSavedViewMode, pctDelta,
-  OVERVIEW_CHART_METRICS, QUALITY_CHART_METRICS, COST_CHART_METRICS, ChartMetric,
-} from '@/components/dashboard/types';
-import { PlantPulseHero }       from '@/components/dashboard/PlantPulseHero';
-import { PlantHealthStrip }    from '@/components/dashboard/PlantHealthStrip';
+import { DashboardViewMode, VIEW_MODE_KEY } from '@/components/dashboard/types';
+import { PlantPulseHero } from '@/components/dashboard/PlantPulseHero';
+import { PlantHealthStrip } from '@/components/dashboard/PlantHealthStrip';
 import { RangeAndMonthlyPicker } from '@/components/dashboard/RangeAndMonthlyPicker';
 import { DashboardSectionNav } from '@/components/dashboard/DashboardSectionNav';
 import { loadThresholds, DEFAULT_THRESHOLDS } from '@/pages/Compliance';
-import { useDashboardQueries } from './useDashboardQueries';
-import { useDashboardAggregates } from './useDashboardAggregates';
-import { useDashboardAlerts } from './useDashboardAlerts';
+import {
+  useProductionStats,
+  usePowerStats,
+  useQualityStats,
+  useCostStats,
+  useDashboardAlerts,
+} from './Dashboard/hooks';
 import { OverviewCluster } from './Dashboard/OverviewCluster';
 import { QualityCluster } from './Dashboard/QualityCluster';
 import { CostCluster } from './Dashboard/CostCluster';
@@ -187,62 +157,56 @@ export default function Dashboard() {
   const today     = new Date(_localDateStr + 'T00:00:00').toISOString();   // local midnight → ISO
   const yesterday = new Date(format(subDays(new Date(), 1), 'yyyy-MM-dd') + 'T00:00:00').toISOString();
 
-  // ----- Today aggregates from raw tables -----
-  //
-  // IMPORTANT: locator_readings and well_readings do NOT have a plant_id column.
-  // Filtering them with .in('plant_id', plantIds) returns zero rows — which is
-  // why the stat cards were showing 0 m³. We must first resolve the entity IDs
-  // (locator_id / well_id) for this plant, then query by those IDs.
-
-  const {
-    _locatorIds, _directLocatorIds, _directProductMeterIds, _wellIds,
-    todayLocators, todayWells, todayProductMeters,
-    plantMeterConfigs, permeateProductionPlantIds, productExcludedPlantIds,
-    _permeateTrainMeta, _permeateTrainIds, _permeateTrainPlantMap,
-    todayRoPermeate, _dayBeforeYesterdayKey, yRoPermeate,
-    todayPowerRaw, todayPower, powerIsStale, dashPowerConfigMap,
-    yLocators, yWells, yProductMeters, yPower,
-    _qualityTrainMeta, _qualityTrainIds, _qualityTrainMeta2, _wellNamesByTrainWell,
-    latestRO, roHistory10d, roAvgFlowByTrain,
-    recentPretreatment, latestPumpReadings,
-    powerHistory, powerAvgByPlant, prevPowerRowByPlant,
-    productMetersHaveData, todayAllPermeate,
-    todayCostsRaw, todayCosts, costDataDate, costIsStale, dashTariffByPlant, dashDosingPeso,
-    blendingTodayRows,
-  } = useDashboardQueries({
-    plantIds, today, yesterday, _localDateStr, _yesterdayKey, plants,
+  // ── Domain 1: Production (volume, flow, NRW, blending) ─────────────────────
+  const prodStats = useProductionStats({
+    plantIds,
+    today,
+    yesterday,
+    _localDateStr,
+    _yesterdayKey,
   });
 
-  const {
-    _todayKey, rawWaterVol, roPermeateProduction, yRoPermeateProduction,
-    production, consumption, kwh, powerCostPeso: todayPowerCostPeso, nrw, pv,
-    yRawWaterVol, yProduction, yConsumption, yKwh, dProduction, dConsumption, dRawWater, dKwh,
-    yNrw, nrwBreached, roByTrain, wellsByQuality,
-    avgPermTds, avgFeedTds, avgRecovery, avgTurb, wellsWithTds, wellsWithNtu, avgRawTds, avgRawTurb,
-    plantCodeById, hasCostData, prodCostsChem, chemCostTotal, chemCost, powerCost, productionCost,
-    blending, chemInv, trainGaps, wellGaps, locatorGaps, trainHourlyGaps, _localROPerTrain, feed, feedAlerts,
-  } = useDashboardAggregates({
-    plantIds, today, yesterday, _localDateStr, _yesterdayKey, plants, selectedPlantId,
-    _directLocatorIds, _directProductMeterIds,
-    todayLocators, todayWells, todayProductMeters,
-    permeateProductionPlantIds, productExcludedPlantIds,
-    todayRoPermeate, yRoPermeate, todayPowerRaw, todayPower, dashPowerConfigMap,
-    yLocators, yWells, yProductMeters, yPower,
-    _qualityTrainMeta2, _wellNamesByTrainWell, latestRO,
-    todayAllPermeate, todayCosts, costIsStale, dashTariffByPlant, dashDosingPeso,
-    blendingTodayRows,
+  // ── Domain 2: Water Quality (RO trains, well quality, recovery, TDS, NTU) ───
+  const qualityStats = useQualityStats({
+    plantIds,
+    plants,
+    todayWells: prodStats.todayWells,
   });
 
-  const {
-    plantNameById, roMeterSpikes, pretreatmentAlerts, pumpElectricalAlerts,
-  } = useDashboardAlerts({
-    selectedPlantId, addAlerts, removeAlerts, plants, plantIds,
-    latestRO, roAvgFlowByTrain, recentPretreatment, latestPumpReadings,
-    powerAvgByPlant, prevPowerRowByPlant, todayPower, powerIsStale,
-    nrw, nrwBreached, feedAlerts, trainGaps, wellGaps, locatorGaps, trainHourlyGaps, chemInv, consumption, _qualityTrainMeta2,
+  // ── Domain 3: Power (meter readings, CT ratios, kWh, power cost, PV ratio) ──
+  const powerStats = usePowerStats({
+    plantIds,
+    today,
+    yesterday,
+    production: prodStats.production,
   });
 
-  const netBalance = (production ?? 0) - (consumption ?? 0);
+  // ── Domain 4: Financials & Costs (chemical, power, total production cost) ────
+  const costStats = useCostStats({
+    plantIds,
+    todayPowerCostPeso: powerStats.powerCostPeso,
+  });
+
+  // ── Domain 5: Dashboard Alerts (thresholds, gaps, spikes → global alertStore)
+  useDashboardAlerts({
+    selectedPlantId,
+    addAlerts,
+    removeAlerts,
+    plants,
+    plantIds,
+    latestRO: qualityStats.latestRO,
+    roAvgFlowByTrain: qualityStats.roAvgFlowByTrain,
+    recentPretreatment: qualityStats.recentPretreatment,
+    latestPumpReadings: qualityStats.latestPumpReadings,
+    powerAvgByPlant: powerStats.powerAvgByPlant,
+    prevPowerRowByPlant: powerStats.prevPowerRowByPlant,
+    todayPower: powerStats.todayPower,
+    powerIsStale: powerStats.powerIsStale,
+    nrw: prodStats.nrw,
+    nrwBreached: prodStats.nrwBreached,
+    qualityTrainMeta2: qualityStats.qualityTrainMeta2,
+  });
+
   const selectedPlantName = (selectedPlantId ? plants?.find(p => p.id === selectedPlantId)?.name : null) || 'All Production Facilities';
 
   return (
@@ -253,8 +217,8 @@ export default function Dashboard() {
         selectedPlantName={selectedPlantName}
         openIncidentCount={openIncidentCount}
         secondsAgo={secondsAgo}
-        production={production}
-        dProduction={dProduction}
+        production={prodStats.production}
+        dProduction={prodStats.dProduction}
         viewMode={viewMode}
         onViewModeChange={persistViewMode}
         onOpenDowntime={() => setDowntimeOpen(true)}
@@ -301,13 +265,13 @@ export default function Dashboard() {
       <DashboardSectionNav />
 
       <OverviewCluster
-        consumption={consumption}
-        dConsumption={dConsumption}
-        nrw={nrw}
-        yNrw={yNrw}
-        rawWaterVol={rawWaterVol}
-        dRawWater={dRawWater}
-        blending={blending}
+        consumption={prodStats.consumption}
+        dConsumption={prodStats.dConsumption}
+        nrw={prodStats.nrw}
+        yNrw={prodStats.yNrw}
+        rawWaterVol={prodStats.rawWaterVol}
+        dRawWater={prodStats.dRawWater}
+        blending={prodStats.blending}
         viewMode={viewMode}
         expandedMetric={expandedMetric}
         plantIds={plantIds}
@@ -315,31 +279,31 @@ export default function Dashboard() {
       />
 
       <QualityCluster
-        avgFeedTds={avgFeedTds}
-        roByTrain={roByTrain}
-        avgPermTds={avgPermTds}
+        avgFeedTds={qualityStats.avgFeedTds}
+        roByTrain={qualityStats.roByTrain}
+        avgPermTds={qualityStats.avgPermTds}
         thresholds={thresholds}
-        wellsByQuality={wellsByQuality}
-        plantCodeById={plantCodeById}
+        wellsByQuality={qualityStats.wellsByQuality}
+        plantCodeById={qualityStats.plantCodeById}
         plantIds={plantIds}
-        avgRecovery={avgRecovery}
-        avgRawTds={avgRawTds}
-        avgRawTurb={avgRawTurb}
+        avgRecovery={qualityStats.avgRecovery}
+        avgRawTds={qualityStats.avgRawTds}
+        avgRawTurb={qualityStats.avgRawTurb}
         viewMode={viewMode}
         expandedMetric={expandedMetric}
         onMetricClick={handleMetricClick}
       />
 
       <CostCluster
-        productionCost={productionCost}
-        costIsStale={costIsStale}
-        costDataDate={costDataDate}
-        powerCost={powerCost}
-        chemCost={chemCost}
-        kwh={kwh}
-        powerIsStale={powerIsStale}
-        dKwh={dKwh}
-        pv={pv}
+        productionCost={costStats.productionCost}
+        costIsStale={costStats.costIsStale}
+        costDataDate={costStats.costDataDate}
+        powerCost={costStats.powerCost}
+        chemCost={costStats.chemCost}
+        kwh={powerStats.kwh}
+        powerIsStale={powerStats.powerIsStale}
+        dKwh={powerStats.dKwh}
+        pv={powerStats.pv}
         thresholds={thresholds}
         viewMode={viewMode}
         expandedMetric={expandedMetric}
