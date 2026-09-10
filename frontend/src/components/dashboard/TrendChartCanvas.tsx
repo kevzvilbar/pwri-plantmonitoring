@@ -10,7 +10,7 @@
 // Moved verbatim from TrendChart.tsx — no logic or markup changes, only
 // the props needed to reach the free variables it already used.
 import React from 'react';
-import { ResponsiveContainer } from 'recharts';
+
 import { useQuery } from '@tanstack/react-query';
 import { useAppStore } from '@/store/appStore';
 import { loadThresholds, DEFAULT_THRESHOLDS } from '@/pages/Compliance';
@@ -61,7 +61,7 @@ export function TrendChartCanvas(props: Record<string, any>) {
   const permTdsMax = thresholds?.permeate_tds_max ?? DEFAULT_THRESHOLDS.permeate_tds_max;
 
   return (
-    <ResponsiveContainer width="100%" height="100%">
+    <>
       {(hasRoDrill && roDrillMode === 'by-train' && viewGran === 'daily') ? (
         <RoDrillByTrainChart
           roTrainDrillData={roTrainDrillData}
@@ -207,6 +207,6 @@ export function TrendChartCanvas(props: Record<string, any>) {
           NegativeAwareTooltip={NegativeAwareTooltip}
         />
       )}
-    </ResponsiveContainer>
+    </>
   );
 }

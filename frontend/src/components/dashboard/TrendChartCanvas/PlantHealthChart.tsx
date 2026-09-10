@@ -1,5 +1,5 @@
 import React from 'react';
-import { ComposedChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ReferenceLine } from 'recharts';
+import { ResponsiveContainer,  ComposedChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ReferenceLine  } from 'recharts';
 
 const CHART_CURSOR = {
   stroke: 'hsl(var(--highlight))',
@@ -65,7 +65,8 @@ export function PlantHealthChart({
   const bottomMargin = phDrillMode === 'hourly' ? 32 : 0;
 
   return (
-    <ComposedChart data={phActiveData} margin={{ top: 8, right: 8, left: 0, bottom: bottomMargin }}>
+    <ResponsiveContainer width="100%" height="100%">
+      <ComposedChart data={phActiveData} margin={{ top: 8, right: 8, left: 0, bottom: bottomMargin }}>
       <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} strokeOpacity={0.6} />
       <XAxis
         dataKey="date"
@@ -128,5 +129,6 @@ export function PlantHealthChart({
         connectNulls
       />
     </ComposedChart>
+    </ResponsiveContainer>
   );
 }

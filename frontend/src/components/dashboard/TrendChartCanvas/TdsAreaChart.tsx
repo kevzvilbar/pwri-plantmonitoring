@@ -1,5 +1,5 @@
 import React from 'react';
-import { AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid, ReferenceLine } from 'recharts';
+import { ResponsiveContainer,  AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid, ReferenceLine  } from 'recharts';
 import { C_TDS } from '@/lib/chartColors';
 
 const INSTRUMENT_TOOLTIP_STYLE: React.CSSProperties = {
@@ -21,7 +21,8 @@ export function TdsAreaChart({
   NegativeAwareTooltip: React.ComponentType<any>;
 }) {
   return (
-    <AreaChart data={trendRows} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+    <ResponsiveContainer width="100%" height="100%">
+      <AreaChart data={trendRows} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
       <defs>
         <linearGradient id="tdsFill" x1="0" y1="0" x2="0" y2="1">
           <stop offset="5%"  stopColor={C_TDS} stopOpacity={0.28} />
@@ -67,5 +68,6 @@ export function TdsAreaChart({
         name="Permeate TDS (ppm)"
       />
     </AreaChart>
+    </ResponsiveContainer>
   );
 }

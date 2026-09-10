@@ -1,5 +1,5 @@
 import React from 'react';
-import { ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, CartesianGrid, Legend } from 'recharts';
+import { ResponsiveContainer,  ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, CartesianGrid, Legend  } from 'recharts';
 import { makeDrillableBarShape } from '../TrendChartDrillKit';
 
 const INSTRUMENT_TOOLTIP_STYLE: React.CSSProperties = {
@@ -27,7 +27,8 @@ export function RawWaterByWellDailyChart({
   visibleWellEntities: { id: string; label: string; color: string }[];
 }) {
   return (
-    <ComposedChart data={wellEntityRows} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+    <ResponsiveContainer width="100%" height="100%">
+      <ComposedChart data={wellEntityRows} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
       <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} strokeOpacity={0.6} />
       <XAxis dataKey="date" tick={{ fontSize: 10, fontWeight: 500 }} stroke="hsl(var(--muted-foreground))" axisLine={false} tickLine={false} />
       <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" tickFormatter={formatYAxis} width={44} axisLine={false} tickLine={false} />
@@ -44,6 +45,7 @@ export function RawWaterByWellDailyChart({
         <Line key={id} type="monotone" dataKey={id} name={label} stroke={color} strokeWidth={2} dot={false} />
       ))}
     </ComposedChart>
+    </ResponsiveContainer>
   );
 }
 
@@ -64,7 +66,8 @@ export function RawWaterByWellBarChart({
     : wellEntityRows;
 
   return (
-    <ComposedChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+    <ResponsiveContainer width="100%" height="100%">
+      <ComposedChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
       <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} strokeOpacity={0.6} />
       <XAxis dataKey="date" tick={{ fontSize: 10, fontWeight: 500 }} stroke="hsl(var(--muted-foreground))" axisLine={false} tickLine={false} />
       <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" tickFormatter={formatYAxis} width={44} axisLine={false} tickLine={false} />
@@ -90,5 +93,6 @@ export function RawWaterByWellBarChart({
         />
       ))}
     </ComposedChart>
+    </ResponsiveContainer>
   );
 }

@@ -1,5 +1,5 @@
 import React from 'react';
-import { AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
+import { ResponsiveContainer,  AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid  } from 'recharts';
 import { C_TDS, C_RECOVERY } from '@/lib/chartColors';
 
 const INSTRUMENT_TOOLTIP_STYLE: React.CSSProperties = {
@@ -30,7 +30,8 @@ export function RoDrillByHourChart({
   const tooltipLabel = metric === 'tds' ? 'Avg TDS' : 'Avg Recovery';
 
   return (
-    <AreaChart data={roHourDrillData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+    <ResponsiveContainer width="100%" height="100%">
+      <AreaChart data={roHourDrillData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
       <defs>
         <linearGradient id="hourlyDrillFill" x1="0" y1="0" x2="0" y2="1">
           <stop offset="5%"  stopColor={strokeColor} stopOpacity={0.28} />
@@ -66,5 +67,6 @@ export function RoDrillByHourChart({
         dot={false}
       />
     </AreaChart>
+    </ResponsiveContainer>
   );
 }

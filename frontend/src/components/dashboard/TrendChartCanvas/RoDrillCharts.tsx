@@ -1,7 +1,7 @@
 import React from 'react';
-import {
+import { ResponsiveContainer, 
   ComposedChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Legend, LineChart, Line,
-} from 'recharts';
+ } from 'recharts';
 import { C_PRODUCTION, C_CONSUMPTION, C_NRW } from '@/lib/chartColors';
 import { makeDrillableBarShape } from '../TrendChartDrillKit';
 
@@ -30,7 +30,8 @@ export function RoDrillByTrainChart({
   visibleTrainEntities: { id: string; label: string; color: string }[];
 }) {
   return (
-    <LineChart data={roTrainDrillData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+    <ResponsiveContainer width="100%" height="100%">
+      <LineChart data={roTrainDrillData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
       <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} strokeOpacity={0.6} />
       <XAxis dataKey="date" tick={{ fontSize: 10, fontWeight: 500 }} stroke="hsl(var(--muted-foreground))" axisLine={false} tickLine={false} />
       <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" width={44} axisLine={false} tickLine={false} />
@@ -47,6 +48,7 @@ export function RoDrillByTrainChart({
         <Line key={id} type="monotone" dataKey={id} name={label} stroke={color} strokeWidth={2} dot={false} />
       ))}
     </LineChart>
+    </ResponsiveContainer>
   );
 }
 
@@ -67,7 +69,8 @@ export function RoDrillByTrainBarChart({
     : roTrainDrillData;
 
   return (
-    <ComposedChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+    <ResponsiveContainer width="100%" height="100%">
+      <ComposedChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
       <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} strokeOpacity={0.6} />
       <XAxis dataKey="date" tick={{ fontSize: 10, fontWeight: 500 }} stroke="hsl(var(--muted-foreground))" axisLine={false} tickLine={false} />
       <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" width={44} axisLine={false} tickLine={false} />
@@ -96,5 +99,6 @@ export function RoDrillByTrainBarChart({
         />
       ))}
     </ComposedChart>
+    </ResponsiveContainer>
   );
 }

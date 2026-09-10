@@ -1,5 +1,5 @@
 import React from 'react';
-import { AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
+import { ResponsiveContainer,  AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid  } from 'recharts';
 
 const INSTRUMENT_TOOLTIP_STYLE: React.CSSProperties = {
   background: 'hsl(var(--card))',
@@ -23,7 +23,8 @@ export function CostAreaChart({
   NegativeAwareTooltip: React.ComponentType<any>;
 }) {
   return (
-    <AreaChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+    <ResponsiveContainer width="100%" height="100%">
+      <AreaChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
       <defs>
         <linearGradient id={fillId} x1="0" y1="0" x2="0" y2="1">
           <stop offset="5%"  stopColor={strokeColor} stopOpacity={0.28} />
@@ -44,5 +45,6 @@ export function CostAreaChart({
         name={name}
       />
     </AreaChart>
+    </ResponsiveContainer>
   );
 }

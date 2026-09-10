@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { calc, ALERTS } from '@/lib/calculations';
 import { evaluateROMeterSpike } from '@/lib/roReadingGuards';
 import { isAnomalyRemarkValid } from '@/lib/anomalyRemarks';
+import type { DeviationResult } from '@/lib/flowRateGuards';
 
 export interface PretreatmentCalculations {
   dp: number | null;
@@ -33,9 +34,9 @@ export interface PretreatmentCalculations {
   feedNegWarn: boolean;
   permNegWarn: boolean;
   rejNegWarn: boolean;
-  feedSpike: { tier: string };
-  permSpike: { tier: string };
-  rejSpike: { tier: string };
+  feedSpike: DeviationResult & { label: string; detail: string };
+  permSpike: DeviationResult & { label: string; detail: string };
+  rejSpike: DeviationResult & { label: string; detail: string };
   feedHighWarn: boolean;
   permHighWarn: boolean;
   rejHighWarn: boolean;
@@ -86,6 +87,7 @@ export function usePretreatmentCalculations(
     const rejNegWarn = prevRejMeter != null && !isNaN(rejCurr) && rejCurr < prevRejMeter;
 
     const feedSpike = evaluateROMeterSpike('feed', feedDelta, mDurHr, avgFeedFlowRate);
+    const permSpike = evaluateROMeterSpike('permeate', permDelta, mDurHr, avgPermFlowRate);
     const rejSpike = evaluateROMeterSpike('reject', rejDelta, mDurHr, avgRejFlowRate);
 
     const feedHighWarn = !feedNegWarn && feedSpike.tier === 'critical';

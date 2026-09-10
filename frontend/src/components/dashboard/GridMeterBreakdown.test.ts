@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computeGridMeterBreakdown, buildKwhSummaryCsv, GRID_METER_OTHER_KEY } from './TrendChartPivotShared';
+import { computeGridMeterBreakdown, buildKwhSummaryCsv, GRID_METER_OTHER_KEY, type GridPowerReadingRow } from './TrendChartPivotShared';
 
 // TZ-safe local-noon instants: day bucketing uses date-fns format() in the
 // local timezone, so building instants from local Date components and

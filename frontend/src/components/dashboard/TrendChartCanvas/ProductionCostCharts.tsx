@@ -1,5 +1,5 @@
 import React from 'react';
-import { BarChart, LineChart, Bar, Line, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
+import { ResponsiveContainer,  BarChart, LineChart, Bar, Line, XAxis, YAxis, Tooltip, CartesianGrid  } from 'recharts';
 
 const INSTRUMENT_TOOLTIP_STYLE: React.CSSProperties = {
   background: 'hsl(var(--card))',
@@ -26,7 +26,8 @@ export function ProductionCostStackedChart({
   showChemCostLine: boolean;
 }) {
   return (
-    <BarChart data={trendRows} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+    <ResponsiveContainer width="100%" height="100%">
+      <BarChart data={trendRows} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
       <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} strokeOpacity={0.6} />
       <XAxis dataKey="date" tick={{ fontSize: 10, fontWeight: 500 }} stroke="hsl(var(--muted-foreground))" axisLine={false} tickLine={false} />
       <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--accent))" tickFormatter={(v) => `₱${formatYAxis(v)}`} width={44} axisLine={false} tickLine={false} />
@@ -42,6 +43,7 @@ export function ProductionCostStackedChart({
         <Bar dataKey="chemCost" name="Chem (₱/m³)" fill="hsl(var(--highlight))" stackId="cost" radius={[3, 3, 0, 0]} maxBarSize={32} />
       )}
     </BarChart>
+    </ResponsiveContainer>
   );
 }
 
@@ -55,7 +57,8 @@ export function ProductionCostLineChart({
   showChemCostLine: boolean;
 }) {
   return (
-    <LineChart data={trendRows} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+    <ResponsiveContainer width="100%" height="100%">
+      <LineChart data={trendRows} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
       <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} strokeOpacity={0.6} />
       <XAxis dataKey="date" tick={{ fontSize: 10, fontWeight: 500 }} stroke="hsl(var(--muted-foreground))" axisLine={false} tickLine={false} />
       <YAxis
@@ -84,5 +87,6 @@ export function ProductionCostLineChart({
         <Line type="monotone" dataKey="chemCost" stroke="hsl(var(--highlight))" strokeWidth={2} dot={false} name="Chem (₱/m³)" />
       )}
     </LineChart>
+    </ResponsiveContainer>
   );
 }

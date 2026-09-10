@@ -1,5 +1,5 @@
 import React from 'react';
-import { ComposedChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
+import { ResponsiveContainer,  ComposedChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid  } from 'recharts';
 
 const INSTRUMENT_TOOLTIP_STYLE: React.CSSProperties = {
   background: 'hsl(var(--card))',
@@ -71,7 +71,8 @@ export function KwhChart({
   const barSize = Math.max(3, Math.min(18, 400 / Math.max(kwhChartRows.length, 1)));
 
   return (
-    <ComposedChart
+    <ResponsiveContainer width="100%" height="100%">
+      <ComposedChart
       data={kwhChartRows}
       margin={{ top: 8, right: 8, left: -8, bottom: 20 }}
       barSize={barSize}
@@ -109,5 +110,6 @@ export function KwhChart({
           radius={[3, 3, 0, 0]} />
       )}
     </ComposedChart>
+    </ResponsiveContainer>
   );
 }

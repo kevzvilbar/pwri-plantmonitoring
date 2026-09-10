@@ -132,14 +132,16 @@ export function usePretreatmentFormState(_trainId: string, _train: any): Pretrea
     try { return localStorage.getItem(BOOSTER_MODE_KEY) !== 'false'; } catch { return true; }
   });
 
-  const setAfmmfField = (u: number, patch: Partial<AfmRow>) => setAfmmf((p) => ({
-    ...p,
-    [u]: {
+  const setAfmmfField = (u: number, patch: Partial<AfmRow>) => setAfmmf((p) => {
+    const existing = p[u] ?? {
       unit: u, bw: false, bwStart: '', bwEnd: '',
       meterStart: '', meterEnd: '', pressureIn: '', pressureOut: '',
-      ...(p[u] ?? {}), ...patch,
-    },
-  }));
+    };
+    return {
+      ...p,
+      [u]: { ...existing, ...patch },
+    };
+  });
 
   return {
     syncBwOn, setSyncBwOn,

@@ -1,5 +1,5 @@
 import React from 'react';
-import { ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, CartesianGrid, ReferenceLine } from 'recharts';
+import { ResponsiveContainer,  ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, CartesianGrid, ReferenceLine  } from 'recharts';
 import { C_PRODUCTION, C_CONSUMPTION, C_NRW } from '@/lib/chartColors';
 import { makeDrillableBarShape } from '../TrendChartDrillKit';
 
@@ -21,7 +21,8 @@ export function NrwChart({
   NegativeAwareTooltip: React.ComponentType<any>;
 }) {
   return (
-    <ComposedChart data={focusedTrendRows} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+    <ResponsiveContainer width="100%" height="100%">
+      <ComposedChart data={focusedTrendRows} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
       <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} strokeOpacity={0.6} />
       <XAxis dataKey="date" tick={{ fontSize: 10, fontWeight: 500 }} stroke="hsl(var(--muted-foreground))" axisLine={false} tickLine={false} />
       <YAxis yAxisId="vol" tick={{ fontSize: 10 }} stroke={C_PRODUCTION} tickFormatter={formatYAxis} width={44} axisLine={false} tickLine={false} />
@@ -47,5 +48,6 @@ export function NrwChart({
       />
       <Line yAxisId="pct" type="monotone" dataKey="nrw" stroke={C_NRW} strokeWidth={2.5} dot={{ r: 3.5, fill: C_NRW, strokeWidth: 0 }} name="NRW %" />
     </ComposedChart>
+    </ResponsiveContainer>
   );
 }

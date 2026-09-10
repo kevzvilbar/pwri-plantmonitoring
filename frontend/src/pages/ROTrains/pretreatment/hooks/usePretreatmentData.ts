@@ -3,6 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { usePlantMeterConfig } from '@/pages/plants/shared';
 
 export interface PretreatmentData {
+  trains?: any[];
   train: any;
   prevFeedMeter: number | null;
   prevPermMeter: number | null;
@@ -27,7 +28,7 @@ export function usePretreatmentData(
   roValues: Record<string, string>,
   isSynchronized: boolean,
 ) {
-  const { data: meterCfg } = usePlantMeterConfig(plantId);
+  const { config: meterCfg } = usePlantMeterConfig(plantId);
 
   // Trains for the selected plant
   const { data: trains } = useQuery({
@@ -163,6 +164,7 @@ export function usePretreatmentData(
   const rejCurr = num(roValues.reject_meter_curr);
 
   return {
+    trains,
     train,
     prevFeedMeter,
     prevPermMeter,

@@ -1,5 +1,5 @@
 import React from 'react';
-import { LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ReferenceLine } from 'recharts';
+import { ResponsiveContainer,  LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ReferenceLine  } from 'recharts';
 import { C_PRODUCTION, C_GRID_PV } from '@/lib/chartColors';
 
 export function PvChart({
@@ -22,7 +22,8 @@ export function PvChart({
   const tickFormatter = (v: number) => +v.toFixed(2) === 0 ? '0' : v.toFixed(v < 1 ? 2 : 1);
 
   return (
-    <LineChart data={trendRows} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+    <ResponsiveContainer width="100%" height="100%">
+      <LineChart data={trendRows} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
       <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} strokeOpacity={0.6} />
       <XAxis dataKey="date" tick={{ fontSize: 10, fontWeight: 500 }} stroke="hsl(var(--muted-foreground))" axisLine={false} tickLine={false} />
       <YAxis
@@ -63,5 +64,6 @@ export function PvChart({
         name="(Grid+Solar) PV (kWh/m³)"
       />
     </LineChart>
+    </ResponsiveContainer>
   );
 }
