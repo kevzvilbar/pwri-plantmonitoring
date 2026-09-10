@@ -2,6 +2,7 @@ import React from 'react';
 import type { TopoNode, TopoLink, DragItem } from '../shared';
 import { NODE_W, NODE_H, NODE_LABELS, COLORS, TOPO_FONT_SANS, TOPO_FONT_MONO, getNodeStatusInfo } from '../shared';
 import type { NodeType } from '../shared';
+import { fmtNum } from '@/lib/calculations';
 
 export interface NodeRendererProps {
   node: TopoNode;
@@ -17,11 +18,14 @@ export interface NodeRendererProps {
   startDrag: (item: DragItem, e: React.PointerEvent) => void;
   handleNodeClick: (node: TopoNode) => void;
   setHovered: (id: string | null) => void;
+  nodeVolume?: number;
+  overlayMode?: 'schematic' | 'waterBalance';
 }
 
 export function TopoNodeRenderer({
   node, positions, linkCounts, pendingFrom, hovered, inspectNode,
   editMode, canEdit, dragItem, topoState, startDrag, handleNodeClick, setHovered,
+  nodeVolume, overlayMode,
 }: NodeRendererProps) {
   const pos = positions.get(node.id);
   if (!pos) return null;
@@ -36,7 +40,8 @@ export function TopoNodeRenderer({
   const hasDetail   = !!node.detail;
   const isBeingDragged = dragItem?.nodeId === node.id;
   const statusInfo  = getNodeStatusInfo(node.status);
-  const h = hasDetail ? NODE_H + 18 : NODE_H;
+  const isOverlay   = overlayMode === 'waterBalance';
+  const h           = (hasDetail ? NODE_H + 18 : NODE_H) + (isOverlay ? 16 : 0);
 
   return (
     <g
@@ -108,6 +113,31 @@ export function TopoNodeRenderer({
         >
           {(node.detail ?? '').length > 22 ? (node.detail ?? '').slice(0, 21) + '…' : node.detail}
         </text>
+      )}
+
+      {isOverlay && (
+        <g transform={`translate(${NODE_W / 2 + 4}, ${hasDetail ? 64 : 48})`}>
+          <rect
+            x={-36}
+            y={-7}
+            width={72}
+            height={13}
+            rx={3.5}
+            fill={nodeVolume && nodeVolume > 0 ? c.accent : 'hsl(var(--muted))'}
+            opacity={nodeVolume && nodeVolume > 0 ? 0.22 : 0.15}
+          />
+          <text
+            x={0}
+            y={2.5}
+            textAnchor="middle"
+            fill={nodeVolume && nodeVolume > 0 ? c.accent : 'hsl(var(--muted-foreground))'}
+            fontSize={8}
+            fontFamily={TOPO_FONT_MONO}
+            fontWeight={700}
+          >
+            {nodeVolume != null && nodeVolume > 0 ? `${fmtNum(nodeVolume, 0)} m³` : '0 m³'}
+          </text>
+        </g>
       )}
 
       {node.status && (

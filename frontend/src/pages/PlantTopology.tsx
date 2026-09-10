@@ -40,6 +40,9 @@ import {
 import { useTopologyData, useSaveTopologyLinks } from '@/data/hooks/usePlantTopology';
 import PlantTopologyContent from './plantTopology/TopologyCanvas';
 import { SidePanel } from './plantTopology/SidePanel';
+import { useWaterBalanceReconciliation } from '@/data/hooks/useWaterBalanceReconciliation';
+import { ReconciliationLedgerModal } from './plantTopology/ReconciliationLedgerModal';
+import type { RangeKey } from '@/components/dashboard/types';
 
 export default function PlantTopology() {
   const { isAdmin, isManager } = useAuth();
@@ -51,6 +54,15 @@ export default function PlantTopology() {
   const { data: plants = [] } = usePlants();
   const [activePlantId, setActivePlantId] = useState<string | null>(null);
   const effectivePlantId = activePlantId ?? selectedPlantId ?? plants[0]?.id ?? null;
+
+  const [wbrRange, setWbrRange] = useState<RangeKey>('7D');
+  const [overlayMode, setOverlayMode] = useState<'schematic' | 'waterBalance'>('waterBalance');
+  const [ledgerOpen, setLedgerOpen] = useState(false);
+
+  const { summary: wbrSummary, isLoading: wbrLoading, window: wbrWindow } = useWaterBalanceReconciliation({
+    plantId: effectivePlantId,
+    rangeKey: wbrRange,
+  });
 
   const { data: rawData, isLoading, refetch } = useTopologyData(effectivePlantId);
   const saveLinksMutation = useSaveTopologyLinks();
@@ -333,7 +345,8 @@ export default function PlantTopology() {
   }
 
   return (
-    <PlantTopologyContent
+    <>
+      <PlantTopologyContent
       plants={plants}
       effectivePlantId={effectivePlantId}
       setActivePlantId={setActivePlantId}
@@ -404,6 +417,24 @@ export default function PlantTopology() {
       handleDropNode={handleDropNode}
       saveColWidths={saveColWidths}
       SidePanelComponent={SidePanel}
+      wbrSummary={wbrSummary}
+      wbrLoading={wbrLoading}
+      wbrRange={wbrRange}
+      setWbrRange={setWbrRange}
+      overlayMode={overlayMode}
+      setOverlayMode={setOverlayMode}
+      onOpenLedger={() => setLedgerOpen(true)}
     />
+
+    <ReconciliationLedgerModal
+      open={ledgerOpen}
+      onClose={() => setLedgerOpen(false)}
+      plantName={plants.find((p) => p.id === effectivePlantId)?.name ?? 'Plant'}
+      summary={wbrSummary}
+      dateRangeLabel={
+        wbrWindow ? `${wbrWindow.startKey} to ${wbrWindow.endKey}` : wbrRange
+      }
+    />
+    </>
   );
 }

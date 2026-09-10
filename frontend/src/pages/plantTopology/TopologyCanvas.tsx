@@ -21,6 +21,9 @@ import { TopologyLegend } from './TopologyLegend';
 import { TopologyHeader } from './TopologyCanvas/TopologyHeader';
 import { TopologySvgCanvas, type TopologySvgCanvasProps } from './TopologyCanvas/TopologySvgCanvas';
 import { ZoomControls } from './TopologyCanvas/ZoomControls';
+import { WaterBalanceHud } from './WaterBalanceHud';
+import type { PlantWaterBalanceSummary } from '@/lib/waterBalanceReconciliation';
+import type { RangeKey } from '@/components/dashboard/types';
 
 export interface PlantTopologyProps {
   plants: any[];
@@ -106,6 +109,13 @@ export interface PlantTopologyProps {
     onAddColumn: (label: string, insertAfter: string) => void;
     onDeleteColumn: (colId: string) => void;
   }>;
+  wbrSummary?: PlantWaterBalanceSummary | null;
+  wbrLoading?: boolean;
+  wbrRange?: RangeKey;
+  setWbrRange?: (r: RangeKey) => void;
+  overlayMode?: 'schematic' | 'waterBalance';
+  setOverlayMode?: (m: 'schematic' | 'waterBalance') => void;
+  onOpenLedger?: () => void;
 }
 
 export default function PlantTopologyContent({
@@ -119,6 +129,7 @@ export default function PlantTopologyContent({
   isPanning, lastPan, qc, handleAddNode, handleDeleteCustomNode, handleRenameCustomNode, handleAddColumn,
   handleDeleteColumn, handleAddPaletteItem, handleRenamePaletteItem, handleDeletePaletteItem, handleSave,
   startDrag, handleRenameConfirm, handleNodeClick, computeSnap, handleDropNode, saveColWidths,
+  wbrSummary, wbrLoading, wbrRange, setWbrRange, overlayMode, setOverlayMode, onOpenLedger,
 }: PlantTopologyProps) {
   const isMobile = useIsMobile();
   const { selectedPlantId } = useAppStore();
@@ -216,6 +227,9 @@ export default function PlantTopologyContent({
     pendingFrom,
     isPanning,
     lastPan,
+    nodeVolumes: wbrSummary?.nodeVolumes,
+    overlayMode,
+    setOverlayMode,
   };
 
   return (
@@ -243,6 +257,19 @@ export default function PlantTopologyContent({
         activeLinksCount={activeLinksCount}
         isMobile={isMobile}
       />
+
+      {/* ── Water Balance & Permeate Reconciliation HUD ── */}
+      {effectivePlantId && (
+        <div className="px-5 pt-2 shrink-0">
+          <WaterBalanceHud
+            summary={wbrSummary ?? null}
+            isLoading={!!wbrLoading}
+            rangeKey={wbrRange ?? '7D'}
+            onRangeChange={setWbrRange ?? (() => {})}
+            onOpenLedger={onOpenLedger ?? (() => {})}
+          />
+        </div>
+      )}
 
       <TopologySvgCanvas {...svgCanvasProps} />
 

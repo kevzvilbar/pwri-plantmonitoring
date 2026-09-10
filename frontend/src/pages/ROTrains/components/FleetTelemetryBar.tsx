@@ -1,6 +1,6 @@
 import React from 'react';
 import { fmtNum } from '@/lib/calculations';
-import { deriveTrainStatus } from '../ro-trains';
+import { deriveTrainStatus } from '@/pages/ro-trains';
 import { cn } from '@/lib/utils';
 import { Activity, Droplets, Gauge, ShieldCheck, Waves } from 'lucide-react';
 

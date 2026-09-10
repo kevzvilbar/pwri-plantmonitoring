@@ -10,7 +10,8 @@ import { TopoLinkRenderer, type LinkRendererProps } from './TopoLinkRenderer';
 import { ZoomControls } from './ZoomControls';
 import { NodeInspector } from '../NodeInspector';
 import { TopologyLegend } from '../TopologyLegend';
-import { Droplet } from 'lucide-react';
+import { Droplet, Scale } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import type { TopoNode, TopoLink, DragItem, NodePositionOverride } from '../shared';
 import type { PlantTopologyProps } from '../TopologyCanvas';
 
@@ -50,6 +51,9 @@ export interface TopologySvgCanvasProps {
   hovered: string | null;
   isPanning: React.MutableRefObject<boolean>;
   lastPan: React.MutableRefObject<{ x: number; y: number }>;
+  nodeVolumes?: Record<string, number>;
+  overlayMode?: 'schematic' | 'waterBalance';
+  setOverlayMode?: (m: 'schematic' | 'waterBalance') => void;
 }
 
 export function TopologySvgCanvas({
@@ -59,6 +63,7 @@ export function TopologySvgCanvas({
   inspectNode, colWidths, resizingCol, hoveredLaneResizer, zoom, topoState,
   effectivePlantId, isMobile, canEdit, panelOpen, saving, showHelp,
   editMode, pendingFrom, hovered, isPanning, lastPan,
+  nodeVolumes, overlayMode = 'schematic', setOverlayMode,
 }: TopologySvgCanvasProps) {
   const canvasRef = useRef<HTMLDivElement>(null);
   const { selectedPlantId } = useAppStore();
@@ -84,16 +89,48 @@ export function TopologySvgCanvas({
   return (
     <div className="flex-1 flex flex-col min-h-0 relative">
       <div className="flex-1 flex flex-col min-h-0 p-4 overflow-hidden">
-        <div className="flex items-center gap-2 mb-3 shrink-0">
-          <Droplet className="h-3.5 w-3.5 text-primary" />
-          <span className="text-2xs tracking-widest text-primary font-mono uppercase font-semibold">
-            {activePlant?.name} — Water Treatment Flow
-          </span>
-          <span className="ml-auto text-3xs text-muted-foreground font-mono">
-            {dragItem
-              ? '📌 Drop on any column to place node'
-              : isMobile ? 'Tap node to inspect · +/− to zoom' : 'Click node to inspect · Scroll / Alt+drag · Ctrl+scroll'}
-          </span>
+        <div className="flex items-center gap-2 mb-3 shrink-0 flex-wrap justify-between">
+          <div className="flex items-center gap-2">
+            <Droplet className="h-3.5 w-3.5 text-primary" />
+            <span className="text-2xs tracking-widest text-primary font-mono uppercase font-semibold">
+              {activePlant?.name} — Water Treatment Flow
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {/* View Mode: Schematic vs Water Balance Overlay */}
+            <div className="flex items-center gap-0.5 bg-muted/40 p-0.5 rounded-lg border border-border/40">
+              <button
+                onClick={() => setOverlayMode?.('schematic')}
+                className={cn(
+                  'px-2 py-0.5 rounded text-3xs font-medium transition-all cursor-pointer',
+                  overlayMode === 'schematic'
+                    ? 'bg-background text-foreground shadow-2xs font-bold border border-border/50'
+                    : 'text-muted-foreground hover:text-foreground'
+                )}
+              >
+                Schematic
+              </button>
+              <button
+                onClick={() => setOverlayMode?.('waterBalance')}
+                className={cn(
+                  'px-2 py-0.5 rounded text-3xs font-medium transition-all flex items-center gap-1 cursor-pointer',
+                  overlayMode === 'waterBalance'
+                    ? 'bg-primary text-primary-foreground shadow-2xs font-bold'
+                    : 'text-muted-foreground hover:text-foreground'
+                )}
+              >
+                <Scale className="h-2.5 w-2.5" />
+                <span>Balance Overlay</span>
+              </button>
+            </div>
+
+            <span className="text-3xs text-muted-foreground font-mono hidden md:inline">
+              {dragItem
+                ? '📌 Drop on any column to place node'
+                : isMobile ? 'Tap node to inspect · +/− to zoom' : 'Click node to inspect · Scroll / Alt+drag · Ctrl+scroll'}
+            </span>
+          </div>
         </div>
 
         <div className="flex-1 min-h-0 relative overflow-hidden flex flex-col">
@@ -310,6 +347,8 @@ export function TopologySvgCanvas({
                       startDrag={props.startDrag}
                       handleNodeClick={props.handleNodeClick}
                       setHovered={props.setHovered}
+                      nodeVolume={nodeVolumes?.[node.id]}
+                      overlayMode={overlayMode}
                     />
                   ))}
                 </g>
