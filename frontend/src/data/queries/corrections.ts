@@ -698,67 +698,245 @@ export async function fetchEditHistory(
 
 /** Fetch operator error stats (30-day rolling) */
 export async function fetchOperatorStats(): Promise<OperatorStat[]> {
-  const { data: viewData, error: viewError } = await supabase
-    .from('operator_error_rates_30d')
-    .select('*');
-
-  if (!viewError && viewData && viewData.length > 0) {
-    return viewData.map(d => ({
-      user_id: d.user_id ?? undefined,
-      username: d.username,
-      error_count: d.error_count ?? 0,
-      last_error_at: d.last_error,
-    }));
+  // 1. Fetch user profiles and user roles to identify Operator accounts only
+  let profiles: Array<{ id: string; username: string | null; first_name: string | null; last_name: string | null; status?: string }> = [];
+  try {
+    const { data: rpcProfiles, error: rpcErr } = await (supabase as any).rpc('get_all_staff_profiles');
+    if (!rpcErr && rpcProfiles && rpcProfiles.length > 0) {
+      profiles = rpcProfiles;
+    } else {
+      const { data, error } = await supabase.from('user_profiles').select('id, username, first_name, last_name, status');
+      if (!error && data) profiles = data;
+    }
+  } catch {
+    const { data } = await supabase.from('user_profiles').select('id, username, first_name, last_name, status');
+    if (data) profiles = data ?? [];
   }
 
-  // Fallback to aggregation over reading_normalizations
-  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-  const { data, error } = await supabase
-    .from('reading_normalizations')
-    .select('*')
-    .gte('performed_at', thirtyDaysAgo);
-  if (error) throw error;
-
-  const stats: Record<string, OperatorStat> = {};
-  (data ?? []).forEach(r => {
-    const key = r.performed_by;
-    if (!key) return;
-    if (!stats[key]) {
-      stats[key] = {
-        user_id: key,
-        username: null,
-        first_name: null,
-        last_name: null,
-        plant_id: undefined,
-        plant_name: '',
-        role: null,
-        error_count: 0,
-        total_readings: 0,
-        error_rate: 0,
-        last_error_at: r.performed_at,
-      };
+  let rolesData: Array<{ user_id: string; role: string }> = [];
+  try {
+    const { data: rpcRoles, error: rpcErr } = await (supabase as any).rpc('get_all_user_roles');
+    if (!rpcErr && rpcRoles && rpcRoles.length > 0) {
+      rolesData = rpcRoles;
+    } else {
+      const { data, error } = await supabase.from('user_roles').select('user_id, role');
+      if (!error && data) rolesData = data as Array<{ user_id: string; role: string }>;
     }
-    stats[key].error_count = (stats[key].error_count ?? 0) + 1;
-    stats[key].last_error_at = r.performed_at;
+  } catch {
+    const { data } = await supabase.from('user_roles').select('user_id, role');
+    if (data) rolesData = (data ?? []) as Array<{ user_id: string; role: string }>;
+  }
+
+  // Build role map per user_id
+  const rolesByUser = new Map<string, Set<string>>();
+  for (const r of rolesData) {
+    if (!r.user_id) continue;
+    if (!rolesByUser.has(r.user_id)) {
+      rolesByUser.set(r.user_id, new Set());
+    }
+    rolesByUser.get(r.user_id)!.add(r.role);
+  }
+
+  // Filter ONLY Operator accounts (exclude Admin, Manager, Data Analyst, non-operators)
+  const operatorProfiles = profiles.filter((p) => {
+    if (p.status === 'Suspended') return false;
+    const userRoles = rolesByUser.get(p.id);
+    if (!userRoles || userRoles.size === 0) return false;
+    const rolesArr = Array.from(userRoles).map((r) => r.toLowerCase());
+    const hasOperator = rolesArr.includes('operator');
+    const isExcluded = rolesArr.some((r) =>
+      r === 'admin' || r === 'manager' || r === 'data analyst' || r === 'analyst'
+    );
+    return hasOperator && !isExcluded;
   });
 
-  const userIds = Object.keys(stats);
-  if (userIds.length > 0) {
-    const { data: profiles } = await supabase
-      .from('user_profiles')
-      .select('id, username, first_name, last_name, plant_assignments')
-      .in('id', userIds);
-    (profiles ?? []).forEach(p => {
-      if (stats[p.id]) {
-        stats[p.id].username = p.username;
-        stats[p.id].first_name = p.first_name;
-        stats[p.id].last_name = p.last_name;
-        stats[p.id].plant_id = p.plant_assignments?.[0] ?? stats[p.id].plant_id;
-      }
+  if (operatorProfiles.length === 0 && profiles.length > 0) {
+    // Edge-case safeguard: if roles table is not populated in local dev/tests, fallback to any non-admin/non-manager profile
+    const fallbackOps = profiles.filter((p) => {
+      const rolesArr = Array.from(rolesByUser.get(p.id) ?? []).map((r) => r.toLowerCase());
+      return !rolesArr.some((r) => r === 'admin' || r === 'manager' || r === 'data analyst');
+    });
+    if (fallbackOps.length > 0) {
+      operatorProfiles.push(...fallbackOps);
+    }
+  }
+
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+
+  // Query readings across locator_readings, well_readings, product_meter_readings, ro_train_readings
+  const [locRes, wellRes, prodRes, roRes] = await Promise.allSettled([
+    supabase
+      .from('locator_readings')
+      .select('id, recorded_by, reading_datetime, norm_status, daily_volume, is_backward, is_meter_replacement')
+      .gte('reading_datetime', thirtyDaysAgo)
+      .limit(5000),
+    supabase
+      .from('well_readings')
+      .select('id, recorded_by, reading_datetime, norm_status, daily_volume, is_backward, is_meter_replacement')
+      .gte('reading_datetime', thirtyDaysAgo)
+      .limit(5000),
+    supabase
+      .from('product_meter_readings')
+      .select('id, recorded_by, reading_datetime, norm_status, daily_volume, is_meter_replacement')
+      .gte('reading_datetime', thirtyDaysAgo)
+      .limit(5000),
+    supabase
+      .from('ro_train_readings')
+      .select('id, recorded_by, reading_datetime, norm_status')
+      .gte('reading_datetime', thirtyDaysAgo)
+      .limit(5000),
+  ]);
+
+  interface ReadingStatItem {
+    recorded_by: string | null;
+    reading_datetime: string;
+    norm_status?: string | null;
+    daily_volume?: number | null;
+    is_backward?: boolean | null;
+    is_meter_replacement?: boolean | null;
+  }
+
+  const allReadings: ReadingStatItem[] = [];
+  if (locRes.status === 'fulfilled' && locRes.value.data) {
+    allReadings.push(...(locRes.value.data as ReadingStatItem[]));
+  }
+  if (wellRes.status === 'fulfilled' && wellRes.value.data) {
+    allReadings.push(...(wellRes.value.data as ReadingStatItem[]));
+  }
+  if (prodRes.status === 'fulfilled' && prodRes.value.data) {
+    allReadings.push(...(prodRes.value.data as ReadingStatItem[]));
+  }
+  if (roRes.status === 'fulfilled' && roRes.value.data) {
+    allReadings.push(...(roRes.value.data as ReadingStatItem[]));
+  }
+
+  // Initialize stats for each operator
+  const statsMap = new Map<string, {
+    user_id: string;
+    username: string | null;
+    first_name: string | null;
+    last_name: string | null;
+    total_entries: number;
+    backward_readings: number;
+    pending_review: number;
+    retracted: number;
+    error_count: number;
+    last_entry_at: string | null;
+  }>();
+
+  for (const op of operatorProfiles) {
+    statsMap.set(op.id, {
+      user_id: op.id,
+      username: op.username,
+      first_name: op.first_name,
+      last_name: op.last_name,
+      total_entries: 0,
+      backward_readings: 0,
+      pending_review: 0,
+      retracted: 0,
+      error_count: 0,
+      last_entry_at: null,
     });
   }
 
-  return Object.values(stats);
+  // Aggregate readings
+  for (const r of allReadings) {
+    if (!r.recorded_by || !statsMap.has(r.recorded_by)) continue;
+    const stat = statsMap.get(r.recorded_by)!;
+    stat.total_entries += 1;
+
+    if (r.reading_datetime) {
+      if (!stat.last_entry_at || new Date(r.reading_datetime).getTime() > new Date(stat.last_entry_at).getTime()) {
+        stat.last_entry_at = r.reading_datetime;
+      }
+    }
+
+    const isReplacement = !!r.is_meter_replacement;
+    const isBackward = !isReplacement && (r.is_backward === true || (r.daily_volume != null && r.daily_volume < 0));
+    const isPending = r.norm_status === 'pending_review';
+    const isRetracted = r.norm_status === 'retracted';
+
+    if (isBackward) stat.backward_readings += 1;
+    if (isPending) stat.pending_review += 1;
+    if (isRetracted) stat.retracted += 1;
+
+    if (isBackward || isPending || isRetracted) {
+      stat.error_count += 1;
+    }
+  }
+
+  const result: OperatorStat[] = Array.from(statsMap.values()).map((s) => {
+    const error_rate_pct = s.total_entries > 0
+      ? (s.error_count / s.total_entries) * 100
+      : 0;
+
+    return {
+      user_id: s.user_id,
+      username: s.username,
+      first_name: s.first_name,
+      last_name: s.last_name,
+      total_entries: s.total_entries,
+      backward_readings: s.backward_readings,
+      pending_review: s.pending_review,
+      retracted: s.retracted,
+      error_count: s.error_count,
+      error_rate_pct,
+      last_entry_at: s.last_entry_at,
+    };
+  });
+
+  // For operators who had no entries in the last 30 days, look up their latest historical entry if any
+  const operatorsNeedingLastEntry = result.filter(r => !r.last_entry_at && r.user_id);
+  if (operatorsNeedingLastEntry.length > 0) {
+    const userIds = operatorsNeedingLastEntry.map(r => r.user_id!);
+    try {
+      const [locLast, wellLast] = await Promise.allSettled([
+        supabase
+          .from('locator_readings')
+          .select('recorded_by, reading_datetime')
+          .in('recorded_by', userIds)
+          .order('reading_datetime', { ascending: false })
+          .limit(userIds.length * 2),
+        supabase
+          .from('well_readings')
+          .select('recorded_by, reading_datetime')
+          .in('recorded_by', userIds)
+          .order('reading_datetime', { ascending: false })
+          .limit(userIds.length * 2),
+      ]);
+      const latestMap = new Map<string, string>();
+      const processRows = (rows: Array<{ recorded_by: string | null; reading_datetime: string }> | null | undefined) => {
+        for (const row of rows ?? []) {
+          if (!row.recorded_by || !row.reading_datetime) continue;
+          const curr = latestMap.get(row.recorded_by);
+          if (!curr || new Date(row.reading_datetime).getTime() > new Date(curr).getTime()) {
+            latestMap.set(row.recorded_by, row.reading_datetime);
+          }
+        }
+      };
+      if (locLast.status === 'fulfilled' && locLast.value.data) processRows(locLast.value.data as any);
+      if (wellLast.status === 'fulfilled' && wellLast.value.data) processRows(wellLast.value.data as any);
+
+      for (const r of result) {
+        if (!r.last_entry_at && r.user_id && latestMap.has(r.user_id)) {
+          r.last_entry_at = latestMap.get(r.user_id);
+        }
+      }
+    } catch {
+      // Non-critical optimization, ignore error
+    }
+  }
+
+  // Sort: error_rate_pct DESC, then total_entries DESC, then username ASC
+  result.sort((a, b) => {
+    const rateDiff = (b.error_rate_pct ?? 0) - (a.error_rate_pct ?? 0);
+    if (Math.abs(rateDiff) > 0.001) return rateDiff;
+    const entriesDiff = (b.total_entries ?? 0) - (a.total_entries ?? 0);
+    if (entriesDiff !== 0) return entriesDiff;
+    return (a.username ?? '').localeCompare(b.username ?? '');
+  });
+
+  return result;
 }
 
 /** Fetch reading chain for an entity */
