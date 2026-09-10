@@ -82,11 +82,13 @@ export function useDashboardQueries({
     queryKey: ['dash-meter-direct-ids', plantIds],
     queryFn: async () => {
       if (!plantIds.length) return new Set<string>();
-      const { data, error } = await (supabase.from('product_meters' as any) as any)
-        .select('id,is_derived').in('plant_id', plantIds);
+      const { data, error } = await supabase
+        .from('product_meters')
+        .select('id,is_derived')
+        .in('plant_id', plantIds);
       if (error) throw error;
       return new Set<string>(
-        (data ?? []).filter((m: any) => m.is_derived === true).map((m: any) => m.id as string),
+        (data ?? []).filter((m) => m.is_derived === true).map((m) => m.id),
       );
     },
     enabled: plantIds.length > 0,
@@ -99,7 +101,7 @@ export function useDashboardQueries({
       if (!plantIds.length) return [] as string[];
       const { data, error } = await supabase.from('wells').select('id').in('plant_id', plantIds);
       if (error) throw error;
-      return (data ?? []).map((w: any) => w.id as string);
+      return (data ?? []).map((w) => w.id);
     },
     enabled: plantIds.length > 0,
     staleTime: 10 * 60_000,
@@ -117,14 +119,14 @@ export function useDashboardQueries({
       // in the Prod. vs Consum. tab.
       const todayEnd = new Date(_localDateStr + 'T23:59:59').toISOString();
       const { data, error } = await supabase
-        .from('locator_readings_clean' as any)
+        .from('locator_readings_clean')
         .select('locator_id,daily_volume,current_reading,previous_reading,reading_datetime,is_meter_replacement,is_estimated')
         .in('locator_id', _locatorIds)
         .gte('reading_datetime', today)
         .lte('reading_datetime', todayEnd)
         .order('reading_datetime', { ascending: true });
       if (error) throw error;
-      return (data ?? []) as any[];
+      return data ?? [];
     },
     enabled: (_locatorIds?.length ?? 0) > 0,
     staleTime: 120_000,
@@ -140,17 +142,17 @@ export function useDashboardQueries({
       // Try to fetch quality columns (tds_ppm, turbidity_ntu) — these are optional
       // migration columns that may not exist in all environments yet. Fall back to
       // base columns only if PostgREST returns a schema-cache error.
-      const { data, error } = await (supabase
-        .from('well_readings_clean' as any) as any)
+      const { data, error } = await supabase
+        .from('well_readings_clean')
         .select('well_id,plant_id,daily_volume,current_reading,previous_reading,reading_datetime,is_meter_replacement,tds_ppm,turbidity_ntu')
         .in('well_id', _wellIds)
         .gte('reading_datetime', today)
         .lte('reading_datetime', todayEnd)
         .order('reading_datetime', { ascending: true });
-      if (!error) return (data ?? []) as any[];
+      if (!error) return data ?? [];
       // Fallback: base columns without quality fields
       const { data: fallback, error: fallbackErr } = await supabase
-        .from('well_readings_clean' as any)
+        .from('well_readings_clean')
         .select('well_id,plant_id,daily_volume,current_reading,previous_reading,reading_datetime,is_meter_replacement')
         .in('well_id', _wellIds)
         .gte('reading_datetime', today)
@@ -160,7 +162,7 @@ export function useDashboardQueries({
       // of BOTH attempts (not just missing quality columns) silently
       // resolved to []. Throw the fallback's error if it also failed.
       if (fallbackErr) throw fallbackErr;
-      return (fallback ?? []) as any[];
+      return fallback ?? [];
     },
     enabled: (_wellIds?.length ?? 0) > 0,
     staleTime: 120_000,
@@ -171,21 +173,24 @@ export function useDashboardQueries({
     queryKey: ['dash-product-meters-today', plantIds],
     queryFn: async () => {
       if (!plantIds.length) return [];
-      const { data: meters, error: metersErr } = await (supabase.from('product_meters' as any) as any)
-        .select('id').in('plant_id', plantIds);
+      const { data: meters, error: metersErr } = await supabase
+        .from('product_meters')
+        .select('id')
+        .in('plant_id', plantIds);
       if (metersErr) throw metersErr;
-      const meterIds = (meters ?? []).map((m: any) => m.id);
+      const meterIds = (meters ?? []).map((m) => m.id);
       if (!meterIds.length) return [];
       // FIX: Bounded to current calendar day — mirrors the todayLocators fix.
       const todayEnd = new Date(_localDateStr + 'T23:59:59').toISOString();
-      const { data, error } = await (supabase.from('product_meter_readings' as any) as any)
+      const { data, error } = await supabase
+        .from('product_meter_readings')
         .select('meter_id,plant_id,daily_volume,current_reading,previous_reading,reading_datetime,is_meter_replacement')
         .in('meter_id', meterIds)
         .gte('reading_datetime', today)
         .lte('reading_datetime', todayEnd)
         .order('reading_datetime', { ascending: true });
       if (error) throw error;
-      return (data ?? []) as any[];
+      return data ?? [];
     },
     enabled: plantIds.length > 0,
     staleTime: 120_000,
@@ -204,12 +209,13 @@ export function useDashboardQueries({
   const { data: plantMeterConfigs } = useQuery({
     queryKey: ['dash-plant-meter-configs', plantIds],
     queryFn: async () => {
-      if (!plantIds.length) return [] as any[];
-      const { data, error } = await (supabase.from('plant_meter_config' as any) as any)
+      if (!plantIds.length) return [];
+      const { data, error } = await supabase
+        .from('plant_meter_config')
         .select('plant_id, permeate_is_production, config')
         .in('plant_id', plantIds);
       if (error) throw error;
-      return (data ?? []) as any[];
+      return data ?? [];
     },
     enabled: plantIds.length > 0,
     staleTime: 10 * 60_000, // config rarely changes — cache for 10 min
@@ -289,10 +295,11 @@ export function useDashboardQueries({
   const { data: todayRoPermeate } = useQuery({
     queryKey: ['dash-ro-permeate-today', _permeateTrainIds, _localDateStr],
     queryFn: async () => {
-      if (!_permeateTrainIds.length) return [] as any[];
+      if (!_permeateTrainIds.length) return [];
       const windowStart = new Date(_localDateStr + 'T00:00:00').toISOString();
       const windowEnd   = new Date(_localDateStr + 'T23:59:59').toISOString();
-      const { data, error } = await (supabase.from('ro_train_readings' as any) as any)
+      const { data, error } = await supabase
+        .from('ro_train_readings')
         .select('train_id,permeate_meter_delta,reading_datetime')
         .in('train_id', _permeateTrainIds)
         .gte('reading_datetime', windowStart)
@@ -301,7 +308,7 @@ export function useDashboardQueries({
         .gt('permeate_meter_delta', 0);
       if (error) throw error;
       // Attach plant_id via the trainPlantMap so downstream code can group by plant if needed
-      return (data ?? []).map((r: any) => ({
+      return (data ?? []).map((r) => ({
         ...r,
         plant_id: _permeateTrainPlantMap.get(r.train_id) ?? null,
       }));
@@ -319,10 +326,11 @@ export function useDashboardQueries({
   const { data: yRoPermeate } = useQuery({
     queryKey: ['dash-ro-permeate-yest', _permeateTrainIds, _yesterdayKey],
     queryFn: async () => {
-      if (!_permeateTrainIds.length) return [] as any[];
+      if (!_permeateTrainIds.length) return [];
       const windowStart = new Date(_yesterdayKey + 'T00:00:00').toISOString();
       const windowEnd   = new Date(_yesterdayKey + 'T23:59:59').toISOString();
-      const { data, error } = await (supabase.from('ro_train_readings' as any) as any)
+      const { data, error } = await supabase
+        .from('ro_train_readings')
         .select('train_id,permeate_meter_delta,reading_datetime')
         .in('train_id', _permeateTrainIds)
         .gte('reading_datetime', windowStart)
@@ -330,7 +338,7 @@ export function useDashboardQueries({
         .not('permeate_meter_delta', 'is', null)
         .gt('permeate_meter_delta', 0);
       if (error) throw error;
-      return (data ?? []).map((r: any) => ({
+      return (data ?? []).map((r) => ({
         ...r,
         plant_id: _permeateTrainPlantMap.get(r.train_id) ?? null,
       }));
@@ -397,9 +405,11 @@ export function useDashboardQueries({
     queryFn: async () => {
       const map = new Map<string, number[]>();
       try {
-        const { data } = await (supabase.from('plant_power_config' as any) as any)
-          .select('plant_id,grid_meter_multipliers').in('plant_id', plantIds);
-        for (const cfg of (data ?? []) as any[]) {
+        const { data } = await supabase
+          .from('plant_power_config')
+          .select('plant_id,grid_meter_multipliers')
+          .in('plant_id', plantIds);
+        for (const cfg of data ?? []) {
           const mArr = cfg.grid_meter_multipliers;
           if (Array.isArray(mArr) && mArr.length > 0)
             map.set(cfg.plant_id, mArr.map((v: any) => +v > 0 ? +v : 1));
@@ -416,14 +426,14 @@ export function useDashboardQueries({
     queryFn: async () => {
       if (!_locatorIds?.length) return [];
       const { data, error } = await supabase
-        .from('locator_readings_clean' as any)
+        .from('locator_readings_clean')
         .select('locator_id,daily_volume,current_reading,previous_reading,reading_datetime,is_meter_replacement,is_estimated')
         .in('locator_id', _locatorIds)
         .gte('reading_datetime', yesterday)
         .lt('reading_datetime', today)
         .order('reading_datetime', { ascending: true });
       if (error) throw error;
-      return (data ?? []) as any[];
+      return data ?? [];
     },
     enabled: (_locatorIds?.length ?? 0) > 0,
     staleTime: 12 * 60 * 60_000,  // yesterday is immutable — cache for 12 hours
@@ -434,14 +444,14 @@ export function useDashboardQueries({
     queryFn: async () => {
       if (!_wellIds?.length) return [];
       const { data, error } = await supabase
-        .from('well_readings_clean' as any)
+        .from('well_readings_clean')
         .select('well_id,daily_volume,current_reading,previous_reading,reading_datetime,is_meter_replacement')
         .in('well_id', _wellIds)
         .gte('reading_datetime', yesterday)
         .lt('reading_datetime', today)
         .order('reading_datetime', { ascending: true });
       if (error) throw error;
-      return (data ?? []) as any[];
+      return data ?? [];
     },
     enabled: (_wellIds?.length ?? 0) > 0,
     staleTime: 12 * 60 * 60_000,  // yesterday is immutable — cache for 12 hours
@@ -452,19 +462,22 @@ export function useDashboardQueries({
     queryKey: ['dash-product-meters-yest', plantIds],
     queryFn: async () => {
       if (!plantIds.length) return [];
-      const { data: meters, error: metersErr } = await (supabase.from('product_meters' as any) as any)
-        .select('id').in('plant_id', plantIds);
+      const { data: meters, error: metersErr } = await supabase
+        .from('product_meters')
+        .select('id')
+        .in('plant_id', plantIds);
       if (metersErr) throw metersErr;
-      const meterIds = (meters ?? []).map((m: any) => m.id);
+      const meterIds = (meters ?? []).map((m) => m.id);
       if (!meterIds.length) return [];
-      const { data, error } = await (supabase.from('product_meter_readings' as any) as any)
+      const { data, error } = await supabase
+        .from('product_meter_readings')
         .select('meter_id,plant_id,daily_volume,current_reading,previous_reading,reading_datetime,is_meter_replacement')
         .in('meter_id', meterIds)
         .gte('reading_datetime', yesterday)
         .lt('reading_datetime', today)
         .order('reading_datetime', { ascending: true });
       if (error) throw error;
-      return (data ?? []) as any[];
+      return data ?? [];
     },
     enabled: plantIds.length > 0,
     staleTime: 12 * 60 * 60_000,  // yesterday is immutable — cache for 12 hours
@@ -553,9 +566,10 @@ export function useDashboardQueries({
   const { data: latestRO } = useQuery({
     queryKey: ['dash-ro-recent', _qualityTrainIds],
     queryFn: async () => {
-      if (!_qualityTrainIds.length) return [] as any[];
+      if (!_qualityTrainIds.length) return [];
       const since = subDays(new Date(), 1).toISOString();
-      const { data, error } = await (supabase.from('ro_train_readings' as any) as any)
+      const { data, error } = await supabase
+        .from('ro_train_readings')
         // feed/permeate/reject_meter_delta added for RO meter spike detection
         // (roReadingGuards.ts) — same columns PretreatmentAndROLog.tsx already
         // writes on save, just not previously read back here.
@@ -566,7 +580,7 @@ export function useDashboardQueries({
       if (error) throw new Error(`ro_train_readings (quality): ${error.message}`);
       // Reattach plant_id + train_number + train_name + well_id from the ro_trains
       // lookup so downstream consumers (roByTrain, PerWellSourceCard, expandRows) keep working.
-      return (data ?? []).map((r: any) => {
+      return (data ?? []).map((r) => {
         const meta = _qualityTrainMeta2.get(r.train_id);
         return {
           ...r,
@@ -592,9 +606,10 @@ export function useDashboardQueries({
   const { data: roHistory10d } = useQuery({
     queryKey: ['dash-ro-history-10d', _qualityTrainIds],
     queryFn: async () => {
-      if (!_qualityTrainIds.length) return [] as any[];
+      if (!_qualityTrainIds.length) return [];
       const since = subDays(new Date(), 10).toISOString();
-      const { data, error } = await (supabase.from('ro_train_readings' as any) as any)
+      const { data, error } = await supabase
+        .from('ro_train_readings')
         .select('train_id,reading_datetime,feed_meter,permeate_meter,reject_meter')
         .in('train_id', _qualityTrainIds)
         .gte('reading_datetime', since)
@@ -638,7 +653,7 @@ export function useDashboardQueries({
   const { data: recentPretreatment } = useQuery({
     queryKey: ['dash-pretreatment-recent', plantIds],
     queryFn: async () => {
-      if (!plantIds.length) return [] as any[];
+      if (!plantIds.length) return [];
       const since = subDays(new Date(), 2).toISOString();
       const { data, error } = await supabase
         .from('ro_pretreatment_readings')
@@ -647,7 +662,7 @@ export function useDashboardQueries({
         .gte('reading_datetime', since)
         .order('reading_datetime', { ascending: false });
       if (error) throw new Error(`ro_pretreatment_readings: ${error.message}`);
-      return (data ?? []) as any[];
+      return data ?? [];
     },
     enabled: plantIds.length > 0,
     staleTime: 2 * 60_000,
@@ -663,7 +678,7 @@ export function useDashboardQueries({
   const { data: latestPumpReadings } = useQuery({
     queryKey: ['dash-pump-readings-recent', plantIds],
     queryFn: async () => {
-      if (!plantIds.length) return [] as any[];
+      if (!plantIds.length) return [];
       const since = subDays(new Date(), 1).toISOString();
       const { data, error } = await supabase
         .from('pump_readings')
@@ -674,7 +689,7 @@ export function useDashboardQueries({
       if (error) throw new Error(`pump_readings: ${error.message}`);
       // Collapse to the single latest row per (train_id, pump_type, pump_number)
       const latestByPump = new Map<string, any>();
-      (data ?? []).forEach((r: any) => {
+      (data ?? []).forEach((r) => {
         const key = `${r.train_id}-${r.pump_type}-${r.pump_number}`;
         if (!latestByPump.has(key)) latestByPump.set(key, r); // first = most recent (DESC order)
       });
@@ -692,7 +707,7 @@ export function useDashboardQueries({
   const { data: powerHistory } = useQuery({
     queryKey: ['dash-power-history', plantIds, today],
     queryFn: async () => {
-      if (!plantIds.length) return [] as any[];
+      if (!plantIds.length) return [];
       const since = subDays(new Date(), 14).toISOString();
       const { data, error } = await supabase
         .from('power_readings')
@@ -702,7 +717,7 @@ export function useDashboardQueries({
         .lt('reading_datetime', today)
         .not('daily_consumption_kwh', 'is', null);
       if (error) throw new Error(`power_readings (history): ${error.message}`);
-      return (data ?? []) as any[];
+      return data ?? [];
     },
     enabled: plantIds.length > 0,
     staleTime: 15 * 60_000, // 14-day historical rolling average — cache for 15 min
@@ -752,10 +767,11 @@ export function useDashboardQueries({
   const { data: todayAllPermeate } = useQuery({
     queryKey: ['dash-all-permeate-today', _qualityTrainIds, _localDateStr],
     queryFn: async () => {
-      if (!_qualityTrainIds.length) return [] as any[];
+      if (!_qualityTrainIds.length) return [];
       const windowStart = new Date(_localDateStr + 'T00:00:00').toISOString();
       const windowEnd   = new Date(_localDateStr + 'T23:59:59').toISOString();
-      const { data, error } = await (supabase.from('ro_train_readings' as any) as any)
+      const { data, error } = await supabase
+        .from('ro_train_readings')
         .select('train_id,permeate_meter_delta,reading_datetime')
         .in('train_id', _qualityTrainIds)
         .gte('reading_datetime', windowStart)
@@ -763,7 +779,7 @@ export function useDashboardQueries({
         .not('permeate_meter_delta', 'is', null)
         .gt('permeate_meter_delta', 0);
       if (error) throw error;
-      return (data ?? []) as any[];
+      return data ?? [];
     },
     // Only fetch when there are no product meter readings — avoids a redundant
     // round-trip when product meters are working correctly.
@@ -820,7 +836,7 @@ export function useDashboardQueries({
 
       // Build tariff map: plant_id → latest ₱/kWh rate (results ordered DESC, first per plant wins)
       const tariffByPlant = new Map<string, number>();
-      for (const t of (tariffRes.data ?? []) as any[]) {
+      for (const t of tariffRes.data ?? []) {
         if (!tariffByPlant.has(t.plant_id)) tariffByPlant.set(t.plant_id, +t.rate_per_kwh);
       }
 
@@ -830,7 +846,7 @@ export function useDashboardQueries({
       // This mirrors TrendChart's priceMap logic (same base-stripping) so stat card
       // and chart always use the same live fallback cost when calculated_cost = 0.
       const priceMap: Record<string, number> = {};
-      for (const p of (pricesRes.data ?? []) as any[]) {
+      for (const p of pricesRes.data ?? []) {
         if (!(p.chemical_name in priceMap)) priceMap[p.chemical_name] = +p.unit_price;
         const base = (p.chemical_name as string).replace(/\s*\([^)]+\)\s*$/, '').trim();
         if (!(base in priceMap)) priceMap[base] = +p.unit_price;
@@ -840,9 +856,9 @@ export function useDashboardQueries({
         { key: 'smbs_kg',        name: 'SMBS'         },
         { key: 'anti_scalant_l', name: 'Anti Scalant' },
         { key: 'soda_ash_kg',    name: 'Soda Ash'     },
-      ];
+      ] as const;
       let dashDosingPeso = 0;
-      for (const r of (dosingRes.data ?? []) as any[]) {
+      for (const r of dosingRes.data ?? []) {
         const stored = +r.calculated_cost || 0;
         const live   = DOSING_KEYS.reduce((s, c) => s + (+r[c.key] || 0) * (priceMap[c.name] ?? 0), 0);
         dashDosingPeso += stored > 0 ? stored : live;
@@ -886,7 +902,8 @@ export function useDashboardQueries({
     queryFn: async () => {
       if (!plantIds.length) return [];
       const today = new Date().toISOString().slice(0, 10);
-      const { data, error } = await (supabase.from('blending_events' as any) as any)
+      const { data, error } = await supabase
+        .from('blending_events')
         .select('volume_m3, plant_id')
         .in('plant_id', plantIds)
         .eq('event_date', today);
