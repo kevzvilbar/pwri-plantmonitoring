@@ -120,15 +120,27 @@ export function usePowerStats({
       }
 
       const baselineTimestamp = rows.length > 0 ? rows[0].reading_datetime : today;
+      let prevRows: any[] = [];
       const { data: prevData, error: prevErr } = await (supabase.rpc as any)(
         'latest_power_readings_before',
         { plant_ids: plantIds, before_ts: baselineTimestamp },
       );
-      if (prevErr) {
-        console.warn('[Dashboard] latest_power_readings_before failed:', prevErr);
+      if (!prevErr && prevData && prevData.length > 0) {
+        prevRows = prevData;
+      } else {
+        if (prevErr) console.warn('[Dashboard] latest_power_readings_before failed:', prevErr);
+        await Promise.all(
+          plantIds.map(async (pid) => {
+            const { data } = await supabase.from('power_readings')
+              .select('daily_consumption_kwh,daily_grid_kwh,meter_reading_kwh,grid_meter_readings,is_meter_replacement,plant_id,reading_datetime')
+              .eq('plant_id', pid).lt('reading_datetime', baselineTimestamp)
+              .order('reading_datetime', { ascending: false }).limit(1);
+            if (data?.[0]) prevRows.push(data[0]);
+          }),
+        );
       }
 
-      return { rows, prevRows: prevData ?? [], isStale };
+      return { rows, prevRows, isStale };
     },
     enabled: plantIds.length > 0,
     staleTime: 120_000,
@@ -147,14 +159,26 @@ export function usePowerStats({
         .in('plant_id', plantIds).gte('reading_datetime', yesterday).lt('reading_datetime', today);
       if (rowsErr) throw rowsErr;
 
+      let prevRows: any[] = [];
       const { data: prevData, error: prevErr } = await (supabase.rpc as any)(
         'latest_power_readings_before',
         { plant_ids: plantIds, before_ts: yesterday },
       );
-      if (prevErr) {
-        console.warn('[Dashboard] yesterday latest_power_readings_before failed:', prevErr);
+      if (!prevErr && prevData && prevData.length > 0) {
+        prevRows = prevData;
+      } else {
+        if (prevErr) console.warn('[Dashboard] yesterday latest_power_readings_before failed:', prevErr);
+        await Promise.all(
+          plantIds.map(async (pid) => {
+            const { data } = await supabase.from('power_readings')
+              .select('daily_consumption_kwh,daily_grid_kwh,meter_reading_kwh,grid_meter_readings,is_meter_replacement,plant_id,reading_datetime')
+              .eq('plant_id', pid).lt('reading_datetime', yesterday)
+              .order('reading_datetime', { ascending: false }).limit(1);
+            if (data?.[0]) prevRows.push(data[0]);
+          }),
+        );
       }
-      return { rows: rows ?? [], prevRows: prevData ?? [] };
+      return { rows: rows ?? [], prevRows };
     },
     enabled: plantIds.length > 0,
     staleTime: 12 * 60 * 60_000,

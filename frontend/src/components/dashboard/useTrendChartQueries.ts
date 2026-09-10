@@ -452,20 +452,28 @@ export function useTrendChartQueries({
         'power_readings',
         'daily_consumption_kwh,daily_solar_kwh,daily_grid_kwh,meter_reading_kwh,grid_meter_readings,multiplier,reading_datetime,is_meter_replacement,plant_id,is_estimated',
       );
-      // For each plant, fetch the single most-recent row BEFORE the window to
-      // establish a delta baseline for the first in-window reading.
-      const preRows: any[] = [];
-      await Promise.all(
-        plantIds.map(async (pid) => {
-          const { data } = await (supabase.from('power_readings' as never) as any)
-            .select('daily_consumption_kwh,daily_solar_kwh,daily_grid_kwh,meter_reading_kwh,grid_meter_readings,multiplier,reading_datetime,is_meter_replacement,plant_id,is_estimated')
-            .eq('plant_id', pid)
-            .lt('reading_datetime', startISO)
-            .order('reading_datetime', { ascending: false })
-            .limit(1);
-          if (data?.[0]) preRows.push(data[0]);
-        }),
+      // Fetch the single most-recent row BEFORE the window per plant in a single round-trip
+      let preRows: any[] = [];
+      const { data: rpcRows, error: rpcErr } = await (supabase.rpc as any)(
+        'latest_power_readings_before',
+        { plant_ids: plantIds, before_ts: startISO },
       );
+      if (!rpcErr && rpcRows && rpcRows.length > 0) {
+        preRows = rpcRows;
+      } else {
+        // Fallback for mock environments or if RPC is unavailable
+        await Promise.all(
+          plantIds.map(async (pid) => {
+            const { data } = await (supabase.from('power_readings' as never) as any)
+              .select('daily_consumption_kwh,daily_solar_kwh,daily_grid_kwh,meter_reading_kwh,grid_meter_readings,multiplier,reading_datetime,is_meter_replacement,plant_id,is_estimated')
+              .eq('plant_id', pid)
+              .lt('reading_datetime', startISO)
+              .order('reading_datetime', { ascending: false })
+              .limit(1);
+            if (data?.[0]) preRows.push(data[0]);
+          }),
+        );
+      }
       // Merge pre-window rows at the front, then sort ascending so
       // computeEntityDeltas sees them in chronological order.
       return [...preRows, ...inWindow].sort(
