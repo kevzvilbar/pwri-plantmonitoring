@@ -17,6 +17,7 @@ import { useState } from 'react';
 import { format } from 'date-fns';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import type { Database } from '@/integrations/supabase/types';
 import { useAuth } from '@/hooks/useAuth';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -57,7 +58,10 @@ export function ReplaceTrainMeterDialog({
   // to just trainId/plantId/readingId, no matter which meter ends up picked.
   const { data: train } = useQuery({
     queryKey: ['train-meter-identity', trainId],
-    queryFn: async () => (await supabase.from('ro_trains' as any).select('*').eq('id', trainId).single() as any).data as any,
+    queryFn: async () => {
+      const { data } = await supabase.from('ro_trains').select('*').eq('id', trainId).single();
+      return data;
+    },
   });
 
   const [form, setForm] = useState({
@@ -66,12 +70,14 @@ export function ReplaceTrainMeterDialog({
     new_installed_date: format(new Date(), 'yyyy-MM-dd'), remarks: '',
   });
 
-  const oldSerial: string | null = train ? ((train as any)[`${meterType}_meter_serial`] ?? null) : null;
+  const oldSerial: string | null = train
+    ? ((train as Record<string, unknown>)[`${meterType}_meter_serial`] as string | null ?? null)
+    : null;
 
   const submit = async () => {
     if (!form.new_serial) { toast.error('New serial required'); return; }
     setBusy(true);
-    const payload: any = {
+    const payload: Database['public']['Tables']['ro_train_meter_replacements']['Insert'] = {
       train_id: trainId, plant_id: plantId, reading_id: readingId ?? null,
       meter_type: meterType, replacement_date: form.replacement_date,
       old_meter_serial: oldSerial, old_meter_final_reading: form.old_final_reading ? +form.old_final_reading : null,
@@ -80,24 +86,42 @@ export function ReplaceTrainMeterDialog({
       new_meter_installed_date: form.new_installed_date,
       replaced_by: activeOperator?.id ?? user?.id, remarks: form.remarks || null,
     };
-    const { error } = await supabase.from('ro_train_meter_replacements' as any).insert(payload);
+    const { error } = await supabase.from('ro_train_meter_replacements').insert(payload);
     if (error) { setBusy(false); toast.error(friendlyError(error)); return; }
 
-    const trainUpdate: any = {
-      [`${meterType}_meter_brand`]: form.new_brand,
-      [`${meterType}_meter_size`]: form.new_size,
-      [`${meterType}_meter_serial`]: form.new_serial,
-      [`${meterType}_meter_installed_date`]: form.new_installed_date,
-    };
-    await supabase.from('ro_trains' as any).update(trainUpdate).eq('id', trainId);
+    const trainUpdate: Database['public']['Tables']['ro_trains']['Update'] =
+      meterType === 'feed'
+        ? {
+            feed_meter_brand: form.new_brand,
+            feed_meter_size: form.new_size,
+            feed_meter_serial: form.new_serial,
+            feed_meter_installed_date: form.new_installed_date,
+          }
+        : meterType === 'permeate'
+        ? {
+            permeate_meter_brand: form.new_brand,
+            permeate_meter_size: form.new_size,
+            permeate_meter_serial: form.new_serial,
+            permeate_meter_installed_date: form.new_installed_date,
+          }
+        : {
+            reject_meter_brand: form.new_brand,
+            reject_meter_size: form.new_size,
+            reject_meter_serial: form.new_serial,
+            reject_meter_installed_date: form.new_installed_date,
+          };
+    await supabase.from('ro_trains').update(trainUpdate).eq('id', trainId);
 
     if (readingId) {
-      const flagCol = `is_${meterType}_meter_replacement`;
-      // is_meter_replacement itself is DB-trigger-derived (OR of the three
-      // granular flags) — no need to set it here too, see the 2026-07-27
-      // migration's sync_ro_train_reading_meter_replacement_flag trigger.
-      const { error: flagError } = await (supabase.from('ro_train_readings' as any) as any)
-        .update({ [flagCol]: true })
+      const readingUpdate: Database['public']['Tables']['ro_train_readings']['Update'] =
+        meterType === 'feed'
+          ? { is_feed_meter_replacement: true }
+          : meterType === 'permeate'
+          ? { is_permeate_meter_replacement: true }
+          : { is_reject_meter_replacement: true };
+      const { error: flagError } = await supabase
+        .from('ro_train_readings')
+        .update(readingUpdate)
         .eq('id', readingId);
       if (flagError) toast.error(`Meter replaced, but couldn't flag the reading: ${friendlyError(flagError)}`);
     }

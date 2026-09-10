@@ -7,6 +7,7 @@
  * No React imports — safe for use in non-component contexts.
  */
 import { supabase } from '@/integrations/supabase/client';
+import type { Database } from '@/integrations/supabase/types';
 import { parsePretreatRow } from './pretreat-csv';
 
 export type PretreatConflictMode = 'skip' | 'overwrite';
@@ -34,10 +35,13 @@ export async function insertPretreatReadings(
   // Skip the DB train lookup when the caller already knows the target train.
   const numToId: Record<string, string> = {};
   if (!options?.trainIdOverride) {
-    const { data: trains } = await (supabase.from('ro_trains' as any) as any)
+    const { data: trains } = await supabase
+      .from('ro_trains')
       .select('id, train_number')
       .eq('plant_id', plantId);
-    (trains ?? []).forEach((t: any) => { numToId[String(t.train_number)] = t.id; });
+    (trains ?? []).forEach((t) => {
+      if (t.train_number != null) numToId[String(t.train_number)] = t.id;
+    });
   }
 
   let count = 0;
@@ -75,7 +79,8 @@ export async function insertPretreatReadings(
     }
 
     // Duplicate check — one per train per minute
-    const { data: existing } = await (supabase.from('ro_pretreatment_readings' as any) as any)
+    const { data: existing } = await supabase
+      .from('ro_pretreatment_readings')
       .select('id')
       .eq('train_id', rowTrainId)
       .gte('reading_datetime', `${dtMin}:00`)
@@ -90,7 +95,7 @@ export async function insertPretreatReadings(
     }
 
     const parsed = parsePretreatRow(r);
-    const payload: Record<string, any> = {
+    const payload: Database['public']['Tables']['ro_pretreatment_readings']['Insert'] = {
       plant_id:         plantId,
       train_id:         rowTrainId,
       reading_datetime: dt,
@@ -98,14 +103,16 @@ export async function insertPretreatReadings(
     };
     if (userId) payload.recorded_by = userId;
 
-    let writeError: any;
+    let writeError: { message: string } | null = null;
     if (existingId) {
-      const { error } = await (supabase.from('ro_pretreatment_readings' as any) as any)
+      const { error } = await supabase
+        .from('ro_pretreatment_readings')
         .update(payload)
         .eq('id', existingId);
       writeError = error;
     } else {
-      const { error } = await (supabase.from('ro_pretreatment_readings' as any) as any)
+      const { error } = await supabase
+        .from('ro_pretreatment_readings')
         .insert(payload);
       writeError = error;
     }

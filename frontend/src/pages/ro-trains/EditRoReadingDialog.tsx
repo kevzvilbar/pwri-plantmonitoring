@@ -27,6 +27,7 @@ import { DateTimePicker } from '@/components/ui/date-picker';
 import { CorrectionReasonField } from '@/components/CorrectionReasonField';
 import { resolveReason, isReasonComplete } from '@/lib/correctionReasons';
 import { supabase } from '@/integrations/supabase/client';
+import type { Database } from '@/integrations/supabase/types';
 import { useAuth } from '@/hooks/useAuth';
 import { canEditEntry, diffFields, logReadingEdit, recalculateTrainDeltas } from './helpers';
 import { getHourBucket, isOfflineRORecord } from '@/lib/hourlyReadingGuard';
@@ -107,12 +108,14 @@ export function EditRoReadingDialog({ row, trainId, onClose, onSaved }: Props) {
 
     const num = (k: string) => (vals[k] !== '' && vals[k] !== undefined ? +vals[k] : null);
 
-    const payload: Record<string, any> = {
+    const payload: Database['public']['Tables']['ro_train_readings']['Update'] = {
       reading_datetime: new Date(dt).toISOString(),
       remarks:          remarks || null,
     };
     for (const f of RO_EDIT_NUMERIC_FIELDS) {
-      if (f.key in row) payload[f.key] = num(f.key);
+      if (f.key in row) {
+        (payload as Record<string, unknown>)[f.key] = num(f.key);
+      }
     }
 
     // Recompute derived fields using the same formulas as the create form
@@ -129,8 +132,10 @@ export function EditRoReadingDialog({ row, trainId, onClose, onSaved }: Props) {
     payload.salt_passage_pct = feedTds != null && feedTds > 0 && permTds != null
       ? +((permTds / feedTds) * 100).toFixed(2) : null;
 
-    const { error } = await (supabase.from('ro_train_readings' as any) as any)
-      .update(payload).eq('id', row.id);
+    const { error } = await supabase
+      .from('ro_train_readings')
+      .update(payload)
+      .eq('id', row.id);
     if (error) { setSaving(false); toast.error(friendlyError(error)); return; }
 
     await recalculateTrainDeltas(trainId);

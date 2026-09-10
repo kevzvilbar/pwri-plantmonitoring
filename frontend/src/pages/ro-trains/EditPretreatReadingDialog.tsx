@@ -188,8 +188,10 @@ export function EditPretreatReadingDialog({ row, trainId, onClose, onSaved }: Pr
       })),
     };
 
-    const { error } = await (supabase.from('ro_pretreatment_readings' as any) as any)
-      .update(payload).eq('id', row.id);
+    const { error } = await supabase
+      .from('ro_pretreatment_readings')
+      .update(payload)
+      .eq('id', row.id);
     if (error) { setSaving(false); toast.error(friendlyError(error)); return; }
 
     const actorLabel = `${activeOperator?.first_name ?? ''} ${activeOperator?.last_name ?? ''}`.trim()

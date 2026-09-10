@@ -159,19 +159,18 @@ export function TrainLogModal({ trainId, trainLabel, plantId, onClose, initialTa
           }
         });
 
-        const uids = [...new Set(readings.map((r: any) => r.recorded_by).filter(Boolean))];
+        const uids = [...new Set(readings.map((r: any) => r.recorded_by).filter((id): id is string => !!id))];
         let profileMap: Record<string, string> = {};
         if (uids.length) {
-          for (const table of ['user_profiles', 'profiles']) {
-            const { data: pdata, error: perr } = await (supabase.from(table as any) as any)
-              .select('id, first_name, last_name, username').in('id', uids);
-            if (!perr && pdata?.length) {
-              profileMap = Object.fromEntries((pdata as any[]).map((p: any) => {
-                const name = `${p.first_name ?? ''} ${p.last_name ?? ''}`.trim() || p.username?.trim() || '';
-                return [p.id, name || null];
-              }).filter(([, n]) => n));
-              if (Object.keys(profileMap).length) break;
-            }
+          const { data: pdata, error: perr } = await supabase
+            .from('user_profiles')
+            .select('id, first_name, last_name, username')
+            .in('id', uids);
+          if (!perr && pdata?.length) {
+            profileMap = Object.fromEntries(pdata.map((p) => {
+              const name = `${p.first_name ?? ''} ${p.last_name ?? ''}`.trim() || p.username?.trim() || '';
+              return [p.id, name || null];
+            }).filter(([, n]) => n));
           }
         }
         return readings.map((r: any) => ({
@@ -188,26 +187,26 @@ export function TrainLogModal({ trainId, trainLabel, plantId, onClose, initialTa
     queryKey: preQueryKey,
     queryFn: async () => {
       try {
-        let q = (supabase.from('ro_pretreatment_readings' as any) as any)
+        let q = supabase
+          .from('ro_pretreatment_readings')
           .select('id,reading_datetime,recorded_by,created_at,plant_id,hpp_target_pressure_psi,bag_filters_changed,afm_units,mmf_readings,booster_pumps,filter_housings,cartridge_filter_housings,remarks,incomplete_reason')
           .eq('train_id', trainId).order('reading_datetime', { ascending: false }).limit(2000);
         if (dateFrom)     q = q.gte('reading_datetime', `${dateFrom}T00:00:00`);
         if (untilNextDay) q = q.lt('reading_datetime',  `${untilNextDay}T00:00:00`);
         const { data, error } = await q;
         if (error) return [];
-        const uids = [...new Set((data ?? []).map((r: any) => r.recorded_by).filter(Boolean))];
+        const uids = [...new Set((data ?? []).map((r) => r.recorded_by).filter((id): id is string => !!id))];
         let profileMap: Record<string, string> = {};
         if (uids.length) {
-          for (const table of ['user_profiles', 'profiles']) {
-            const { data: pd, error: pe } = await (supabase.from(table as any) as any)
-              .select('id, first_name, last_name, username').in('id', uids);
-            if (!pe && pd?.length) {
-              profileMap = Object.fromEntries((pd as any[]).map((p: any) => {
-                const name = `${p.first_name ?? ''} ${p.last_name ?? ''}`.trim() || p.username?.trim() || '';
-                return [p.id, name || null];
-              }).filter(([, n]) => n));
-              if (Object.keys(profileMap).length) break;
-            }
+          const { data: pd, error: pe } = await supabase
+            .from('user_profiles')
+            .select('id, first_name, last_name, username')
+            .in('id', uids);
+          if (!pe && pd?.length) {
+            profileMap = Object.fromEntries(pd.map((p) => {
+              const name = `${p.first_name ?? ''} ${p.last_name ?? ''}`.trim() || p.username?.trim() || '';
+              return [p.id, name || null];
+            }).filter(([, n]) => n));
           }
         }
         return (data ?? []).map((r: any) => ({

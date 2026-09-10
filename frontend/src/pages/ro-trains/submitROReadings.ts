@@ -7,6 +7,7 @@
  * No React imports — safe for use in non-component contexts.
  */
 import { supabase } from '@/integrations/supabase/client';
+import type { Database } from '@/integrations/supabase/types';
 import { flushDeltaCache } from '@/lib/deltaCache';
 import { normalizeRODatetime } from './csv';
 import { classifyDeviation } from '@/lib/flowRateGuards';
@@ -165,7 +166,7 @@ export async function insertROTrainReadings(
     const permDelta = permCurr !== null && permPrev !== null ? Math.max(0, permCurr - permPrev) : null;
 
     // Core payload — columns confirmed present in the original schema
-    const corePayload: Record<string, any> = {
+    const corePayload: Database['public']['Tables']['ro_train_readings']['Insert'] = {
       train_id:             trainId,
       plant_id:             plantId,
       reading_datetime:     dt,
@@ -191,14 +192,14 @@ export async function insertROTrainReadings(
     // needs its own check: CSV import never ran anything like it before.
     const avgs = avgByTrain[trainId];
     const flaggedRateFields = RATE_FIELDS.filter((f) => {
-      const v = corePayload[f];
+      const v = (corePayload as Record<string, unknown>)[f] as number | null;
       return v != null && avgs && classifyDeviation(v, avgs[f], ALERTS.ro_meter_spike_multiplier).tier === 'critical';
     });
 
     // Optional columns — added by migrations; may not exist in all DBs.
     // Only include each key when it has a real value so un-migrated DBs don't
     // get a schema-cache error.
-    const optionalPayload: Record<string, any> = {};
+    const optionalPayload: Partial<Database['public']['Tables']['ro_train_readings']['Insert']> = {};
     const remarksVal  = r.remarks?.trim();
     if (remarksVal)        optionalPayload.remarks                  = remarksVal;
     if (userId)            optionalPayload.recorded_by              = userId;
@@ -218,27 +219,26 @@ export async function insertROTrainReadings(
     // Column-fallback: full payload → core-only on schema-cache miss.
     // Mirrors the pattern in insertPowerReadings / insertWellReadings.
     const OPTIONAL_KEYS = [
-      'remarks', 'recorded_by',
-      'chlorine_residual_mg_l',
-      'feed_meter', 'feed_meter_prev', 'feed_meter_delta',
+      'remarks', 'recorded_by', 'chlorine_residual_mg_l',
       'permeate_meter', 'permeate_meter_prev', 'permeate_meter_delta',
+      'feed_meter', 'feed_meter_prev', 'feed_meter_delta',
       'reject_meter', 'reject_meter_prev', 'reject_meter_delta',
       'norm_status',
     ];
     const isOptionalColError = (msg: string) =>
       OPTIONAL_KEYS.some(k => msg.includes(`'${k}'`));
 
-    const doWrite = async (payload: Record<string, any>) => {
+    const doWrite = async (payload: Database['public']['Tables']['ro_train_readings']['Insert']) => {
       if (existingId) {
         const { error } = await supabase
           .from('ro_train_readings')
-          .update(payload as any)
+          .update(payload)
           .eq('id', existingId);
         return error;
       }
       const { error } = await supabase
         .from('ro_train_readings')
-        .insert(payload as any);
+        .insert(payload);
       return error;
     };
 
@@ -249,7 +249,7 @@ export async function insertROTrainReadings(
         const e2 = await doWrite(corePayload);
         if (e2) errors.push(e2.message);
         else    { count++; affectedTrainIds.add(trainId); }
-      } else if ((error as any).code === '23505') {
+      } else if ('code' in error && (error as { code: string }).code === '23505') {
         errors.push(`Row at ${dt} skipped: a reading was already submitted for train ${r.train_number ?? trainId} at this timestamp.`);
       } else {
         errors.push(error.message);
