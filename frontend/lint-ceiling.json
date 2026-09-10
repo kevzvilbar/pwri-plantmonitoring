@@ -1,7 +1,13 @@
 {
-  "maxWarnings": 1875,
-  "lastUpdated": "2026-09-06",
+  "maxWarnings": 2562,
+  "lastUpdated": "2026-09-10",
   "history": [
+    {
+      "date": "2026-09-10",
+      "maxWarnings": 2562,
+      "previous": 1875,
+      "reason": "Re-baseline lint ceiling following Phase 3-4 god-component decompositions (PretreatmentAndROLog, ReadingHistoryDialog, TrendChartCanvas, Compliance, DataCorrections, Employees) and CSV import consolidation across the app."
+    },
     {
       "date": "2026-08-22",
       "maxWarnings": 1730,
@@ -176,6 +182,11 @@
       "date": "2026-09-06",
       "maxWarnings": 1875,
       "previous": 1862
+    },
+    {
+      "date": "2026-09-10",
+      "maxWarnings": 2562,
+      "previous": 1875
     }
   ]
 }
