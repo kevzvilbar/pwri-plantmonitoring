@@ -12,19 +12,73 @@ import { useReadingGaps, type ReadingGap, gapDescription } from '@/hooks/useRead
 import { useTrainHourlyGaps, type TrainHourlyGap } from '@/hooks/useTrainHourlyGaps';
 import { useTrainAutoOffline, type TrainGap } from '@/hooks/useTrainAutoOffline';
 
+export interface ROAlertReading {
+  train_id?: string;
+  train_number?: number | null;
+  train_name?: string | null;
+  plant_id?: string | null;
+  reading_datetime?: string;
+  dp_psi?: number | null;
+  permeate_tds?: number | null;
+  permeate_ph?: number | null;
+  recovery_pct?: number | null;
+  feed_meter_delta?: number | null;
+  permeate_meter_delta?: number | null;
+  reject_meter_delta?: number | null;
+  [key: string]: unknown;
+}
+
+export interface PretreatmentAlertRow {
+  train_id?: string;
+  plant_id?: string;
+  afm_units?: unknown;
+  filter_housings?: unknown;
+  booster_pumps?: unknown;
+  [key: string]: unknown;
+}
+
+export interface PumpReadingAlertRow {
+  id: string;
+  train_id: string;
+  plant_id?: string;
+  pump_type?: string;
+  pump_number?: number | string;
+  l1_amp?: number | null;
+  l2_amp?: number | null;
+  l3_amp?: number | null;
+  [key: string]: unknown;
+}
+
+export interface ChemInventoryAlertRow {
+  id: string;
+  chemical_name?: string;
+  current_stock?: number | null;
+  low_stock_threshold?: number | null;
+  unit?: string | null;
+  plant_id?: string;
+  [key: string]: unknown;
+}
+
+export interface PowerReadingAlertRow {
+  plant_id: string;
+  reading_datetime?: string;
+  daily_consumption_kwh?: number | null;
+  [key: string]: unknown;
+}
+
 export interface DashboardAlertsParams {
   selectedPlantId: string | null;
   addAlerts: (alerts: PlantAlert[]) => void;
   removeAlerts: (ids: string[]) => void;
   plants: { id: string; name?: string | null; code?: string | null }[] | undefined;
   plantIds: string[];
-  latestRO: unknown[] | undefined;
+  latestRO: ROAlertReading[] | undefined;
   roAvgFlowByTrain: Map<string, Record<ROMeterKind, number | null>>;
-  recentPretreatment: unknown[] | undefined;
-  latestPumpReadings: unknown[] | undefined;
+  recentPretreatment: PretreatmentAlertRow[] | undefined;
+  latestPumpReadings: PumpReadingAlertRow[] | undefined;
   powerAvgByPlant: Map<string, number>;
   prevPowerRowByPlant: Map<string, { reading_datetime: string }>;
-  todayPower: unknown[];
+  todayPower: PowerReadingAlertRow[];
   powerIsStale: boolean;
   nrw: number | null;
   nrwBreached: boolean;
@@ -35,7 +89,7 @@ export interface DashboardAlertsParams {
   wellGaps?: ReadingGap[];
   locatorGaps?: ReadingGap[];
   trainHourlyGaps?: TrainHourlyGap[];
-  chemInv?: unknown[];
+  chemInv?: ChemInventoryAlertRow[];
 }
 
 export function useDashboardAlerts({
@@ -90,7 +144,7 @@ export function useDashboardAlerts({
       const since = format(subDays(new Date(), Math.max(1, days)), 'yyyy-MM-dd');
       const alerts: any[] = [];
 
-      let qDt = supabase.from('downtime_events' as any)
+      let qDt = supabase.from('downtime_events')
         .select('id, plant_id, subsystem, duration_hrs, event_date')
         .gte('event_date', since);
       if (selectedPlantId) qDt = qDt.eq('plant_id', selectedPlantId);
@@ -139,7 +193,7 @@ export function useDashboardAlerts({
         });
       });
 
-      let qSnap = supabase.from('compliance_snapshots' as any)
+      let qSnap = supabase.from('compliance_snapshots')
         .select('plant_id, evaluated_at, violations')
         .order('evaluated_at', { ascending: false }).limit(20);
       if (selectedPlantId) qSnap = qSnap.eq('plant_id', selectedPlantId);
@@ -187,24 +241,24 @@ export function useDashboardAlerts({
   }, [plants]);
 
   const roMeterSpikes = useMemo(() => {
-    const byTrain = new Map<string, any[]>();
-    ((latestRO as any[]) ?? []).forEach((r) => {
+    const byTrain = new Map<string, ROAlertReading[]>();
+    (latestRO ?? []).forEach((r) => {
       const key = String(r.train_id ?? 'unknown');
       if (!byTrain.has(key)) byTrain.set(key, []);
       byTrain.get(key)!.push(r);
     });
-    const spikes: { row: any; kind: ROMeterKind; result: ReturnType<typeof evaluateROMeterSpike> }[] = [];
+    const spikes: { row: ROAlertReading; kind: ROMeterKind; result: ReturnType<typeof evaluateROMeterSpike> }[] = [];
     byTrain.forEach((rows, trainId) => {
       const sorted = [...rows].sort(
-        (a, b) => new Date(a.reading_datetime).getTime() - new Date(b.reading_datetime).getTime(),
+        (a, b) => new Date(a.reading_datetime ?? 0).getTime() - new Date(b.reading_datetime ?? 0).getTime(),
       );
       const avgRates = roAvgFlowByTrain.get(trainId);
       for (let i = 1; i < sorted.length; i++) {
         const hoursElapsed =
-          (new Date(sorted[i].reading_datetime).getTime() - new Date(sorted[i - 1].reading_datetime).getTime()) / 3_600_000;
+          (new Date(sorted[i].reading_datetime ?? 0).getTime() - new Date(sorted[i - 1].reading_datetime ?? 0).getTime()) / 3_600_000;
         (['feed', 'permeate', 'reject'] as ROMeterKind[]).forEach((kind) => {
           const col = `${kind}_meter_delta`;
-          const result = evaluateROMeterSpike(kind, sorted[i][col], hoursElapsed, avgRates?.[kind] ?? null);
+          const result = evaluateROMeterSpike(kind, sorted[i][col] as number | null, hoursElapsed, avgRates?.[kind] ?? null);
           if (result.tier === 'critical') spikes.push({ row: sorted[i], kind, result });
         });
       }
@@ -218,8 +272,8 @@ export function useDashboardAlerts({
       title: string; description: string; idSuffix: string;
     };
     const out: PretreatAlert[] = [];
-    const byTrain = new Map<string, any[]>();
-    ((recentPretreatment as any[]) ?? []).forEach((r) => {
+    const byTrain = new Map<string, PretreatmentAlertRow[]>();
+    (recentPretreatment ?? []).forEach((r) => {
       const key = String(r.train_id ?? 'unknown');
       if (!byTrain.has(key)) byTrain.set(key, []);
       byTrain.get(key)!.push(r);
@@ -231,7 +285,8 @@ export function useDashboardAlerts({
       const plantId = latest.plant_id ?? meta?.plant_id ?? '';
       const trainLabel = meta?.train_name ?? (meta?.train_number != null ? `Train ${meta.train_number}` : 'Train');
 
-      (latest.afm_units ?? []).forEach((u: any) => {
+      const afmUnits = Array.isArray(latest.afm_units) ? latest.afm_units : [];
+      afmUnits.forEach((u: any) => {
         const dp = u.dp_psi ?? dpPsi(u.in_psi, u.out_psi);
         if (dp != null && dp >= ALERTS.pretreatment_afm_dp_max) {
           out.push({
@@ -243,7 +298,8 @@ export function useDashboardAlerts({
         }
       });
 
-      (latest.filter_housings ?? []).forEach((h: any) => {
+      const filterHousings = Array.isArray(latest.filter_housings) ? latest.filter_housings : [];
+      filterHousings.forEach((h: any) => {
         const dp = dpPsi(h.in_psi, h.out_psi);
         if (dp != null && dp >= ALERTS.pretreatment_filter_housing_dp_max) {
           out.push({
@@ -257,8 +313,10 @@ export function useDashboardAlerts({
 
       if (prior) {
         const priorByUnit = new Map<number, any>();
-        (prior.booster_pumps ?? []).forEach((p: any) => { if (p.unit != null) priorByUnit.set(+p.unit, p); });
-        (latest.booster_pumps ?? []).forEach((p: any) => {
+        const priorPumps = Array.isArray(prior.booster_pumps) ? prior.booster_pumps : [];
+        priorPumps.forEach((p: any) => { if (p.unit != null) priorByUnit.set(+p.unit, p); });
+        const latestPumps = Array.isArray(latest.booster_pumps) ? latest.booster_pumps : [];
+        latestPumps.forEach((p: any) => {
           const amp = p.amperage != null ? +p.amperage : null;
           const prevAmp = priorByUnit.get(+p.unit)?.amperage ?? null;
           if (
@@ -284,7 +342,7 @@ export function useDashboardAlerts({
       title: string; description: string; idSuffix: string;
     };
     const out: PumpAlert[] = [];
-    ((latestPumpReadings as any[]) ?? []).forEach((r) => {
+    (latestPumpReadings ?? []).forEach((r) => {
       const meta = qualityTrainMeta2.get(r.train_id);
       const plantId = r.plant_id ?? meta?.plant_id ?? '';
       const trainLabel = meta?.train_name ?? (meta?.train_number != null ? `Train ${meta.train_number}` : 'Train');
@@ -386,8 +444,8 @@ export function useDashboardAlerts({
       removeAlerts(['nrw-threshold']);
     }
 
-    const latestPerTrain = new Map<string, any>();
-    ((latestRO as any[]) ?? []).forEach((r) => {
+    const latestPerTrain = new Map<string, ROAlertReading>();
+    (latestRO ?? []).forEach((r) => {
       const key = String(r.train_id ?? r.train_number ?? 'unknown');
       if (!latestPerTrain.has(key)) latestPerTrain.set(key, r);
     });
@@ -470,7 +528,7 @@ export function useDashboardAlerts({
       }
     });
 
-    ((chemInv as any[]) ?? []).forEach((c) => {
+    (chemInv ?? []).forEach((c) => {
       if ((c.current_stock ?? 0) < (c.low_stock_threshold ?? 0)) {
         storeAlerts.push({
           id:          `stock-${c.id}`,
@@ -524,7 +582,7 @@ export function useDashboardAlerts({
       });
     });
 
-    (powerIsStale ? [] : ((todayPower as any[]) ?? [])).forEach((r) => {
+    (powerIsStale ? [] : (todayPower ?? [])).forEach((r) => {
       const pid = r.plant_id ?? selectedPlantId ?? '';
       const todayKwh = Number(r.daily_consumption_kwh);
       const avgRate = powerAvgByPlant.get(pid) ?? null;

@@ -21,7 +21,7 @@ export function useQualityStats({
       if (!plantIds.length) return { ids: [] as string[], metaMap: new Map<string, { plant_id: string; train_number: number | null; train_name: string | null; well_id: string | null; unit_type: string | null }>() };
       const { data, error } = await supabase
         .from('ro_trains')
-        .select('id, plant_id, train_number, name, well_id')
+        .select('id, plant_id, train_number, name, well_id, unit_type')
         .in('plant_id', plantIds);
       if (error) throw error;
       const rows = data ?? [];
@@ -31,7 +31,7 @@ export function useQualityStats({
         train_number: t.train_number ?? null,
         train_name:   t.name ?? null,
         well_id:      t.well_id ?? null,
-        unit_type:    (t as any).unit_type ?? 'primary',
+        unit_type:    t.unit_type ?? 'primary',
       }));
       return { ids: rows.map((t) => t.id), metaMap };
     },

@@ -201,10 +201,10 @@ export function useProductionStats({
       if (!permeateProductionPlantIds.length) return { ids: [] as string[], trainPlantMap: new Map<string, string>() };
       const { data, error } = await supabase
         .from('ro_trains')
-        .select('id, plant_id')
+        .select('id, plant_id, unit_type')
         .in('plant_id', permeateProductionPlantIds);
       if (error) throw error;
-      const rows = (data ?? []).filter((t) => (t as any).unit_type !== 'secondary');
+      const rows = (data ?? []).filter((t) => t.unit_type !== 'secondary');
       const trainPlantMap = new Map<string, string>();
       rows.forEach((t) => trainPlantMap.set(t.id, t.plant_id));
       return { ids: rows.map((t) => t.id), trainPlantMap };

@@ -61,22 +61,22 @@ export function useDataSummaryQueries({ open, plantIds }: DataSummaryQueriesOpti
     queryFn: async () => {
       if (!plantIds.length) return [];
       const { data } = await supabase
-        .from('locators').select('id,name,code,plant_id,default_input_mode,is_derived')
+        .from('locators').select('id,name,plant_id,default_input_mode,is_derived')
         .in('plant_id', plantIds).eq('status', 'Active');
-      return (data ?? []) as any[];
+      return data ?? [];
     },
     enabled: open && plantIds.length > 0,
     staleTime: 30_000,
     refetchInterval: open ? 30_000 : false,
   });
 
-  const locatorIds = useMemo(() => (locators ?? []).map((l: any) => l.id), [locators]);
+  const locatorIds = useMemo(() => (locators ?? []).map((l) => l.id), [locators]);
 
   const directLocatorIds = useMemo(
     () => new Set(
       (locators ?? [])
-        .filter((l: any) => l.default_input_mode === 'direct' || l.is_derived === true)
-        .map((l: any) => l.id),
+        .filter((l) => l.default_input_mode === 'direct' || l.is_derived === true)
+        .map((l) => l.id),
     ),
     [locators],
   );
@@ -86,13 +86,13 @@ export function useDataSummaryQueries({ open, plantIds }: DataSummaryQueriesOpti
     queryFn: async () => {
       if (!locatorIds.length) return [];
       const { data } = await supabase
-        .from('locator_readings_clean' as any)
+        .from('locator_readings_clean')
         .select('locator_id,daily_volume,current_reading,previous_reading,reading_datetime,is_meter_replacement,is_estimated')
         .in('locator_id', locatorIds)
         .gte('reading_datetime', startISO)
         .lte('reading_datetime', endISO)
         .order('reading_datetime', { ascending: true });
-      return (data ?? []) as any[];
+      return data ?? [];
     },
     enabled: open && locatorIds.length > 0,
     refetchInterval: open ? 30_000 : false,
@@ -101,19 +101,19 @@ export function useDataSummaryQueries({ open, plantIds }: DataSummaryQueriesOpti
   const { data: productMeters, isLoading: metersLoading } = useQuery({
     queryKey: ['dsm-product-meters', plantIds],
     queryFn: async () => {
-      if (!plantIds.length) return [] as any[];
-      const { data } = await (supabase.from('product_meters' as any) as any)
+      if (!plantIds.length) return [];
+      const { data } = await supabase.from('product_meters')
         .select('id,name,plant_id,is_derived').in('plant_id', plantIds);
-      return (data ?? []) as any[];
+      return data ?? [];
     },
     enabled: open && plantIds.length > 0,
     refetchInterval: open ? 30_000 : false,
   });
 
-  const meterIds = useMemo(() => (productMeters ?? []).map((m: any) => m.id), [productMeters]);
+  const meterIds = useMemo(() => (productMeters ?? []).map((m) => m.id), [productMeters]);
 
   const directMeterIds = useMemo(
-    () => new Set((productMeters ?? []).filter((m: any) => m.is_derived === true).map((m: any) => m.id)),
+    () => new Set((productMeters ?? []).filter((m) => m.is_derived === true).map((m) => m.id)),
     [productMeters],
   );
 
@@ -121,13 +121,13 @@ export function useDataSummaryQueries({ open, plantIds }: DataSummaryQueriesOpti
     queryKey: ['dsm-prod-readings', meterIds, fromStr, toStr],
     queryFn: async () => {
       if (!meterIds.length) return [];
-      const { data } = await (supabase.from('product_meter_readings' as any) as any)
+      const { data } = await supabase.from('product_meter_readings')
         .select('meter_id,daily_volume,current_reading,previous_reading,reading_datetime,is_meter_replacement,is_estimated')
         .in('meter_id', meterIds)
         .gte('reading_datetime', startISO)
         .lte('reading_datetime', endISO)
         .order('reading_datetime', { ascending: true });
-      return (data ?? []) as any[];
+      return data ?? [];
     },
     enabled: open && meterIds.length > 0,
     refetchInterval: open ? 30_000 : false,
@@ -136,31 +136,35 @@ export function useDataSummaryQueries({ open, plantIds }: DataSummaryQueriesOpti
   const { data: modalMeterConfigs, isLoading: configLoading } = useQuery({
     queryKey: ['dsm-meter-configs', plantIds],
     queryFn: async () => {
-      if (!plantIds.length) return [] as any[];
-      const { data } = await (supabase.from('plant_meter_config' as any) as any)
+      if (!plantIds.length) return [];
+      const { data } = await supabase.from('plant_meter_config')
         .select('plant_id,permeate_is_production,config')
         .in('plant_id', plantIds);
-      return (data ?? []) as any[];
+      return data ?? [];
     },
     enabled: open && plantIds.length > 0,
     staleTime: 30_000,
-    refetchInterval: open ? 30_000 : false,
   });
 
   const permeateIsProductionPlantIds = useMemo(
     () => (modalMeterConfigs ?? [])
-      .filter((c: any) => c.permeate_is_production === true || c.config?.permeate_is_production === true)
-      .map((c: any) => c.plant_id as string),
+      .filter((c) => {
+        const cfg = c.config as Record<string, unknown> | null;
+        return c.permeate_is_production === true || cfg?.permeate_is_production === true;
+      })
+      .map((c) => c.plant_id),
     [modalMeterConfigs],
   );
 
   const productExcludedPlantIds = useMemo(
     () => new Set<string>(
       (modalMeterConfigs ?? [])
-        .filter((c: any) =>
-          c.config?.ro_production_source === 'permeate' &&
-          (c.permeate_is_production === true || c.config?.permeate_is_production === true))
-        .map((c: any) => c.plant_id as string),
+        .filter((c) => {
+          const cfg = c.config as Record<string, unknown> | null;
+          return cfg?.ro_production_source === 'permeate' &&
+            (c.permeate_is_production === true || cfg?.permeate_is_production === true);
+        })
+        .map((c) => c.plant_id),
     ),
     [modalMeterConfigs],
   );
@@ -170,13 +174,13 @@ export function useDataSummaryQueries({ open, plantIds }: DataSummaryQueriesOpti
   const { data: roTrainsMeta, isLoading: trainsLoading } = useQuery({
     queryKey: ['dsm-ro-trains', permeateIsProductionPlantIds],
     queryFn: async () => {
-      if (!permeateIsProductionPlantIds.length) return [] as any[];
+      if (!permeateIsProductionPlantIds.length) return [];
       const { data } = await supabase
         .from('ro_trains')
         .select('id,train_number,plant_id')
         .in('plant_id', permeateIsProductionPlantIds)
         .order('train_number');
-      return (data ?? []) as any[];
+      return data ?? [];
     },
     enabled: open && permeateIsProductionPlantIds.length > 0,
     refetchInterval: open ? 30_000 : false,
@@ -185,7 +189,7 @@ export function useDataSummaryQueries({ open, plantIds }: DataSummaryQueriesOpti
   const { data: roMeterReadings, isLoading: roLoading } = useQuery({
     queryKey: ['dsm-ro-readings', permeateIsProductionPlantIds, fromStr, toStr],
     queryFn: async () => {
-      if (!permeateIsProductionPlantIds.length) return [] as any[];
+      if (!permeateIsProductionPlantIds.length) return [];
       const { data } = await supabase
         .from('ro_train_readings')
         .select('train_id,permeate_meter_delta,reading_datetime,is_estimated')
@@ -194,7 +198,7 @@ export function useDataSummaryQueries({ open, plantIds }: DataSummaryQueriesOpti
         .gt('permeate_meter_delta', 0)
         .gte('reading_datetime', startISO)
         .lte('reading_datetime', endISO);
-      return (data ?? []) as any[];
+      return data ?? [];
     },
     enabled: open && permeateIsProductionPlantIds.length > 0,
     staleTime: 30_000,
@@ -204,7 +208,7 @@ export function useDataSummaryQueries({ open, plantIds }: DataSummaryQueriesOpti
   const { data: roCurrentReadings } = useQuery({
     queryKey: ['dsm-ro-current', permeateIsProductionPlantIds, fromStr, toStr],
     queryFn: async () => {
-      if (!permeateIsProductionPlantIds.length) return [] as any[];
+      if (!permeateIsProductionPlantIds.length) return [];
       const { data } = await supabase
         .from('ro_train_readings')
         .select('train_id,permeate_meter,reading_datetime')
@@ -212,7 +216,7 @@ export function useDataSummaryQueries({ open, plantIds }: DataSummaryQueriesOpti
         .not('permeate_meter', 'is', null)
         .gte('reading_datetime', startISO)
         .lte('reading_datetime', endISO);
-      return (data ?? []) as any[];
+      return data ?? [];
     },
     enabled: open && (tab === 'current' || tab === 'production') && permeateIsProductionPlantIds.length > 0,
   });

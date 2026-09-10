@@ -6,6 +6,18 @@ import { calc } from '@/lib/calculations';
 import { pctDelta } from '@/components/dashboard/types';
 import { computeRollingAverageRateFromDeltas, type VolumePoint } from '@/lib/flowRateGuards';
 
+export interface PowerRow {
+  daily_consumption_kwh?: number | null;
+  daily_grid_kwh?: number | null;
+  daily_solar_kwh?: number | null;
+  meter_reading_kwh?: number | null;
+  grid_meter_readings?: unknown;
+  is_meter_replacement?: boolean | null;
+  plant_id: string;
+  reading_datetime: string;
+  [key: string]: unknown;
+}
+
 export interface UsePowerStatsParams {
   plantIds: string[];
   today: string;
@@ -15,12 +27,12 @@ export interface UsePowerStatsParams {
 }
 
 export function computePowerKwh(
-  currentRows: any[],
-  prevRows: any[],
+  currentRows: PowerRow[],
+  prevRows: PowerRow[],
   configMap: Map<string, number[]> | undefined,
   tariffByPlant?: Map<string, number>,
 ): { kwh: number; powerCostPeso: number | null } {
-  const prevByPlant = new Map<string, any>();
+  const prevByPlant = new Map<string, PowerRow>();
   for (const p of prevRows) prevByPlant.set(p.plant_id, p);
   let totalKwh = 0;
   let totalCostPeso = 0;
@@ -84,9 +96,9 @@ export function usePowerStats({
           .select('plant_id,grid_meter_multipliers')
           .in('plant_id', plantIds);
         for (const cfg of data ?? []) {
-          const mArr = cfg.grid_meter_multipliers as any[];
+          const mArr = cfg.grid_meter_multipliers as unknown[];
           if (Array.isArray(mArr) && mArr.length > 0)
-            map.set(cfg.plant_id, mArr.map((v) => +v > 0 ? +v : 1));
+            map.set(cfg.plant_id, mArr.map((v) => Number(v) > 0 ? Number(v) : 1));
         }
       } catch { /* plant_power_config may not exist */ }
       return map;
@@ -98,14 +110,14 @@ export function usePowerStats({
   const { data: todayPowerRaw } = useQuery({
     queryKey: ['dash-power-today', plantIds],
     queryFn: async () => {
-      if (!plantIds.length) return { rows: [] as any[], prevRows: [] as any[], isStale: false };
+      if (!plantIds.length) return { rows: [] as PowerRow[], prevRows: [] as PowerRow[], isStale: false };
 
       const { data: todayRows, error: todayErr } = await supabase.from('power_readings')
         .select('daily_consumption_kwh,daily_grid_kwh,meter_reading_kwh,grid_meter_readings,is_meter_replacement,plant_id,reading_datetime')
         .in('plant_id', plantIds).gte('reading_datetime', today);
       if (todayErr) throw todayErr;
 
-      let rows = todayRows ?? [];
+      let rows: PowerRow[] = todayRows ?? [];
       let isStale = false;
 
       if (!rows.length) {
@@ -113,18 +125,18 @@ export function usePowerStats({
           .select('daily_consumption_kwh,daily_grid_kwh,meter_reading_kwh,grid_meter_readings,is_meter_replacement,plant_id,reading_datetime')
           .in('plant_id', plantIds).order('reading_datetime', { ascending: false }).limit(plantIds.length * 3);
         if (recentErr) throw recentErr;
-        const latestByPlant = new Map<string, any>();
+        const latestByPlant = new Map<string, PowerRow>();
         (recent ?? []).forEach((r) => { if (!latestByPlant.has(r.plant_id)) latestByPlant.set(r.plant_id, r); });
         rows = Array.from(latestByPlant.values());
         isStale = rows.length > 0;
       }
 
       const baselineTimestamp = rows.length > 0 ? rows[0].reading_datetime : today;
-      let prevRows: any[] = [];
-      const { data: prevData, error: prevErr } = await (supabase.rpc as any)(
+      let prevRows: PowerRow[] = [];
+      const { data: prevData, error: prevErr } = (await (supabase.rpc as any)(
         'latest_power_readings_before',
         { plant_ids: plantIds, before_ts: baselineTimestamp },
-      );
+      )) as { data: PowerRow[] | null; error: unknown };
       if (!prevErr && prevData && prevData.length > 0) {
         prevRows = prevData;
       } else {
@@ -153,17 +165,17 @@ export function usePowerStats({
   const { data: yPower } = useQuery({
     queryKey: ['dash-power-yest', plantIds],
     queryFn: async () => {
-      if (!plantIds.length) return { rows: [] as any[], prevRows: [] as any[] };
+      if (!plantIds.length) return { rows: [] as PowerRow[], prevRows: [] as PowerRow[] };
       const { data: rows, error: rowsErr } = await supabase.from('power_readings')
         .select('daily_consumption_kwh,daily_grid_kwh,meter_reading_kwh,grid_meter_readings,is_meter_replacement,plant_id,reading_datetime')
         .in('plant_id', plantIds).gte('reading_datetime', yesterday).lt('reading_datetime', today);
       if (rowsErr) throw rowsErr;
 
-      let prevRows: any[] = [];
-      const { data: prevData, error: prevErr } = await (supabase.rpc as any)(
+      let prevRows: PowerRow[] = [];
+      const { data: prevData, error: prevErr } = (await (supabase.rpc as any)(
         'latest_power_readings_before',
         { plant_ids: plantIds, before_ts: yesterday },
-      );
+      )) as { data: PowerRow[] | null; error: unknown };
       if (!prevErr && prevData && prevData.length > 0) {
         prevRows = prevData;
       } else {
@@ -178,7 +190,7 @@ export function usePowerStats({
           }),
         );
       }
-      return { rows: rows ?? [], prevRows };
+      return { rows: (rows ?? []) as PowerRow[], prevRows };
     },
     enabled: plantIds.length > 0,
     staleTime: 12 * 60 * 60_000,
@@ -223,7 +235,7 @@ export function usePowerStats({
 
   const prevPowerRowByPlant = useMemo(() => {
     const m = new Map<string, { reading_datetime: string }>();
-    (todayPowerRaw?.prevRows ?? []).forEach((r: any) => {
+    (todayPowerRaw?.prevRows ?? []).forEach((r: PowerRow) => {
       if (r.plant_id && r.reading_datetime) m.set(r.plant_id, r);
     });
     return m;

@@ -28,22 +28,23 @@ export function PendingReviewCard({ plantIds }: Props) {
     queryFn: async () => {
       const [tableCounts, corrReqCount] = await Promise.all([
         Promise.all(
-          PENDING_REVIEW_TABLES.map((t) => {
-            let q = supabase.from(t as any).select('id', { count: 'exact', head: true }).eq('norm_status', 'pending_review');
+          PENDING_REVIEW_TABLES.map(async (t) => {
+            let q = supabase.from(t).select('id', { count: 'exact', head: true }).eq('norm_status', 'pending_review');
             if (plantIds.length) q = q.in('plant_id', plantIds);
-            return q as any;
+            const { count } = await q;
+            return count ?? 0;
           }),
         ),
-        (() => {
-          let q = supabase.from('correction_requests' as any).select('id', { count: 'exact', head: true }).eq('status', 'pending');
+        (async () => {
+          let q = supabase.from('correction_requests').select('id', { count: 'exact', head: true }).eq('status', 'pending');
           if (plantIds.length) q = q.in('plant_id', plantIds);
-          return q as any;
+          const { count } = await q;
+          return count ?? 0;
         })(),
       ]);
 
-      const flaggedSum = tableCounts.reduce((sum, r) => sum + (r.count ?? 0), 0);
-      const corrSum = (corrReqCount as any)?.count ?? 0;
-      return flaggedSum + corrSum;
+      const flaggedSum = tableCounts.reduce((sum, c) => sum + c, 0);
+      return flaggedSum + corrReqCount;
     },
     // FIX (egress): staleTime matched to refetchInterval — was relying on the 30s
     // global default, so the app-wide background-sync sweep force-refetched this

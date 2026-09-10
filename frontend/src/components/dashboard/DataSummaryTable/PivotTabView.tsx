@@ -19,19 +19,29 @@ function fmtVal(v: number | null | undefined, minimumFractionDigits = 1, maximum
   return v.toLocaleString(undefined, { minimumFractionDigits, maximumFractionDigits });
 }
 
-function getEntityLabel(e: any, i: number, tab: 'production' | 'consumption') {
-  const isRoTrain = tab === 'production' && (e as any)._source === 'ro';
+export interface PivotEntity {
+  id: string;
+  name?: string | null;
+  code?: string | null;
+  plant_id?: string;
+  _source?: string;
+  train_number?: number | null;
+  [key: string]: unknown;
+}
+
+function getEntityLabel(e: PivotEntity, i: number, tab: 'production' | 'consumption') {
+  const isRoTrain = tab === 'production' && e._source === 'ro';
   return isRoTrain
     ? `RO${e.train_number ?? i + 1}`
     : (e.name ?? e.code ?? `#${i + 1}`);
 }
 
-function getEntitySublabel(e: any, plantCodeById: Map<string, string>) {
-  return plantCodeById.get(e.plant_id) ?? '';
+function getEntitySublabel(e: PivotEntity, plantCodeById: Map<string, string>) {
+  return e.plant_id ? plantCodeById.get(e.plant_id) ?? '' : '';
 }
 
-function EntityHeader({ e, i, tab, plantCodeById }: { e: any; i: number; tab: string; plantCodeById: Map<string, string> }) {
-  const isRoTrain = tab === 'production' && (e as any)._source === 'ro';
+function EntityHeader({ e, i, tab, plantCodeById }: { e: PivotEntity; i: number; tab: string; plantCodeById: Map<string, string> }) {
+  const isRoTrain = tab === 'production' && e._source === 'ro';
   const label = getEntityLabel(e, i, tab as 'production' | 'consumption');
   const sublabel = getEntitySublabel(e, plantCodeById);
   return (

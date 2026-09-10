@@ -68,10 +68,10 @@ export function useTrendChartQueries({
   const { data: productMeterNames } = useQuery({
     queryKey: ['entity-names-product-meters', plantIds],
     queryFn: async () => {
-      const { data } = await (supabase.from('product_meters' as never) as any)
+      const { data } = await supabase.from('product_meters')
         .select('id, name').in('plant_id', plantIds);
       const map = new Map<string, string>();
-      (data ?? []).forEach((m: any) => map.set(m.id, m.name));
+      (data ?? []).forEach((m) => map.set(m.id, m.name));
       return map;
     },
     enabled: plantIds.length > 0 && needsProductMeterReadings,
@@ -94,13 +94,13 @@ export function useTrendChartQueries({
     queryKey: ['trend-meter-direct-ids', plantIds],
     queryFn: async () => {
       if (!plantIds.length) return new Set<string>();
-      const { data } = await (supabase.from('product_meters' as never) as any)
+      const { data } = await supabase.from('product_meters')
         .select('id,is_derived')
         .in('plant_id', plantIds);
       return new Set<string>(
         (data ?? [])
-          .filter((m: any) => m.is_derived === true)
-          .map((m: any) => m.id as string),
+          .filter((m) => m.is_derived === true)
+          .map((m) => m.id),
       );
     },
     enabled: plantIds.length > 0 && needsProductMeterReadings,
@@ -215,7 +215,7 @@ export function useTrendChartQueries({
     queryFn: async () => {
       // Try with is_meter_replacement first; fall back gracefully if column
       // doesn't exist in this deployment (field will be undefined → false).
-      const { data, error } = await (supabase.from('product_meter_readings' as never) as any)
+      const { data, error } = await supabase.from('product_meter_readings')
         // Bug fix: include daily_volume so computeEntityDeltas can use it directly,
         // matching how locator_readings are handled (avoids boundary-read delta = 0).
         .select('meter_id,daily_volume,current_reading,previous_reading,reading_datetime,is_meter_replacement,plant_id,norm_status,is_estimated')
@@ -224,17 +224,17 @@ export function useTrendChartQueries({
         .lte('reading_datetime', endISO);
       if (error) {
         if (error.message?.includes('is_meter_replacement') || error.message?.includes('is_estimated')) {
-          const { data: d2, error: e2 } = await (supabase.from('product_meter_readings' as never) as any)
+          const { data: d2, error: e2 } = await supabase.from('product_meter_readings')
             .select('meter_id,daily_volume,current_reading,previous_reading,reading_datetime,plant_id,norm_status')
             .in('plant_id', plantIds)
             .gte('reading_datetime', startISO)
             .lte('reading_datetime', endISO);
           if (e2) throw new Error(`product_meter_readings: ${e2.message}`);
-          return (d2 as any[]) ?? [];
+          return (d2 ?? []) as any[];
         }
         throw new Error(`product_meter_readings: ${error.message}`);
       }
-      return (data as any[]) ?? [];
+      return (data ?? []) as any[];
     },
     enabled: plantIds.length > 0 && needsProductMeterReadings,
     staleTime: 180_000,
@@ -310,17 +310,17 @@ export function useTrendChartQueries({
     queryKey: ['trend-ro-train-ids', plantIds],
     queryFn: async () => {
       if (!plantIds.length) return { ids: [] as string[], trainPlantMap: new Map<string, string>(), trainUnitTypeMap: new Map<string, string>() };
-      const { data } = await (supabase.from('ro_trains' as never) as any)
+      const { data } = await supabase.from('ro_trains')
         .select('id, plant_id, unit_type')
         .in('plant_id', plantIds);
       const rows = data ?? [];
       const trainPlantMap = new Map<string, string>();
       const trainUnitTypeMap = new Map<string, string>();
-      rows.forEach((t: any) => {
+      rows.forEach((t) => {
         trainPlantMap.set(t.id, t.plant_id);
         trainUnitTypeMap.set(t.id, t.unit_type ?? 'primary');
       });
-      return { ids: rows.map((t: any) => t.id as string), trainPlantMap, trainUnitTypeMap };
+      return { ids: rows.map((t) => t.id as string), trainPlantMap, trainUnitTypeMap };
     },
     enabled: plantIds.length > 0,
     staleTime: 10 * 60_000,
@@ -353,7 +353,7 @@ export function useTrendChartQueries({
       const NEW_COLS = ['permeate_meter_prev', 'permeate_meter_delta'];
       const isNewColError = (msg: string) => NEW_COLS.some(c => msg.includes(c));
 
-      const { data, error } = await (supabase.from('ro_train_readings' as never) as any)
+      const { data, error } = await supabase.from('ro_train_readings')
         .select(FULL_SELECT)
         .in('train_id', trainIds)
         .gte('reading_datetime', startISO)
@@ -361,7 +361,7 @@ export function useTrendChartQueries({
         .order('reading_datetime', { ascending: true });
       if (error) {
         if (isNewColError(error.message)) {
-          const { data: d2, error: e2 } = await (supabase.from('ro_train_readings' as never) as any)
+          const { data: d2, error: e2 } = await supabase.from('ro_train_readings')
             .select(LEGACY_SELECT)
             .in('train_id', trainIds)
             .gte('reading_datetime', startISO)
@@ -383,11 +383,11 @@ export function useTrendChartQueries({
   const { data: roTrainNames } = useQuery({
     queryKey: ['entity-names-ro-trains', plantIds],
     queryFn: async () => {
-      const { data } = await (supabase.from('ro_trains' as never) as any)
+      const { data } = await supabase.from('ro_trains')
         .select('id, name')
         .in('plant_id', plantIds);
       const map = new Map<string, string>();
-      (data ?? []).forEach((t: any) => map.set(t.id, t.name ?? `Train ${String(t.id).slice(-4)}`));
+      (data ?? []).forEach((t) => map.set(t.id, t.name ?? `Train ${String(t.id).slice(-4)}`));
       return map;
     },
     enabled: plantIds.length > 0 && (needsRoReadings || needsPermeateProduction),
@@ -403,7 +403,7 @@ export function useTrendChartQueries({
   const { data: permeateConfigData } = useQuery({
     queryKey: ['plant-meter-config-permeate', plantIds],
     queryFn: async () => {
-      const { data } = await (supabase.from('plant_meter_config' as any) as any)
+      const { data } = await supabase.from('plant_meter_config')
         .select('plant_id, permeate_is_production, config')
         .in('plant_id', plantIds);
       const permeateCounts = new Set<string>();
@@ -414,22 +414,11 @@ export function useTrendChartQueries({
       // keep BOTH their product meter reading (Step 1) and their permeate delta
       // (Step 2) — they stay OUT of this set.
       const productExcluded = new Set<string>();
-      (data ?? []).forEach((row: any) => {
-        // permeate_is_production is a DB-trigger-maintained mirror of
-        // config.permeate_is_production (see the plant_meter_config migration) —
-        // checking both is harmless redundancy, not two independent signals.
-        // ro_production_source is NOT part of this check: it describes intended
-        // mode, not whether permeate is active right now. A plant can have
-        // ro_production_source: 'both' while the switch is deliberately off (see
-        // MeterConfig.tsx's "⚠ permeate switch off" warning) — treating
-        // ro_production_source as a fallback here previously overrode that
-        // explicit "off" and silently re-activated paused permeate production.
-        const permeateOn = row.permeate_is_production === true || row.config?.permeate_is_production === true;
+      (data ?? []).forEach((row) => {
+        const cfg = row.config as Record<string, unknown> | null;
+        const permeateOn = row.permeate_is_production === true || cfg?.permeate_is_production === true;
         if (permeateOn) permeateCounts.add(row.plant_id);
-        // Requiring permeateOn here too: without it, a plant with
-        // ro_production_source: 'permeate' but the switch paused would lose its
-        // product meter AND get no permeate credit — zero production shown.
-        if (row.config?.ro_production_source === 'permeate' && permeateOn) productExcluded.add(row.plant_id);
+        if (cfg?.ro_production_source === 'permeate' && permeateOn) productExcluded.add(row.plant_id);
       });
       return { permeateCounts, productExcluded };
     },
@@ -595,11 +584,11 @@ export function useTrendChartQueries({
     queryFn: async () => {
       const map = new Map<string, number>();
       try {
-        const { data } = await (supabase.from('electric_bills' as never) as any)
+        const { data } = await supabase.from('electric_bills')
           .select('plant_id,multiplier')
           .in('plant_id', plantIds)
           .order('billing_month', { ascending: false });
-        for (const b of (data ?? []) as any[]) {
+        for (const b of data ?? []) {
           // Keep only the FIRST (most-recent) entry per plant — query is DESC by billing_month.
           if (!map.has(b.plant_id) && +(b.multiplier ?? 0) > 0)
             map.set(b.plant_id, +b.multiplier);
@@ -619,13 +608,13 @@ export function useTrendChartQueries({
     queryFn: async () => {
       const map = new Map<string, number[]>();
       try {
-        const { data } = await (supabase.from('plant_power_config' as never) as any)
+        const { data } = await supabase.from('plant_power_config')
           .select('plant_id,grid_meter_multipliers')
           .in('plant_id', plantIds);
-        for (const cfg of (data ?? []) as any[]) {
-          const mArr = cfg.grid_meter_multipliers;
+        for (const cfg of data ?? []) {
+          const mArr = cfg.grid_meter_multipliers as unknown[];
           if (Array.isArray(mArr) && mArr.length > 0)
-            map.set(cfg.plant_id, mArr.map((v: any) => +v > 0 ? +v : 1));
+            map.set(cfg.plant_id, mArr.map((v) => Number(v) > 0 ? Number(v) : 1));
         }
       } catch { /* plant_power_config table may not exist — keep defaults */ }
       return map;

@@ -60,7 +60,7 @@ export function PMDueSoonCard({ plantIds }: Props) {
 
   const plantNameById = useMemo(() => {
     const m = new Map<string, string>();
-    (plants ?? []).forEach((p) => m.set(p.id, (p as any).code ?? p.name));
+    (plants ?? []).forEach((p) => m.set(p.id, p.name));
     return m;
   }, [plants]);
 

@@ -124,7 +124,7 @@ export function PlantHealthStrip({ plantIds, onSelectPlant }: Props) {
         {visiblePlants.map((plant) => {
           const lastDt    = lastByPlant[plant.id] ?? null;
           const status    = statusFromLastDt(lastDt);
-          const shortName = (plant as any).code ?? plant.name.split(' ')[0];
+          const shortName = plant.name.split(' ')[0];
 
           return (
             <div

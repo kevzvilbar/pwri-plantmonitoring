@@ -1,12 +1,19 @@
 import { Sun, Zap } from 'lucide-react';
 import { GridPylonIcon } from '@/components/icons/water-icons';
 
-export function TrendChartKwhStatCards({ chartData }: { chartData: any[] }) {
-  const dataRows = chartData.filter((d: any) => (d.kwh ?? 0) > 0 || (d.solarKwh ?? 0) > 0);
+export interface KwhStatDataRow {
+  date?: string;
+  kwh?: number | null;
+  solarKwh?: number | null;
+  [key: string]: unknown;
+}
+
+export function TrendChartKwhStatCards({ chartData }: { chartData: KwhStatDataRow[] }) {
+  const dataRows = chartData.filter((d) => (d.kwh ?? 0) > 0 || (d.solarKwh ?? 0) > 0);
   if (!dataRows.length) return null;
 
-  const latest    = dataRows[dataRows.length - 1] as any;
-  const prevRow   = dataRows.length > 1 ? dataRows[dataRows.length - 2] as any : null;
+  const latest    = dataRows[dataRows.length - 1];
+  const prevRow   = dataRows.length > 1 ? dataRows[dataRows.length - 2] : null;
 
   const latestSolar = +(latest.solarKwh ?? 0);
   const latestGrid  = +(latest.kwh      ?? 0);
@@ -20,8 +27,8 @@ export function TrendChartKwhStatCards({ chartData }: { chartData: any[] }) {
     ? +(((latestGrid - (prevRow.kwh ?? 0)) / (prevRow.kwh ?? 0)) * 100).toFixed(1)
     : null;
 
-  const hasSolarData = chartData.some((d: any) => (d.solarKwh ?? 0) > 0);
-  const hasGridData  = chartData.some((d: any) => (d.kwh      ?? 0) > 0);
+  const hasSolarData = chartData.some((d) => (d.solarKwh ?? 0) > 0);
+  const hasGridData  = chartData.some((d) => (d.kwh      ?? 0) > 0);
 
   if (latestSolar === 0 && latestGrid === 0) return null;
 

@@ -3,6 +3,14 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
 
+export interface ProductionCostRow {
+  chem_cost: number | null;
+  power_cost: number | null;
+  total_cost: number | null;
+  plant_id: string;
+  cost_date: string;
+}
+
 export interface UseCostStatsParams {
   plantIds: string[];
   todayPowerCostPeso: number | null;
@@ -16,7 +24,7 @@ export function useCostStats({
     queryKey: ['dash-costs-today', plantIds],
     queryFn: async () => {
       if (!plantIds.length) return {
-        rows: [] as any[],
+        rows: [] as ProductionCostRow[],
         costDataDate: null as string | null,
         tariffByPlant: new Map<string, number>(),
         dashDosingPeso: 0,
@@ -83,8 +91,8 @@ export function useCostStats({
         .order('cost_date', { ascending: false })
         .limit(plantIds.length * 3);
       if (recentErr) throw recentErr;
-      const latestByPlant = new Map<string, any>();
-      (recent ?? []).forEach((r: any) => {
+      const latestByPlant = new Map<string, ProductionCostRow>();
+      (recent ?? []).forEach((r) => {
         if (!latestByPlant.has(r.plant_id)) latestByPlant.set(r.plant_id, r);
       });
       const rows = Array.from(latestByPlant.values());
@@ -106,7 +114,7 @@ export function useCostStats({
 
   const prodCostsChem = costIsStale
     ? 0
-    : (todayCosts as any[] ?? []).reduce((s: number, r: any) => s + (+r.chem_cost || 0), 0);
+    : (todayCosts ?? []).reduce((s, r) => s + (Number(r.chem_cost) || 0), 0);
   const chemCostTotal = prodCostsChem + dashDosingPeso;
   const chemCost      = (chemCostTotal > 0) ? chemCostTotal
     : hasCostData ? null

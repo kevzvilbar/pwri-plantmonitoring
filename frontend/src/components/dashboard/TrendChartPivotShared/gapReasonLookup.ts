@@ -34,12 +34,12 @@ export function useGapReasonLookup(
     enabled: !!entityType && entityIds.length > 0,
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('reading_gap_reasons' as any)
+        .from('reading_gap_reasons')
         .select('*')
-        .eq('entity_type', entityType)
+        .eq('entity_type', entityType!)
         .in('entity_id', entityIds);
       if (error) return [];
-      return (data ?? []) as any[];
+      return data ?? [];
     },
   });
 
@@ -48,27 +48,29 @@ export function useGapReasonLookup(
     enabled: !!entityType && entityIds.length > 0,
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('entity_status_audit_log' as any)
+        .from('entity_status_audit_log')
         .select('*')
         .eq('entity_type', GAP_ENTITY_TYPE_LABEL[entityType!])
         .in('entity_id', entityIds)
         .order('timestamp', { ascending: true });
       if (error) return [];
-      return (data ?? []) as any[];
+      return data ?? [];
     },
   });
 
   const getReason = useMemo(() => {
-    const gapMap = new Map<string, any>();
-    (gapReasons ?? []).forEach((g: any) => { gapMap.set(`${g.entity_id}|${g.gap_date}`, g); });
+    const gapMap = new Map<string, { reason_category: string; reason_detail: string | null }>();
+    (gapReasons ?? []).forEach((g) => { gapMap.set(`${g.entity_id}|${g.gap_date}`, g); });
 
+    type StatusRow = NonNullable<typeof statusLog>[number];
     const intervalsByEntity = new Map<string, Array<{ start: number; end: number; category: string | null; detail: string | null }>>();
-    const rowsByEntity = new Map<string, any[]>();
-    (statusLog ?? []).forEach((row: any) => {
+    const rowsByEntity = new Map<string, StatusRow[]>();
+    (statusLog ?? []).forEach((row) => {
       if (!rowsByEntity.has(row.entity_id)) rowsByEntity.set(row.entity_id, []);
       rowsByEntity.get(row.entity_id)!.push(row);
     });
     rowsByEntity.forEach((rows, entityId) => {
+      if (!rows) return;
       const intervals: Array<{ start: number; end: number; category: string | null; detail: string | null }> = [];
       rows.forEach((row, i) => {
         if (!GAP_DOWN_STATUSES.has(row.to_status)) return;

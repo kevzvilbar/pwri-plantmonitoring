@@ -4222,6 +4222,7 @@ export type Database = {
           feed_meter_installed_date: string | null
           feed_meter_serial: string | null
           feed_meter_size: string | null
+          feed_source_train_id: string | null
           filter_housing_type: string | null
           filter_media_type: string | null
           hpp_target_pressure_psi: number | null
@@ -4243,9 +4244,11 @@ export type Database = {
           reject_meter_installed_date: string | null
           reject_meter_serial: string | null
           reject_meter_size: string | null
+          reject_routing: string | null
           shared_power_meter_group: string | null
           status: Database["public"]["Enums"]["train_status"]
           train_number: number
+          unit_type: string | null
           updated_at: string
           well_id: string | null
         }
@@ -4256,6 +4259,7 @@ export type Database = {
           feed_meter_installed_date?: string | null
           feed_meter_serial?: string | null
           feed_meter_size?: string | null
+          feed_source_train_id?: string | null
           filter_housing_type?: string | null
           filter_media_type?: string | null
           hpp_target_pressure_psi?: number | null
@@ -4277,9 +4281,11 @@ export type Database = {
           reject_meter_installed_date?: string | null
           reject_meter_serial?: string | null
           reject_meter_size?: string | null
+          reject_routing?: string | null
           shared_power_meter_group?: string | null
           status?: Database["public"]["Enums"]["train_status"]
           train_number: number
+          unit_type?: string | null
           updated_at?: string
           well_id?: string | null
         }
@@ -4290,6 +4296,7 @@ export type Database = {
           feed_meter_installed_date?: string | null
           feed_meter_serial?: string | null
           feed_meter_size?: string | null
+          feed_source_train_id?: string | null
           filter_housing_type?: string | null
           filter_media_type?: string | null
           hpp_target_pressure_psi?: number | null
@@ -4311,9 +4318,11 @@ export type Database = {
           reject_meter_installed_date?: string | null
           reject_meter_serial?: string | null
           reject_meter_size?: string | null
+          reject_routing?: string | null
           shared_power_meter_group?: string | null
           status?: Database["public"]["Enums"]["train_status"]
           train_number?: number
+          unit_type?: string | null
           updated_at?: string
           well_id?: string | null
         }
