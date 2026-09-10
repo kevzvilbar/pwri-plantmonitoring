@@ -213,6 +213,8 @@ export type Database = {
           id: string
           is_estimated: boolean | null
           is_meter_replacement: boolean | null
+          is_meter_rollover: boolean | null
+          meter_rollover_max: number | null
           noted_at: string
           plant_id: string
           plant_name: string | null
@@ -228,6 +230,8 @@ export type Database = {
           id?: string
           is_estimated?: boolean | null
           is_meter_replacement?: boolean | null
+          is_meter_rollover?: boolean | null
+          meter_rollover_max?: number | null
           noted_at?: string
           plant_id: string
           plant_name?: string | null
@@ -243,6 +247,8 @@ export type Database = {
           id?: string
           is_estimated?: boolean | null
           is_meter_replacement?: boolean | null
+          is_meter_rollover?: boolean | null
+          meter_rollover_max?: number | null
           noted_at?: string
           plant_id?: string
           plant_name?: string | null
@@ -2805,10 +2811,13 @@ export type Database = {
           created_at: string
           id: string
           meter_index: number
+          new_meter_initial_reading: number | null
           new_multiplier: number
           notes: string | null
+          old_meter_final_reading: number | null
           old_multiplier: number
           plant_id: string
+          reading_id: string | null
         }
         Insert: {
           change_date: string
@@ -2816,10 +2825,13 @@ export type Database = {
           created_at?: string
           id?: string
           meter_index?: number
+          new_meter_initial_reading?: number | null
           new_multiplier?: number
           notes?: string | null
+          old_meter_final_reading?: number | null
           old_multiplier?: number
           plant_id: string
+          reading_id?: string | null
         }
         Update: {
           change_date?: string
@@ -2827,10 +2839,13 @@ export type Database = {
           created_at?: string
           id?: string
           meter_index?: number
+          new_meter_initial_reading?: number | null
           new_multiplier?: number
           notes?: string | null
+          old_meter_final_reading?: number | null
           old_multiplier?: number
           plant_id?: string
+          reading_id?: string | null
         }
         Relationships: [
           {
@@ -3485,6 +3500,7 @@ export type Database = {
           edited_at: string
           id: string
           plant_id: string | null
+          reason: string | null
           record_id: string | null
           table_name: string
           train_id: string | null
@@ -3497,6 +3513,7 @@ export type Database = {
           edited_at?: string
           id?: string
           plant_id?: string | null
+          reason?: string | null
           record_id?: string | null
           table_name: string
           train_id?: string | null
@@ -3509,6 +3526,7 @@ export type Database = {
           edited_at?: string
           id?: string
           plant_id?: string | null
+          reason?: string | null
           record_id?: string | null
           table_name?: string
           train_id?: string | null
@@ -3679,12 +3697,14 @@ export type Database = {
           date_to: string | null
           id: string
           intercept: number | null
+          outlier_count: number
           plant_id: string | null
           r_squared: number | null
           row_count: number
           slope: number | null
           source_table: string
           status: string
+          truncated: boolean
         }
         Insert: {
           column_name: string
@@ -3696,12 +3716,14 @@ export type Database = {
           date_to?: string | null
           id?: string
           intercept?: number | null
+          outlier_count?: number
           plant_id?: string | null
           r_squared?: number | null
           row_count?: number
           slope?: number | null
           source_table: string
           status?: string
+          truncated?: boolean
         }
         Update: {
           column_name?: string
@@ -3713,12 +3735,14 @@ export type Database = {
           date_to?: string | null
           id?: string
           intercept?: number | null
+          outlier_count?: number
           plant_id?: string | null
           r_squared?: number | null
           row_count?: number
           slope?: number | null
           source_table?: string
           status?: string
+          truncated?: boolean
         }
         Relationships: [
           {

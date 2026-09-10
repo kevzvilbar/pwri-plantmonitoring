@@ -3,7 +3,12 @@
   "private": true,
   "version": "1.0.0",
   "scripts": {
-    "build": "npm --prefix frontend run build"
+    "build": "npm --prefix frontend run build",
+    "test": "npm --prefix frontend test",
+    "types:check": "node scripts/check-types-sync.mjs",
+    "types:validate": "node scripts/check-types-sync.mjs && npm --prefix frontend run types:check-tsc",
+    "types:gen:local": "npx supabase gen types typescript --local > frontend/src/integrations/supabase/types.ts",
+    "types:gen": "npx supabase gen types typescript --project-id sosfbfxovtleuvahxvpm > frontend/src/integrations/supabase/types.ts"
   },
   "devDependencies": {
     "supabase": "^2.95.6"

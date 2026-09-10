@@ -15,6 +15,10 @@
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "check:strict-null-checks": "node -e \"console.log('strictNullChecks is globally ON (tsconfig.app.json sets strictNullChecks: true); run: npx tsc --noEmit -p tsconfig.app.json')\"",
+    "types:check-sync": "node ../scripts/check-types-sync.mjs",
+    "types:check-tsc": "tsc --noEmit -p tsconfig.app.json",
+    "types:validate": "node ../scripts/check-types-sync.mjs && tsc --noEmit -p tsconfig.app.json",
+    "types:gen:local": "npx supabase gen types typescript --local > src/integrations/supabase/types.ts",
     "types:gen": "npx supabase gen types typescript --project-id=\"$VITE_SUPABASE_PROJECT_ID\" > src/integrations/supabase/types.ts"
   },
   "dependencies": {
