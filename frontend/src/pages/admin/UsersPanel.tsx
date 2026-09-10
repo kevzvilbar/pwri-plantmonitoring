@@ -49,10 +49,10 @@ export function UsersPanel() {
   const logPlantAssignmentChange = async (userId: string, newPlants: string[], justification = 'Admin update') => {
     try {
       const { data: actor } = await supabase.auth.getUser();
-      await supabase.from('plant_assignment_audit' as any).insert({
+      await supabase.from('plant_assignment_audit').insert({
         user_id: userId, admin_id: actor.user?.id ?? null,
         new_plant_ids: newPlants, justification, changed_at: new Date().toISOString(),
-      } as any);
+      });
     } catch { /* non-blocking */ }
   };
 
@@ -70,7 +70,7 @@ export function UsersPanel() {
   };
 
   const approveUser = async (uid: string, label: string) => {
-    const { error } = await supabase.rpc('approve_user' as any, { _user_id: uid, _approve: true } as any);
+    const { error } = await supabase.rpc('approve_user', { _user_id: uid, _approve: true });
     if (error) { toast.error(friendlyError(error)); return; }
     toast.success(`${label || 'User'} approved`);
     invalidate();

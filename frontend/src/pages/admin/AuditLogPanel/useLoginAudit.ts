@@ -15,7 +15,7 @@ export function useLoginAudit(isAdmin: boolean, auditMode: string, loginStatusFi
     enabled: isAdmin && auditMode === 'logins',
     queryFn: async (): Promise<LoginAttempt[]> => {
       const { data: rows, error: sbError } = await supabase
-        .from('login_attempts' as any)
+        .from('login_attempts')
         .select('*')
         .order('attempted_at', { ascending: false })
         .limit(200);

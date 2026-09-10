@@ -45,7 +45,7 @@ function ChangePasswordDialog({ open, onClose, userId, userName }: {
     if (password.length < 8) { toast.error('Password must be at least 8 characters'); return; }
     if (password !== confirm)  { toast.error('Passwords do not match'); return; }
     setBusy(true);
-    const { error } = await (supabase.rpc as any)('admin_set_user_password', {
+    const { error } = await supabase.rpc('admin_set_user_password', {
       _user_id: userId, _new_password: password,
     });
     setBusy(false);

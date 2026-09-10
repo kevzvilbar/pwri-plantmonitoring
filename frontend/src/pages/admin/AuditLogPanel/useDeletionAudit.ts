@@ -16,7 +16,7 @@ export function useDeletionAudit(kindFilter: string, auditMode: string) {
     enabled: auditMode === 'deletions',
     queryFn: async (): Promise<{ entries: AuditEntry[] }> => {
       let q = supabase
-        .from('deletion_audit_log' as any)
+        .from('deletion_audit_log')
         .select('id, kind, entity_id, entity_label, action, actor_user_id, actor_label, reason, dependencies, created_at')
         .order('created_at', { ascending: false })
         .limit(200);
