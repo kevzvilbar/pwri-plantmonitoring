@@ -76,6 +76,7 @@ function PageAnimationWrapper({ children }: { children: React.ReactNode }) {
 
 export function AppShell() {
   useScrollRestore();
+  const { pathname } = useLocation();
   const queryClient = useQueryClient();
 
   const pullState = usePullToRefresh({
@@ -120,7 +121,7 @@ export function AppShell() {
                 App.tsx is a last-resort backstop for errors outside the shell
                 (e.g. AuthProvider, PresenceProvider).
               */}
-              <ErrorBoundary>
+              <ErrorBoundary resetKey={pathname}>
                 <Outlet />
               </ErrorBoundary>
             </PageAnimationWrapper>

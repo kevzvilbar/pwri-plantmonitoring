@@ -2,7 +2,11 @@ import React from 'react';
 import { AlertTriangle, RefreshCw } from 'lucide-react';
 import { reportError } from '@/lib/monitoring';
 
-type Props = { children: React.ReactNode };
+type Props = {
+  children: React.ReactNode;
+  resetKey?: unknown;
+  fallbackTitle?: string;
+};
 type State = { error: Error | null; didAutoReload: boolean };
 
 // Detects the "Failed to fetch dynamically imported module" error that
@@ -27,6 +31,12 @@ export class ErrorBoundary extends React.Component<Props, State> {
 
   static getDerivedStateFromError(error: Error): Partial<State> {
     return { error };
+  }
+
+  componentDidUpdate(prevProps: Props) {
+    if (this.state.error && prevProps.resetKey !== this.props.resetKey) {
+      this.setState({ error: null, didAutoReload: false });
+    }
   }
 
   componentDidCatch(error: Error, info: React.ErrorInfo) {
@@ -81,7 +91,7 @@ export class ErrorBoundary extends React.Component<Props, State> {
           <div className="mx-auto h-12 w-12 rounded-full bg-danger-soft flex items-center justify-center">
             <AlertTriangle className="h-6 w-6 text-danger" />
           </div>
-          <h2 className="text-lg font-semibold">Something went wrong</h2>
+          <h2 className="text-lg font-semibold">{this.props.fallbackTitle || 'Something went wrong'}</h2>
 
           {isChunk ? (
             <p className="text-sm text-muted-foreground">
