@@ -25,30 +25,33 @@ jobs:
   baseline-check:
     name: Baseline Migration — existence gate
     runs-on: ubuntu-latest
-    # Fails fast if the squashed baseline migration is missing.
-    # The baseline (20260908000000_baseline_schema.sql) must exist in
-    # supabase/migrations/ before any other migration jobs run, otherwise
-    # supabase start applies only the 5 Phase-4 patches — no core schema.
+    # Fails fast if any of the modular baseline migrations are missing.
+    # The baseline migrations (20260908000001 through 20260908000005) must exist
+    # in supabase/migrations/ before any other migration jobs run.
     steps:
       - uses: actions/checkout@v4
 
-      - name: Verify baseline migration exists
+      - name: Verify baseline migrations exist and are non-empty
         run: |
-          if [ ! -f supabase/migrations/20260908000000_baseline_schema.sql ]; then
-            echo "::error::Baseline migration missing: supabase/migrations/20260908000000_baseline_schema.sql"
-            echo "Run 'node scripts/squash-baseline.mjs' after reconciling prod drift (see docs/MIGRATION-SQUASH.md)"
-            exit 1
-          fi
-          echo "✅ Baseline migration found"
-
-      - name: Verify baseline is not empty
-        run: |
-          SIZE=$(wc -c < supabase/migrations/20260908000000_baseline_schema.sql)
-          if [ "$SIZE" -lt 10000 ]; then
-            echo "::error::Baseline migration appears empty/truncated ($SIZE bytes)"
-            exit 1
-          fi
-          echo "✅ Baseline migration size: $SIZE bytes"
+          for f in \
+            "20260908000001_001_core_schema.sql" \
+            "20260908000002_002_meters_and_audits.sql" \
+            "20260908000003_003_hamas_meter_wiring.sql" \
+            "20260908000004_004_custom_roles_and_readings.sql" \
+            "20260908000005_005_backfill_and_hardening.sql"
+          do
+            if [ ! -f "supabase/migrations/$f" ]; then
+              echo "::error::Baseline migration partition missing: supabase/migrations/$f"
+              echo "Run 'node scripts/partition-baseline.mjs' to regenerate baseline partitions."
+              exit 1
+            fi
+            SIZE=$(wc -c < "supabase/migrations/$f")
+            if [ "$SIZE" -lt 10000 ]; then
+              echo "::error::Baseline partition appears empty/truncated ($SIZE bytes): $f"
+              exit 1
+            fi
+            echo "✅ Baseline partition verified: $f ($SIZE bytes)"
+          done
 
       - name: Verify Phase 4 migrations exist
         run: |
@@ -329,8 +332,8 @@ jobs:
     # Every test file creates its own plants/users/rows and ends in
     # ROLLBACK, so nothing here depends on (or pollutes) seed data.
     #
-    # 2026-09-08: Migrations are now squashed to a single baseline
-    # (20260908000000_baseline_schema.sql) + subsequent migrations.
+    # 2026-09-08: Migrations are modular baseline partitions
+    # (20260908000001 through 20260908000005) + subsequent migrations.
     # This job applies the baseline + any newer migrations, verifying
     # the full schema can be recreated from scratch.
     steps:
