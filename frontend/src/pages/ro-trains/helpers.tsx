@@ -107,20 +107,23 @@ export function TelemetryGauge({
 //   1. Operator manually tagged 'Maintenance' → always Maintenance (hard lock)
 //   2. Operator manually tagged 'Offline'     → always Offline     (hard lock)
 //      Cleared only when operator submits a reading with trainOnline=true.
-//   3. A reading exists within the last 2 hours → Running
-//   4. Otherwise → Offline (no recent data)
+//   3. A reading exists within the last 1 hour → Running
+//   4. Otherwise → Offline (no recent data in past hour)
 
-export const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
+export const ONE_HOUR_MS = 60 * 60 * 1000;
+/** @deprecated Use ONE_HOUR_MS */
+export const TWO_HOURS_MS = ONE_HOUR_MS;
 
 export function deriveTrainStatus(
   train: any,
   lastReading: any,
 ): 'Running' | 'Maintenance' | 'Offline' {
+  if (!train) return 'Offline';
   if (train.status === 'Maintenance') return 'Maintenance';
   if (train.status === 'Offline') return 'Offline';
   if (lastReading?.reading_datetime) {
     const age = Date.now() - new Date(lastReading.reading_datetime).getTime();
-    if (age <= TWO_HOURS_MS) return 'Running';
+    if (age <= ONE_HOUR_MS) return 'Running';
   }
   return 'Offline';
 }

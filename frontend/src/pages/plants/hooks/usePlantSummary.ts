@@ -12,8 +12,8 @@ export function usePlantSummary() {
   return useQuery<SummaryCounts>({
     queryKey: ['plants-summary-counts'],
     queryFn: async () => {
-      const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
-      const twoHoursAgo = new Date(Date.now() - TWO_HOURS_MS).toISOString();
+      const ONE_HOUR_MS = 60 * 60 * 1000;
+      const oneHourAgo = new Date(Date.now() - ONE_HOUR_MS).toISOString();
       const staleCutoff = new Date(Date.now() - STALE_READING_HOURS * 60 * 60 * 1000).toISOString();
 
       const [
@@ -25,7 +25,7 @@ export function usePlantSummary() {
         supabase.from('ro_trains').select('id, plant_id, status'),
         supabase.from('ro_train_readings')
           .select('train_id')
-          .gte('reading_datetime', twoHoursAgo),
+          .gte('reading_datetime', oneHourAgo),
         (supabase.from('well_readings_latest' as any) as any).select('well_id, reading_datetime'),
         (supabase.from('locator_readings_latest' as any) as any).select('locator_id, reading_datetime'),
       ]);

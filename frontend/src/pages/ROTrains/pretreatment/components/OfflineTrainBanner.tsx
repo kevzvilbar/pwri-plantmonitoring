@@ -51,6 +51,165 @@ interface OfflineTrainBannerProps {
  * Props are passed through from PretreatmentAndROLog's state.
  */
 
+export function DowntimeResolutionCard({
+  train,
+  offlineReason,
+  offlineReasonOther,
+  offlineStart,
+  offlineEnd,
+  isDowntimeResolved,
+  onOfflineReasonChange,
+  onOfflineReasonOtherChange,
+  onOfflineStartChange,
+  onOfflineEndChange,
+}: {
+  train: any;
+  offlineReason: string;
+  offlineReasonOther: string;
+  offlineStart: string;
+  offlineEnd: string;
+  isDowntimeResolved: boolean;
+  onOfflineReasonChange: (val: string) => void;
+  onOfflineReasonOtherChange: (val: string) => void;
+  onOfflineStartChange: (val: string) => void;
+  onOfflineEndChange: (val: string) => void;
+}) {
+  const durationStr = (() => {
+    if (!offlineStart || !offlineEnd) return '';
+    const diffMs = new Date(offlineEnd).getTime() - new Date(offlineStart).getTime();
+    if (diffMs <= 0) return '';
+    const hrs = Math.floor(diffMs / 3600000);
+    const mins = Math.round((diffMs % 3600000) / 60000);
+    if (hrs > 0 && mins > 0) return `${hrs}h ${mins}m`;
+    if (hrs > 0) return `${hrs}h`;
+    return `${mins}m`;
+  })();
+
+  const reasonDisplay = offlineReason === 'Other' ? offlineReasonOther : offlineReason;
+
+  if (isDowntimeResolved) {
+    return (
+      <div className="rounded-lg border border-accent/40 bg-accent-soft/40 p-3 shadow-xs space-y-1.5">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="h-4 w-4 text-accent shrink-0" />
+            <span className="text-xs font-bold text-accent uppercase tracking-wider">
+              Downtime Resolved · Inputs Unlocked
+            </span>
+          </div>
+          {durationStr && (
+            <span className="text-2xs font-semibold px-2 py-0.5 rounded bg-accent/10 border border-accent/20 text-accent font-mono-num">
+              {durationStr} downtime
+            </span>
+          )}
+        </div>
+        <div className="text-xs text-foreground/90 flex items-center justify-between gap-2 flex-wrap">
+          <div>
+            <span className="text-muted-foreground">Reason: </span>
+            <span className="font-semibold text-foreground">{reasonDisplay || 'Unspecified'}</span>
+          </div>
+          {offlineStart && offlineEnd && (
+            <span className="text-2xs text-muted-foreground font-mono-num">
+              {format(new Date(offlineStart), 'MMM dd, HH:mm')} → {format(new Date(offlineEnd), 'MMM dd, HH:mm')}
+            </span>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3 rounded-lg border border-danger/50 bg-danger-soft/40 p-3.5 shadow-xs">
+      <div className="flex items-center justify-between border-b border-danger/20 pb-2">
+        <div className="flex items-center gap-2">
+          <AlertCircle className="h-4.5 w-4.5 text-danger shrink-0" />
+          <span className="text-xs font-bold uppercase tracking-wider text-danger">
+            Downtime Resolution Required
+          </span>
+        </div>
+        <span className="text-3xs font-semibold uppercase tracking-wider px-2 py-0.5 rounded bg-danger/15 text-danger border border-danger/30">
+          Inputs Locked
+        </span>
+      </div>
+
+      <p className="text-xs text-danger/90 leading-relaxed">
+        <strong>{train?.name || `Train ${train?.train_number ?? ''}`}</strong> was offline (no data logged in past hour).
+        Before entering operational parameters, you must provide the reason for downtime and when it ended.
+      </p>
+
+      {/* Reason dropdown */}
+      <div className="space-y-1">
+        <Label htmlFor="resolve-offline-reason" className="text-xs font-medium text-foreground">
+          Reason for Offline <span className="text-danger font-bold">*</span>
+        </Label>
+        <Select value={offlineReason} onValueChange={onOfflineReasonChange}>
+          <SelectTrigger className="h-9 bg-background border-danger/40 focus:ring-danger" id="resolve-offline-reason">
+            <SelectValue placeholder="Select downtime reason…" />
+          </SelectTrigger>
+          <SelectContent>
+            {STANDARD_OFFLINE_REASONS.map((r) => (
+              <SelectItem key={r} value={r}>{r}</SelectItem>
+            ))}
+            <SelectItem value="Other">Other (specify below)</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* Free-text for Other */}
+      {offlineReason === 'Other' && (
+        <div className="space-y-1">
+          <Label htmlFor="resolve-specify-reason" className="text-xs font-medium text-foreground">
+            Specify Reason <span className="text-danger font-bold">*</span>
+          </Label>
+          <Input
+            value={offlineReasonOther}
+            onChange={(e) => onOfflineReasonOtherChange(e.target.value)}
+            placeholder="Describe specific downtime reason…"
+            className="bg-background border-danger/50"
+            id="resolve-specify-reason"
+          />
+        </div>
+      )}
+
+      {/* Start / End times */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+        <div className="space-y-1">
+          <Label htmlFor="resolve-offline-since" className="text-xs font-medium text-foreground flex items-center gap-1">
+            Offline Since <span className="text-danger font-bold">*</span>
+          </Label>
+          <DateTimePicker
+            value={offlineStart}
+            onChange={(val) => onOfflineStartChange(val)}
+            placeholder="Select offline start time..."
+            size="sm"
+            className="w-full bg-background border-danger/50 font-mono-num"
+            id="resolve-offline-since"
+          />
+        </div>
+
+        <div className="space-y-1">
+          <Label htmlFor="resolve-back-online" className="text-xs font-medium text-foreground flex items-center gap-1">
+            Back Online At <span className="text-danger font-bold">*</span>
+          </Label>
+          <DateTimePicker
+            value={offlineEnd}
+            onChange={(val) => onOfflineEndChange(val)}
+            placeholder="When did downtime end..."
+            size="sm"
+            className="w-full bg-background border-danger/50 font-mono-num"
+            id="resolve-back-online"
+          />
+        </div>
+      </div>
+
+      <div className="flex items-center gap-2 text-2xs text-danger bg-danger/10 border border-danger/20 rounded px-2.5 py-1.5 font-medium">
+        <Lock className="h-3.5 w-3.5 shrink-0" />
+        <span>Telemetry inputs (AFM/MMF, Boosters, RO Vessel) will unlock as soon as downtime reason and times are specified.</span>
+      </div>
+    </div>
+  );
+}
+
 export function OfflineWarningNotice({
   trainOnline,
   dbStatus,
@@ -218,7 +377,10 @@ export function OfflineLockedCard({
   offlineReasonFinal,
   offlineStart,
   latestStatusLog,
-}: Pick<OfflineTrainBannerProps, 'offlineReasonFinal' | 'offlineStart' | 'latestStatusLog'>) {
+  trainOnline = false,
+}: Pick<OfflineTrainBannerProps, 'offlineReasonFinal' | 'offlineStart' | 'latestStatusLog'> & { trainOnline?: boolean }) {
+  const isPendingDowntimeResolution = trainOnline;
+
   return (
     <Card className="p-4 border-danger/70 bg-danger-soft/80 shadow-xs">
       <div className="flex items-start gap-3">
@@ -227,7 +389,11 @@ export function OfflineLockedCard({
         </div>
         <div className="space-y-1.5 flex-1 min-w-0">
           <div className="flex items-center justify-between gap-2 flex-wrap">
-            <p className="text-sm font-bold text-danger">RO Train is Currently Offline</p>
+            <p className="text-sm font-bold text-danger">
+              {isPendingDowntimeResolution
+                ? 'Operational Telemetry Locked — Downtime Resolution Required'
+                : 'RO Train is Currently Offline'}
+            </p>
             {latestStatusLog?.status === 'Offline' && (
               <span className="text-2xs font-semibold text-danger/90 bg-danger/10 px-2 py-0.5 rounded-full border border-danger/20 flex items-center gap-1">
                 <User className="h-3 w-3" />
@@ -236,7 +402,9 @@ export function OfflineLockedCard({
             )}
           </div>
           <p className="text-xs text-danger/90 leading-relaxed">
-            Telemetry inputs are locked while the train is down. To record this offline session, click <strong>Save Offline Record</strong> below. If the train has resumed operation, specify the <em>Back Online At</em> timestamp above or toggle to <em>Operational / Running</em>.
+            {isPendingDowntimeResolution
+              ? 'Telemetry inputs cannot be entered until the downtime reason and back-online timestamp are specified in the Downtime Resolution section above.'
+              : <>Telemetry inputs are locked while the train is down. To record this offline session, click <strong>Save Offline Record</strong> below. If the train has resumed operation, toggle to <em>Operational / Running</em> and resolve the downtime.</>}
           </p>
           {(offlineReasonFinal || latestStatusLog?.reason) && (
             <div className="pt-1.5 text-2xs text-danger/80 border-t border-danger/20 flex items-center gap-1.5 flex-wrap">

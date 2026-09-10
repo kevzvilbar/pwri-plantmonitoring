@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { canEditEntry, EDIT_WINDOW_HOURS } from './helpers';
+import { canEditEntry, EDIT_WINDOW_HOURS, deriveTrainStatus } from './helpers';
 
 // Covers canEditEntry's permission model, including the noTimeLimit
 // parameter added for the 2026-08-18 fix: Kevz asked for the reading-edit
@@ -57,5 +57,48 @@ describe('canEditEntry', () => {
       const row = { recorded_by: OPERATOR_ID, created_at: null };
       expect(canEditEntry(row, false, OPERATOR_ID, true)).toBe(true);
     });
+  });
+});
+
+describe('deriveTrainStatus', () => {
+  it('returns Offline when train is null or undefined', () => {
+    expect(deriveTrainStatus(null, null)).toBe('Offline');
+  });
+
+  it('preserves explicit Maintenance status regardless of readings', () => {
+    const train = { status: 'Maintenance' };
+    const recent = { reading_datetime: new Date().toISOString() };
+    expect(deriveTrainStatus(train, recent)).toBe('Maintenance');
+    expect(deriveTrainStatus(train, null)).toBe('Maintenance');
+  });
+
+  it('preserves explicit Offline status even if recent reading exists', () => {
+    const train = { status: 'Offline' };
+    const recent = { reading_datetime: new Date().toISOString() };
+    expect(deriveTrainStatus(train, recent)).toBe('Offline');
+  });
+
+  it('marks train as Running if last reading is within 1 hour', () => {
+    const train = { status: 'Running' };
+    const reading30m = { reading_datetime: new Date(Date.now() - 30 * 60 * 1000).toISOString() };
+    expect(deriveTrainStatus(train, reading30m)).toBe('Running');
+
+    const reading59m = { reading_datetime: new Date(Date.now() - 59 * 60 * 1000).toISOString() };
+    expect(deriveTrainStatus(train, reading59m)).toBe('Running');
+  });
+
+  it('auto-flags train as Offline if last reading is older than 1 hour', () => {
+    const train = { status: 'Running' };
+    const reading61m = { reading_datetime: new Date(Date.now() - 61 * 60 * 1000).toISOString() };
+    expect(deriveTrainStatus(train, reading61m)).toBe('Offline');
+
+    const reading2h = { reading_datetime: new Date(Date.now() - 2 * 3600 * 1000).toISOString() };
+    expect(deriveTrainStatus(train, reading2h)).toBe('Offline');
+  });
+
+  it('auto-flags train as Offline if no readings exist at all', () => {
+    const train = { status: 'Running' };
+    expect(deriveTrainStatus(train, null)).toBe('Offline');
+    expect(deriveTrainStatus(train, {})).toBe('Offline');
   });
 });

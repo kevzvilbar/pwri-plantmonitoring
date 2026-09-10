@@ -12,7 +12,7 @@ import { ExportButton } from '@/components/ExportButton';
 import { Upload, Loader2 } from 'lucide-react';
 import { ImportROReadingsDialog } from '../../ro-trains';
 
-import { OfflineWarningNotice, OfflineDetailsPanel, OfflineLockedCard } from './components/OfflineTrainBanner';
+import { DowntimeResolutionCard, OfflineDetailsPanel, OfflineLockedCard } from './components/OfflineTrainBanner';
 import { PlantTrainSelector } from './components/PlantTrainSelector';
 import { OnlineStatusToggle } from './components/OnlineStatusToggle';
 import { PretreatmentStagesContainer } from './components/PretreatmentStagesContainer';
@@ -109,6 +109,35 @@ export function PretreatmentAndROLog() {
     form.setHppTarget(train?.hpp_target_pressure_psi != null ? String(train.hpp_target_pressure_psi) : '');
   }, [train?.id, train?.hpp_target_pressure_psi]);
 
+  // Auto-set offline when train is offline in DB or has no readings in past hour
+  const autoInitializedTrainId = useRef<string | null>(null);
+  useEffect(() => {
+    if (!train) return;
+    if (autoInitializedTrainId.current !== train.id) {
+      autoInitializedTrainId.current = train.id;
+      if (data.isEffectivelyOffline) {
+        form.setTrainOnline(false);
+        if (data.lastReadingTime) {
+          form.setOfflineStart(format(new Date(data.lastReadingTime), "yyyy-MM-dd'T'HH:mm"));
+        } else {
+          form.setOfflineStart(dt);
+        }
+        form.setOfflineEnd('');
+        form.setOfflineReason(
+          latestStatusLog?.reason && !latestStatusLog.reason.startsWith('Auto-flagged')
+            ? latestStatusLog.reason
+            : ''
+        );
+      } else {
+        form.setTrainOnline(true);
+        form.setOfflineStart('');
+        form.setOfflineEnd('');
+        form.setOfflineReason('');
+        form.setOfflineReasonOther('');
+      }
+    }
+  }, [train?.id, data.isEffectivelyOffline, data.lastReadingTime, latestStatusLog?.reason, dt]);
+
   // ── Calculations hook ─────────────────────────────────────────────────────
   const calc = usePretreatmentCalculations(
     form.roValues,
@@ -126,7 +155,19 @@ export function PretreatmentAndROLog() {
     showRejectMeter,
   );
 
-  const isOfflineBlocked = !form.trainOnline;
+  const wasOffline = Boolean(train && (train.status === 'Offline' || data.isEffectivelyOffline));
+  const isDowntimeResolved = wasOffline
+    ? Boolean(
+        form.offlineReason &&
+        (form.offlineReason !== 'Other' || form.offlineReasonOther.trim()) &&
+        form.offlineStart &&
+        form.offlineEnd &&
+        new Date(form.offlineEnd) <= new Date(dt) &&
+        new Date(form.offlineStart) < new Date(form.offlineEnd)
+      )
+    : true;
+
+  const isOfflineBlocked = !form.trainOnline || !isDowntimeResolved;
   const offlineReasonFinal = form.offlineReason === 'Other' ? form.offlineReasonOther : form.offlineReason;
 
   const f = (k: string) => ({
@@ -212,28 +253,33 @@ export function PretreatmentAndROLog() {
           <OnlineStatusToggle
             trainOnline={form.trainOnline}
             onSetOnline={() => {
-              if (!form.trainOnline) {
-                form.setConfirmBackOnline(true);
-              }
               form.setTrainOnline(true);
-              form.setOfflineStart('');
-              form.setOfflineEnd('');
-              form.setOfflineReason('');
-              form.setOfflineReasonOther('');
+              if (wasOffline && !form.offlineStart && data.lastReadingTime) {
+                form.setOfflineStart(format(new Date(data.lastReadingTime), "yyyy-MM-dd'T'HH:mm"));
+              }
             }}
             onSetOffline={() => {
               form.setTrainOnline(false);
+              if (data.lastReadingTime && !form.offlineStart) {
+                form.setOfflineStart(format(new Date(data.lastReadingTime), "yyyy-MM-dd'T'HH:mm"));
+              }
             }}
           />
         )}
 
-        {/* Warning banner: DB says this train is Offline but form is in online mode */}
-        {train && (
-          <OfflineWarningNotice
-            trainOnline={form.trainOnline}
-            dbStatus={train.status}
-            confirmBackOnline={form.confirmBackOnline}
-            onConfirmBackOnline={form.setConfirmBackOnline}
+        {/* Downtime Resolution Card: when train was offline but operator toggled to online */}
+        {train && wasOffline && form.trainOnline && (
+          <DowntimeResolutionCard
+            train={train}
+            offlineReason={form.offlineReason}
+            offlineReasonOther={form.offlineReasonOther}
+            offlineStart={form.offlineStart}
+            offlineEnd={form.offlineEnd}
+            isDowntimeResolved={isDowntimeResolved}
+            onOfflineReasonChange={form.setOfflineReason}
+            onOfflineReasonOtherChange={form.setOfflineReasonOther}
+            onOfflineStartChange={form.setOfflineStart}
+            onOfflineEndChange={form.setOfflineEnd}
           />
         )}
 
@@ -267,6 +313,7 @@ export function PretreatmentAndROLog() {
           {/* Offline gate: lock all parameter inputs when train is offline with no end time */}
           {isOfflineBlocked && (
             <OfflineLockedCard
+              trainOnline={form.trainOnline}
               offlineReasonFinal={offlineReasonFinal}
               offlineStart={form.offlineStart}
               latestStatusLog={latestStatusLog}
@@ -305,10 +352,16 @@ export function PretreatmentAndROLog() {
             </>
           )}
 
-          {train && (!form.trainOnline || form.cartridgeSectionStarted) && (
+          {train && (!form.trainOnline || (isDowntimeResolved && form.cartridgeSectionStarted)) && (
             <Button onClick={submit} disabled={hookIsSaving || calc.anomalyRemarksMissing} className="w-full h-12 text-base font-semibold gap-2">
               {hookIsSaving && <Loader2 className="h-4 w-4 animate-spin" />}
-              {hookIsSaving ? 'Saving…' : !form.trainOnline ? 'Save Offline Record' : 'Save Pre-Treatment & RO Reading'}
+              {hookIsSaving
+                ? 'Saving…'
+                : !form.trainOnline
+                ? 'Save Offline Record'
+                : wasOffline
+                ? 'Save Reading & Mark Train Online'
+                : 'Save Pre-Treatment & RO Reading'}
             </Button>
           )}
         </>

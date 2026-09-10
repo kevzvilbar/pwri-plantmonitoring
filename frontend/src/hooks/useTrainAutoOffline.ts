@@ -1,9 +1,9 @@
 import { useEffect } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 
 /**
- * Auto-flag RO trains as Offline when no readings have been logged in > 2 hours.
+ * Auto-flag RO trains as Offline when no readings have been logged in >= 1 hour.
  * Returns the list of trains needing operator confirmation to remain Running.
  */
 export interface TrainGap {
@@ -16,18 +16,11 @@ export interface TrainGap {
 }
 
 export function useTrainAutoOffline(plantIds: string[]) {
+  const qc = useQueryClient();
   const { data: gaps } = useQuery({
     queryKey: ['train-gaps', plantIds],
     queryFn: async (): Promise<TrainGap[]> => {
       if (!plantIds.length) return [];
-      // Was: `{ data: trains }` / `{ data: recent }` with error discarded.
-      // If the readings fetch failed, `recent` became undefined, `lastBy`
-      // stayed empty, and EVERY train computed hours_gap = Infinity below —
-      // which the effect further down uses to auto-flag trains Offline.
-      // A transient network blip could have silently flipped every running
-      // train across every plant to Offline. Throw instead: on failure,
-      // `gaps` stays undefined, and the effect's `if (!gaps?.length) return`
-      // correctly no-ops rather than acting on wrong data.
       const { data: trains, error: trainsErr } = await supabase
         .from('ro_trains')
         .select('id,train_number,plant_id,status')
@@ -57,7 +50,7 @@ export function useTrainAutoOffline(plantIds: string[]) {
           train_id: t.id, train_number: t.train_number, plant_id: t.plant_id,
           last_reading_at: last, hours_gap: hours, current_status: t.status,
         };
-      }).filter((g) => g.hours_gap > 2 && g.current_status === 'Running');
+      }).filter((g) => g.hours_gap >= 1 && g.current_status === 'Running');
     },
     enabled: plantIds.length > 0,
     staleTime: 5 * 60_000,
@@ -68,22 +61,31 @@ export function useTrainAutoOffline(plantIds: string[]) {
   useEffect(() => {
     if (!gaps?.length) return;
     (async () => {
+      let flaggedAny = false;
       for (const g of gaps) {
         const { error } = await supabase.from('ro_trains').update({ status: 'Offline' }).eq('id', g.train_id);
         if (error) {
-          // Fail-safe direction (train just doesn't get flagged) is fine to
-          // swallow visually, but silent-forever makes this hard to debug —
-          // at least surface it in dev tools.
           console.warn('[useTrainAutoOffline] Failed to auto-flag train offline', g.train_id, error);
           continue;
         }
         await supabase.from('train_status_log').insert({
-          train_id: g.train_id, plant_id: g.plant_id, status: 'Offline',
-          reason: `Auto-flagged: no reading for ${g.hours_gap.toFixed(1)}h`,
+          train_id: g.train_id,
+          plant_id: g.plant_id,
+          status: 'Offline',
+          reason: `Auto-flagged: no data for past hour (${g.hours_gap === Infinity ? '>24' : g.hours_gap.toFixed(1)}h)`,
+          confirmed_at: g.last_reading_at ? new Date(g.last_reading_at).toISOString() : new Date().toISOString(),
         });
+        flaggedAny = true;
+      }
+      if (flaggedAny) {
+        qc.invalidateQueries({ queryKey: ['trains'] });
+        qc.invalidateQueries({ queryKey: ['ro-trains'] });
+        qc.invalidateQueries({ queryKey: ['train-latest-status-log'] });
+        qc.invalidateQueries({ queryKey: ['train-status-log'] });
+        qc.invalidateQueries({ queryKey: ['train-hourly-gaps'] });
       }
     })();
-  }, [gaps]);
+  }, [gaps, qc]);
 
   return gaps ?? [];
 }

@@ -41,9 +41,36 @@ export function usePretreatmentActions(rawOpts: PretreatmentActionsOptions) {
   const submit = async () => {
     if (isSaving) return;
     if (!opts.plantId || !opts.trainId) { toast.error('Select plant and train'); return; }
-    if (opts.trainOnline && opts.train?.status === 'Offline' && !opts.confirmBackOnline) {
-      toast.error('This train is still marked Offline in the database. Confirm it has actually resumed (checkbox above the form) before saving as Online.');
-      return;
+    const wasOffline = Boolean(opts.train && (opts.train.status === 'Offline' || opts.data?.isEffectivelyOffline));
+    if (opts.trainOnline && wasOffline) {
+      if (!opts.offlineReason) {
+        toast.error('Please select the reason the train was offline.');
+        return;
+      }
+      if (opts.offlineReason === 'Other' && !opts.offlineReasonOther?.trim()) {
+        toast.error('Please specify the reason the train was offline.');
+        return;
+      }
+      if (!opts.offlineStart) {
+        toast.error('Please enter the time the train went offline ("Offline Since").');
+        return;
+      }
+      if (!opts.offlineEnd) {
+        toast.error('Please enter when the downtime ended ("Back Online At").');
+        return;
+      }
+      if (new Date(opts.offlineEnd) > new Date()) {
+        toast.error('"Back Online At" must be in the past.');
+        return;
+      }
+      if (new Date(opts.offlineEnd) > new Date(opts.dt)) {
+        toast.error('"Back Online At" cannot be later than the current reading timestamp.');
+        return;
+      }
+      if (new Date(opts.offlineStart) >= new Date(opts.offlineEnd)) {
+        toast.error('"Back Online At" must be after "Offline Since".');
+        return;
+      }
     }
     if (opts.anomalyRemarksMissing) {
       toast.error('One or more meters are outside the normal range — add a remark for each before saving.');
@@ -102,7 +129,7 @@ export function usePretreatmentActions(rawOpts: PretreatmentActionsOptions) {
         }
       }
 
-      const isOfflineExempt = !opts.trainOnline || opts.train?.status === 'Offline' || opts.confirmBackOnline || !!opts.offlineStart || !!opts.offlineEnd;
+      const isOfflineExempt = !opts.trainOnline || wasOffline || !!opts.offlineStart || !!opts.offlineEnd;
 
       if (!isOfflineExempt) {
         const hourBucket = getHourBucket(opts.dt);
@@ -256,25 +283,58 @@ export function usePretreatmentActions(rawOpts: PretreatmentActionsOptions) {
         opts.setAnomalyRemarkFeed(''); opts.setAnomalyRemarkPerm(''); opts.setAnomalyRemarkRej('');
       }
 
+      const offlineReasonFinal = opts.offlineReason === 'Other'
+        ? (opts.offlineReasonOther?.trim() || 'Other')
+        : (opts.offlineReason || null);
+
       if (!opts.trainOnline) {
-        if (opts.train?.status !== 'Offline') {
+        if (opts.data?.latestStatusLog?.status === 'Offline' && opts.data?.latestStatusLog?.id) {
+          try {
+            await opts.supabase.from('train_status_log').update({
+              reason: offlineReasonFinal,
+              confirmed_by: opts.activeOperator?.id ?? null,
+              confirmed_at: opts.offlineStart ? new Date(opts.offlineStart).toISOString() : opts.data.latestStatusLog.confirmed_at,
+            }).eq('id', opts.data.latestStatusLog.id);
+          } catch { /* best-effort */ }
+        } else {
           try {
             await opts.supabase.from('train_status_log').insert({
               train_id: opts.trainId, plant_id: opts.plantId, status: 'Offline',
-              reason: opts.offlineReason || null,
+              reason: offlineReasonFinal,
               confirmed_by: opts.activeOperator?.id ?? null,
               confirmed_at: opts.offlineStart ? new Date(opts.offlineStart).toISOString() : new Date().toISOString(),
             });
           } catch { /* best-effort */ }
         }
         await opts.supabase.from('ro_trains').update({ status: 'Offline' }).eq('id', opts.trainId);
-      } else if (opts.train?.status === 'Offline') {
+      } else if (wasOffline) {
+        // Operator resolved downtime and brought the train back online
+        // 1. Ensure the offline record reflects the confirmed operator reason and start time
+        if (opts.data?.latestStatusLog?.status === 'Offline' && opts.data?.latestStatusLog?.id) {
+          try {
+            await opts.supabase.from('train_status_log').update({
+              reason: offlineReasonFinal,
+              confirmed_by: opts.activeOperator?.id ?? null,
+              confirmed_at: opts.offlineStart ? new Date(opts.offlineStart).toISOString() : opts.data.latestStatusLog.confirmed_at,
+            }).eq('id', opts.data.latestStatusLog.id);
+          } catch { /* best-effort */ }
+        } else {
+          try {
+            await opts.supabase.from('train_status_log').insert({
+              train_id: opts.trainId, plant_id: opts.plantId, status: 'Offline',
+              reason: offlineReasonFinal,
+              confirmed_by: opts.activeOperator?.id ?? null,
+              confirmed_at: opts.offlineStart ? new Date(opts.offlineStart).toISOString() : new Date().toISOString(),
+            });
+          } catch { /* best-effort */ }
+        }
+        // 2. Insert the confirmed Running transition
         try {
           await opts.supabase.from('train_status_log').insert({
             train_id: opts.trainId, plant_id: opts.plantId, status: 'Running',
             reason: null,
             confirmed_by: opts.activeOperator?.id ?? null,
-            confirmed_at: opts.offlineEnd ? new Date(opts.offlineEnd).toISOString() : new Date().toISOString(),
+            confirmed_at: opts.offlineEnd ? new Date(opts.offlineEnd).toISOString() : new Date(opts.dt).toISOString(),
           });
         } catch { /* best-effort */ }
         await opts.supabase.from('ro_trains').update({ status: 'Running' }).eq('id', opts.trainId);
@@ -422,7 +482,7 @@ export function usePretreatmentActions(rawOpts: PretreatmentActionsOptions) {
       opts.setHousingReasonNeeded(false); opts.setCartridgeUnitReasons({}); opts.setHousingUnitReasons({});
       opts.setRoReasonNeeded(false); opts.setRoIncompleteReason('');
       opts.setAfmSectionStarted(false); opts.setBoosterHppSectionStarted(false); opts.setCartridgeSectionStarted(false);
-      if (opts.offlineEnd) {
+      if (opts.offlineEnd || wasOffline) {
         opts.setTrainOnline(true); opts.setOfflineStart(''); opts.setOfflineEnd('');
         opts.setOfflineReason(''); opts.setOfflineReasonOther('');
       }
@@ -447,6 +507,7 @@ export function usePretreatmentActions(rawOpts: PretreatmentActionsOptions) {
       opts.qc.invalidateQueries({ queryKey: ['train-latest-status-log', opts.trainId] });
       opts.qc.invalidateQueries({ queryKey: ['train-status-log', opts.trainId] });
       opts.qc.invalidateQueries({ queryKey: ['trains'] });
+      opts.qc.invalidateQueries({ queryKey: ['ro-trains'] });
       opts.qc.invalidateQueries({ queryKey: ['dash-ro-recent'] });
       opts.qc.invalidateQueries({ queryKey: ['dash-ro-permeate-today'] });
       opts.qc.invalidateQueries({ queryKey: ['dash-ro-permeate-yest'] });

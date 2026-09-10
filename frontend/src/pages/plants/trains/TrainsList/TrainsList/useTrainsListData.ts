@@ -18,13 +18,13 @@ export function useTrainsListData(plantId: string) {
     queryFn: async () => {
       const ids = (trains ?? []).map((t: any) => t.id);
       if (!ids.length) return new Set<string>();
-      const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
-      const twoHoursAgo = new Date(Date.now() - TWO_HOURS_MS).toISOString();
+      const ONE_HOUR_MS = 60 * 60 * 1000;
+      const oneHourAgo = new Date(Date.now() - ONE_HOUR_MS).toISOString();
       const { data } = await supabase
         .from('ro_train_readings')
         .select('train_id')
         .in('train_id', ids)
-        .gte('reading_datetime', twoHoursAgo);
+        .gte('reading_datetime', oneHourAgo);
       return new Set((data ?? []).map((r: any) => r.train_id));
     },
     enabled: (trains ?? []).length > 0,

@@ -10,6 +10,9 @@ export interface PretreatmentData {
   prevRejMeter: number | null;
   prevPowerMeter: number | null;
   autoDurationMin: number | null;
+  lastReadingTime: string | null;
+  isPastHourMissing: boolean;
+  isEffectivelyOffline: boolean;
   feedCurr: number;
   permCurr: number;
   rejCurr: number;
@@ -70,10 +73,15 @@ export function usePretreatmentData(
   const prevPowerMeter = prevReadings?.power_meter_reading_kwh ?? null;
 
   // Auto-duration: minutes since last reading
-  const lastReadingTime = prevReadings?.reading_datetime;
+  const lastReadingTime = prevReadings?.reading_datetime ?? null;
   const autoDurationMin = lastReadingTime
     ? Math.max(0, (Date.now() - new Date(lastReadingTime).getTime()) / 60000)
     : null;
+  const ONE_HOUR_MS = 60 * 60 * 1000;
+  const isPastHourMissing = !lastReadingTime || (Date.now() - new Date(lastReadingTime).getTime() > ONE_HOUR_MS);
+  const isEffectivelyOffline = train
+    ? (train.status === 'Offline' || (train.status !== 'Maintenance' && isPastHourMissing))
+    : false;
   // Average flow rates (10-day rolling)
   const { data: avgFlowRates } = useQuery({
     queryKey: ['ro-spark', trainId],
@@ -171,6 +179,9 @@ export function usePretreatmentData(
     prevRejMeter,
     prevPowerMeter,
     autoDurationMin,
+    lastReadingTime,
+    isPastHourMissing,
+    isEffectivelyOffline,
     feedCurr,
     permCurr,
     rejCurr,

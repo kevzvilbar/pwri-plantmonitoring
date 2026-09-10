@@ -41,8 +41,8 @@ export function usePlantDetail(plantId: string) {
   const { data: trainCounts } = useQuery({
     queryKey: ['ro-trains-count', plantId],
     queryFn: async () => {
-      const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
-      const twoHoursAgo = new Date(Date.now() - TWO_HOURS_MS).toISOString();
+      const ONE_HOUR_MS = 60 * 60 * 1000;
+      const oneHourAgo = new Date(Date.now() - ONE_HOUR_MS).toISOString();
       const { data: trains } = await supabase
         .from('ro_trains')
         .select('id, status')
@@ -54,7 +54,7 @@ export function usePlantDetail(plantId: string) {
         .from('ro_train_readings')
         .select('train_id')
         .in('train_id', trainIds)
-        .gte('reading_datetime', twoHoursAgo);
+        .gte('reading_datetime', oneHourAgo);
       const recentSet = new Set((recentReadings ?? []).map((r: any) => r.train_id));
       const active = (trains as any[]).filter((t: any) =>
         t.status !== 'Maintenance' && recentSet.has(t.id)
