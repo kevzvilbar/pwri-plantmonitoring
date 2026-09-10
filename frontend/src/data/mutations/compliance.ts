@@ -28,10 +28,8 @@ export async function createComplianceSnapshot(
     .from('compliance_snapshots')
     .insert({
       plant_id: plantId,
-      scope,
-      scope_label: scopeLabel,
-      violations,
-      thresholds,
+      summary: JSON.stringify({ scope, scope_label: scopeLabel, thresholds }),
+      violations: violations as any,
       evaluated_at: new Date().toISOString(),
     });
   if (error) throw error;

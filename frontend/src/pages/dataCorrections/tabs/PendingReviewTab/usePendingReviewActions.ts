@@ -89,7 +89,7 @@ export function usePendingReviewActions() {
   const rejectCorrectionRequestMutation = useRejectCorrectionRequest();
   const insertNormalizationMutation = useInsertReadingNormalization();
 
-  const handleSaveReason = async (row: DataFlaggedRow, reasonText: string) => {
+  const handleSaveReason = async (row: FlaggedRow, reasonText: string) => {
     try {
       await submitAnomalyRemark({
         table_name: row.source_table as any,
@@ -144,7 +144,7 @@ export function usePendingReviewActions() {
     refetchCorrReqs();
   }, [refetch, refetchCorrReqs]);
 
-  const approveRequest = async (req: DataCorrectionRequest) => {
+  const approveRequest = async (req: CorrectionRequest) => {
     try {
       await approveCorrectionRequestMutation.mutateAsync({
         id: req.id,
@@ -166,7 +166,7 @@ export function usePendingReviewActions() {
     }
   };
 
-  const rejectRequest = async (req: DataCorrectionRequest, resolutionNote: string) => {
+  const rejectRequest = async (req: CorrectionRequest, resolutionNote: string) => {
     if (!resolutionNote.trim()) { toast.error('A reason is required to reject a correction request'); return; }
     try {
       await rejectCorrectionRequestMutation.mutateAsync({
@@ -181,7 +181,7 @@ export function usePendingReviewActions() {
     }
   };
 
-  const unlockReading = async (row: DataFlaggedRow) => {
+  const unlockReading = async (row: FlaggedRow) => {
     // This still needs direct supabase call - unlock is a simple update
     const { supabase } = await import('@/integrations/supabase/client');
     await (supabase.from(row.source_table as any)
@@ -191,7 +191,7 @@ export function usePendingReviewActions() {
     invalidate();
   };
 
-  const resolveOne = async (row: DataFlaggedRow, decision: 'normal' | 'retracted') => {
+  const resolveOne = async (row: FlaggedRow, decision: 'normal' | 'retracted') => {
     const hasReason = Boolean(
       row.anomaly_remark?.text ||
       row.edit_reason?.text ||

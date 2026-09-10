@@ -246,7 +246,7 @@ export function useWellsList(plantId: string, highlightId?: string | null) {
     }
   };
 
-  const setDetailWell = (id: string) => setDetail(id);
+  const setDetailWell = (id: string | null) => setDetail(id);
   const setEditWell = (w: any) => setEditingWell(w);
   const setDeleteWell = (w: any) => { setWellDeleteTarget(w); setWellDeleteReason(''); };
   const setNavOperations = (w: any) => navigate(`/operations?tab=well&highlight=${w.id}`);

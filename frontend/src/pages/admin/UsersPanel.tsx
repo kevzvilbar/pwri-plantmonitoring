@@ -18,6 +18,7 @@ import {
   CARD_ROLES, TABLE_ROLES, OPERATORS_PER_PAGE,
   primaryRole, displayName, userLabel,
 } from './UsersPanel/constants';
+import { type SharedTileProps } from './UsersPanel/types';
 import { CreateUserDialog } from './UsersPanel/CreateUserDialog';
 import { ChangePasswordDialog } from './UsersPanel/ChangePasswordDialog';
 import { CardRoleSection, TableRoleSection } from './UsersPanel/UserSections';

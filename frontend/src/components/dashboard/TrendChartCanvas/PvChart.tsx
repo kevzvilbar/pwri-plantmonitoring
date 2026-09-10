@@ -31,7 +31,7 @@ export function PvChart({
         width={44}
         axisLine={false}
         tickLine={false}
-        domain={yDomain}
+        domain={yDomain as any}
         tickCount={6}
         tickFormatter={tickFormatter}
       />

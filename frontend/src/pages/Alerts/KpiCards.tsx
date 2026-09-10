@@ -1,5 +1,6 @@
 import { Card } from '@/components/ui/card';
-import { Bell, Lamp, Activity } from 'lucide-react';
+import { Bell, Activity } from 'lucide-react';
+import { Lamp } from '@/components/ui/Lamp';
 import { cn } from '@/lib/utils';
 
 interface KpiCardsProps {

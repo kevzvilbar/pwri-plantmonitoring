@@ -20,7 +20,7 @@ interface PreTreatLogTableProps {
   logTab: 'ro' | 'pretreat';
   highlightId?: string;
   highlightGapStartAt: string | null;
-  highlightRowRef: React.RefObject<HTMLTableRowElement | null>;
+  highlightRowRef: React.RefObject<HTMLTableRowElement>;
   highlightJumped: boolean;
   expandedSpanIds: Set<string>;
   toggleSpanExpand: (id: string) => void;

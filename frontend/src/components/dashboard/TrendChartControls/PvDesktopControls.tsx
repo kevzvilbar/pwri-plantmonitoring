@@ -1,9 +1,10 @@
 import React from 'react';
 import { GranularityControl } from '../TrendChartDrill';
+import type { Granularity } from '../TrendChartAggregate';
 
 interface PvDesktopControlsProps {
-  viewGran: string;
-  setViewGran: (g: string) => void;
+  viewGran: Granularity;
+  setViewGran: (g: Granularity) => void;
   rangeDays: number;
   metric: string;
 }

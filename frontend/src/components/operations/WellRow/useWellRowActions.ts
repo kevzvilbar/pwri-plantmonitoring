@@ -165,7 +165,7 @@ export function useWellRowActions({
     }
 
     setSaving(true);
-    let gps_lat = null, gps_lng = null;
+    let gps_lat: number | null = null, gps_lng: number | null = null;
     try {
       const pos = await getCurrentPosition();
       gps_lat = pos.coords.latitude; gps_lng = pos.coords.longitude;
@@ -278,13 +278,13 @@ export function useWellRowActions({
 
     let autoApproved = false;
     if (isPending && canAutoApprove && savedRow?.id) {
-      const { error: autoErr } = await (supabase.rpc('fn_cascade_reading_correction', {
+      const { error: autoErr } = await (supabase.rpc as any)('fn_cascade_reading_correction', {
         p_table:       'well_readings',
         p_row_id:      savedRow.id,
         p_new_current: savedRow.current_reading,
         p_admin_id:    userId ?? null,
         p_reason:      `Auto-approved on entry — ${guardReason ?? 'flagged'} check bypassed for Manager/Admin, logged for tracing`,
-      }) as any);
+      });
       if (!autoErr) { isPending = false; autoApproved = true; }
     }
     setWellLastSavePending(isPending);

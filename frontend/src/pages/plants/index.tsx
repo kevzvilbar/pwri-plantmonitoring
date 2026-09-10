@@ -51,11 +51,11 @@ export default function Plants() {
   const { isManager, profile, user: currentUser } = useAuth();
 
   const visiblePlants = isManager
-    ? plants
-    : plants?.filter(p => profile?.plant_assignments?.includes(p.id));
+    ? (plants ?? [])
+    : (plants?.filter(p => profile?.plant_assignments?.includes(p.id)) ?? []);
 
   const list = selectedPlantId
-    ? visiblePlants?.filter(p => p.id === selectedPlantId)
+    ? visiblePlants.filter(p => p.id === selectedPlantId)
     : visiblePlants;
   const navigate = useNavigate();
 
@@ -225,7 +225,7 @@ function PlantDetail({ plantId }: { plantId: string }) {
         }
       />
 
-      <PlantDetailStats plant={plant} trainCounts={trainCounts} />
+      <PlantDetailStats plant={plant} trainCounts={trainCounts ?? null} />
 
       <PlantTelemetryChart
         plantId={plant.id}

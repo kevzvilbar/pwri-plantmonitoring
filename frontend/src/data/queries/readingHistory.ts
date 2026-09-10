@@ -227,5 +227,3 @@ export async function resyncLocatorChain(locatorId: string): Promise<void> {
     (supabase.rpc as any)('fn_backfill_missing_readings', { p_lookback_days: 14 }).catch(() => {});
   }
 }
-
-export type { HistoryModule };

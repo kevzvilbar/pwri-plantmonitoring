@@ -21,7 +21,7 @@ export {
 } from './TrendChartPivotShared/dateUtils';
 
 export {
-  DSMTab,
+  type DSMTab,
   TH,
   TH_DATE,
   TH_TOTAL,

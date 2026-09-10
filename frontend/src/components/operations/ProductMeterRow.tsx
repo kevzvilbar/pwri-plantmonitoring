@@ -23,8 +23,8 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { cn } from '@/lib/utils';
-import { fmtNum, ALERTS, fmtSaveToast } from '@/lib/calculations';
-import { lastReadingFreshness } from '@/lib/format';
+import { fmtNum, ALERTS } from '@/lib/calculations';
+import { fmtSaveToast, lastReadingFreshness } from '@/lib/format';
 import { computeRate, classifyDeviation } from '@/lib/flowRateGuards';
 import { friendlyError } from '@/lib/supabaseErrors';
 import { format } from 'date-fns';

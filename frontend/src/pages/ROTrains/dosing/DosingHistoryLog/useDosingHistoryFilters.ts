@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useRef } from 'react';
 import { usePlants } from '@/hooks/usePlants';
 import { useAppStore } from '@/store/appStore';
 
-export function useDosingHistoryFilters(selectedPlantId: string | undefined) {
+export function useDosingHistoryFilters(selectedPlantId: string | null | undefined) {
   const [filterPlantId, setFilterPlantId] = useState(selectedPlantId ?? '');
   const [days, setDays] = useState<'7' | '30' | '90' | 'custom'>('30');
   const [customFrom, setCustomFrom] = useState('');

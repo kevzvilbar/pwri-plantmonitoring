@@ -257,7 +257,7 @@ function LocatorRow({
               </Button>
             ) : (
               <Button
-                onClick={save} disabled={saving || !readingChanged || (showAnomalyBanner && anomalyRemarkRequired) || (editingId && !isReasonComplete(editReason, editCustomReason))}
+                onClick={save} disabled={Boolean(saving || !readingChanged || (showAnomalyBanner && anomalyRemarkRequired) || (editingId && !isReasonComplete(editReason, editCustomReason)))}
                 style={{ '--confirm-glow': 'hsl(var(--kpi-locator, 175 84% 32%) / 0.5)' } as React.CSSProperties}
                 className={cn(
                   'flex-1 h-11 rounded-full text-sm font-semibold shadow-sm transition-all',
@@ -320,7 +320,7 @@ function LocatorRow({
             </Button>
           ) : (
             <Button
-              onClick={save} disabled={saving || !readingChanged || (showAnomalyBanner && anomalyRemarkRequired) || (editingId && !isReasonComplete(editReason, editCustomReason))}
+              onClick={save} disabled={Boolean(saving || !readingChanged || (showAnomalyBanner && anomalyRemarkRequired) || (editingId && !isReasonComplete(editReason, editCustomReason)))}
               style={{ '--confirm-glow': 'hsl(var(--kpi-locator, 175 84% 32%) / 0.5)' } as React.CSSProperties}
               className={cn(
                 'h-11 px-6 rounded-full text-sm font-semibold shrink-0 shadow-sm transition-all',

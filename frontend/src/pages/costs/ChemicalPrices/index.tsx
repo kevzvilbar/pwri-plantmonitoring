@@ -62,7 +62,7 @@ export function ChemicalPrices() {
           emptyTitle="No prices yet"
         >
           <PriceHistoryList
-            data={data}
+            data={data ?? []}
             isLoading={isLoading}
             canEdit={canEdit}
             edit={edit}

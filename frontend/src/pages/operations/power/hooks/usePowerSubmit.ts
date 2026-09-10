@@ -5,7 +5,7 @@ import { classifyDeviation } from '@/lib/flowRateGuards';
 export interface UsePowerSubmitOptions {
   plantId: string | null;
   configLoading: boolean;
-  configMultiplierArr: unknown[] | null | undefined;
+  configMultiplierArr: (number | string)[] | null | undefined;
   toast: {
     error: (message: string) => void;
     info: (message: string) => void;
@@ -54,18 +54,7 @@ export interface UsePowerSubmitOptions {
   classifyDeviation: (rate: number, avg: number | null | undefined, multiplier: number) => ReturnType<typeof classifyDeviation>;
   ALERTS: { power_spike_multiplier: number };
   isAnomalyRemarkValid: (remark: string) => boolean;
-  submitAnomalyRemark: (opts: {
-    table_name: string;
-    record_id: string;
-    plant_id: string;
-    tier: 'needs_remark' | 'critical';
-    direction: string;
-    deviation_pct: number;
-    flow_rate: number;
-    avg_flow_rate: number;
-    rate_unit: string;
-    remark_text: string;
-  }) => Promise<void>;
+  submitAnomalyRemark: (opts: any) => Promise<any>;
   invalidatePowerDash: (qc: QueryClient) => void;
   qc: QueryClient;
   friendlyError: (error: unknown) => string;
@@ -344,8 +333,8 @@ export function usePowerSubmit(opts: UsePowerSubmitOptions) {
         tier: result.tier as 'needs_remark' | 'critical',
         direction: result.direction!,
         deviation_pct: result.deviationPct!,
-        flow_rate: result.rate,
-        avg_flow_rate: result.avgRate,
+        flow_rate: result.rate ?? 0,
+        avg_flow_rate: result.avgRate ?? 0,
         rate_unit: 'kwh/hr',
         remark_text: anomalyRemark,
       });

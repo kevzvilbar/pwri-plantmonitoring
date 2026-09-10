@@ -237,7 +237,7 @@ describe('buildKwhSummaryCsv — kWh Data Summary export', () => {
     // Sep 04: Estimated row (is_estimated = true), only Meter 0 = 502
     // Sep 05: Meter 0 = 505, Meter 2 = 9239.6
     // Multipliers: [1, 1, 2400]
-    const readings = [
+    const readings: GridPowerReadingRow[] = [
       {
         plant_id: 'plant-srp',
         reading_datetime: '2026-09-02T04:49:00+08:00',

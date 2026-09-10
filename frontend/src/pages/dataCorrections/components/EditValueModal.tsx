@@ -101,7 +101,7 @@ export function EditValueModal({
     if (!isReasonComplete(reason, customReason)) { toast.error('A correction reason is required'); return; }
     setBusy(true);
     try {
-      const { data, error } = await (supabase.rpc('fn_cascade_reading_correction', {
+      const { data, error } = await ((supabase.rpc as any)('fn_cascade_reading_correction', {
         p_table:       row.source_table,
         p_row_id:      row.id,
         p_new_current: parsed,

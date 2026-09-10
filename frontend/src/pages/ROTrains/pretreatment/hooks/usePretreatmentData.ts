@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { usePlantMeterConfig } from '../../../../plants/shared';
+import { usePlantMeterConfig } from '@/pages/plants/shared';
 
 export interface PretreatmentData {
   train: any;
@@ -19,6 +19,7 @@ export interface PretreatmentData {
   meterCfg: any;
   latestStatusLog: any;
   siblingTrains: any[];
+  trains: any[];
 }
 
 export function usePretreatmentData(
@@ -27,7 +28,7 @@ export function usePretreatmentData(
   roValues: Record<string, string>,
   isSynchronized: boolean,
 ) {
-  const { data: meterCfg } = usePlantMeterConfig(plantId);
+  const { config: meterCfg } = usePlantMeterConfig(plantId);
 
   // Trains for the selected plant
   const { data: trains } = useQuery({
@@ -156,6 +157,12 @@ export function usePretreatmentData(
     staleTime: 10_000,
   });
 
+  // Current meter values
+  const num = (s: string) => s ? +s : NaN;
+  const feedCurr = num(roValues.feed_meter_curr);
+  const permCurr = num(roValues.permeate_meter_curr);
+  const rejCurr = num(roValues.reject_meter_curr);
+
   return {
     train,
     prevFeedMeter,
@@ -173,13 +180,6 @@ export function usePretreatmentData(
     meterCfg,
     latestStatusLog,
     siblingTrains,
+    trains: trains ?? [],
   };
 }
-
-  // Current meter values
-  const num = (s: string) => s ? +s : NaN;
-  const feedCurr = num(roValues.feed_meter_curr);
-  const permCurr = num(roValues.permeate_meter_curr);
-  const rejCurr = num(roValues.reject_meter_curr);
-
-  // Average flow rates (10-day rolling)

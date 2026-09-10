@@ -45,7 +45,7 @@ describe('computeIntraFileDuplicateIndices — power module, multi-meter plants'
 
 describe('computeIntraFileDuplicateIndices — non-power modules unaffected', () => {
   it('ignores meter_name entirely and keys on entity name + full datetime', () => {
-    const rows = [
+    const rows: Record<string, string>[] = [
       { well_name: 'Well A', current_reading: '10', reading_datetime: '2026-08-22T03:12', meter_name: 'irrelevant' },
       { well_name: 'Well A', current_reading: '11', reading_datetime: '2026-08-22T03:12' }, // true dup: same well, same minute
       { well_name: 'Well B', current_reading: '12', reading_datetime: '2026-08-22T03:12' }, // different well, not a dup

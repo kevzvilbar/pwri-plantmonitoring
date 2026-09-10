@@ -324,7 +324,7 @@ export default function DataAnalysis() {
         onPowerSourceChange={(v: string) => {
           setPowerSource(v);
           const opt = POWER_SOURCE_OPTIONS.find(o => o.value === v);
-          if (opt && 'columns' in opt && opt.columns.length > 0) {
+          if (opt && 'columns' in opt && opt.columns && opt.columns.length > 0) {
             setColumn(opt.columns[0]);
           } else if (v === 'all') {
             setColumn(SOURCE_TABLES['power_readings'][0]);

@@ -184,7 +184,7 @@ export function usePowerFormActions(state: ReturnType<typeof import('./usePowerF
   const displayHistory = useMemo(() => {
     if (!state.history?.length) return [];
     return state.history.map((r: any, i: number) => {
-      const pred = state.history[i + 1] ?? null;
+      const pred = state.history?.[i + 1] ?? null;
       const deltaKwh = (() => {
         const rGmr = r.grid_meter_readings as Record<string, number> | null | undefined;
         const pGmr = pred?.grid_meter_readings as Record<string, number> | null | undefined;

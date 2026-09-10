@@ -183,7 +183,7 @@ export function PowerForm() {
         configLoading={configLoading}
         effectiveMultiplier={effectiveMultiplier}
         solarInputMode={solarInputMode}
-        plants={plants}
+        plants={plants ?? []}
         powerConfig={powerConfig}
         todayDateStr={todayDateStr}
         userId={user?.id ?? null}

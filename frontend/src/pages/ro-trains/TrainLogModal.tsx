@@ -247,7 +247,7 @@ export function TrainLogModal({ trainId, trainLabel, plantId, onClose, initialTa
   });
 
   const highlightGapStartAt = highlightId?.startsWith('gap:') ? highlightId.slice(4) : null;
-  const highlightRowRef = useRef<HTMLTableRowElement | null>(null);
+  const highlightRowRef = useRef<HTMLTableRowElement>(null);
   const [highlightJumped, setHighlightJumped] = useState(false);
 
   const actions = useTrainLogActions({

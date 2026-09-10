@@ -1,14 +1,16 @@
 import React from 'react';
 import { Button } from '@/components/ui/button';
 import { GranularityControl, StackToggle } from '../TrendChartDrill';
+import type { Granularity } from '../TrendChartAggregate';
+import type { StackMode } from '../TrendChartDrillKit';
 
 interface ProductionCostDesktopControlsProps {
-  viewGran: string;
-  setViewGran: (g: string) => void;
+  viewGran: Granularity;
+  setViewGran: (g: Granularity) => void;
   rangeDays: number;
   metric: string;
-  stackMode: string;
-  setStackMode: (m: string) => void;
+  stackMode: StackMode;
+  setStackMode: (m: StackMode) => void;
   showTotalCostLine: boolean;
   setShowTotalCostLine: (v: boolean) => void;
   showPowerCostLine: boolean;
@@ -30,7 +32,7 @@ export function ProductionCostDesktopControls({
       <span className="text-3xs text-muted-foreground mr-0.5 hidden sm:inline ml-1">Show:</span>
       {stackMode !== 'stacked' && (
         <button
-          onClick={() => setShowTotalCostLine((v) => !v)}
+          onClick={() => setShowTotalCostLine(!showTotalCostLine)}
           title="Toggle Production Cost (Power + Chem) line"
           className={[
             'h-5 px-1.5 rounded text-2xs font-medium transition-colors leading-none border',
@@ -41,17 +43,17 @@ export function ProductionCostDesktopControls({
         >Prod</button>
       )}
       <button
-        onClick={() => setShowPowerCostLine((v) => !v)}
+        onClick={() => setShowPowerCostLine(!showPowerCostLine)}
         title="Toggle Power Cost (₱/m³) line"
         className={[
           'h-5 px-1.5 rounded text-2xs font-medium transition-colors leading-none border',
           showPowerCostLine
             ? 'border-[hsl(var(--chart-6))] text-[hsl(var(--chart-6))] bg-[hsl(var(--chart-6))]/10'
             : 'bg-muted text-muted-foreground hover:text-foreground border-border',
-        ].join(' ')}
+          ].join(' ')}
       >Power</button>
       <button
-        onClick={() => setShowChemCostLine((v) => !v)}
+        onClick={() => setShowChemCostLine(!showChemCostLine)}
         title="Toggle Chemical Cost (₱/m³) line"
         className={[
           'h-5 px-1.5 rounded text-2xs font-medium transition-colors leading-none border',

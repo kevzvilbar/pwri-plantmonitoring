@@ -36,10 +36,12 @@ export function buildKwhSummaryCsv(
     'Grid by Meter',
     ['date', ...cols.map((c) => csvField(c.label)), 'total_kwh'].join(','),
   ];
-  for (const dk of dates) {
+  for (let i = 0; i < dates.length; i++) {
+    const dk = dates[i];
     const row = breakdown.byDate.get(dk);
+    const dateLabel = overviewRows[i]?.date ?? dk;
     s2.push([
-      csvField(dk),
+      csvField(dateLabel),
       ...cols.map((c) => {
         const v = row?.values[c.key];
         return v != null ? +v.toFixed(2) : '';

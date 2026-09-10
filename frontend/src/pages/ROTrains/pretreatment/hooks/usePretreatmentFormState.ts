@@ -37,7 +37,7 @@ export interface PretreatmentFormState {
   confirmBackOnline: boolean;
   setConfirmBackOnline: (v: boolean) => void;
   roValues: Record<string, string>;
-  setRoValues: (v: Record<string, string>) => void;
+  setRoValues: React.Dispatch<React.SetStateAction<Record<string, string>>>;
   afmSectionStarted: boolean;
   setAfmSectionStarted: (v: boolean) => void;
   boosterHppSectionStarted: boolean;
@@ -89,11 +89,6 @@ const EMPTY_RO_VALUES = {
   permeate_meter_curr: '',
   reject_meter_curr: '',
   power_meter_curr: '',
-  power_meter_curr: '',
-  power_meter_curr: '',
-};
-
-export function usePretreatmentFormState(_trainId: string, _train: any): PretreatmentFormState {
 };
 
 export function usePretreatmentFormState(_trainId: string, _train: any): PretreatmentFormState {
@@ -114,7 +109,7 @@ export function usePretreatmentFormState(_trainId: string, _train: any): Pretrea
   const [offlineReason, setOfflineReason] = useState('');
   const [offlineReasonOther, setOfflineReasonOther] = useState('');
   const [confirmBackOnline, setConfirmBackOnline] = useState(false);
-  const [roValues, setRoValues] = useState(EMPTY_RO_VALUES);
+  const [roValues, setRoValues] = useState<Record<string, string>>(EMPTY_RO_VALUES);
   const [afmSectionStarted, setAfmSectionStarted] = useState(false);
   const [boosterHppSectionStarted, setBoosterHppSectionStarted] = useState(false);
   const [cartridgeSectionStarted, setCartridgeSectionStarted] = useState(false);
@@ -137,14 +132,16 @@ export function usePretreatmentFormState(_trainId: string, _train: any): Pretrea
     try { return localStorage.getItem(BOOSTER_MODE_KEY) !== 'false'; } catch { return true; }
   });
 
-  const setAfmmfField = (u: number, patch: Partial<AfmRow>) => setAfmmf((p) => ({
-    ...p,
-    [u]: {
+  const setAfmmfField = (u: number, patch: Partial<AfmRow>) => setAfmmf((p) => {
+    const existing = p[u] ?? {
       unit: u, bw: false, bwStart: '', bwEnd: '',
       meterStart: '', meterEnd: '', pressureIn: '', pressureOut: '',
-      ...(p[u] ?? {}), ...patch,
-    },
-  }));
+    };
+    return {
+      ...p,
+      [u]: { ...existing, ...patch },
+    };
+  });
 
   return {
     syncBwOn, setSyncBwOn,

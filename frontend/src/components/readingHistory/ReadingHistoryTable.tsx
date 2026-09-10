@@ -81,7 +81,7 @@ export function ReadingHistoryTable(props: any) {
 
   const actions = useReadingHistoryActions({
     module, entityId, plantId, queryKey, qc, rows,
-    hasFullAccess, activeOperatorId, user, activeOperator,
+    hasFullAccess, activeOperatorId: activeOperatorId ?? undefined, user, activeOperator,
     assetMeterSerial, multiplier,
     gridMeterCountProp, gridMeterNames, gridMultipliers,
     defaultInputMode, solarInputMode, isSolarDirectMode,
@@ -134,14 +134,14 @@ export function ReadingHistoryTable(props: any) {
             <TableHeader
               module={module} isDirectMode={isDirectMode} anyEditable={anyEditable}
               resolvedGridCount={resolvedGridCount} actions={actions}
-              hasFullAccess={hasFullAccess} activeOperatorId={activeOperatorId}
+              hasFullAccess={hasFullAccess} activeOperatorId={activeOperatorId ?? undefined}
               rows={rows}
             />
             <TableBody
               rows={rows} module={module} isDirectMode={isDirectMode}
               isSolarDirectMode={isSolarDirectMode} solarDirectVal={solarDirectVal}
               anyEditable={anyEditable} hasFullAccess={hasFullAccess}
-              activeOperatorId={activeOperatorId} actions={actions}
+              activeOperatorId={activeOperatorId ?? undefined} actions={actions}
               getHistGridLabel={getHistGridLabel} getHistGridMult={getHistGridMult}
               resolvedGridCount={resolvedGridCount} meterFilter={meterFilter}
             />

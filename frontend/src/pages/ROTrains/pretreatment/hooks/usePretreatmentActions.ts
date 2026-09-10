@@ -10,122 +10,34 @@ export interface PretreatmentActionsOptions {
   plantId: string;
   trainId: string;
   train: any;
-  trainOnline: boolean;
-  confirmBackOnline: boolean;
   dt: string;
-  roValues: Record<string, string>;
-  roIncompleteReason: string;
-  setRoIncompleteReason: (v: string) => void;
-  setRoReasonNeeded: (v: boolean) => void;
-  anomalyRemarksMissing: boolean;
-  offlineStart: string;
-  offlineReason: string;
-  offlineReasonOther: string;
-  offlineEnd: string;
-  setTrainOnline: (v: boolean) => void;
-  setOfflineStart: (v: string) => void;
-  setOfflineEnd: (v: string) => void;
-  setOfflineReason: (v: string) => void;
-  setOfflineReasonOther: (v: string) => void;
-  setRoValues: (v: any) => void;
-  afmmf: Record<number, any>;
-  boosters: Record<number, any>;
-  housings: Record<number, any>;
-  cartridgeHousings: Record<number, any>;
   isSynchronized: boolean;
   showFeedMeter: boolean;
   showPermeateMeter: boolean;
   showRejectMeter: boolean;
-  syncBwOn: boolean;
-  syncBwStart: string;
-  syncBwEnd: string;
-  syncMeterStart: string;
-  syncMeterEnd: string;
-  setAfmmf: (v: Record<number, any>) => void;
-  setBoosters: (v: Record<number, any>) => void;
-  setHousings: (v: Record<number, any>) => void;
-  setCartridgeHousings: (v: Record<number, any>) => void;
-  setSyncBwOn: (v: boolean) => void;
-  setSyncBwStart: (v: string) => void;
-  setSyncBwEnd: (v: string) => void;
-  setSyncMeterStart: (v: string) => void;
-  setSyncMeterEnd: (v: string) => void;
-  boosterPrefPsi: boolean;
-  hppTarget: string;
-  setHppTarget: (v: string) => void;
-  bagsChanged: string;
-  setBagsChanged: (v: string) => void;
-  remarks: string;
-  setRemarks: (v: string) => void;
-  afmUnitReasons: Record<number, { reason: string; custom: string }>;
-  boosterUnitReasons: Record<number, { reason: string; custom: string }>;
-  hppUnitReason: { reason: string; custom: string };
-  cartridgeUnitReasons: Record<number, { reason: string; custom: string }>;
-  housingUnitReasons: Record<number, { reason: string; custom: string }>;
-  setAfmReasonNeeded: (v: boolean) => void;
-  setAfmUnitReasons: (v: Record<number, { reason: string; custom: string }>) => void;
-  setBoosterReasonNeeded: (v: boolean) => void;
-  setBoosterUnitReasons: (v: Record<number, { reason: string; custom: string }>) => void;
-  setHppUnitReason: (v: { reason: string; custom: string }) => void;
-  setHousingReasonNeeded: (v: boolean) => void;
-  setCartridgeUnitReasons: (v: Record<number, { reason: string; custom: string }>) => void;
-  setHousingUnitReasons: (v: Record<number, { reason: string; custom: string }>) => void;
-  setAfmSectionStarted: (v: boolean) => void;
-  setBoosterHppSectionStarted: (v: boolean) => void;
-  setCartridgeSectionStarted: (v: boolean) => void;
-  setConfirmBackOnline: (v: boolean) => void;
-  setAnomalyRemarkFeed: (v: string) => void;
-  setAnomalyRemarkPerm: (v: string) => void;
-  setAnomalyRemarkRej: (v: string) => void;
-  anomalyRemarkFeed: string;
-  anomalyRemarkPerm: string;
-  anomalyRemarkRej: string;
-  numAfm: number;
-  numBoosterPumps: number;
-  numCartridgeFilters: number;
-  numFilterHousings: number;
-  feedCurr: number | null;
-  permCurr: number | null;
-  rejCurr: number | null;
-  prevFeedMeter: number | null;
-  prevPermMeter: number | null;
-  prevRejMeter: number | null;
-  feedDelta: number | null;
-  permDelta: number | null;
-  rejDelta: number | null;
-  effFeedFlow: number | null;
-  effPermFlow: number | null;
-  rejectFlow: number | null;
-  recovery: number | null;
-  rejection: number | null;
-  saltPassage: number | null;
-  dp: number | null;
-  pwrCurr: number | null;
-  prevPowerMeter: number | null;
-  pwrDelta: number | null;
-  pwrKw: number | null;
-  secEnergy: number | null;
   sharedPowerGroup: string | null;
-  feedHighWarn: boolean;
-  permHighWarn: boolean;
-  rejHighWarn: boolean;
-  feedSpike: any;
-  permSpike: any;
-  rejSpike: any;
-  feedNeedsRemark: boolean;
-  permNeedsRemark: boolean;
-  rejNeedsRemark: boolean;
-  anyMeterSpike: boolean;
-  mDurHr: number | null;
   qc: any;
   activeOperator: any;
   addAlerts: (alerts: any[]) => void;
   supabase: any;
+  form: any;
+  data: any;
+  calc: any;
 }
 
-export function usePretreatmentActions(opts: PretreatmentActionsOptions) {
+export function usePretreatmentActions(rawOpts: PretreatmentActionsOptions) {
   const [isSaving, setIsSaving] = useState(false);
-
+  const opts = {
+    ...rawOpts,
+    ...rawOpts.form,
+    ...rawOpts.data,
+    ...rawOpts.calc,
+    numAfm: rawOpts.train?.num_afm ?? 0,
+    numBoosterPumps: rawOpts.train?.num_booster_pumps ?? 0,
+    numCartridgeFilters: rawOpts.train?.num_cartridge_filters ?? 0,
+    numFilterHousings: rawOpts.train?.num_filter_housings ?? 0,
+    pwrCurr: rawOpts.data.prevPowerMeter,
+  };
   const submit = async () => {
     if (isSaving) return;
     if (!opts.plantId || !opts.trainId) { toast.error('Select plant and train'); return; }
@@ -368,7 +280,7 @@ export function usePretreatmentActions(opts: PretreatmentActionsOptions) {
         await opts.supabase.from('ro_trains').update({ status: 'Running' }).eq('id', opts.trainId);
       }
 
-      const rowsArr = Object.values(opts.afmmf);
+      const rowsArr = Object.values(opts.afmmf) as any[];
       const mmf_readings = opts.isSynchronized
         ? (opts.syncBwOn && (opts.syncMeterStart || opts.syncMeterEnd)
             ? Array.from({ length: opts.numAfm }, (_, i) => i + 1).map((u) => ({
@@ -377,8 +289,8 @@ export function usePretreatmentActions(opts: PretreatmentActionsOptions) {
                 meter_end: opts.syncMeterEnd ? +opts.syncMeterEnd : null,
               }))
             : [])
-        : rowsArr.filter((r) => r.bw && (r.meterStart || r.meterEnd))
-            .map((r) => ({
+        : rowsArr.filter((r: any) => r.bw && (r.meterStart || r.meterEnd))
+            .map((r: any) => ({
               unit: r.unit,
               meter_start: r.meterStart ? +r.meterStart : null,
               meter_end: r.meterEnd ? +r.meterEnd : null,

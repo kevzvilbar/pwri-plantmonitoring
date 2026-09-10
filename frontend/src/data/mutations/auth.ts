@@ -37,7 +37,7 @@ export async function completeOnboarding(params: {
   _designation: string | null;
   _plant_assignments: string[];
 }): Promise<void> {
-  const { error } = await supabase.rpc('complete_onboarding', params);
+  const { error } = await (supabase.rpc as any)('complete_onboarding', params);
   if (error) throw error;
 }
 

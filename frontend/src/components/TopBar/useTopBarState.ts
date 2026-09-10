@@ -68,13 +68,15 @@ export function useTopBarState() {
   useEffect(() => {
     const currentCriticalIds = plantAlerts.filter(a => sevTier(a.severity) === 'critical').map((a) => a.id);
     const hasNewCritical = currentCriticalIds.some((id) => !prevCriticalIdsRef.current.includes(id));
+    let timer: ReturnType<typeof setTimeout> | undefined;
     if (hasNewCritical && currentCriticalIds.length > 0) {
       setIsRinging(true);
-      const timer = setTimeout(() => setIsRinging(false), 700);
-      prevCriticalIdsRef.current = currentCriticalIds;
-      return () => clearTimeout(timer);
+      timer = setTimeout(() => setIsRinging(false), 700);
     }
     prevCriticalIdsRef.current = currentCriticalIds;
+    return () => {
+      if (timer) clearTimeout(timer);
+    };
   }, [plantAlerts]);
 
   const markAllRead = async () => {

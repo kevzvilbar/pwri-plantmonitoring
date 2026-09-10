@@ -1,12 +1,14 @@
 import React from 'react';
 import { Button } from '@/components/ui/button';
 import { GranularityControl, StackToggle } from '../TrendChartDrill';
+import type { Granularity } from '../TrendChartAggregate';
+import type { StackMode } from '../TrendChartDrillKit';
 import { Filter } from 'lucide-react';
 
 interface ProductionDrillControlsProps {
   metric: string;
-  viewGran: string;
-  setViewGran: (g: string) => void;
+  viewGran: Granularity;
+  setViewGran: (g: Granularity) => void;
   rangeDays: number;
   viewBreakdown: string;
   setViewBreakdown: (b: string) => void;
@@ -18,8 +20,8 @@ interface ProductionDrillControlsProps {
   noneSelected: boolean;
   drillEntities: any[];
   usePermeateForSource: boolean;
-  stackMode: string;
-  setStackMode: (m: string) => void;
+  stackMode: StackMode;
+  setStackMode: (m: StackMode) => void;
   selectAllLocators: () => void;
   clearAllLocators: () => void;
   toggleLocator: (id: string) => void;
@@ -81,7 +83,7 @@ export function ProductionDrillControls({
 
       {viewBreakdown !== 'total' && (
         <button
-          onClick={() => setShowLocatorFilter((v) => !v)}
+          onClick={() => setShowLocatorFilter(!showLocatorFilter)}
           data-testid={`drill-filter-${metric}`}
           className={[
             'h-5 px-1.5 rounded text-2xs font-medium transition-colors leading-none flex items-center gap-0.5 border',

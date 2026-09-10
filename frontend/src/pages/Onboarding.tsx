@@ -75,7 +75,7 @@ export default function Onboarding() {
     if (!form.username || !form.first_name || !form.last_name) { toast.error('Fill required fields'); return; }
     if (form.plant_assignments.length === 0) { toast.error('Assign at least one plant'); return; }
     setBusy(true);
-    const { error } = await supabase.rpc('complete_onboarding', {
+    const { error } = await (supabase.rpc as any)('complete_onboarding', {
       _username: form.username,
       _first_name: form.first_name,
       _middle_name: form.middle_name || null,

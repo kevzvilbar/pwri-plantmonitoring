@@ -36,7 +36,7 @@ export function Power() {
   });
 
   const monthOptions = useMemo(() => {
-    const opts = [];
+    const opts: { value: string; label: string }[] = [];
     const now = new Date();
     for (let i = 0; i < 24; i++) {
       const d = subMonths(now, i);

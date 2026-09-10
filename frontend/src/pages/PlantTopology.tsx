@@ -39,6 +39,7 @@ import {
 } from './plantTopology/shared';
 import { useTopologyData, useSaveTopologyLinks } from '@/data/hooks/usePlantTopology';
 import PlantTopologyContent from './plantTopology/TopologyCanvas';
+import { SidePanel } from './plantTopology/SidePanel';
 
 export default function PlantTopology() {
   const { isAdmin, isManager } = useAuth();
@@ -194,7 +195,7 @@ export default function PlantTopology() {
   // ── Drag-and-drop ────────────────────────────────────────────────────────────
 
   const computeSnap = useCallback((clientX: number, clientY: number): { colKey: string; rowIdx: number } | null => {
-    const el = canvasRef.current;
+    const el = CANVAS_REF.current;
     if (!el) return null;
     const rect = el.getBoundingClientRect();
     if (clientX < rect.left || clientX > rect.right || clientY < rect.top || clientY > rect.bottom) return null;
@@ -317,10 +318,18 @@ export default function PlantTopology() {
   async function handleSave() {
     if (!topoState || !effectivePlantId) return;
     setSaving(true);
-    await saveLinks(effectivePlantId, topoState.editLinks);
-    qc.invalidateQueries({ queryKey: ['topology-data', effectivePlantId] });
-    setSaving(false);
-    toast.success('Topology saved');
+    try {
+      await saveLinksMutation.mutateAsync({
+        plantId: effectivePlantId,
+        links: topoState.editLinks.map((l) => ({ from_id: l.from, to_id: l.to })),
+      });
+      qc.invalidateQueries({ queryKey: ['topology-data', effectivePlantId] });
+      toast.success('Topology saved');
+    } catch {
+      toast.error('Failed to save topology');
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (

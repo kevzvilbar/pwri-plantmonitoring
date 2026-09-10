@@ -14,8 +14,8 @@ const DAYS_OPTIONS = ['7', '30', '90', 'custom'] as const;
 interface DosingHistoryLogFiltersProps {
   filterPlantId: string;
   setFilterPlantId: (id: string) => void;
-  selectedPlantId: string | undefined;
-  setSelectedPlantId: (id: string | undefined) => void;
+  selectedPlantId: string | null | undefined;
+  setSelectedPlantId: (id: string | null) => void;
   days: '7' | '30' | '90' | 'custom';
   setDays: (d: '7' | '30' | '90' | 'custom') => void;
   customFrom: string;

@@ -42,7 +42,7 @@ export interface TrainLogActionsOptions {
   plantId: string;
   qc: ReturnType<typeof useQueryClient>;
   isManager: boolean;
-  activeOperator: { id?: string; first_name?: string; last_name?: string; username?: string } | null;
+  activeOperator: { id?: string; first_name?: string | null; last_name?: string | null; username?: string | null } | null;
   hasFullAccess: boolean;
   trainLabel: string;
   logs: any[];
@@ -74,7 +74,7 @@ export interface TrainLogActionsOptions {
   toggleSpanExpand: (id: string) => void;
   highlightId?: string;
   highlightGapStartAt: string | null;
-  highlightRowRef: Ref<HTMLTableRowElement | null>;
+  highlightRowRef: React.RefObject<HTMLTableRowElement>;
   highlightJumped: boolean;
   setHighlightJumped: (v: boolean) => void;
   logTab: 'ro' | 'pretreat';

@@ -6,7 +6,7 @@ import {
 } from './constants';
 import { type AppRole } from './constants';
 import { type SharedTileProps } from './types';
-import { DesignationCombobox, accessLevelFromRoles, OPERATOR_DESIGNATION as OP_DESIG } from '@/components/DesignationCombobox';
+import { DesignationCombobox, accessLevelFromRoles, OPERATOR_DESIGNATION } from '@/components/DesignationCombobox';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { PlantAssignmentEditor } from '@/components/PlantAssignmentEditor';

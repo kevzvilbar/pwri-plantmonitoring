@@ -1,2 +1,2 @@
-export { ProductMeterRow } from './ProductMeterRow';
+export { ProductMeterRow } from '../ProductMeterRow';
 export { ProductMeterHistoryDialog } from './ProductMeterHistoryDialog';

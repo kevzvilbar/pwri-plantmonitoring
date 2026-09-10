@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { StaffMember, fullName, getPresence, getRoleConfig, OnlineIds } from '../../types';
@@ -42,7 +42,7 @@ export function useStaffData(onlineIds: OnlineIds) {
   }).length;
   const operatorCount = staff.length - leadershipCount - analystCount;
 
-  const filterStaff = useMemo((search: string, filterPlant: string, roleFilter: string) => {
+  const filterStaff = useCallback((search: string, filterPlant: string, roleFilter: string) => {
     const q = search.toLowerCase();
     return staff.filter((s) => {
       const nameMatch = !q || fullName(s).toLowerCase().includes(q) || (s.username ?? '').toLowerCase().includes(q);
@@ -63,7 +63,7 @@ export function useStaffData(onlineIds: OnlineIds) {
 
   const plantsWithStaff = (plants ?? []).filter((p) => staff.some((s) => s.plant_assignments?.includes(p.id)));
 
-  const getGroup = useMemo((filtered: StaffMember[], groupName: string) => {
+  const getGroup = useCallback((filtered: StaffMember[], groupName: string) => {
     return filtered.filter((s) => {
       const r = (roles as any[]).find((x) => x.user_id === s.id)?.role;
       if (groupName === 'leadership') return r === 'Admin' || r === 'Manager';

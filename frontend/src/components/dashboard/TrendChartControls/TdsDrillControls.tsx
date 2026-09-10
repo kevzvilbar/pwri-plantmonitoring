@@ -1,11 +1,13 @@
 import React from 'react';
 import { Button } from '@/components/ui/button';
 import { GranularityControl, StackToggle } from '../TrendChartDrill';
+import type { Granularity } from '../TrendChartAggregate';
+import type { StackMode } from '../TrendChartDrillKit';
 import { ChevronsDown, Filter } from 'lucide-react';
 
 interface TdsDrillControlsProps {
-  viewGran: string;
-  setViewGran: (g: string) => void;
+  viewGran: Granularity;
+  setViewGran: (g: Granularity) => void;
   rangeDays: number;
   metric: string;
   roDrillMode: string;
@@ -16,8 +18,8 @@ interface TdsDrillControlsProps {
   noTrainsSelected: boolean;
   roTrainEntities: any[];
   selectedTrainIds: Set<string> | null;
-  stackMode: string;
-  setStackMode: (m: string) => void;
+  stackMode: StackMode;
+  setStackMode: (m: StackMode) => void;
   selectAllTrains: () => void;
   clearAllTrains: () => void;
   toggleTrain: (id: string) => void;
@@ -81,7 +83,7 @@ export function TdsDrillControls({
 
       {roDrillMode !== 'default' && (
         <button
-          onClick={() => setShowTrainFilter((v) => !v)}
+          onClick={() => setShowTrainFilter(!showTrainFilter)}
           className={[
             'h-5 px-1.5 rounded text-2xs font-medium transition-colors leading-none flex items-center gap-0.5 border',
             showTrainFilter

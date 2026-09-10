@@ -1,11 +1,13 @@
 import React from 'react';
 import { Button } from '@/components/ui/button';
 import { GranularityControl, StackToggle } from '../TrendChartDrill';
+import type { Granularity } from '../TrendChartAggregate';
+import type { StackMode } from '../TrendChartDrillKit';
 import { Filter } from 'lucide-react';
 
 interface RawWaterDesktopControlsProps {
-  viewGran: string;
-  setViewGran: (g: string) => void;
+  viewGran: Granularity;
+  setViewGran: (g: Granularity) => void;
   rangeDays: number;
   metric: string;
   rawwaterBreakdown: string;
@@ -16,12 +18,15 @@ interface RawWaterDesktopControlsProps {
   setShowWellFilter: (v: boolean) => void;
   allWellsSelected: boolean;
   wellEntities: any[];
+  stackMode: StackMode;
+  setStackMode: (m: StackMode) => void;
 }
 
 export function RawWaterDesktopControls({
   viewGran, setViewGran, rangeDays, metric,
   rawwaterBreakdown, setRawwaterBreakdown, selectedWellIds, setSelectedWellIds,
   showWellFilter, setShowWellFilter, allWellsSelected, wellEntities,
+  stackMode, setStackMode,
 }: RawWaterDesktopControlsProps) {
   return (
     <div className="flex items-center gap-0.5 shrink-0 ml-1">
@@ -54,7 +59,7 @@ export function RawWaterDesktopControls({
       >By well</button>
       {rawwaterBreakdown === 'by-well' && (
         <button
-          onClick={() => setShowWellFilter((v) => !v)}
+          onClick={() => setShowWellFilter(!showWellFilter)}
           data-testid="drill-filter-rawwater"
           className={[
             'h-5 px-1.5 rounded text-2xs font-medium transition-colors leading-none flex items-center gap-0.5 border',
@@ -78,7 +83,7 @@ export function RawWaterDesktopControls({
       {rawwaterBreakdown === 'by-well' && viewGran !== 'daily' && (
         <>
           <span className="hidden sm:inline-block h-3 border-l border-border mx-1" aria-hidden />
-          <StackToggle value={stackMode} onChange={() => {}} testId="rawwater-stack-toggle" />
+          <StackToggle value={stackMode} onChange={setStackMode} testId="rawwater-stack-toggle" />
         </>
       )}
     </div>

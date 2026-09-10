@@ -24,7 +24,7 @@ export async function updateReadingEntry(
   editorId: string,
   reason: string
 ): Promise<void> {
-  const { error } = await supabase.from(table).update(updates).eq('id', id);
+  const { error } = await (supabase.from(table as any) as any).update(updates).eq('id', id);
   if (error) throw error;
 }
 

@@ -34,7 +34,7 @@ export async function fetchUserDeps(id: string): Promise<DependencySnapshot> {
     { table: 'power_readings', count: rest[7] },
     { table: 'user_profiles (reports to this user)', column: 'immediate_head_id', count: rest[8] },
   ].filter((r) => r.count > 0);
-  const blockingRefs = refs.filter((r) => !r.table.startsWith('user_profiles'));
+  const blockingRefs = refs.filter((r) => !r.table?.startsWith('user_profiles'));
   const total = refs.reduce((a, b) => a + b.count, 0);
   return { blocking: blockingRefs.length > 0, total_references: total, references: refs, role_rows: roles };
 }

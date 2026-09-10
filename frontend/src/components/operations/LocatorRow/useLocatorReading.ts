@@ -201,11 +201,11 @@ export function useLocatorReading({
     }
 
     setSaving(true);
-    let gps_lat = null, gps_lng = null, off = false;
+    let gps_lat: number | null = null, gps_lng: number | null = null, off = false;
     try {
       const pos = await getCurrentPosition();
       gps_lat = pos.coords.latitude; gps_lng = pos.coords.longitude;
-      if (locator.gps_lat && locator.gps_lng)
+      if (gps_lat != null && gps_lng != null && locator.gps_lat && locator.gps_lng)
         off = isOffLocation(gps_lat, gps_lng, locator.gps_lat, locator.gps_lng, 100);
     } catch (err) { console.warn('[Operations] geolocation unavailable:', err); }
 

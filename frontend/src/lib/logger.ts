@@ -45,7 +45,7 @@ function formatMessage(level: LogLevel, message: string, context?: LogContext): 
   
   if (!context) return base;
   
-  const parts = [];
+  const parts: string[] = [];
   if (context.userId) parts.push(`user=${context.userId}`);
   if (context.plantId) parts.push(`plant=${context.plantId}`);
   if (context.component) parts.push(`component=${context.component}`);

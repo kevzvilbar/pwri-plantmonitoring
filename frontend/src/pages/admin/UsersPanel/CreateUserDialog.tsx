@@ -59,7 +59,7 @@ function CreateUserDialog({ open, onClose, onCreated }: {
       if (upErr) throw new Error(upErr.message);
       const { error: inErr } = await supabase.auth.signInWithPassword({ email: form.email, password: form.password });
       if (inErr) throw new Error(inErr.message);
-      const { error: rpErr } = await supabase.rpc('complete_onboarding', {
+      const { error: rpErr } = await (supabase.rpc as any)('complete_onboarding', {
         _username: form.username,
         _first_name: form.first_name,
         _middle_name: form.middle_name || null,

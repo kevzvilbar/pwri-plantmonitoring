@@ -111,7 +111,7 @@ export function computeGridMeterBreakdown(
     let gridKwh = 0;
     const meterDeltas = new Map<string, number>();
     const multArr: number[] = powerConfigMap?.get(pid) ?? [
-      +(r.multiplier ?? 0) > 0 ? +r.multiplier : (billMultiplierMap?.get(pid) ?? 1),
+      r.multiplier != null && +r.multiplier > 0 ? +r.multiplier : (billMultiplierMap?.get(pid) ?? 1),
     ];
 
     if (!afterGridRepl.has(pid)) {

@@ -347,8 +347,8 @@ export function RegressionDetail({
       <RegressionDetailHeader
         result={result}
         canEdit={canEdit}
-        plantName={plantName}
-        entityName={entityName}
+        plantName={plantName ?? null}
+        entityName={entityName ?? null}
         outliers={outliers}
         gapFillRows={gapFillRows}
         gapsInserted={gapsInserted}

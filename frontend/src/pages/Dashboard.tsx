@@ -243,7 +243,7 @@ export default function Dashboard() {
   });
 
   const netBalance = (production ?? 0) - (consumption ?? 0);
-  const selectedPlantName = selectedPlantId ? plants?.find(p => p.id === selectedPlantId)?.name : 'All Production Facilities';
+  const selectedPlantName = (selectedPlantId ? plants?.find(p => p.id === selectedPlantId)?.name : null) || 'All Production Facilities';
 
   return (
     <div className="space-y-3 animate-fade-in">

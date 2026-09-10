@@ -91,6 +91,7 @@ export function TrendChartControls(props: Record<string, any>) {
             selectedWellIds={selectedWellIds} setSelectedWellIds={setSelectedWellIds}
             showWellFilter={showWellFilter} setShowWellFilter={setShowWellFilter}
             allWellsSelected={allWellsSelected} wellEntities={wellEntities}
+            stackMode={stackMode} setStackMode={setStackMode}
           />
         )}
         {hasConsumptionDrill && (

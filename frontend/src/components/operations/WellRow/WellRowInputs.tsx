@@ -100,7 +100,7 @@ export function WellRowInputs({
               )}
             </div>
             <Button
-              onClick={onSave} disabled={saving || !meterChanged || atLimit || (showAnomalyBanner && anomalyRemarkRequired) || (editingId && !isReasonComplete(editReason, editCustomReason))}
+              onClick={onSave} disabled={Boolean(saving || !meterChanged || atLimit || (showAnomalyBanner && anomalyRemarkRequired) || (editingId && !isReasonComplete(editReason, editCustomReason)))}
               className={cn(
                 'w-full h-11 text-sm font-bold shadow-sm rounded-xl transition-all',
                 meterChanged
@@ -122,7 +122,7 @@ export function WellRowInputs({
               data-testid={`well-meter-input-${well.id}`}
             />
             <Button
-              onClick={onSave} disabled={saving || !meterChanged || atLimit || (showAnomalyBanner && anomalyRemarkRequired) || (editingId && !isReasonComplete(editReason, editCustomReason))}
+              onClick={onSave} disabled={Boolean(saving || !meterChanged || atLimit || (showAnomalyBanner && anomalyRemarkRequired) || (editingId && !isReasonComplete(editReason, editCustomReason)))}
               size="sm"
               className={cn(
                 'h-8 px-3.5 shrink-0 text-xs font-semibold shadow-sm transition-all',

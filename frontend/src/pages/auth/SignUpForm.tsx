@@ -159,7 +159,7 @@ export function SignUpForm({
           if (inErr) throw new Error(inErr.message);
         }
 
-        const { error: rpErr } = await supabase.rpc('complete_onboarding', {
+        const { error: rpErr } = await (supabase.rpc as any)('complete_onboarding', {
           _username: op.username,
           _first_name: op.first_name,
           _middle_name: op.middle_name || null,

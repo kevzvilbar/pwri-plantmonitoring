@@ -1,4 +1,4 @@
-﻿import { useState, useMemo, useEffect, useRef } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -685,7 +685,7 @@ export function PretreatmentAndROLog() {
     ? +( (permTds / feedTds) * 100 ).toFixed(2) : null;
   const rejectFlow  = effRejFlow;
 
-  const phWarn = num(roValues.permeate_ph) && (num(roValues.permeate_ph) < 6.5 || num(roValues.permeate_ph) > 8.5);
+  const phWarn = Boolean(num(roValues.permeate_ph) && (num(roValues.permeate_ph) < 6.5 || num(roValues.permeate_ph) > 8.5));
   const recWarn = recovery != null && (recovery < 65 || recovery > 75);
   const dpAlert = dp != null && dp >= ALERTS.dp_max;
 
@@ -1170,7 +1170,7 @@ export function PretreatmentAndROLog() {
               showPowerMeter={showPowerMeter}
               isSharedPowerMeter={isSharedPowerMeter}
               sharedPowerGroup={sharedPowerGroup}
-              siblingTrains={siblingTrains}
+              siblingTrains={siblingTrains ?? []}
               roValues={roValues}
               onFieldChange={f}
               autoDurationMin={autoDurationMin}

@@ -10,7 +10,7 @@
     ],
     "module": "ESNext",
     "moduleDetection": "force",
-    "moduleResolution": "node",
+    "moduleResolution": "bundler",
     "noEmit": true,
     "noFallthroughCasesInSwitch": false,
     "noImplicitAny": false,

@@ -33,9 +33,9 @@ export interface PretreatmentCalculations {
   feedNegWarn: boolean;
   permNegWarn: boolean;
   rejNegWarn: boolean;
-  feedSpike: { tier: string };
-  permSpike: { tier: string };
-  rejSpike: { tier: string };
+  feedSpike: ReturnType<typeof evaluateROMeterSpike>;
+  permSpike: ReturnType<typeof evaluateROMeterSpike>;
+  rejSpike: ReturnType<typeof evaluateROMeterSpike>;
   feedHighWarn: boolean;
   permHighWarn: boolean;
   rejHighWarn: boolean;
@@ -87,6 +87,40 @@ export function usePretreatmentCalculations(
 
     const feedSpike = evaluateROMeterSpike('feed', feedDelta, mDurHr, avgFeedFlowRate);
     const permSpike = evaluateROMeterSpike('permeate', permDelta, mDurHr, avgPermFlowRate);
+    const rejSpike = evaluateROMeterSpike('reject', rejDelta, mDurHr, avgRejFlowRate);
+
+    const feedHighWarn = !feedNegWarn && feedSpike.tier === 'critical';
+    const permHighWarn = !permNegWarn && permSpike.tier === 'critical';
+    const rejHighWarn = !rejNegWarn && rejSpike.tier === 'critical';
+
+    const feedNeedsRemark = !feedNegWarn && feedSpike.tier !== 'ok';
+    const permNeedsRemark = !permNegWarn && permSpike.tier !== 'ok';
+    const rejNeedsRemark = !rejNegWarn && rejSpike.tier !== 'ok';
+    const anyNeedsRemark = feedNeedsRemark || permNeedsRemark || rejNeedsRemark;
+
+    const anomalyRemarksMissing =
+      (feedNeedsRemark && !isAnomalyRemarkValid(anomalyRemarkFeed)) ||
+      (permNeedsRemark && !isAnomalyRemarkValid(anomalyRemarkPerm)) ||
+      (rejNeedsRemark && !isAnomalyRemarkValid(anomalyRemarkRej));
+
+    const anyMeterSpike = feedHighWarn || permHighWarn || rejHighWarn;
+
+    const feedVol = feedDelta ?? (permDelta !== null && rejDelta !== null ? +(permDelta + rejDelta).toFixed(3) : null);
+    const permVol = permDelta ?? (feedDelta !== null && rejDelta !== null ? +(feedDelta - rejDelta).toFixed(3) : null);
+    const rejVol = rejDelta ?? (feedDelta !== null && permDelta !== null ? +(feedDelta - permDelta).toFixed(3) : null);
+
+    const feedFlowMeter = feedVol !== null && mDurHr ? +(feedVol / mDurHr).toFixed(2) : null;
+    const permFlowMeter = permVol !== null && mDurHr ? +(permVol / mDurHr).toFixed(2) : null;
+    const rejFlowMeter = rejVol !== null && mDurHr ? +(rejVol / mDurHr).toFixed(2) : null;
+
+    const feedInferred = feedDelta === null && feedVol !== null;
+    const permInferred = permDelta === null && permVol !== null;
+    const rejInferred = rejDelta === null && rejVol !== null;
+
+    // EM 3-way inference
+    const emFeedFlow = roValues.feed_flow ? num(roValues.feed_flow) : null;
+    const emPermFlow = roValues.permeate_flow ? num(roValues.permeate_flow) : null;
+    const emRejFlow = roValues.reject_flow ? num(roValues.reject_flow) : null;
     const emEntered = [emFeedFlow, emPermFlow, emRejFlow].filter(v => v !== null).length;
 
     const effFeedFlow: number | null = (() => {
@@ -158,38 +192,3 @@ export function usePretreatmentCalculations(
     };
   }, [roValues, prevFeedMeter, prevPermMeter, prevRejMeter, prevPowerMeter, autoDurationMin, avgFeedFlowRate, avgPermFlowRate, avgRejFlowRate, anomalyRemarkFeed, anomalyRemarkPerm, anomalyRemarkRej, showRejectMeter]);
 }
-    const rejSpike = evaluateROMeterSpike('reject', rejDelta, mDurHr, avgRejFlowRate);
-
-    const feedHighWarn = !feedNegWarn && feedSpike.tier === 'critical';
-    const permHighWarn = !permNegWarn && permSpike.tier === 'critical';
-    const rejHighWarn = !rejNegWarn && rejSpike.tier === 'critical';
-
-    const feedNeedsRemark = !feedNegWarn && feedSpike.tier !== 'ok';
-    const permNeedsRemark = !permNegWarn && permSpike.tier !== 'ok';
-    const rejNeedsRemark = !rejNegWarn && rejSpike.tier !== 'ok';
-    const anyNeedsRemark = feedNeedsRemark || permNeedsRemark || rejNeedsRemark;
-
-    const anomalyRemarksMissing =
-      (feedNeedsRemark && !isAnomalyRemarkValid(anomalyRemarkFeed)) ||
-      (permNeedsRemark && !isAnomalyRemarkValid(anomalyRemarkPerm)) ||
-      (rejNeedsRemark && !isAnomalyRemarkValid(anomalyRemarkRej));
-
-    const anyMeterSpike = feedHighWarn || permHighWarn || rejHighWarn;
-
-    const feedVol = feedDelta ?? (permDelta !== null && rejDelta !== null ? +(permDelta + rejDelta).toFixed(3) : null);
-    const permVol = permDelta ?? (feedDelta !== null && rejDelta !== null ? +(feedDelta - rejDelta).toFixed(3) : null);
-    const rejVol = rejDelta ?? (feedDelta !== null && permDelta !== null ? +(feedDelta - permDelta).toFixed(3) : null);
-
-    const feedFlowMeter = feedVol !== null && mDurHr ? +(feedVol / mDurHr).toFixed(2) : null;
-    const permFlowMeter = permVol !== null && mDurHr ? +(permVol / mDurHr).toFixed(2) : null;
-    const rejFlowMeter = rejVol !== null && mDurHr ? +(rejVol / mDurHr).toFixed(2) : null;
-
-    const feedInferred = feedDelta === null && feedVol !== null;
-    const permInferred = permDelta === null && permVol !== null;
-    const rejInferred = rejDelta === null && rejVol !== null;
-
-    // EM 3-way inference
-    const emFeedFlow = roValues.feed_flow ? num(roValues.feed_flow) : null;
-    const emPermFlow = roValues.permeate_flow ? num(roValues.permeate_flow) : null;
-    const emRejFlow = roValues.reject_flow ? num(roValues.reject_flow) : null;
-    const emEntered = [emFeedFlow, emPermFlow, emRejFlow].filter(v => v !== null).length;

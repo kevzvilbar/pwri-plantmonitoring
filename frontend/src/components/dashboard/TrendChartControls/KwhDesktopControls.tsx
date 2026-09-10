@@ -1,19 +1,21 @@
 import React from 'react';
 import { Button } from '@/components/ui/button';
 import { GranularityControl, StackToggle } from '../TrendChartDrill';
+import type { Granularity } from '../TrendChartAggregate';
+import type { StackMode } from '../TrendChartDrillKit';
 import { Sun } from 'lucide-react';
 import { GridPylonIcon } from '@/components/icons/water-icons';
 import { Download } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface KwhDesktopControlsProps {
-  viewGran: string;
-  setViewGran: (g: string) => void;
+  viewGran: Granularity;
+  setViewGran: (g: Granularity) => void;
   rangeDays: number;
   kwhSource: string;
   setKwhSource: (s: string) => void;
-  stackMode: string;
-  setStackMode: (m: string) => void;
+  stackMode: StackMode;
+  setStackMode: (m: StackMode) => void;
   chartData: any[];
   metric: string;
 }

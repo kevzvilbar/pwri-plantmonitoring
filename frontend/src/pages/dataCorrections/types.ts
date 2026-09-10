@@ -78,7 +78,7 @@ export interface FlaggedRow {
   previous_operator_username?: string | null;
   current_reading: number;
   daily_volume: number | null;
-  recorded_by: string | null;
+  recorded_by?: string | null;
   operator_username: string | null;
   norm_status: string;
   flag_reason?: 'backward' | 'unchanged' | 'edited' | 'spike' | string;

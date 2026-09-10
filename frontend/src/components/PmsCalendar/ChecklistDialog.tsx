@@ -65,10 +65,13 @@ export function ChecklistDialog({ item, isManager, onClose, onEdit, onDelete }: 
   }, [existingExec?.id, existingSteps?.length]);
 
   const setStep = (i: number, patch: Partial<{ completed: boolean; value: string; notes: string }>) => {
-    setStepState(prev => ({
-      ...prev,
-      [i]: { completed: false, value: '', notes: '', ...prev[i], ...patch },
-    }));
+    setStepState(prev => {
+      const existing = prev[i] ?? { completed: false, value: '', notes: '' };
+      return {
+        ...prev,
+        [i]: { ...existing, ...patch },
+      };
+    });
   };
 
   const allDone = steps.length > 0 && steps.every((_, i) => stepState[i]?.completed);

@@ -230,13 +230,13 @@ export function useDataSummaryQueries({ open, plantIds }: DataSummaryQueriesOpti
     tab, setTab, currentSide, setCurrentSide,
     fromStr, setFromStr, toStr, setToStr,
     startISO, endISO,
-    locators, locatorsLoading, locatorIds, directLocatorIds,
-    consReadings, consLoading,
-    productMeters, metersLoading, meterIds, directMeterIds,
-    prodReadings, prodLoading,
+    locators: locators ?? [], locatorsLoading, locatorIds, directLocatorIds,
+    consReadings: consReadings ?? [], consLoading,
+    productMeters: productMeters ?? [], metersLoading, meterIds, directMeterIds,
+    prodReadings: prodReadings ?? [], prodLoading,
     modalMeterConfigs, configLoading,
     permeateIsProductionPlantIds, productExcludedPlantIds, configsReady,
-    roTrainsMeta, trainsLoading, roMeterReadings, roLoading, roCurrentReadings,
+    roTrainsMeta: roTrainsMeta ?? [], trainsLoading, roMeterReadings: roMeterReadings ?? [], roLoading, roCurrentReadings,
     prodDataLoading, isLoading,
   };
 }

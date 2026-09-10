@@ -17,7 +17,9 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { cn } from '@/lib/utils';
-import { fmtNum, ALERTS, computeRate, classifyDeviation, fmtSaveToast, lastReadingFreshness } from '@/lib/calculations';
+import { fmtNum, ALERTS } from '@/lib/calculations';
+import { computeRate, classifyDeviation } from '@/lib/flowRateGuards';
+import { fmtSaveToast, lastReadingFreshness } from '@/lib/format';
 import { friendlyError } from '@/lib/supabaseErrors';
 import { format } from 'date-fns';
 import { toast } from 'sonner';

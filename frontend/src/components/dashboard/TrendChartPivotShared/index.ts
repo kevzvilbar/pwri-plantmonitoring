@@ -1,7 +1,7 @@
 export { resolveReadingDelta, buildEntityPivot } from './readingUtils';
 export { fillDateRange, fmtDateKey } from './dateUtils';
 export {
-  DSMTab, TH, TH_DATE, TH_TOTAL, TD, TD_TOTAL_ROW, TD_TOTAL_COL, fmtV,
+  type DSMTab, TH, TH_DATE, TH_TOTAL, TD, TD_TOTAL_ROW, TD_TOTAL_COL, fmtV,
 } from './cssClasses';
 export {
   interpolateMissingGridMeterReadings,
