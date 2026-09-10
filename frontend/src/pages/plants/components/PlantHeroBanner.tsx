@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
 import { format } from 'date-fns';
-import { ChevronLeft, MapPin, Pencil, Trash2, Droplets, Zap, Building2, CheckCircle2, AlertTriangle } from 'lucide-react';
-import { ROTrainIcon } from '@/components/icons/water-icons';
+import { ChevronLeft, MapPin, Pencil, Droplets, Zap, Building2, Sun, Gauge } from 'lucide-react';
+import { ROTrainIcon, GridPylonIcon } from '@/components/icons/water-icons';
 import { Button } from '@/components/ui/button';
 import { Lamp } from '@/components/ui/Lamp';
 import { fmtNum } from '@/lib/format';
 import { useQuery } from '@tanstack/react-query';
 import { loadThresholds } from '@/pages/Compliance';
+import { ProductMetersStat } from '../config/ProductMeters';
 
 interface PlantHeroBannerProps {
   plant: any;
@@ -46,7 +47,6 @@ export function PlantHeroBanner({
   }, []);
 
   const isOnline = plant.status === 'Active';
-  const capM3 = plant.design_capacity_m3 ? plant.design_capacity_m3 * 1000 : null;
   const trainOnlinePct = trainCounts && trainCounts.total > 0
     ? Math.round((trainCounts.active / trainCounts.total) * 100)
     : null;
@@ -88,7 +88,7 @@ export function PlantHeroBanner({
       </div>
 
       {/* ── Facility Cockpit Hero (Impeccable: crisp 1px border, solid slate-900) ── */}
-      <div className="rounded-lg border border-slate-800 bg-slate-900 text-white p-4 sm:p-5 relative overflow-hidden space-y-4">
+      <div className="rounded-lg border border-slate-800 bg-slate-900 text-white p-4 sm:p-5 relative overflow-hidden space-y-4 shadow-sm">
         {/* Top Row: Facility Tag + Name + Status Badge + Live Clock */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
           <div className="flex items-center gap-2.5 flex-wrap">
@@ -111,87 +111,125 @@ export function PlantHeroBanner({
             </div>
           </div>
 
-          <div className="flex items-center gap-2 font-mono text-2xs text-slate-300 self-start sm:self-auto tabular-nums">
-            <Lamp tone="live" pulse size={6} />
-            <span className="text-cyan-300 font-semibold">Live Telemetry</span>
-            <span className="text-white/30">&bull;</span>
-            <span>{timeStr || '—'}</span>
+          <div className="flex items-center gap-3">
+            <p className="text-2xs text-slate-400 items-center gap-1.5 hidden md:flex">
+              <MapPin className="h-3.5 w-3.5 text-teal-400/80 shrink-0" />
+              <span className="truncate max-w-[260px]">{plant.address || 'Address unassigned'}</span>
+            </p>
+            <div className="flex items-center gap-2 font-mono text-2xs text-slate-300 self-start sm:self-auto tabular-nums">
+              <Lamp tone="live" pulse size={6} />
+              <span className="text-cyan-300 font-semibold">Live Telemetry</span>
+              <span className="text-white/30">&bull;</span>
+              <span>{timeStr || '—'}</span>
+            </div>
           </div>
         </div>
 
-          {/* Main Hero Metrics Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-center">
-            
-            {/* Left: Design Extraction Capacity */}
-            <div className="md:col-span-5 space-y-1.5">
-              <div className="flex items-center gap-1.5 text-3xs uppercase tracking-wider font-semibold text-teal-200/90">
-                <Droplets className="h-3 w-3 text-cyan-400" />
-                <span>Peak Extraction Capacity</span>
-              </div>
-              <div className="flex items-baseline gap-2">
-                <span className="readout-num readout-glow text-3xl sm:text-4xl font-bold font-mono-num text-white leading-none">
-                  {plant.design_capacity_m3 ? fmtNum(plant.design_capacity_m3) : '—'}
-                </span>
-                {plant.design_capacity_m3 && (
-                  <span className="text-sm font-sans font-medium text-slate-300">
-                    MLD <span className="text-2xs opacity-80 font-mono">({fmtNum(plant.design_capacity_m3 * 1000)} m³/d)</span>
-                  </span>
-                )}
-              </div>
-              <p className="text-2xs text-slate-300 flex items-center gap-1.5 pt-0.5">
-                <MapPin className="h-3.5 w-3.5 text-teal-400 shrink-0" />
-                <span className="truncate">{plant.address || 'Address unassigned'}</span>
-              </p>
+        {/* Main Hero Metrics Grid (4 Pillars) */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          {/* Pillar 1: Peak Extraction Capacity */}
+          <div className="p-3.5 rounded-lg bg-slate-800/60 border border-slate-700/60 space-y-1.5">
+            <div className="flex items-center gap-1.5 text-3xs uppercase tracking-wider font-semibold text-teal-200/90">
+              <Droplets className="h-3 w-3 text-cyan-400" />
+              <span>Peak Extraction Capacity</span>
             </div>
-
-            {/* Middle: RO Trains Fleet Operational Ratio */}
-            <div className="md:col-span-4 space-y-1.5">
-              <div className="flex items-center gap-1.5 text-3xs uppercase tracking-wider font-semibold text-teal-200/90">
-                <ROTrainIcon className="h-3 w-3 text-teal-400" />
-                <span>RO Trains Operational</span>
-              </div>
-              <div className="flex items-baseline gap-2">
-                <span className="readout-num text-3xl sm:text-4xl font-bold font-mono-num text-white leading-none">
-                  {trainCounts ? `${trainCounts.active}` : (plant.num_ro_trains ?? '—')}
+            <div className="flex items-baseline gap-2">
+              <span className="readout-num readout-glow text-3xl sm:text-4xl font-bold font-mono-num text-white leading-none">
+                {plant.design_capacity_m3 ? fmtNum(plant.design_capacity_m3) : '—'}
+              </span>
+              {plant.design_capacity_m3 && (
+                <span className="text-sm font-sans font-medium text-slate-300">
+                  MLD <span className="text-2xs opacity-80 font-mono">({fmtNum(plant.design_capacity_m3 * 1000)} m³/d)</span>
                 </span>
-                {trainCounts && (
-                  <span className="text-sm font-mono text-slate-300">
-                    / {trainCounts.total} units
-                  </span>
-                )}
-              </div>
-              <div className="flex items-center gap-1.5 text-3xs text-slate-300 font-mono">
-                <Lamp
-                  tone={trainOnlinePct === 100 ? 'good' : (trainOnlinePct ?? 0) > 0 ? 'warn' : 'danger'}
-                  pulse={trainOnlinePct === 100}
-                  size={6}
-                />
-                <span>
-                  {trainCounts && trainCounts.total > 0
-                    ? `${trainOnlinePct}% fleet online`
-                    : 'Train telemetry online'}
-                </span>
-              </div>
+              )}
             </div>
-
-            {/* Right: Quick Spec Tag */}
-            <div className="md:col-span-3 p-3 rounded-xl bg-white/5 border border-white/10 space-y-1">
-              <div className="text-3xs uppercase tracking-wider font-semibold text-teal-200/80">
-                System Benchmark
-              </div>
-              <div className="text-xs font-mono font-medium text-white flex items-center justify-between">
-                <span>Target Recovery:</span>
-                <span className="text-teal-300 font-bold">{thresholds?.recovery_pct_min != null ? `${thresholds.recovery_pct_min}% – 75%` : '65% – 75%'}</span>
-              </div>
-              <div className="text-xs font-mono font-medium text-white flex items-center justify-between">
-                <span>Permeate TDS:</span>
-                <span className="text-teal-300 font-bold">&le; {thresholds?.permeate_tds_max ?? 500} ppm</span>
-              </div>
-            </div>
-
+            <div className="text-3xs text-slate-400">Peak abstraction throughput</div>
           </div>
+
+          {/* Pillar 2: RO Fleet Operational Ratio */}
+          <div className="p-3.5 rounded-lg bg-slate-800/60 border border-slate-700/60 space-y-1.5">
+            <div className="flex items-center gap-1.5 text-3xs uppercase tracking-wider font-semibold text-teal-200/90">
+              <ROTrainIcon className="h-3 w-3 text-teal-400" />
+              <span>RO Trains Operational</span>
+            </div>
+            <div className="flex items-baseline gap-2">
+              <span className="readout-num text-3xl sm:text-4xl font-bold font-mono-num text-white leading-none">
+                {trainCounts ? `${trainCounts.active}` : (plant.num_ro_trains ?? '—')}
+              </span>
+              {trainCounts && (
+                <span className="text-sm font-mono text-slate-300">
+                  / {trainCounts.total} units
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-1.5 text-3xs text-slate-300 font-mono">
+              <Lamp
+                tone={trainOnlinePct === 100 ? 'good' : (trainOnlinePct ?? 0) > 0 ? 'warn' : 'danger'}
+                pulse={trainOnlinePct === 100}
+                size={6}
+              />
+              <span>
+                {trainCounts && trainCounts.total > 0
+                  ? `${trainOnlinePct}% fleet online`
+                  : 'Train telemetry online'}
+              </span>
+            </div>
+          </div>
+
+          {/* Pillar 3: Distribution Meters */}
+          <div className="p-3.5 rounded-lg bg-slate-800/60 border border-slate-700/60 space-y-1.5">
+            <div className="flex items-center gap-1.5 text-3xs uppercase tracking-wider font-semibold text-teal-200/90">
+              <Gauge className="h-3 w-3 text-amber-400" />
+              <span>Distribution Meters</span>
+            </div>
+            <ProductMetersStat plantId={plant.id} variant="hero" />
+            <div className="text-3xs text-slate-400">Offtake & bulk consumption</div>
+          </div>
+
+          {/* Pillar 4: Power Mix */}
+          <div className="p-3.5 rounded-lg bg-slate-800/60 border border-slate-700/60 space-y-1.5">
+            <div className="flex items-center gap-1.5 text-3xs uppercase tracking-wider font-semibold text-teal-200/90">
+              <Zap className="h-3 w-3 text-emerald-400" />
+              <span>Power Mix</span>
+            </div>
+            <div className="flex items-center gap-2 flex-wrap min-h-[38px]">
+              {plant.has_solar && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-2xs font-mono font-medium bg-amber-950/80 text-amber-300 border border-amber-500/40">
+                  <Sun className="h-3 w-3 text-amber-400" />
+                  <span>Solar{plant.solar_capacity_kw ? ` · ${plant.solar_capacity_kw} kW` : ''}</span>
+                </span>
+              )}
+              {plant.has_grid !== false && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-2xs font-mono font-medium bg-cyan-950/80 text-cyan-300 border border-cyan-500/40">
+                  <GridPylonIcon className="h-3 w-3 text-cyan-400" />
+                  <span>Grid Connected</span>
+                </span>
+              )}
+              {!plant.has_solar && plant.has_grid === false && (
+                <span className="text-slate-400 italic text-2xs">No source configured</span>
+              )}
+            </div>
+            <div className="text-3xs text-slate-400">Grid / Solar telemetry</div>
+          </div>
+        </div>
+
+        {/* Bottom Strip: System Benchmark specs */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-3.5 py-2 rounded-md bg-slate-800/40 border border-slate-700/40 text-2xs text-slate-300 font-mono">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-3xs uppercase tracking-wider font-semibold text-teal-300">
+              System Benchmarks:
+            </span>
+            <span>Target Recovery: <strong className="text-white">{thresholds?.recovery_pct_min != null ? `${thresholds.recovery_pct_min}% – 75%` : '65% – 75%'}</strong></span>
+            <span className="text-white/20 hidden sm:inline">&bull;</span>
+            <span>Permeate TDS: <strong className="text-white">&le; {thresholds?.permeate_tds_max ?? 500} ppm</strong></span>
+          </div>
+          <p className="text-3xs text-slate-400 flex items-center gap-1.5 md:hidden">
+            <MapPin className="h-3 w-3 text-teal-400/80 shrink-0" />
+            <span className="truncate">{plant.address || 'Address unassigned'}</span>
+          </p>
         </div>
       </div>
+    </div>
   );
 }
 

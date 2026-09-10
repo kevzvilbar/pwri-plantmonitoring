@@ -3,7 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useMemo } from 'react';
 import { lastReadingFreshness, STALE_READING_HOURS } from '@/lib/format';
 
-export function ProductMetersStat({ plantId }: { plantId: string }) {
+export function ProductMetersStat({ plantId, variant = 'default' }: { plantId: string; variant?: 'default' | 'hero' }) {
   const { data: meters } = useQuery({
     queryKey: ['product-meters-stat', plantId],
     queryFn: async () => {
@@ -63,6 +63,20 @@ export function ProductMetersStat({ plantId }: { plantId: string }) {
 
   const total = meters?.length ?? 0;
   const active = (meters ?? []).filter((m: any) => (m.status ?? 'Active') === 'Active' && freshSet.has(m.id)).length;
+
+  if (variant === 'hero') {
+    return (
+      <div className="flex items-baseline gap-2">
+        <span className="readout-num text-3xl sm:text-4xl font-bold font-mono-num text-white leading-none">
+          {active}
+        </span>
+        <span className="text-sm font-mono text-slate-300">
+          / {total} meters
+        </span>
+      </div>
+    );
+  }
+
   return (
     <div>
       <div className="font-mono-num text-lg font-bold">

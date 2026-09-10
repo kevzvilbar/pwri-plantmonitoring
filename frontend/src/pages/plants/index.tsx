@@ -33,7 +33,6 @@ import { usePlantDetail } from './hooks/usePlantDetail';
 import { PlantList } from './components/PlantList';
 import { PlantListHeader } from './index/PlantListHeader';
 import { PlantDetailTabs } from './index/PlantDetailTabs';
-import { PlantDetailStats } from './index/PlantDetailStats';
 import { PlantInfoEditDialog } from './index/PlantInfoEditDialog';
 
 export interface AddPlantFormData {
@@ -224,8 +223,6 @@ function PlantDetail({ plantId }: { plantId: string }) {
           )
         }
       />
-
-      <PlantDetailStats plant={plant} trainCounts={trainCounts ?? null} />
 
       <PlantTelemetryChart
         plantId={plant.id}
