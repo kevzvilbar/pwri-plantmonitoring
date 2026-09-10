@@ -125,10 +125,27 @@ export default function PlantTopologyContent({
   const { isAdmin, isManager } = useAuth();
 
   const activePlant = plants.find((p) => p.id === effectivePlantId);
+
+  if (!plants.length) {
+    return (
+      <div className="flex h-64 items-center justify-center text-sm text-muted-foreground">
+        No plants found. Create a plant first.
+      </div>
+    );
+  }
+
+  if (isLoading || !topoState) {
+    return (
+      <div className="flex h-64 items-center justify-center gap-2 text-sm text-muted-foreground">
+        <RefreshCw className="h-4 w-4 animate-spin" /> Building topology…
+      </div>
+    );
+  }
+
   const colSequence = buildColSequence(customColumns);
   const colXMap = buildColXMap(customColumns, colWidths);
-  const positions  = layoutNodes(topoState!.nodes, customColumns, posOverrides, colWidths);
-  const allLinks   = [...topoState!.fixedLinks, ...topoState!.editLinks];
+  const positions  = layoutNodes(topoState.nodes, customColumns, posOverrides, colWidths);
+  const allLinks   = [...topoState.fixedLinks, ...topoState.editLinks];
 
   let maxX = 0, maxY = 0;
   positions.forEach(({ x, y }) => {
@@ -147,28 +164,12 @@ export default function PlantTopologyContent({
     linkCounts[l.to]   = (linkCounts[l.to]   ?? 0) + 1;
   });
 
-  const hasPowerNodes = topoState!.nodes.some((n) =>
+  const hasPowerNodes = topoState.nodes.some((n) =>
     ['solarSource', 'gridSource', 'solarMeter', 'gridMeter'].includes(n.type)
   );
-  const waterNodesCount = topoState?.nodes.filter(n => !['solarSource', 'gridSource', 'solarMeter', 'gridMeter'].includes(n.type)).length ?? 0;
-  const powerNodesCount = topoState?.nodes.filter(n => ['solarSource', 'gridSource', 'solarMeter', 'gridMeter'].includes(n.type)).length ?? 0;
-  const activeLinksCount = topoState?.editLinks.length ?? 0;
-
-  if (!plants.length) {
-    return (
-      <div className="flex h-64 items-center justify-center text-sm text-muted-foreground">
-        No plants found. Create a plant first.
-      </div>
-    );
-  }
-
-  if (isLoading || !topoState) {
-    return (
-      <div className="flex h-64 items-center justify-center gap-2 text-sm text-muted-foreground">
-        <RefreshCw className="h-4 w-4 animate-spin" /> Building topology…
-      </div>
-    );
-  }
+  const waterNodesCount = topoState.nodes.filter(n => !['solarSource', 'gridSource', 'solarMeter', 'gridMeter'].includes(n.type)).length;
+  const powerNodesCount = topoState.nodes.filter(n => ['solarSource', 'gridSource', 'solarMeter', 'gridMeter'].includes(n.type)).length;
+  const activeLinksCount = topoState.editLinks.length;
 
   const svgCanvasProps: TopologySvgCanvasProps = {
     props: {
