@@ -252,14 +252,14 @@ export function BlendingVolumeCard({ plantIds }: Props) {
       }}>
         <p style={{ margin: '0 0 6px', fontWeight: 700, fontSize: 12, letterSpacing: '-0.01em' }}>{label}</p>
         <p style={{ margin: '2px 0', color: TOTAL_FILL, fontWeight: 600 }}>
-          Total: <span style={{ fontWeight: 700 }}>{fmtNum(row.volume, 1)} m³</span>
+          Total: <span style={{ fontWeight: 700 }}>{fmtNum(row.volume, 2)} m³</span>
         </p>
         {shown.length > 0 && (
           <div style={{ marginTop: 6, paddingTop: 5, borderTop: '1px solid hsl(var(--border))' }}>
             {shown.map((w) => (
               <p key={w.name} style={{ margin: '2px 0', color: 'hsl(var(--muted-foreground))', display: 'flex', justifyContent: 'space-between', gap: 10 }}>
                 <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{w.name}</span>
-                <span style={{ fontWeight: 600, color: 'hsl(var(--foreground))' }}>{fmtNum(w.volume, 1)}</span>
+                <span style={{ fontWeight: 600, color: 'hsl(var(--foreground))' }}>{fmtNum(w.volume, 2)}</span>
               </p>
             ))}
             {rest > 0 && (
@@ -419,14 +419,14 @@ export function BlendingVolumeCard({ plantIds }: Props) {
               <div key={w.name} className="flex justify-between items-center text-xs">
                 <span className="min-w-0 truncate font-medium">{w.name}</span>
                 <span className="font-mono-num shrink-0 ml-2">
-                  {fmtNum(w.volume, 1)} <span className="text-2xs text-muted-foreground">m³</span>
+                  {fmtNum(w.volume, 2)} <span className="text-2xs text-muted-foreground">m³</span>
                 </span>
               </div>
             ))}
             <div className="flex justify-between items-center text-xs pt-1 mt-1 border-t">
               <span className="font-semibold">Day total</span>
               <span className="font-mono-num font-semibold shrink-0 ml-2">
-                {fmtNum(selectedRow.volume, 1)} <span className="text-2xs text-muted-foreground">m³</span>
+                {fmtNum(selectedRow.volume, 2)} <span className="text-2xs text-muted-foreground">m³</span>
               </span>
             </div>
           </div>

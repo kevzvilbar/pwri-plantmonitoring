@@ -126,7 +126,7 @@ export function useWellRowActions({
 
     if (!editingId && previousMeter != null && cur === previousMeter && !meterReplacePending) {
       if (hoursElapsedWell != null && hoursElapsedWell < 12) {
-        toast.error(`${well.name}: this odometer reading (${fmtNum(cur, 1)}) was already recorded within the last 12 hours.`);
+        toast.error(`${well.name}: this odometer reading (${fmtNum(cur, 2)}) was already recorded within the last 12 hours.`);
         return;
       }
     }

@@ -13,7 +13,7 @@ export interface BothTabViewProps {
   consGrandTotal: number;
 }
 
-function fmtVal(v: number | null | undefined, minimumFractionDigits = 1, maximumFractionDigits = 2) {
+function fmtVal(v: number | null | undefined, minimumFractionDigits = 2, maximumFractionDigits = 2) {
   if (v == null || v === 0) return null;
   return v.toLocaleString(undefined, { minimumFractionDigits, maximumFractionDigits });
 }

@@ -149,7 +149,7 @@ export function usePowerSubmit(opts: UsePowerSubmitOptions) {
         ? (new Date(dt).getTime() - new Date(prevRow.reading_datetime).getTime()) / 3_600_000
         : null;
       if (hoursElapsed != null && hoursElapsed < 12) {
-        toast.error(`Grid meter: this odometer reading (${fmtNum(+val, 1)}) was already recorded within the last 12 hours.`);
+        toast.error(`Grid meter: this odometer reading (${fmtNum(+val, 2)}) was already recorded within the last 12 hours.`);
         return;
       }
     }

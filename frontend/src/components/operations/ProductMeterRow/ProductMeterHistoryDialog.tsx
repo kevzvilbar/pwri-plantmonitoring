@@ -383,15 +383,15 @@ export function ProductMeterHistoryDialog({ meter, plantId, onClose }: ProductMe
                       </td>
                       {meter.is_derived ? (
                         <td className={cn('px-3 py-1.5 text-right font-mono-num', (r.daily_volume ?? r.current_reading) < 0 ? 'text-destructive font-semibold' : 'text-primary')}>
-                          {fmtNum(r.daily_volume ?? r.current_reading, 1)}
+                          {fmtNum(r.daily_volume ?? r.current_reading, 2)}
                         </td>
                       ) : (
                         <>
-                          <td className="px-3 py-1.5 text-right font-mono-num">{fmtNum(r.current_reading, 1)}</td>
+                          <td className="px-3 py-1.5 text-right font-mono-num">{fmtNum(r.current_reading, 2)}</td>
                           <td className="px-3 py-1.5 text-right font-mono-num text-primary">
                             {isMeterReplacement
-                              ? <span className="text-kpi-solar font-medium">0.0</span>
-                              : vol != null ? <span className={vol < 0 ? 'text-destructive font-semibold' : ''}>{fmtNum(vol, 1)}</span> : '—'
+                              ? <span className="text-kpi-solar font-medium">0.00</span>
+                              : vol != null ? <span className={vol < 0 ? 'text-destructive font-semibold' : ''}>{fmtNum(vol, 2)}</span> : '—'
                             }
                           </td>
                         </>

@@ -66,7 +66,7 @@ export function useProductionStats({
         console.warn('[Dashboard] get_dashboard_aggregates failed, falling back to client computation:', error);
         return null;
       }
-      return data as ServerDashboardAggregates;
+      return (data as unknown) as ServerDashboardAggregates;
     },
     enabled: plantIds.length > 0,
     staleTime: 120_000,

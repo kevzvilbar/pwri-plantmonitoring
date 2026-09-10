@@ -90,11 +90,11 @@ export function ChemInventory() {
                 <div className="font-medium">{c.chemical_name}</div>
                 <div className="text-xs text-muted-foreground">{c.plant_name}</div>
                 <div className="text-2xs text-muted-foreground font-mono-num">
-                  +{fmtNum(c.received, 1)} / -{fmtNum(c.used, 1)} {c.unit}
+                  +{fmtNum(c.received, 2)} / -{fmtNum(c.used, 2)} {c.unit}
                 </div>
               </div>
               <div className="text-right">
-                <div className="font-mono-num text-base">{fmtNum(c.current, 1)} {c.unit}</div>
+                <div className="font-mono-num text-base">{fmtNum(c.current, 2)} {c.unit}</div>
                 {c.current < threshold && <StatusPill tone="danger">Low stock</StatusPill>}
               </div>
             </div>

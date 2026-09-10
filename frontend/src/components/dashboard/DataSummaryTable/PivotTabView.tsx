@@ -14,7 +14,7 @@ export interface PivotTabViewProps {
   plantCodeById: Map<string, string>;
 }
 
-function fmtVal(v: number | null | undefined, minimumFractionDigits = 1, maximumFractionDigits = 2) {
+function fmtVal(v: number | null | undefined, minimumFractionDigits = 2, maximumFractionDigits = 2) {
   if (v == null || v === 0) return null;
   return v.toLocaleString(undefined, { minimumFractionDigits, maximumFractionDigits });
 }
@@ -224,7 +224,7 @@ function InlineCurrentReadings({
                 className="px-2 py-1.5 text-center text-2xs font-semibold font-mono-num tabular-nums text-primary border-b border-border"
               >
                 {val != null
-                  ? val.toLocaleString(undefined, { maximumFractionDigits: 2 })
+                  ? val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
                   : <span className="text-muted-foreground/40">—</span>}
               </td>
             ))}

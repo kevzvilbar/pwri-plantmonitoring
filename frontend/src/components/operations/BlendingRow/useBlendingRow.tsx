@@ -156,7 +156,7 @@ export function useBlendingRow(props: BlendingRowProps) {
 
   const save = async () => {
     if (prevCumulative != null && +volume === prevCumulative) {
-      toast.error(`${well.name}: this odometer reading (${fmtNum(+volume, 1)}) is identical to the previous reading. Same reading within 12 hours cannot be saved.`);
+      toast.error(`${well.name}: this odometer reading (${fmtNum(+volume, 2)}) is identical to the previous reading. Same reading within 12 hours cannot be saved.`);
       return;
     }
 

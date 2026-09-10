@@ -10,7 +10,7 @@ export interface CurrentTabViewProps {
   isLoading: boolean;
 }
 
-function fmtVal(v: number | null | undefined, minimumFractionDigits = 1, maximumFractionDigits = 2) {
+function fmtVal(v: number | null | undefined, minimumFractionDigits = 2, maximumFractionDigits = 2) {
   if (v == null || v === 0) return null;
   return v.toLocaleString(undefined, { minimumFractionDigits, maximumFractionDigits });
 }
@@ -50,12 +50,11 @@ export function CurrentTabView({
   }
 
   const entityLatest: (number | null)[] = crEntities.map((e: any) => {
-    let latest: number | null = null;
     for (const d of [...crDates].reverse()) {
       const v = crPivot.get(d)?.get(e.id);
-      if (v != null) { latest = v; break; }
+      if (v != null) return v;
     }
-    return latest;
+    return null;
   });
 
   return (
@@ -92,7 +91,7 @@ export function CurrentTabView({
                 className="px-2 py-1.5 text-center text-2xs font-semibold font-mono-num tabular-nums text-primary border-b border-border"
               >
                 {val != null
-                  ? val.toLocaleString(undefined, { maximumFractionDigits: 2 })
+                  ? val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
                   : <span className="text-muted-foreground/40">—</span>}
               </td>
             ))}

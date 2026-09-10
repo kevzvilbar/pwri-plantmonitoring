@@ -99,7 +99,7 @@ function ProductMeterRow({
 
     if (previous != null && cur === previous && !meterReplacePending) {
       if (hoursElapsedProduct != null && hoursElapsedProduct < 12) {
-        toast.error(`${meter.name}: this odometer reading (${fmtNum(cur, 1)}) was already recorded within the last 12 hours.`);
+        toast.error(`${meter.name}: this odometer reading (${fmtNum(cur, 2)}) was already recorded within the last 12 hours.`);
         return;
       }
     }
@@ -189,7 +189,7 @@ function ProductMeterRow({
     if (deviationProduct.tier === 'critical') {
       toast.info(`${meter.name}: reading saved and sent to supervisor for review.`, { duration: 6000 });
     } else {
-      toast.success(`${meter.name}: reading saved${productionVolume != null ? ` · ${fmtNum(productionVolume)} m³ produced` : ''}`);
+      toast.success(`${meter.name}: reading saved${productionVolume != null ? ` · ${fmtNum(productionVolume, 2)} m³ produced` : ''}`);
     }
     setReading(''); setSaving(false); onSaved();
     setMeterReplacePending(null); setShowReplaceMeter(false);
@@ -225,7 +225,7 @@ function ProductMeterRow({
               : ' from a derived locator on another plant'}
             , computed automatically on a schedule.{' '}
             {latest ? (
-              <>Last received: <span className="font-mono-num font-medium text-foreground/80">{fmtNum(latest.daily_volume ?? latest.current_reading)} m³</span> on {new Date(latest.reading_datetime).toLocaleDateString()}.</>
+              <>Last received: <span className="font-mono-num font-medium text-foreground/80">{fmtNum(latest.daily_volume ?? latest.current_reading, 2)} m³</span> on {new Date(latest.reading_datetime).toLocaleDateString()}.</>
             ) : (
               <>No reading received yet — it lands here once the source locator is linked and the next sweep runs.</>
             )}
@@ -288,7 +288,7 @@ function ProductMeterRow({
               },
               productionVolume != null && {
                 tone: productionVolume < 0 ? 'danger' : 'primary',
-                label: `Δ ${fmtNum(productionVolume)} m³`,
+                label: `Δ ${fmtNum(productionVolume, 2)} m³`,
               },
             ].filter(Boolean)}
             overflow={[
@@ -328,11 +328,11 @@ function ProductMeterRow({
 
       <div className="recessed-glass p-2.5 sm:p-3 flex items-center justify-between gap-2 flex-wrap">
         <div className="text-xs text-muted-foreground">
-          prev: <span className="font-mono-num font-semibold text-foreground">{previous == null ? '—' : fmtNum(previous)}</span>
+          prev: <span className="font-mono-num font-semibold text-foreground">{previous == null ? '—' : fmtNum(previous, 2)}</span>
           {productionVolume != null && (
             <>
               {' · '}
-              <span className={cn('font-mono-num font-semibold', productionVolume < 0 ? 'text-destructive' : 'text-primary')}>{fmtNum(productionVolume)} m³</span>
+              <span className={cn('font-mono-num font-semibold', productionVolume < 0 ? 'text-destructive' : 'text-primary')}>{fmtNum(productionVolume, 2)} m³</span>
               {' produced'}
             </>
           )}

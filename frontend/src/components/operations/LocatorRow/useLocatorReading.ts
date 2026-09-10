@@ -162,7 +162,7 @@ export function useLocatorReading({
 
     if (!editingId && locInputMode === 'raw' && previous != null && cur === previous && !overrideOpen) {
       if (hoursElapsedLoc != null && hoursElapsedLoc < 12) {
-        toast.error(`${locator.name}: this odometer reading (${fmtNum(cur, 1)}) was already recorded within the last 12 hours.`);
+        toast.error(`${locator.name}: this odometer reading (${fmtNum(cur, 2)}) was already recorded within the last 12 hours.`);
         return;
       }
     }
