@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { fmtIsoDate } from '@/lib/format';
+import { calc } from '@/lib/calculations';
 
 export interface HistoryRow { date: string; consumption: number; reading?: number; }
 export interface SiblingLocator {
@@ -191,7 +192,7 @@ export function useEntityChartData(
         siblingLocators.forEach(l => {
           perLocator[siblingDataKey(l.id)] = +(dayMap?.get(l.id) ?? 0).toFixed(2);
         });
-        return { ...r, siblingTotal, nrw: calcNrw(r.consumption, siblingTotal), ...perLocator };
+        return { ...r, siblingTotal, nrw: calc.nrw(r.consumption, siblingTotal), ...perLocator };
       });
     }
     if (hasBlending) {
@@ -204,7 +205,7 @@ export function useEntityChartData(
     return aggregated;
   }, [aggregated, hasSiblings, siblingByDate, siblingByDateAndLocator, siblingLocators, hasBlending, blendingByDate]);
 
-  const periodNrw = hasSiblings ? calcNrw(
+  const periodNrw = hasSiblings ? calc.nrw(
     aggregated.reduce((s, r) => s + r.consumption, 0),
     totalSiblingConsumption,
   ) : null;
@@ -231,12 +232,8 @@ export function useEntityChartData(
   };
 }
 
-function calcNrw(production: number, consumption: number): number {
-  const loss = Math.max(0, consumption - production);
-  return consumption > 0 ? +(loss / consumption * 100).toFixed(1) : 0;
-}
-
-export function fmtNum(n: number): string {
+export function fmtNum(n: number | null | undefined): string {
+  if (n == null || !Number.isFinite(n)) return '—';
   if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
   if (Number.isInteger(n)) return String(n);
   return n.toFixed(1);
