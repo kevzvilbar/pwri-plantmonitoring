@@ -1,100 +1,18 @@
-/**
- * DataCorrections.tsx
- * ═══════════════════
- * Unified correction hub — replaces the scattered Admin → Normalization panel,
- * the Pending Readings queue, and the per-row ReadingHistoryDialog corrections.
- *
- * Tabs
- * ────
- * 1. Pending Review  — readings auto-flagged by the DB trigger awaiting approval.
- *                      Bulk approve/retract + inline chain context (items 3, 4, 5).
- * 2. Correction Inbox — all active backward or erroneous readings still norm_status='normal'.
- *                      Admin can edit value (cascade), retract, or mark as replacement (item 6).
- * 3. Edit History    — reading_normalizations audit trail.
- * 4. Operator Stats  — rolling 30-day error rate table (item 7).
- */
-
-import { useState, useCallback, useMemo, useEffect } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useState, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
-import { Card } from '@/components/ui/card';
-import { DataState } from '@/components/DataState';
-import { PageHeader } from '@/components/PageHeader';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select';
-import { Checkbox } from '@/components/ui/checkbox';
 import { ResponsiveDialog } from '@/components/ui/responsive-dialog';
 import { toast } from 'sonner';
 import { friendlyError } from '@/lib/supabaseErrors';
-import { isReasonComplete, resolveReason } from '@/lib/correctionReasons';
-import { CorrectionReasonField } from '@/components/CorrectionReasonField';
-import { format, formatDistanceToNow } from 'date-fns';
-import {
-  CheckCircle2, XCircle, AlertCircle, RefreshCw, Loader2,
-  ChevronDown, ChevronUp, ClipboardCheck, Inbox, History,
-  Users, ArrowRight, Pencil, Search, ShieldAlert, Gauge,
-  AlertTriangle, CheckSquare, FileText, Clock, Activity, Tag, HelpCircle, FileQuestion,
-} from 'lucide-react';
-import {
-  Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
-} from '@/components/ui/tooltip';
-import {
-  Popover, PopoverContent, PopoverTrigger,
-} from '@/components/ui/popover';
-import {
-  computeRollingAverageRate, computeRollingAverageRateFromDeltas, RatePoint, VolumePoint,
-} from '@/lib/flowRateGuards';
-import { submitAnomalyRemark } from '@/lib/anomalyRemarks';
+import { Gauge, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { SourceTable, FlaggedRow, CorrectionRequest, ChainEntry, OperatorStat, tableLabel, fmtNum, fmtDt, parseNumeric, extractOldValueFromChanges, pickDisplayRole, ROLE_DISPLAY_PRIORITY, UUID } from '../types';
-import { PENDING_FETCH_LIMIT_PER_TABLE, guessMeterMax, fetchPending, fetchCorrectionRequests, supersedeOtherCorrectionRequests } from '../api';
+import { FlaggedRow, fmtNum, fmtDt, pickDisplayRole } from '../types';
+import { guessMeterMax, supersedeOtherCorrectionRequests } from '../api';
 import { DeltaBadge } from './DeltaBadge';
-import { FlagBadge } from './FlagBadge';
-import { ChainContext } from './ChainContext';
-import { AnomalyDiagnosticsBadge, formatElapsedDuration, PrecedingReadingTooltip } from './DiagnosticPopover';
-import { CompactReasonBadge, QUICK_ANOMALY_REASONS } from './CompactReasonBadge';
 
-
-// ── Types ─────────────────────────────────────────────────────────────────────
-// ── Helpers ───────────────────────────────────────────────────────────────────
-// BUGFIX: every reading_normalizations audit write on this page hardcoded
-// performed_role: 'Admin', regardless of who actually performed the action.
-// Since this page is also open to Manager and Data Analyst (20260723
-// migration), a Manager's approve/reject/retract was being logged as if an
-// Admin did it — actively wrong for the exact "who did what" tracing this
-// audit table exists for. Priority order matches the tie-break already used
-// server-side for multi-role users (see fn_cascade_reading_correction).
-// ── Recently corrected (old ↔ new value) panel ────────────────────────────────
-// Both "Edit value" (fn_cascade_reading_correction) and "Approve & Apply" on an
-// operator correction request immediately flip the reading's norm_status away
-// from whatever this tab is filtering on — 'pending_review' here, 'pending' for
-// correction_requests — so the row disappears from the list the instant it's
-// corrected. The only record of what changed used to be a toast that fades in
-// a few seconds; the durable copy (reading_normalizations) only surfaces later,
-// buried in the separate Edit History tab. This keeps the last few corrections
-// visible, old value and new value side by side, right where the reviewer is
-// already looking. Session-only by design — Edit History is the permanent record.
-// ── Chain context component (item 4) ──────────────────────────────────────────
-// ── Edit value dialog (item 6 – cascade correction) ───────────────────────────
-// Same "guessed max, human confirms" heuristic as Step 1 of
-// supabase/migrations/*_meter_rollover_backfill.sql: a mechanical register
-// almost always wraps at a round power-of-ten boundary just above its
-// previous value (e.g. a reading in the 900,000s on a 6-digit odometer
-// wraps at 999999.99). It's a starting point for the admin to confirm or
-// overtype against the physical meter's real register size, never applied
-// automatically.
-// "Mark as rollover" for a row stuck in Pending Review because it looked
-// like a backward reading. Deliberately single-row only (no bulk variant,
-// unlike Approve/Reject all) — telling a genuine meter wrap-around apart
-// from a data-entry typo needs a human actually looking at the value
-// against this meter's normal range, the same reasoning behind the backfill
-// script's explicit per-row allow-list instead of an auto-apply pass.
 export function MarkRolloverModal({
   row, onClose, onDone,
 }: { row: FlaggedRow; onClose: () => void; onDone: () => void }) {
@@ -113,15 +31,21 @@ export function MarkRolloverModal({
   const { data: configuredMax } = useQuery({
     queryKey: ['well-rollover-max', row.entity_id],
     queryFn: async () => {
-      const { data } = await supabase.from('wells').select('meter_rollover_max').eq('id', row.entity_id as string).maybeSingle();
-      return (data as any)?.meter_rollover_max ?? null;
+      if (!row.entity_id) return null;
+      const { data } = await supabase
+        .from('wells')
+        .select('meter_rollover_max')
+        .eq('id', row.entity_id)
+        .maybeSingle();
+      return data?.meter_rollover_max ?? null;
     },
     enabled: row.source_table === 'well_readings' && !!row.entity_id,
     staleTime: 60_000,
   });
+
   useEffect(() => {
     if (configuredMax != null && !maxTouched) setMaxVal(String(configuredMax));
-  }, [configuredMax]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [configuredMax, maxTouched]);
 
   const parsedMax = Number(maxVal);
   const validMax = maxVal !== '' && !isNaN(parsedMax) && parsedMax > 0
@@ -146,27 +70,55 @@ export function MarkRolloverModal({
       // recomputes it from is_meter_rollover/meter_rollover_max automatically
       // and must never appear in this UPDATE. well_readings and
       // product_meter_readings store it as a plain column that needs setting
-      // directly — the same table-shape distinction the backfill SQL
-      // script's Step 2 makes.
-      const payload: Record<string, unknown> = {
-        is_meter_rollover: true,
-        meter_rollover_max: parsedMax,
-        norm_status: 'normal',
-      };
-      if (row.source_table !== 'locator_readings') {
-        payload.daily_volume = computedVolume;
+      // directly.
+      if (row.source_table === 'locator_readings') {
+        const { error } = await supabase
+          .from('locator_readings')
+          .update({
+            is_meter_rollover: true,
+            meter_rollover_max: parsedMax,
+            norm_status: 'normal',
+          })
+          .eq('id', row.id);
+        if (error) throw error;
+      } else if (row.source_table === 'well_readings') {
+        const { error } = await supabase
+          .from('well_readings')
+          .update({
+            is_meter_rollover: true,
+            meter_rollover_max: parsedMax,
+            norm_status: 'normal',
+            daily_volume: computedVolume,
+          })
+          .eq('id', row.id);
+        if (error) throw error;
+      } else if (row.source_table === 'product_meter_readings') {
+        const { error } = await supabase
+          .from('product_meter_readings')
+          .update({
+            is_meter_rollover: true,
+            meter_rollover_max: parsedMax,
+            norm_status: 'normal',
+            daily_volume: computedVolume,
+          })
+          .eq('id', row.id);
+        if (error) throw error;
       }
-      const { error } = await (supabase.from(row.source_table as any).update(payload).eq('id', row.id) as any);
-      if (error) throw error;
 
-      await (supabase.from('reading_normalizations' as any).insert({
-        source_table: row.source_table, source_id: row.id,
-        action: 'normalize',
-        original_value: row.current_reading,
-        adjusted_value: computedVolume,
-        note: `Marked as meter rollover (wrap point ${fmtNum(parsedMax)}) from Pending Review — true delta ${fmtNum(computedVolume)} m³`,
-        performed_by: user?.id ?? null, performed_role: actorRole,
-      }) as any);
+      const { error: normError } = await supabase
+        .from('reading_normalizations')
+        .insert({
+          source_table: row.source_table,
+          source_id: row.id,
+          action: 'normalize',
+          original_value: row.current_reading,
+          adjusted_value: computedVolume,
+          note: `Marked as meter rollover (wrap point ${fmtNum(parsedMax)}) from Pending Review — true delta ${fmtNum(computedVolume)} m³`,
+          performed_by: user?.id ?? null,
+          performed_role: actorRole,
+        });
+      if (normError) throw normError;
+
       await supersedeOtherCorrectionRequests(
         row.source_table, row.id, user?.id,
         'Superseded — reading marked as meter rollover directly from Pending Review',

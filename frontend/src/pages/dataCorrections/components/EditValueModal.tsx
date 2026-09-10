@@ -1,78 +1,17 @@
-/**
- * DataCorrections.tsx
- * ═══════════════════
- * Unified correction hub — replaces the scattered Admin → Normalization panel,
- * the Pending Readings queue, and the per-row ReadingHistoryDialog corrections.
- *
- * Tabs
- * ────
- * 1. Pending Review  — readings auto-flagged by the DB trigger awaiting approval.
- *                      Bulk approve/retract + inline chain context (items 3, 4, 5).
- * 2. Correction Inbox — all active backward or erroneous readings still norm_status='normal'.
- *                      Admin can edit value (cascade), retract, or mark as replacement (item 6).
- * 3. Edit History    — reading_normalizations audit trail.
- * 4. Operator Stats  — rolling 30-day error rate table (item 7).
- */
-
-import { useState, useCallback, useMemo, useEffect } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
-import { Card } from '@/components/ui/card';
-import { DataState } from '@/components/DataState';
-import { PageHeader } from '@/components/PageHeader';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select';
-import { Checkbox } from '@/components/ui/checkbox';
 import { ResponsiveDialog } from '@/components/ui/responsive-dialog';
 import { toast } from 'sonner';
 import { friendlyError } from '@/lib/supabaseErrors';
 import { isReasonComplete, resolveReason } from '@/lib/correctionReasons';
 import { CorrectionReasonField } from '@/components/CorrectionReasonField';
-import { format, formatDistanceToNow } from 'date-fns';
-import {
-  CheckCircle2, XCircle, AlertCircle, RefreshCw, Loader2,
-  ChevronDown, ChevronUp, ClipboardCheck, Inbox, History,
-  Users, ArrowRight, Pencil, Search, ShieldAlert, Gauge,
-  AlertTriangle, CheckSquare, FileText, Clock, Activity, Tag, HelpCircle, FileQuestion,
-} from 'lucide-react';
-import {
-  Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
-} from '@/components/ui/tooltip';
-import {
-  Popover, PopoverContent, PopoverTrigger,
-} from '@/components/ui/popover';
-import {
-  computeRollingAverageRate, computeRollingAverageRateFromDeltas, RatePoint, VolumePoint,
-} from '@/lib/flowRateGuards';
-import { submitAnomalyRemark } from '@/lib/anomalyRemarks';
-import { cn } from '@/lib/utils';
-import { SourceTable, FlaggedRow, CorrectionRequest, ChainEntry, OperatorStat, tableLabel, fmtNum, fmtDt, parseNumeric, extractOldValueFromChanges, pickDisplayRole, ROLE_DISPLAY_PRIORITY, UUID } from '../types';
-import { PENDING_FETCH_LIMIT_PER_TABLE, guessMeterMax, fetchPending, fetchCorrectionRequests, supersedeOtherCorrectionRequests } from '../api';
+import { Loader2, ArrowRight } from 'lucide-react';
+import { FlaggedRow, fmtNum, fmtDt } from '../types';
+import { supersedeOtherCorrectionRequests } from '../api';
 import { DeltaBadge } from './DeltaBadge';
-import { FlagBadge } from './FlagBadge';
-import { ChainContext } from './ChainContext';
-import { AnomalyDiagnosticsBadge, formatElapsedDuration, PrecedingReadingTooltip } from './DiagnosticPopover';
-import { CompactReasonBadge, QUICK_ANOMALY_REASONS } from './CompactReasonBadge';
-
-
-// ── Recently corrected (old ↔ new value) panel ────────────────────────────────
-// Both "Edit value" (fn_cascade_reading_correction) and "Approve & Apply" on an
-// operator correction request immediately flip the reading's norm_status away
-// from whatever this tab is filtering on — 'pending_review' here, 'pending' for
-// correction_requests — so the row disappears from the list the instant it's
-// corrected. The only record of what changed used to be a toast that fades in
-// a few seconds; the durable copy (reading_normalizations) only surfaces later,
-// buried in the separate Edit History tab. This keeps the last few corrections
-// visible, old value and new value side by side, right where the reviewer is
-// already looking. Session-only by design — Edit History is the permanent record.
-// ── Chain context component (item 4) ──────────────────────────────────────────
-// ── Edit value dialog (item 6 – cascade correction) ───────────────────────────
 
 export function EditValueModal({
   row, onClose, onDone,

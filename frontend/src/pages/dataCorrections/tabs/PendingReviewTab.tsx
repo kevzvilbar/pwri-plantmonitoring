@@ -1,29 +1,15 @@
-import { useMemo } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import {
-  Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
-} from '@/components/ui/tooltip';
-import {
-  Popover, PopoverContent, PopoverTrigger,
-} from '@/components/ui/popover';
-import { toast } from 'sonner';
 import { DataState } from '@/components/DataState';
-import { PageHeader } from '@/components/PageHeader';
-import { CheckCircle2, XCircle, AlertCircle, RefreshCw, Loader2, ChevronDown, ChevronUp, ClipboardCheck, Inbox, History, Users, ArrowRight, Pencil, Search, ShieldAlert, Gauge, AlertTriangle, CheckSquare, FileText, Clock, Activity, Tag, HelpCircle, FileQuestion } from 'lucide-react';
+import { CheckCircle2, XCircle, AlertCircle, RefreshCw, Loader2, Search } from 'lucide-react';
 import { usePendingReviewActions } from './PendingReviewTab/usePendingReviewActions';
 import { CorrectionRequestCard } from './PendingReviewTab/CorrectionRequestCard';
 import { FlaggedReadingRow } from './PendingReviewTab/FlaggedReadingRow';
 import { RecentCorrectionsPanel } from '../components/RecentCorrectionsPanel';
-import { DeltaBadge } from '../components/DeltaBadge';
-import { FlagBadge } from '../components/FlagBadge';
-import { ChainContext } from '../components/ChainContext';
-import { AnomalyDiagnosticsBadge, PrecedingReadingTooltip } from '../components/DiagnosticPopover';
-import { CompactReasonBadge, QUICK_ANOMALY_REASONS } from '../components/CompactReasonBadge';
 import { EditValueModal } from '../components/EditValueModal';
 import { MarkRolloverModal } from '../components/MarkRolloverModal';
 import { PENDING_FETCH_LIMIT_PER_TABLE } from '../api';

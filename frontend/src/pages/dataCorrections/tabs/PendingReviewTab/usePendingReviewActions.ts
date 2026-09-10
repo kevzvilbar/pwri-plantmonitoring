@@ -4,14 +4,12 @@ import { toast } from 'sonner';
 import { friendlyError } from '@/lib/supabaseErrors';
 import { isReasonComplete, resolveReason } from '@/lib/correctionReasons';
 import { submitAnomalyRemark } from '@/lib/anomalyRemarks';
-import { cn } from '@/lib/utils';
 import {
-  SourceTable, FlaggedRow, CorrectionRequest, ChainEntry, OperatorStat, tableLabel, fmtNum, fmtDt, parseNumeric, extractOldValueFromChanges, pickDisplayRole, ROLE_DISPLAY_PRIORITY, UUID,
+  SourceTable, FlaggedRow, CorrectionRequest, pickDisplayRole, tableLabel,
 } from '../../types';
-import { useRecentCorrections, type RecentCorrection } from '../../components/RecentCorrectionsPanel';
+import { useRecentCorrections } from '../../components/RecentCorrectionsPanel';
 import { 
   usePending, 
-  usePendingCount,
   useCorrectionRequests, 
   useApproveCorrectionRequest, 
   useRejectCorrectionRequest,

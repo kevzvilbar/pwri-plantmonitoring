@@ -75,7 +75,7 @@ export function useInboxCount() {
 export function useCorrectionInbox() {
   return useQuery({
     queryKey: queryKeys.corrections.inbox(),
-    queryFn: fetchCorrectionInbox,
+    queryFn: () => fetchCorrectionInbox(),
     staleTime: 60_000,
   });
 }

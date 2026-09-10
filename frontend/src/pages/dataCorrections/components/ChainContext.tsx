@@ -1,108 +1,111 @@
-/**
- * DataCorrections.tsx
- * ═══════════════════
- * Unified correction hub — replaces the scattered Admin → Normalization panel,
- * the Pending Readings queue, and the per-row ReadingHistoryDialog corrections.
- *
- * Tabs
- * ────
- * 1. Pending Review  — readings auto-flagged by the DB trigger awaiting approval.
- *                      Bulk approve/retract + inline chain context (items 3, 4, 5).
- * 2. Correction Inbox — all active backward or erroneous readings still norm_status='normal'.
- *                      Admin can edit value (cascade), retract, or mark as replacement (item 6).
- * 3. Edit History    — reading_normalizations audit trail.
- * 4. Operator Stats  — rolling 30-day error rate table (item 7).
- */
-
-import { useState, useCallback, useMemo, useEffect } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/hooks/useAuth';
-import { Card } from '@/components/ui/card';
-import { DataState } from '@/components/DataState';
-import { PageHeader } from '@/components/PageHeader';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select';
-import { Checkbox } from '@/components/ui/checkbox';
-import { ResponsiveDialog } from '@/components/ui/responsive-dialog';
-import { toast } from 'sonner';
-import { friendlyError } from '@/lib/supabaseErrors';
-import { isReasonComplete, resolveReason } from '@/lib/correctionReasons';
-import { CorrectionReasonField } from '@/components/CorrectionReasonField';
-import { format, formatDistanceToNow } from 'date-fns';
-import {
-  CheckCircle2, XCircle, AlertCircle, RefreshCw, Loader2,
-  ChevronDown, ChevronUp, ClipboardCheck, Inbox, History,
-  Users, ArrowRight, Pencil, Search, ShieldAlert, Gauge,
-  AlertTriangle, CheckSquare, FileText, Clock, Activity, Tag, HelpCircle, FileQuestion,
-} from 'lucide-react';
-import {
-  Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
-} from '@/components/ui/tooltip';
-import {
-  Popover, PopoverContent, PopoverTrigger,
-} from '@/components/ui/popover';
-import {
-  computeRollingAverageRate, computeRollingAverageRateFromDeltas, RatePoint, VolumePoint,
-} from '@/lib/flowRateGuards';
-import { submitAnomalyRemark } from '@/lib/anomalyRemarks';
+import { Loader2 } from 'lucide-react';
+import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
-import { SourceTable, FlaggedRow, CorrectionRequest, ChainEntry, OperatorStat, tableLabel, fmtNum, fmtDt, parseNumeric, extractOldValueFromChanges, pickDisplayRole, ROLE_DISPLAY_PRIORITY, UUID } from '../types';
-import { PENDING_FETCH_LIMIT_PER_TABLE, guessMeterMax, fetchPending, fetchCorrectionRequests, supersedeOtherCorrectionRequests } from '../api';
+import { SourceTable, ChainEntry, fmtNum } from '../types';
 import { DeltaBadge } from './DeltaBadge';
-import { FlagBadge } from './FlagBadge';
-import { AnomalyDiagnosticsBadge, formatElapsedDuration, PrecedingReadingTooltip } from './DiagnosticPopover';
-import { CompactReasonBadge, QUICK_ANOMALY_REASONS } from './CompactReasonBadge';
 
-
-// ── Chain context component (item 4) ──────────────────────────────────────────
-
-export function ChainContext({ focusedId, sourceTable, entityId, plantId }:
-  { focusedId: string; sourceTable: SourceTable; entityId: string; plantId: string }) {
-
-  const entityCol = sourceTable === 'locator_readings' ? 'locator_id'
-    : sourceTable === 'well_readings' ? 'well_id'
-    : sourceTable === 'product_meter_readings' ? 'meter_id' : null;
-
+export function ChainContext({
+  focusedId,
+  sourceTable,
+  entityId,
+  plantId,
+}: {
+  focusedId: string;
+  sourceTable: SourceTable;
+  entityId: string;
+  plantId: string;
+}) {
   const { data: chain = [], isLoading } = useQuery({
     queryKey: ['chain-context', focusedId, sourceTable],
     queryFn: async () => {
-      if (!entityCol) return [];
-      // Get the focused row's datetime
-      const { data: focus } = await (supabase
-        .from(sourceTable as any)
-        .select('reading_datetime')
-        .eq('id', focusedId)
-        .single() as any);
-      if (!focus) return [];
+      let focusDt: string | null = null;
+      if (sourceTable === 'locator_readings') {
+        const { data } = await supabase.from('locator_readings').select('reading_datetime').eq('id', focusedId).maybeSingle();
+        focusDt = data?.reading_datetime ?? null;
+      } else if (sourceTable === 'well_readings') {
+        const { data } = await supabase.from('well_readings').select('reading_datetime').eq('id', focusedId).maybeSingle();
+        focusDt = data?.reading_datetime ?? null;
+      } else if (sourceTable === 'product_meter_readings') {
+        const { data } = await supabase.from('product_meter_readings').select('reading_datetime').eq('id', focusedId).maybeSingle();
+        focusDt = data?.reading_datetime ?? null;
+      }
+      if (!focusDt) return [];
 
-      const focusDt = focus.reading_datetime;
       const before3 = new Date(focusDt);
       before3.setDate(before3.getDate() - 7);
       const after3 = new Date(focusDt);
       after3.setDate(after3.getDate() + 7);
+      const since = before3.toISOString();
+      const until = after3.toISOString();
 
-      const { data: rows } = await (supabase
-        .from(sourceTable as any)
-        .select('id,reading_datetime,previous_reading,current_reading,daily_volume,norm_status')
-        .eq(entityCol, entityId)
-        .eq('plant_id', plantId)
-        .gte('reading_datetime', before3.toISOString())
-        .lte('reading_datetime', after3.toISOString())
-        .order('reading_datetime', { ascending: true })
-        .limit(10) as any);
-
-      return ((rows ?? []) as ChainEntry[]).map(r => ({ ...r, isFocused: r.id === focusedId }));
+      let entries: ChainEntry[] = [];
+      if (sourceTable === 'locator_readings') {
+        let q = supabase
+          .from('locator_readings')
+          .select('id, reading_datetime, previous_reading, current_reading, daily_volume, norm_status')
+          .eq('locator_id', entityId)
+          .gte('reading_datetime', since)
+          .lte('reading_datetime', until);
+        if (plantId) q = q.eq('plant_id', plantId);
+        const { data } = await q.order('reading_datetime', { ascending: true }).limit(10);
+        entries = (data ?? []).map(r => ({
+          id: r.id,
+          reading_datetime: r.reading_datetime,
+          previous_reading: r.previous_reading,
+          current_reading: r.current_reading ?? 0,
+          daily_volume: r.daily_volume,
+          norm_status: r.norm_status ?? 'normal',
+        }));
+      } else if (sourceTable === 'well_readings') {
+        let q = supabase
+          .from('well_readings')
+          .select('id, reading_datetime, previous_reading, current_reading, daily_volume, norm_status')
+          .eq('well_id', entityId)
+          .gte('reading_datetime', since)
+          .lte('reading_datetime', until);
+        if (plantId) q = q.eq('plant_id', plantId);
+        const { data } = await q.order('reading_datetime', { ascending: true }).limit(10);
+        entries = (data ?? []).map(r => ({
+          id: r.id,
+          reading_datetime: r.reading_datetime,
+          previous_reading: r.previous_reading,
+          current_reading: r.current_reading ?? 0,
+          daily_volume: r.daily_volume,
+          norm_status: r.norm_status ?? 'normal',
+        }));
+      } else if (sourceTable === 'product_meter_readings') {
+        let q = supabase
+          .from('product_meter_readings')
+          .select('id, reading_datetime, previous_reading, current_reading, daily_volume, norm_status')
+          .eq('meter_id', entityId)
+          .gte('reading_datetime', since)
+          .lte('reading_datetime', until);
+        if (plantId) q = q.eq('plant_id', plantId);
+        const { data } = await q.order('reading_datetime', { ascending: true }).limit(10);
+        entries = (data ?? []).map(r => ({
+          id: r.id,
+          reading_datetime: r.reading_datetime,
+          previous_reading: r.previous_reading,
+          current_reading: r.current_reading ?? 0,
+          daily_volume: r.daily_volume,
+          norm_status: r.norm_status ?? 'normal',
+        }));
+      }
+      return entries.map(r => ({ ...r, isFocused: r.id === focusedId }));
     },
     staleTime: 30_000,
   });
 
-  if (isLoading) return <div className="p-3 text-xs text-muted-foreground flex items-center gap-1.5"><Loader2 className="h-3 w-3 animate-spin" />Loading chain…</div>;
+  if (isLoading) {
+    return (
+      <div className="p-3 text-xs text-muted-foreground flex items-center gap-1.5">
+        <Loader2 className="h-3 w-3 animate-spin" />
+        Loading chain…
+      </div>
+    );
+  }
   if (!chain.length) return null;
 
   return (
