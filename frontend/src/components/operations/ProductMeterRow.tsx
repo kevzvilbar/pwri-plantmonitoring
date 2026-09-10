@@ -280,6 +280,12 @@ function ProductMeterRow({
                 label: 'Estimated',
                 title: 'Auto-backfilled reading — no manual operator entry on file.',
               },
+              latest?.norm_status === 'pending_review' && {
+                tone: 'warn',
+                label: 'Pending review',
+                title: 'This reading is flagged and awaiting review in Data Corrections.',
+                onClick: () => navigate('/corrections?tab=inbox'),
+              },
               productionVolume != null && {
                 tone: productionVolume < 0 ? 'danger' : 'primary',
                 label: `Δ ${fmtNum(productionVolume)} m³`,

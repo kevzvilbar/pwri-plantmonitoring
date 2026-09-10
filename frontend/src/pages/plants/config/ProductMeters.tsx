@@ -122,14 +122,38 @@ export function ProductMetersCard({ plant, highlightId }: { plant: any; highligh
     return map;
   }, [meterReplacements]);
 
+  const meterIds = useMemo(() => (meters ?? []).map((m: any) => m.id as string), [meters]);
+
   const { data: latestMeterReadings } = useQuery({
-    queryKey: ['product-meters-latest-readings', plant.id],
+    queryKey: ['product-meters-latest-readings', plant.id, meterIds],
     queryFn: async () => {
-      const { data } = await (supabase.from('product_meter_readings_latest' as any) as any)
-        .select('meter_id, reading_datetime')
-        .eq('plant_id', plant.id);
-      return (data ?? []) as { meter_id: string; reading_datetime: string }[];
+      if (!plant.id || !meterIds.length) return [];
+      const results = await Promise.all(
+        meterIds.map(async (id) => {
+          const { data, error } = await supabase
+            .from('product_meter_readings' as any)
+            .select('meter_id, reading_datetime')
+            .eq('meter_id', id)
+            .or('norm_status.is.null,norm_status.neq.retracted')
+            .order('reading_datetime', { ascending: false })
+            .limit(1);
+          if (error) {
+            const { data: fb } = await supabase
+              .from('product_meter_readings' as any)
+              .select('meter_id, reading_datetime')
+              .eq('meter_id', id)
+              .order('reading_datetime', { ascending: false })
+              .limit(1);
+            return (fb ?? []) as { meter_id: string; reading_datetime: string }[];
+          }
+          return (data ?? []) as { meter_id: string; reading_datetime: string }[];
+        }),
+      );
+      return results.flatMap((r) => r);
     },
+    enabled: !!plant.id && meterIds.length > 0,
+    staleTime: 60_000,
+    refetchInterval: 60_000,
   });
   const latestDtByMeter = useMemo(() => {
     const map: Record<string, string> = {};

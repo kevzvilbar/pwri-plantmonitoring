@@ -94,17 +94,38 @@ export function useProductSectionData({
     return () => clearTimeout(t);
   }, [highlightId, isMobile, meters]);
 
+  const meterIds = useMemo(() => (meters ?? []).map((m: any) => m.id as string), [meters]);
+
   const { data: latestReadings } = useQuery({
-    queryKey: ['product-readings-latest-v2', plantId],
+    queryKey: ['product-readings-latest-v2', plantId, meterIds],
     queryFn: async () => {
-      if (!plantId) return [];
-      const { data, error } = await (supabase.from('product_meter_readings_latest' as any) as any)
-        .select('*')
-        .eq('plant_id', plantId);
-      if (error) throw error;
-      return (data ?? []) as any[];
+      if (!plantId || !meterIds.length) return [];
+      const results = await Promise.all(
+        meterIds.map(async (id) => {
+          const { data, error } = await supabase
+            .from('product_meter_readings' as any)
+            .select('*')
+            .eq('meter_id', id)
+            .or('norm_status.is.null,norm_status.neq.retracted')
+            .order('reading_datetime', { ascending: false })
+            .limit(1);
+          if (error) {
+            const { data: fallback } = await supabase
+              .from('product_meter_readings' as any)
+              .select('*')
+              .eq('meter_id', id)
+              .order('reading_datetime', { ascending: false })
+              .limit(1);
+            return ((fallback ?? []) as any[]).filter((r: any) => r.norm_status !== 'retracted');
+          }
+          return (data ?? []) as any[];
+        }),
+      );
+      return results.flatMap((r) => r);
     },
-    enabled: !!plantId,
+    enabled: !!plantId && meterIds.length > 0,
+    staleTime: 60_000,
+    refetchInterval: 60_000,
   });
 
   const latestByMeter = useMemo(() => {

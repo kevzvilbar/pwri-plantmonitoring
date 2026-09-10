@@ -182,6 +182,8 @@ export function ProductMeterHistoryDialog({ meter, plantId, onClose }: ProductMe
     toast.success('Reading updated');
     setEditRow(null); setReason(''); setCustomReason('');
     qc.invalidateQueries({ queryKey });
+    qc.invalidateQueries({ queryKey: ['product-readings-latest-v2', plantId] });
+    qc.invalidateQueries({ queryKey: ['product-readings-10day', plantId] });
     invalidateProductMeterDash(qc);
   };
 
@@ -204,6 +206,8 @@ export function ProductMeterHistoryDialog({ meter, plantId, onClose }: ProductMe
     setTogglingId(null);
     toast.success(next ? 'Marked as meter replacement — Δ zeroed' : 'Meter replacement flag removed');
     qc.invalidateQueries({ queryKey });
+    qc.invalidateQueries({ queryKey: ['product-readings-latest-v2', plantId] });
+    qc.invalidateQueries({ queryKey: ['product-readings-10day', plantId] });
     invalidateProductMeterDash(qc);
   };
 
@@ -234,6 +238,8 @@ export function ProductMeterHistoryDialog({ meter, plantId, onClose }: ProductMe
     setDeletingId(null);
     toast.success('Reading deleted');
     qc.invalidateQueries({ queryKey });
+    qc.invalidateQueries({ queryKey: ['product-readings-latest-v2', plantId] });
+    qc.invalidateQueries({ queryKey: ['product-readings-10day', plantId] });
     invalidateProductMeterDash(qc);
   };
 

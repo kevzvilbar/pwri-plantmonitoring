@@ -18,17 +18,38 @@ export function ProductMetersStat({ plantId }: { plantId: string }) {
     },
   });
 
+  const meterIds = useMemo(() => (meters ?? []).map((m: any) => m.id as string), [meters]);
+
   const { data: latest } = useQuery({
-    queryKey: ['product-meters-stat-latest', plantId],
+    queryKey: ['product-meters-stat-latest', plantId, meterIds],
     queryFn: async () => {
-      const { data, error } = await (supabase.from('product_meter_readings_latest' as any) as any)
-        .select('meter_id, reading_datetime')
-        .eq('plant_id', plantId);
-      if (error) throw error;
-      return (data ?? []) as { meter_id: string; reading_datetime: string }[];
+      if (!plantId || !meterIds.length) return [];
+      const results = await Promise.all(
+        meterIds.map(async (id) => {
+          const { data, error } = await supabase
+            .from('product_meter_readings' as any)
+            .select('meter_id, reading_datetime')
+            .eq('meter_id', id)
+            .or('norm_status.is.null,norm_status.neq.retracted')
+            .order('reading_datetime', { ascending: false })
+            .limit(1);
+          if (error) {
+            const { data: fb } = await supabase
+              .from('product_meter_readings' as any)
+              .select('meter_id, reading_datetime')
+              .eq('meter_id', id)
+              .order('reading_datetime', { ascending: false })
+              .limit(1);
+            return (fb ?? []) as { meter_id: string; reading_datetime: string }[];
+          }
+          return (data ?? []) as { meter_id: string; reading_datetime: string }[];
+        }),
+      );
+      return results.flatMap((r) => r);
     },
     staleTime: 60_000,
     refetchInterval: 60_000,
+    enabled: !!plantId && meterIds.length > 0,
   });
 
   const freshSet = useMemo(() => {
