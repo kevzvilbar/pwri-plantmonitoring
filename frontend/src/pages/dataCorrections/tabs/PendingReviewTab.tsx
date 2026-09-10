@@ -44,7 +44,7 @@ export function PendingReviewTab() {
             {plants.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
           </SelectContent>
         </Select>
-        <Button variant="outline" size="sm" className="h-8 gap-1.5" onClick={() => refetch()}><RefreshCw className="h-3 w-3" /></Button>
+        <Button variant="outline" size="sm" className="h-8 gap-1.5" onClick={() => invalidate()} title="Refresh pending reviews"><RefreshCw className="h-3 w-3" /></Button>
       </div>
 
       {selected.size > 0 && (

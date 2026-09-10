@@ -1,4 +1,4 @@
-﻿/**
+/**
  * DataCorrections.tsx
  * ═══════════════════
  * Unified correction hub — replaces the scattered Admin → Normalization panel,
@@ -14,70 +14,21 @@
  * 4. Operator Stats  — rolling 30-day error rate table.
  */
 
-import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { Card } from '@/components/ui/card';
 import { PageHeader } from '@/components/PageHeader';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ClipboardCheck, Inbox, History, Users, ShieldAlert } from 'lucide-react';
+import { 
+  usePendingCount, 
+  useCorrectionRequestsCount, 
+  useInboxCount 
+} from '@/data/hooks/useCorrections';
 import { PendingReviewTab } from './dataCorrections/tabs/PendingReviewTab';
 import { CorrectionInboxTab } from './dataCorrections/tabs/CorrectionInboxTab';
 import { EditHistoryTab } from './dataCorrections/tabs/EditHistoryTab';
 import { OperatorStatsTab } from './dataCorrections/tabs/OperatorStatsTab';
-
-function usePendingCount() {
-  return useQuery({
-    queryKey: ['pending-readings-count'],
-    queryFn: async () => {
-      const tables = ['locator_readings', 'well_readings', 'product_meter_readings'];
-      const counts = await Promise.all(
-        tables.map((t) =>
-          (supabase.from(t as any).select('id', { count: 'exact', head: true }).eq('norm_status', 'pending_review') as any)
-        )
-      );
-      return counts.reduce((sum, r) => sum + (r.count ?? 0), 0);
-    },
-    staleTime: 120_000,
-    refetchInterval: 120_000,
-  });
-}
-
-function useCorrectionRequestsCount() {
-  return useQuery({
-    queryKey: ['correction-requests-pending-count'],
-    queryFn: async () => {
-      const { count } = await (supabase
-        .from('correction_requests' as any)
-        .select('id', { count: 'exact', head: true })
-        .eq('status', 'pending') as any);
-      return count ?? 0;
-    },
-    staleTime: 120_000,
-    refetchInterval: 120_000,
-  });
-}
-
-function useInboxCount() {
-  return useQuery({
-    queryKey: ['correction-inbox-count'],
-    queryFn: async () => {
-      const tables = ['locator_readings', 'well_readings', 'product_meter_readings'];
-      const counts = await Promise.all(
-        tables.map((t) =>
-          (supabase.from(t as any)
-            .select('id', { count: 'exact', head: true })
-            .eq('norm_status', 'normal')
-            .lt('daily_volume', 0)
-            .eq('is_meter_replacement', false) as any)
-        )
-      );
-      return counts.reduce((sum, r) => sum + (r.count ?? 0), 0);
-    },
-    staleTime: 60_000,
-  });
-}
 
 export default function DataCorrections() {
   const { isAdmin, isManager, isDataAnalyst } = useAuth();

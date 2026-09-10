@@ -48,8 +48,8 @@ export function usePendingCount() {
   return useQuery({
     queryKey: queryKeys.corrections.pendingCount(),
     queryFn: fetchPendingCount,
-    staleTime: 120_000,
-    refetchInterval: 120_000,
+    staleTime: 5_000,
+    refetchInterval: 15_000,
   });
 }
 
@@ -58,8 +58,8 @@ export function useCorrectionRequestsCount() {
   return useQuery({
     queryKey: queryKeys.corrections.requestsCount(),
     queryFn: fetchCorrectionRequestsCount,
-    staleTime: 120_000,
-    refetchInterval: 120_000,
+    staleTime: 5_000,
+    refetchInterval: 15_000,
   });
 }
 
@@ -67,7 +67,8 @@ export function useInboxCount() {
   return useQuery({
     queryKey: queryKeys.corrections.inboxCount(),
     queryFn: fetchInboxCount,
-    staleTime: 60_000,
+    staleTime: 10_000,
+    refetchInterval: 30_000,
   });
 }
 
@@ -137,8 +138,8 @@ export function useApproveReading() {
       note?: string;
     }) => approveReading(table, id, reviewerId, note),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.corrections.pending() });
-      queryClient.invalidateQueries({ queryKey: queryKeys.corrections.pendingCount() });
+      queryClient.invalidateQueries({ queryKey: ['corrections'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-pending-review-count'] });
     },
   });
 }
@@ -158,8 +159,8 @@ export function useRetractReading() {
       note?: string;
     }) => retractReading(table, id, reviewerId, note),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.corrections.pending() });
-      queryClient.invalidateQueries({ queryKey: queryKeys.corrections.pendingCount() });
+      queryClient.invalidateQueries({ queryKey: ['corrections'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-pending-review-count'] });
     },
   });
 }
@@ -181,8 +182,8 @@ export function useUpdateReadingValue() {
       reason: string;
     }) => updateReadingValue(table, id, newValue, editorId, reason),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.corrections.pending() });
-      queryClient.invalidateQueries({ queryKey: queryKeys.corrections.inbox() });
+      queryClient.invalidateQueries({ queryKey: ['corrections'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-pending-review-count'] });
     },
   });
 }
@@ -200,7 +201,8 @@ export function useMarkMeterReplacement() {
       editorId: string;
     }) => markMeterReplacement(table, id, editorId),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.corrections.inbox() });
+      queryClient.invalidateQueries({ queryKey: ['corrections'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-pending-review-count'] });
     },
   });
 }
@@ -210,8 +212,8 @@ export function useCreateCorrectionRequest() {
   return useMutation({
     mutationFn: createCorrectionRequest,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.corrections.requests() });
-      queryClient.invalidateQueries({ queryKey: queryKeys.corrections.requestsCount() });
+      queryClient.invalidateQueries({ queryKey: ['corrections'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-pending-review-count'] });
     },
   });
 }
@@ -222,8 +224,8 @@ export function useUpdateCorrectionRequest() {
     mutationFn: ({ id, updates }: { id: string; updates: CorrectionRequestUpdate }) => 
       updateCorrectionRequest(id, updates),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.corrections.requests() });
-      queryClient.invalidateQueries({ queryKey: queryKeys.corrections.requestsCount() });
+      queryClient.invalidateQueries({ queryKey: ['corrections'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-pending-review-count'] });
     },
   });
 }
@@ -234,8 +236,8 @@ export function useApproveCorrectionRequest() {
     mutationFn: ({ id, reviewerId, note }: { id: string; reviewerId: string; note?: string }) => 
       approveCorrectionRequest(id, reviewerId, note),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.corrections.requests() });
-      queryClient.invalidateQueries({ queryKey: queryKeys.corrections.requestsCount() });
+      queryClient.invalidateQueries({ queryKey: ['corrections'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-pending-review-count'] });
     },
   });
 }
@@ -246,8 +248,8 @@ export function useRejectCorrectionRequest() {
     mutationFn: ({ id, reviewerId, note }: { id: string; reviewerId: string; note?: string }) => 
       rejectCorrectionRequest(id, reviewerId, note),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.corrections.requests() });
-      queryClient.invalidateQueries({ queryKey: queryKeys.corrections.requestsCount() });
+      queryClient.invalidateQueries({ queryKey: ['corrections'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-pending-review-count'] });
     },
   });
 }
@@ -277,8 +279,8 @@ export function useBulkApproveReadings() {
       note?: string;
     }) => bulkApproveReadings(table, ids, reviewerId, note),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.corrections.pending() });
-      queryClient.invalidateQueries({ queryKey: queryKeys.corrections.pendingCount() });
+      queryClient.invalidateQueries({ queryKey: ['corrections'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-pending-review-count'] });
     },
   });
 }
@@ -298,8 +300,8 @@ export function useBulkRetractReadings() {
       note?: string;
     }) => bulkRetractReadings(table, ids, reviewerId, note),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.corrections.pending() });
-      queryClient.invalidateQueries({ queryKey: queryKeys.corrections.pendingCount() });
+      queryClient.invalidateQueries({ queryKey: ['corrections'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-pending-review-count'] });
     },
   });
 }

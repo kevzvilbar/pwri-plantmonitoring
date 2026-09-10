@@ -1,4 +1,6 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { queryKeys } from '@/data/queryKeys';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
 import { friendlyError } from '@/lib/supabaseErrors';
@@ -58,6 +60,7 @@ export function usePendingReviewActions() {
   const { user, roles } = useAuth();
   const actorRole = pickDisplayRole(roles);
   const recent = useRecentCorrections();
+  const queryClient = useQueryClient();
 
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -78,6 +81,21 @@ export function usePendingReviewActions() {
 
   const { data: corrReqsData = [], refetch: refetchCorrReqs } = useCorrectionRequests('pending');
   const corrReqs = corrReqsData.map(toLocalCorrectionRequest);
+
+  // Instantly synchronize the badge count queries with the fetched tab data
+  useEffect(() => {
+    if (pendingData && !isLoading) {
+      queryClient.setQueryData(queryKeys.corrections.pendingCount(), pendingData.rows.length);
+      queryClient.setQueryData(['pending-readings-count'], pendingData.rows.length);
+    }
+  }, [pendingData, isLoading, queryClient]);
+
+  useEffect(() => {
+    if (corrReqsData && !isFetching) {
+      queryClient.setQueryData(queryKeys.corrections.requestsCount(), corrReqsData.length);
+      queryClient.setQueryData(['correction-requests-pending-count'], corrReqsData.length);
+    }
+  }, [corrReqsData, isFetching, queryClient]);
 
   const approveReadingMutation = useApproveReading();
   const retractReadingMutation = useRetractReading();
@@ -138,12 +156,27 @@ export function usePendingReviewActions() {
   };
 
   const invalidate = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ['corrections'] });
+    queryClient.invalidateQueries({ queryKey: ['dashboard-pending-review-count'] });
+    queryClient.invalidateQueries({ queryKey: ['pending-readings-count'] });
+    queryClient.invalidateQueries({ queryKey: ['correction-requests-pending-count'] });
     refetch();
     refetchCorrReqs();
-  }, [refetch, refetchCorrReqs]);
+  }, [queryClient, refetch, refetchCorrReqs]);
 
   const approveRequest = async (req: CorrectionRequest) => {
     try {
+      // Optimistic update
+      queryClient.setQueryData(queryKeys.corrections.requests('pending'), (old: any[] = []) =>
+        old.filter((r: any) => r.id !== req.id)
+      );
+      queryClient.setQueryData(queryKeys.corrections.requestsCount(), (old: number = 0) =>
+        Math.max(0, old - 1)
+      );
+      queryClient.setQueryData(['correction-requests-pending-count'], (old: number = 0) =>
+        Math.max(0, old - 1)
+      );
+
       await approveCorrectionRequestMutation.mutateAsync({
         id: req.id,
         reviewerId: user?.id ?? '',
@@ -167,6 +200,17 @@ export function usePendingReviewActions() {
   const rejectRequest = async (req: CorrectionRequest, resolutionNote: string) => {
     if (!resolutionNote.trim()) { toast.error('A reason is required to reject a correction request'); return; }
     try {
+      // Optimistic update
+      queryClient.setQueryData(queryKeys.corrections.requests('pending'), (old: any[] = []) =>
+        old.filter((r: any) => r.id !== req.id)
+      );
+      queryClient.setQueryData(queryKeys.corrections.requestsCount(), (old: number = 0) =>
+        Math.max(0, old - 1)
+      );
+      queryClient.setQueryData(['correction-requests-pending-count'], (old: number = 0) =>
+        Math.max(0, old - 1)
+      );
+
       await rejectCorrectionRequestMutation.mutateAsync({
         id: req.id,
         reviewerId: user?.id ?? '',
@@ -195,6 +239,18 @@ export function usePendingReviewActions() {
       row.edit_reason?.text ||
       customReasons[row.id]?.trim() ||
       notes[row.id]?.trim()
+    );
+
+    // Optimistic removal from cache
+    queryClient.setQueryData(queryKeys.corrections.pending(), (old: any) => {
+      if (!old?.rows) return { rows: [], truncated: false };
+      return { ...old, rows: old.rows.filter((r: any) => r.id !== row.id) };
+    });
+    queryClient.setQueryData(queryKeys.corrections.pendingCount(), (old: number = 0) =>
+      Math.max(0, old - 1)
+    );
+    queryClient.setQueryData(['pending-readings-count'], (old: number = 0) =>
+      Math.max(0, old - 1)
     );
 
     setBusy(p => ({ ...p, [row.id]: true }));
@@ -247,9 +303,23 @@ export function usePendingReviewActions() {
   const bulkResolve = async (decision: 'normal' | 'retracted') => {
     if (!selected.size) return;
     setBulkBusy(true);
-    const targets = rows.filter(r => selected.has(r.id));
+    const selectedIds = new Set(selected);
+    const targets = rows.filter(r => selectedIds.has(r.id));
     const ids = targets.map(r => r.id);
     const tables = [...new Set(targets.map(r => r.source_table))];
+
+    // Optimistic removal immediately removes them from UI and clears/decrements count!
+    queryClient.setQueryData(queryKeys.corrections.pending(), (old: any) => {
+      if (!old?.rows) return { rows: [], truncated: false };
+      return { ...old, rows: old.rows.filter((r: any) => !selectedIds.has(r.id)) };
+    });
+    queryClient.setQueryData(queryKeys.corrections.pendingCount(), (old: number = 0) =>
+      Math.max(0, old - selectedIds.size)
+    );
+    queryClient.setQueryData(['pending-readings-count'], (old: number = 0) =>
+      Math.max(0, old - selectedIds.size)
+    );
+    setSelected(new Set());
     
     try {
       // Process each table separately since mutations are per-table
