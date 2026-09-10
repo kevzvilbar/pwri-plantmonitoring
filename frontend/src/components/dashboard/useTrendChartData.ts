@@ -14,9 +14,10 @@
 import { useMemo } from 'react';
 import { calc } from '@/lib/calculations';
 import { format } from 'date-fns';
-import { sanitizeReadings } from '@/lib/readingSanitizer';
-import { fillDateRange, interpolateMissingGridMeterReadings } from './TrendChartPivotShared';
+import { computeEntityDeltas } from '@/lib/entityDeltas';
+import { fillDateRange } from './TrendChartPivotShared';
 import { buildTrendRows, type Granularity, type TrendFieldConfig } from './TrendChartAggregate';
+import { buildTariffsLookup, processPowerReadingsForTrend } from './TrendChart/powerTrendProcessing';
 
 const TREND_FIELD_AGG: Record<string, TrendFieldConfig> = {
   production: {
@@ -75,34 +76,7 @@ export function useTrendChartData({
   _directProductMeterIds: Set<string> | undefined;
 }) {
   const chartData = useMemo(() => {
-    // ── Tariff lookup: for each plant, sorted array of {effectiveDate, ratePerKwh} ─
-    // Used to find the ₱/kWh rate active on a given day:
-    //   latest tariff whose effective_date ≤ day's date.
-    // If no tariff exists yet for a plant, cost will be null (not 0).
-    const tariffsByPlant = new Map<string, { effectiveDate: string; ratePerKwh: number }[]>();
-    (powerTariffs ?? []).forEach((t: any) => {
-      if (!t.plant_id || t.rate_per_kwh == null) return;
-      if (!tariffsByPlant.has(t.plant_id)) tariffsByPlant.set(t.plant_id, []);
-      tariffsByPlant.get(t.plant_id)!.push({
-        effectiveDate: t.effective_date,
-        ratePerKwh: +t.rate_per_kwh,
-      });
-    });
-    // Sort each plant's tariffs ascending by date (already ordered from DB, but ensure)
-    tariffsByPlant.forEach((arr) => arr.sort((a, b) => a.effectiveDate.localeCompare(b.effectiveDate)));
-
-    /** Look up the ₱/kWh rate for a given plant on a given yyyy-MM-dd date. */
-    function getRateForDay(plantId: string, dateKey: string): number | null {
-      const tariffs = tariffsByPlant.get(plantId);
-      if (!tariffs || tariffs.length === 0) return null;
-      // Find latest effective tariff ≤ dateKey
-      let rate: number | null = null;
-      for (const t of tariffs) {
-        if (t.effectiveDate <= dateKey) rate = t.ratePerKwh;
-        else break;
-      }
-      return rate;
-    }
+    const getRateForDay = buildTariffsLookup(powerTariffs);
 
     const byDay = new Map<string, any>();
     const ensure = (d: string, sortKey: number) =>
@@ -126,135 +100,7 @@ export function useTrendChartData({
         _permeateSourcePlants: null as Set<string> | null,
       }).get(d);
 
-    // ── Unified meter-replacement-aware delta helper ────────────────────────
-    // Used for ALL meter types: wells, locators, product meters, power.
-    //
-    // entityKeyField: the column that uniquely identifies an individual meter.
-    //   • well_readings          → 'well_id'
-    //   • locator_readings       → 'locator_id'
-    //   • product_meter_readings → 'meter_id'
-    //   • power_readings         → 'plant_id'  (one power meter per plant)
-    //
-    // Keying by the individual meter ID (not plant_id) prevents readings from
-    // different meters at the same plant bleeding into each other's diff —
-    // the root cause of the -4,853,089 / +885,406 spikes seen in Raw Water.
-    //
-    // dailyVolumeField: if the table stores a pre-computed daily volume column
-    // (e.g. locator_readings.daily_volume), use it directly when present.
-    // Wells and product meters don't have this column so pass null.
-    //
-    // Meter-replacement handling (matches Operations.tsx display logic):
-    //   • REPL row (is_meter_replacement = true):
-    //       delta = 0, new baseline = current_reading, flag entity as "afterRepl"
-    //   • First non-REPL row after a REPL:
-    //       delta = 0 (new meter has no valid predecessor yet), clear flag
-    //   • All subsequent rows:
-    //       delta = current_reading − last seen current_reading for that entity
-    //
-    // rawDelta is null when there is no predecessor (first reading in window,
-    // or first after replacement) so the tooltip doesn't false-flag those as
-    // negative readings.
-    function computeEntityDeltas(
-      readings: any[],
-      entityKeyField: string,
-      dailyVolumeField: string | null,
-      options?: {
-        skipAfterRepl?: boolean;
-        // IDs (e.g. locator_id) whose default_input_mode = 'direct' —
-        // current_reading already IS the period's volume for these. Mirrors
-        // EntityHistoryChart.tsx's isDirectMode branch.
-        directModeIds?: Set<string>;
-      },
-    ): { r: any; delta: number; rawDelta: number | null; isMeterReplacement: boolean }[] {
-      // skipAfterRepl=true: the replacement row already sets lastReading to the
-      // new meter's starting value, so the very next reading can diff against it
-      // normally (e.g. RO permeate: repl=227,368 → next=228,106 → delta=737.7).
-      // skipAfterRepl=false (default): the row immediately after a replacement is
-      // zeroed as a safety net for meter types where the replacement reading may
-      // not be a reliable baseline (locators, wells, product meters).
-      const skipAfterRepl = options?.skipAfterRepl ?? false;
-      const directModeIds = options?.directModeIds;
 
-      const sorted = sanitizeReadings(readings, entityKeyField, directModeIds);
-
-      const lastReading = new Map<string, number>(); // entityKey → last current_reading
-      const afterRepl   = new Set<string>();          // entities whose next row is zeroed
-
-      return sorted.map((r) => {
-        const entityKey = r[entityKeyField] ?? r.plant_id ?? '__';
-        const isMR      = !!r.is_meter_replacement;
-
-        if (isMR) {
-          lastReading.set(entityKey, +r.current_reading);
-          if (!skipAfterRepl) afterRepl.add(entityKey);
-          return { r, delta: 0, rawDelta: null, isMeterReplacement: true };
-        }
-
-        if (afterRepl.has(entityKey)) {
-          lastReading.set(entityKey, +r.current_reading);
-          afterRepl.delete(entityKey);
-          return { r, delta: 0, rawDelta: null, isMeterReplacement: false };
-        }
-
-        if (directModeIds?.has(entityKey)) {
-          // Direct mode: current_reading already IS the period's volume — no
-          // diff, no dependence on daily_volume/previous_reading.
-          const delta = r.current_reading != null ? Math.max(0, +r.current_reading) : 0;
-          lastReading.set(entityKey, +r.current_reading);
-          return { r, delta, rawDelta: null, isMeterReplacement: false };
-        }
-
-        if (dailyVolumeField && r[dailyVolumeField] != null && !lastReading.has(entityKey)) {
-          // Only trust the stored daily_volume for the FIRST row of this
-          // entity within the fetched window, where there's no locally
-          // walked predecessor to diff against — that stored value may
-          // legitimately span >1 day if readings were skipped before the
-          // window. Once a predecessor HAS been walked (below), always diff
-          // live against it instead: daily_volume/previous_reading are
-          // written once at insert time and never cascaded when an earlier
-          // reading is later edited/deleted/replaced, so a downstream row can
-          // keep pointing at a stale predecessor indefinitely. That's what
-          // made Coke/Parkmall's Aug 7–10 daily_volume grow into a
-          // cumulative-looking total instead of a single day's delta — see
-          // the identical fix in DataSummaryModal.tsx's
-          // computePivotFromReadingsNoCache.
-          const storedVol = Math.max(0, +r[dailyVolumeField]);
-          const delta     = storedVol;
-          lastReading.set(entityKey, +r.current_reading);
-          return { r, delta, rawDelta: null, isMeterReplacement: false };
-        }
-
-        if (!lastReading.has(entityKey)) {
-          lastReading.set(entityKey, +r.current_reading);
-          // If the DB stored previous_reading, compute the delta instead of returning 0.
-          // Without this, the first reading in the fetch window (no prior in-memory row)
-          // always shows 0, causing a false dip at the start of every range.
-          if (r.previous_reading != null) {
-            const rawDelta = +r.current_reading - +r.previous_reading;
-            // On the INITIAL reading: an unflagged replacement, rollover, or backward
-            // entry from before the window must not produce a negative delta (or plunge
-            // to -2.1M on the chart). If negative, treat as an unanchored initial point.
-            if (rawDelta >= 0) {
-              return { r, delta: rawDelta, rawDelta, isMeterReplacement: false };
-            }
-            return { r, delta: 0, rawDelta: null, isMeterReplacement: true };
-          }
-          // No previous_reading in DB → we genuinely don't know the delta for this
-          // first row. Return null delta so the chart gaps rather than plots 0.
-          return { r, delta: 0, rawDelta: null, isMeterReplacement: true };
-          // Note: isMeterReplacement=true here causes the caller to skip this point,
-          // preventing a false zero at the start of a date window.
-        }
-
-        const rawDelta = +r.current_reading - lastReading.get(entityKey)!;
-        // Clamp to 0: a meter reading that goes backwards is a bad entry or an
-        // un-flagged meter reset. Propagating a negative tanks the chart
-        // (e.g. Raw Water −1.1M spike on May 4–5, or −200K dip). Matches buildEntityPivot.
-        const delta    = Math.max(0, rawDelta);
-        lastReading.set(entityKey, +r.current_reading);
-        return { r, delta, rawDelta, isMeterReplacement: false };
-      });
-    }
 
     // ── Raw Water = sum of per-well deltas ─────────────────────────────────
     // Uses computeEntityDeltas for sequential in-memory delta tracking
@@ -412,163 +258,17 @@ export function useTrendChartData({
       if (r.permeate_tds != null) { row.tds += +r.permeate_tds; row.tdsSamples += 1; }
     });
 
-    // Power kWh — priority order mirrors the fixed Plants.tsx PowerConsumptionEnergyMix:
-    //   1. Raw JSONB multi-meter delta × per-meter CT multiplier  ← live, never stale
-    //   2. Raw single-meter delta × multiplierArr[0]              ← live, single-meter fallback
-    //   3. daily_consumption_kwh                                  ← stored at write time; may be stale
-    //   4. daily_grid_kwh                                         ← same fallback
-    //
-    // Rationale: daily_consumption_kwh is computed once when the reading is saved.
-    // If the previous-reading baseline was wrong at that moment (meter change, backfill,
-    // import ordering), the stored value is permanently wrong — causing chart spikes
-    // that disagree with the "Last 7 readings" panel, which always recomputes live.
-    // Computing from raw readings first keeps the chart consistent with that panel.
-    {
-      const rawSorted = [...(powerReadings ?? [])].sort(
-        (a, b) => new Date(a.reading_datetime).getTime() - new Date(b.reading_datetime).getTime(),
-      );
-      const sorted = interpolateMissingGridMeterReadings(rawSorted);
-      // Per-plant tracking state (mirrors Plants.tsx prevGridMeter/prevGridReadings)
-      const prevGridMeter    = new Map<string, number | null>();
-      const prevGridReadings = new Map<string, Record<string, number>>();
-      const afterGridRepl    = new Set<string>();
-
-      for (const r of sorted) {
-        const pid  = r.plant_id ?? '__';
-        const isMR = !!r.is_meter_replacement;
-        const gridCurrent = r.meter_reading_kwh != null ? +r.meter_reading_kwh : null;
-        const rGmr = r.grid_meter_readings as Record<string, number> | null | undefined;
-
-        if (isMR) {
-          // Replacement row: zero this day, reset baseline for next delta
-          if (gridCurrent != null) prevGridMeter.set(pid, gridCurrent);
-          const replBaselines = { ...(prevGridReadings.get(pid) ?? {}) };
-          if (rGmr) {
-            for (const [k, v] of Object.entries(rGmr)) {
-              if (v != null && Number.isFinite(+v)) replBaselines[k] = +v;
-            }
-          }
-          if (gridCurrent != null) replBaselines['0'] = gridCurrent;
-          prevGridReadings.set(pid, replBaselines);
-          afterGridRepl.add(pid);
-          // Still record the meter replacement label so the tooltip shows it
-          const dt = new Date(r.reading_datetime);
-          if (dt >= new Date(startISO)) {
-            const dateKey = format(dt, 'yyyy-MM-dd');
-            if (dateKey >= startKey && dateKey <= endKey) {
-              const key = format(dt, 'MMM d');
-              const row = ensure(key, dt.getTime());
-              const entityName = plantNames?.get(pid) ?? pid ?? 'Plant';
-              const label = `${entityName} Power Meter`;
-              if (!row._meterReplacements.includes(label)) row._meterReplacements.push(label);
-            }
-          }
-          continue;
-        }
-
-        let gridKwh = 0;
-        // Per-meter multiplier array: plant_power_config wins, then billMultiplierMap scalar, then 1
-        const multArr: number[] = powerConfigMap?.get(pid) ?? [
-          +(r.multiplier ?? 0) > 0 ? +r.multiplier : (billMultiplierMap?.get(pid) ?? 1),
-        ];
-
-        if (!afterGridRepl.has(pid)) {
-          const pGmr   = prevGridReadings.get(pid) ?? null;
-          const pMeter = prevGridMeter.get(pid) ?? null;
-
-          if (rGmr && pGmr && Object.keys(rGmr).length > 0) {
-            // Priority 1: multi-meter JSONB delta × per-meter CT multiplier
-            let total = 0;
-            for (const k of Object.keys(rGmr)) {
-              const mi    = parseInt(k, 10);
-              const mMult = multArr[mi] ?? multArr[0] ?? 1;
-              const currVal = rGmr[k];
-              const prevVal = pGmr[k];
-              if (currVal != null && prevVal != null) {
-                const d = (currVal - prevVal) * mMult;
-                if (d >= 0) total += d;
-              }
-            }
-            gridKwh = total;
-          } else if (pMeter != null && gridCurrent != null) {
-            // Priority 2: single-meter legacy — (curr − prev) × multArr[0]
-            const rawDelta = gridCurrent - pMeter;
-            if (rawDelta >= 0) gridKwh = rawDelta * (multArr[0] ?? 1);
-          }
-
-          // Priority 3 & 4: stored daily totals — only when no raw readings available.
-          //
-          // IMPORTANT multiplier note:
-          //   • daily_grid_kwh   — stored post-multiplication (already × CT ratio).
-          //                        Use as-is.
-          //   • daily_consumption_kwh — stored as the raw meter delta (NOT multiplied)
-          //                        when the reading was first saved (e.g. Δ = 11 while
-          //                        the actual kWh = 11 × 2400 = 26,400). Applying
-          //                        multArr[0] here matches what the Operations history
-          //                        table shows and what the physical meter produces.
-          //
-          // Order: prefer daily_grid_kwh (already correct) → daily_consumption_kwh × mult.
-          if (gridKwh === 0) {
-            if (r.daily_grid_kwh != null && +r.daily_grid_kwh > 0)
-              gridKwh = +r.daily_grid_kwh;
-            else if (r.daily_consumption_kwh != null && +r.daily_consumption_kwh > 0)
-              gridKwh = +r.daily_consumption_kwh * (multArr[0] ?? 1);
-          }
-        }
-        afterGridRepl.delete(pid);
-        if (gridCurrent != null) prevGridMeter.set(pid, gridCurrent);
-        const currentBaselines = { ...(prevGridReadings.get(pid) ?? {}) };
-        if (rGmr) {
-          for (const [k, v] of Object.entries(rGmr)) {
-            if (v != null && Number.isFinite(+v)) currentBaselines[k] = +v;
-          }
-        }
-        if (gridCurrent != null && currentBaselines['0'] == null) {
-          currentBaselines['0'] = gridCurrent;
-        }
-        prevGridReadings.set(pid, currentBaselines);
-
-        // Only plot rows within the requested window
-        const dt = new Date(r.reading_datetime);
-        if (dt < new Date(startISO)) continue;
-        const dateKey = format(dt, 'yyyy-MM-dd');
-        if (dateKey < startKey || dateKey > endKey) continue;
-
-        const key = format(dt, 'MMM d');
-        if (gridKwh > 0) {
-          const row = ensure(key, dt.getTime());
-          row.kwh += gridKwh;
-        }
-
-        // productionCost: accumulate ₱ power cost for this day
-        if (metric === 'productionCost' && gridKwh > 0) {
-          const rate = getRateForDay(pid, dateKey);
-          if (rate != null) {
-            const row = ensure(key, dt.getTime());
-            const solarForCost = (r.daily_solar_kwh != null)
-              ? Math.max(0, +r.daily_solar_kwh) : 0;
-            row._solarKwhForCost += solarForCost;
-            row._powerCostPeso   += gridKwh * rate;
-            row._hasTariff        = true;
-          }
-        }
-      }
-    }
-
-    // Accumulate daily_solar_kwh per day for the (Grid+Solar) PV ratio line.
-    // Skips null/zero rows so the ratio stays null on days with no solar data.
-    // Pre-window rows (fetched to seed grid baseline) and out-of-range rows are skipped.
-    (powerReadings ?? []).forEach((r: any) => {
-      if (r.daily_solar_kwh == null || r.is_meter_replacement) return;
-      const solarVal = +r.daily_solar_kwh;
-      if (solarVal <= 0) return;
-      const dt = new Date(r.reading_datetime);
-      if (dt < new Date(startISO)) return;
-      const dateKey = format(dt, 'yyyy-MM-dd');
-      if (dateKey < startKey || dateKey > endKey) return;
-      const key = format(dt, 'MMM d');
-      const row = ensure(key, dt.getTime());
-      row.solarKwh += solarVal;
+    processPowerReadingsForTrend({
+      powerReadings,
+      powerConfigMap,
+      billMultiplierMap,
+      plantNames,
+      startISO,
+      startKey,
+      endKey,
+      metric,
+      getRateForDay,
+      ensure,
     });
 
     // Chemical cost: chem_cost (₱/day) from production_costs table.
