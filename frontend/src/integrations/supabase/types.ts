@@ -5822,6 +5822,17 @@ export type Database = {
           user_id: string
         }[]
       }
+      get_dashboard_aggregates: {
+        Args: {
+          p_plant_ids: string[]
+          p_today_start: string
+          p_today_end: string
+          p_yesterday_start: string
+          p_yesterday_end: string
+          p_today_date?: string
+        }
+        Returns: Json
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]

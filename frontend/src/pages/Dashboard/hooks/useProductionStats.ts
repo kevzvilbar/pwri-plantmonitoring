@@ -6,6 +6,27 @@ import { computePivotFromReadingsNoCache, pivotDayTotal } from '@/components/das
 import { pctDelta } from '@/components/dashboard/types';
 import { calc } from '@/lib/calculations';
 
+export interface ServerDashboardAggregates {
+  raw_water_vol: number;
+  y_raw_water_vol: number;
+  production: number;
+  y_production: number;
+  consumption: number;
+  y_consumption: number;
+  blending: number;
+  nrw: number | null;
+  y_nrw: number | null;
+  by_plant?: Array<{
+    plant_id: string;
+    plant_name?: string;
+    raw_water_vol: number;
+    production: number;
+    consumption: number;
+    blending: number;
+    nrw: number | null;
+  }>;
+}
+
 export interface UseProductionStatsParams {
   plantIds: string[];
   today: string;
@@ -25,6 +46,33 @@ export function useProductionStats({
   qualityTrainMeta,
   qualityTrainIds = [],
 }: UseProductionStatsParams) {
+  const todayEnd = useMemo(() => new Date(_localDateStr + 'T23:59:59').toISOString(), [_localDateStr]);
+  const yesterdayEnd = useMemo(() => new Date(_yesterdayKey + 'T23:59:59').toISOString(), [_yesterdayKey]);
+
+  // ── Server-Side Aggregations (Single RPC for All Facilities / Multi-Plant) ──
+  const { data: serverAggregates } = useQuery<ServerDashboardAggregates | null>({
+    queryKey: ['dash-server-aggregates', plantIds, today, todayEnd, yesterday, yesterdayEnd, _localDateStr],
+    queryFn: async () => {
+      if (!plantIds.length) return null;
+      const { data, error } = await supabase.rpc('get_dashboard_aggregates', {
+        p_plant_ids: plantIds,
+        p_today_start: today,
+        p_today_end: todayEnd,
+        p_yesterday_start: yesterday,
+        p_yesterday_end: yesterdayEnd,
+        p_today_date: _localDateStr,
+      });
+      if (error) {
+        console.warn('[Dashboard] get_dashboard_aggregates failed, falling back to client computation:', error);
+        return null;
+      }
+      return data as ServerDashboardAggregates;
+    },
+    enabled: plantIds.length > 0,
+    staleTime: 120_000,
+    refetchInterval: 120_000,
+  });
+
   const { data: locatorIds = [] } = useQuery({
     queryKey: ['dash-locator-ids', plantIds],
     queryFn: async () => {
@@ -370,12 +418,15 @@ export function useProductionStats({
     refetchInterval: 5 * 60_000,
   });
 
-  // ── Aggregations ──────────────────────────────────────────────────────────
+  // ── Aggregations (Server-first with client fallback) ─────────────────────
   const _todayKey = format(new Date(), 'yyyy-MM-dd');
 
-  const rawWaterVol = useMemo((): number => pivotDayTotal(
-    computePivotFromReadingsNoCache(todayWells, 'well_id', 'daily_volume'), _todayKey,
-  ), [todayWells, _todayKey]);
+  const rawWaterVol = useMemo((): number => {
+    if (serverAggregates?.raw_water_vol != null) return serverAggregates.raw_water_vol;
+    return pivotDayTotal(
+      computePivotFromReadingsNoCache(todayWells, 'well_id', 'daily_volume'), _todayKey,
+    );
+  }, [serverAggregates, todayWells, _todayKey]);
 
   const roPermeateProduction = useMemo((): number =>
     todayRoPermeate.reduce((s: number, r: any) => {
@@ -394,6 +445,7 @@ export function useProductionStats({
   [yRoPermeate, _yesterdayKey]);
 
   const production = useMemo((): number => {
+    if (serverAggregates?.production != null) return serverAggregates.production;
     const meterReadingsForProduction = todayProductMeters.filter(
       (r) => !productExcludedPlantIds.has(r.plant_id),
     );
@@ -410,40 +462,64 @@ export function useProductionStats({
       return s + (+(r.permeate_meter_delta ?? 0));
     }, 0);
     return fallbackTotal;
-  }, [todayProductMeters, _todayKey, roPermeateProduction, todayAllPermeate, qualityTrainMeta, permeateProductionPlantIds, productExcludedPlantIds, directProductMeterIds]);
+  }, [serverAggregates, todayProductMeters, _todayKey, roPermeateProduction, todayAllPermeate, qualityTrainMeta, permeateProductionPlantIds, productExcludedPlantIds, directProductMeterIds]);
 
-  const consumption = useMemo((): number => pivotDayTotal(
-    computePivotFromReadingsNoCache(todayLocators, 'locator_id', 'daily_volume', directLocatorIds), _todayKey,
-  ), [todayLocators, _todayKey, directLocatorIds]);
+  const consumption = useMemo((): number => {
+    if (serverAggregates?.consumption != null) return serverAggregates.consumption;
+    return pivotDayTotal(
+      computePivotFromReadingsNoCache(todayLocators, 'locator_id', 'daily_volume', directLocatorIds), _todayKey,
+    );
+  }, [serverAggregates, todayLocators, _todayKey, directLocatorIds]);
 
-  const yRawWaterVol = useMemo((): number => pivotDayTotal(
-    computePivotFromReadingsNoCache(yWells, 'well_id', 'daily_volume'), _yesterdayKey,
-  ), [yWells, _yesterdayKey]);
+  const yRawWaterVol = useMemo((): number => {
+    if (serverAggregates?.y_raw_water_vol != null) return serverAggregates.y_raw_water_vol;
+    return pivotDayTotal(
+      computePivotFromReadingsNoCache(yWells, 'well_id', 'daily_volume'), _yesterdayKey,
+    );
+  }, [serverAggregates, yWells, _yesterdayKey]);
 
-  const yProduction = useMemo((): number =>
-    pivotDayTotal(
-      computePivotFromReadingsNoCache(
-        yProductMeters.filter((r) => !productExcludedPlantIds.has(r.plant_id)),
-        'meter_id', 'daily_volume', directProductMeterIds,
-      ), _yesterdayKey,
-    ) + yRoPermeateProduction,
-  [yProductMeters, _yesterdayKey, yRoPermeateProduction, productExcludedPlantIds, directProductMeterIds]);
+  const yProduction = useMemo((): number => {
+    if (serverAggregates?.y_production != null) return serverAggregates.y_production;
+    return (
+      pivotDayTotal(
+        computePivotFromReadingsNoCache(
+          yProductMeters.filter((r) => !productExcludedPlantIds.has(r.plant_id)),
+          'meter_id', 'daily_volume', directProductMeterIds,
+        ), _yesterdayKey,
+      ) + yRoPermeateProduction
+    );
+  }, [serverAggregates, yProductMeters, _yesterdayKey, yRoPermeateProduction, productExcludedPlantIds, directProductMeterIds]);
 
-  const yConsumption = useMemo((): number => pivotDayTotal(
-    computePivotFromReadingsNoCache(yLocators, 'locator_id', 'daily_volume', directLocatorIds), _yesterdayKey,
-  ), [yLocators, _yesterdayKey, directLocatorIds]);
+  const yConsumption = useMemo((): number => {
+    if (serverAggregates?.y_consumption != null) return serverAggregates.y_consumption;
+    return pivotDayTotal(
+      computePivotFromReadingsNoCache(yLocators, 'locator_id', 'daily_volume', directLocatorIds), _yesterdayKey,
+    );
+  }, [serverAggregates, yLocators, _yesterdayKey, directLocatorIds]);
 
   const dProduction = pctDelta(production, yProduction);
   const dConsumption = pctDelta(consumption, yConsumption);
   const dRawWater = pctDelta(rawWaterVol, yRawWaterVol);
 
-  const nrw = calc.nrw(production, consumption);
-  const yNrw = calc.nrw(yProduction, yConsumption);
+  const nrw = useMemo((): number | null => {
+    if (serverAggregates?.nrw !== undefined) return serverAggregates.nrw;
+    return calc.nrw(production, consumption);
+  }, [serverAggregates, production, consumption]);
+
+  const yNrw = useMemo((): number | null => {
+    if (serverAggregates?.y_nrw !== undefined) return serverAggregates.y_nrw;
+    return calc.nrw(yProduction, yConsumption);
+  }, [serverAggregates, yProduction, yConsumption]);
+
   const nrwBreached = nrw != null && nrw > 10;
 
-  const blending = blendingTodayRows.reduce((s: number, r) => s + (+r.volume_m3 || 0), 0);
+  const blending = useMemo((): number => {
+    if (serverAggregates?.blending != null) return serverAggregates.blending;
+    return blendingTodayRows.reduce((s: number, r) => s + (+r.volume_m3 || 0), 0);
+  }, [serverAggregates, blendingTodayRows]);
 
   return {
+    serverAggregates,
     locatorIds,
     directLocatorIds,
     directProductMeterIds,
