@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { PieChart, Pie, Cell } from 'recharts';
 import { Card } from '@/components/ui/card';
-import { Activity, TrendingUp, TrendingDown, Minus } from 'lucide-react';
+import { Activity } from 'lucide-react';
 import { loadThresholds, DEFAULT_THRESHOLDS } from '@/pages/Compliance';
 import { useAppStore } from '@/store/appStore';
 import { cn } from '@/lib/utils';
@@ -80,140 +80,107 @@ export function NRWGaugeCard({ nrw, yNrw, onClick }: Props) {
   const fillColor  = nrwFill(tone);
   const displayVal = Math.min(Math.max(nrw ?? 0, 0), 100);
 
-  // Gauge geometry — shared by both Pie layers and the threshold tick below
-  // so they always line up exactly.
-  const cx = 44, cy = 46, innerRadius = 27, outerRadius = 40;
-  // Ring is 13px thick; ~half that gives a full pill-shaped rounded cap
-  // without the two ends colliding into a lozenge at low values.
-  const cornerRadius = 6;
+  // Gauge geometry — compact half-donut placed cleanly on the right
+  const cx = 38, cy = 38, innerRadius = 22, outerRadius = 34;
+  const cornerRadius = 5;
 
-  // Threshold tick — marks the compliance limit on the ring so it's visible
-  // at a glance, not just in the "(limit N%)" text below. Clamped into the
-  // gauge's own 0–100 domain: a plant can configure nrw_pct_max above 100
-  // (unusual, but the input doesn't forbid it), which would otherwise place
-  // the tick past the right foot at an angle the arc never reaches.
-  const tickInner = polarPoint(cx, cy, innerRadius - 3, Math.min(limitPct, 100));
-  const tickOuter = polarPoint(cx, cy, outerRadius + 3, Math.min(limitPct, 100));
+  const tickInner = polarPoint(cx, cy, innerRadius - 2.5, Math.min(limitPct, 100));
+  const tickOuter = polarPoint(cx, cy, outerRadius + 2.5, Math.min(limitPct, 100));
 
   // Trend vs yesterday
   const delta = nrw != null && yNrw != null && yNrw !== 0
     ? +((nrw - yNrw) / Math.abs(yNrw) * 100).toFixed(1)
     : null;
 
-  const TrendIcon = delta === null ? null : Math.abs(delta) < 0.5 ? Minus : delta > 0 ? TrendingUp : TrendingDown;
-  const trendCls  = delta === null ? '' : Math.abs(delta) < 0.5
-    ? 'text-muted-foreground'
-    : delta > 0 ? 'text-danger' : 'text-accent';
-
   return (
     <Card
       className={cn(
-        'stat-card min-w-0 h-full p-3 flex items-center gap-3',
+        'stat-card min-w-0 h-full p-3 flex flex-col justify-between transition-colors hover:border-border',
         tone ? TONE_BG[tone] : '',
-        onClick ? 'cursor-pointer hover:border-primary/40 hover:shadow-sm transition-all' : 'cursor-default',
+        onClick ? 'cursor-pointer' : 'cursor-default',
       )}
       onClick={onClick}
       aria-label={`NRW gauge: ${nrw ?? '—'}% (target < ${limitPct}%)`}
     >
-      {/* Half-donut gauge — slightly larger on wider (mobile full-row) layout */}
-      <div className="shrink-0" aria-hidden>
-        {/*
-          margin explicitly zeroed: PieChart defaults to a hidden 5px margin
-          on every side, which shifts the *effective* cx/cy by +5/+5 without
-          changing the numbers you write here. On this 88×48 canvas that
-          pushes the true circle center past the chart's own clip rect
-          (bottom edge lands ~8px outside it), silently slicing the bottom
-          off both arc feet — invisible with flat edges, but it flattens the
-          rounded caps right where they're most visible, and at low % values
-          clips the value-arc's rounded dot into a flat-bottomed blob.
-        */}
-        <PieChart width={88} height={48} margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
-          {/* Track — full-width background arc, rounded caps at both feet
-              so the ring reads as one continuous pill rather than a flat-cut
-              band. Drawn first so the value arc layers cleanly on top. */}
-          <Pie
-            data={[{ name: 'track', value: 100 }]}
-            cx={cx}
-            cy={cy}
-            startAngle={180}
-            endAngle={0}
-            innerRadius={innerRadius}
-            outerRadius={outerRadius}
-            cornerRadius={cornerRadius}
-            dataKey="value"
-            stroke="none"
-            isAnimationActive={false}
-          >
-            <Cell fill={trackColor} />
-          </Pie>
-
-          {/* Value — a second, independent arc layered on top instead of a
-              second slice of the same pie. Two slices sharing one pie would
-              each get their own rounded corners at the seam between them,
-              leaving a visible notch; an overlapping arc avoids that and
-              gives a clean single rounded cap at the value's leading edge. */}
-          <Pie
-            data={[{ name: 'NRW', value: displayVal }]}
-            cx={cx}
-            cy={cy}
-            startAngle={180}
-            endAngle={180 - (displayVal / 100) * 180}
-            innerRadius={innerRadius}
-            outerRadius={outerRadius}
-            cornerRadius={cornerRadius}
-            dataKey="value"
-            stroke="none"
-            isAnimationActive={false}
-          >
-            <Cell fill={fillColor} />
-          </Pie>
-
-          {/* Threshold tick — quiet reference line at the compliance limit,
-              independent of the current value/tone so it stays put as the
-              value moves past it. */}
-          <line
-            x1={tickInner.x} y1={tickInner.y}
-            x2={tickOuter.x} y2={tickOuter.y}
-            stroke="hsl(var(--foreground))"
-            strokeOpacity={0.45}
-            strokeWidth={1.5}
-            strokeLinecap="round"
-          />
-        </PieChart>
-      </div>
-
-      {/* Labels */}
-      <div className="min-w-0 flex-1">
-        {/* Value + trend */}
-        <div className="flex items-baseline gap-1.5 flex-wrap">
-          <span
-            className={cn('text-xl font-bold leading-none font-mono tabular-nums', tone ? TONE_ICON[tone] : 'text-muted-foreground')}
-          >
-            {nrw == null ? '—' : nrw}
-            <span className="text-xs font-sans text-muted-foreground ml-0.5">%</span>
+      {/* ── Header row: icon · LABEL · limit · calc pill ── */}
+      <div className="flex items-center justify-between gap-1 min-w-0">
+        <div className="flex items-center gap-1.5 min-w-0 overflow-hidden">
+          <Activity className="shrink-0 h-3.5 w-3.5 text-muted-foreground/80" />
+          <span className="uppercase tracking-wide font-semibold truncate leading-none text-2xs text-muted-foreground">
+            NRW
           </span>
-
-          {TrendIcon && delta !== null && (
-            <span className={cn('inline-flex items-center gap-0.5 text-2xs font-medium', trendCls)}
-              title="vs yesterday"
-            >
-              <TrendIcon className="h-3 w-3" />
-              {Math.abs(delta)}%
-            </span>
-          )}
-        </div>
-
-        <div className="text-xs text-muted-foreground mt-0.5 leading-tight">
-          NRW
-          <span className="ml-1 text-3xs opacity-60">
+          <span className="text-3xs text-muted-foreground/60 shrink-0 font-mono">
             (limit {limitPct}%)
           </span>
         </div>
+        <span
+          className="text-3xs uppercase tracking-wider px-1 py-0.5 rounded font-mono bg-info/10 text-info border border-info/20 shrink-0"
+          title="Calculated: (Raw Water - Billed Consumption) / Raw Water"
+        >
+          calc
+        </span>
+      </div>
 
-        {/* Threshold bands legend — compact */}
-        <div className="flex items-center gap-2 mt-1.5">
-          <Activity className="h-3 w-3 text-muted-foreground/50 shrink-0" aria-hidden />
-          <span className="text-3xs text-muted-foreground/60 font-medium tracking-wide uppercase">calc</span>
+      {/* ── Value & Gauge Row ── */}
+      <div className="mt-2 flex items-center justify-between gap-2">
+        <div className="min-w-0">
+          <div className="text-2xl font-bold font-mono tabular-nums text-foreground leading-none">
+            {nrw == null ? '—' : nrw}
+            <span className="font-sans font-normal text-muted-foreground ml-1 text-xs">%</span>
+          </div>
+          {delta !== null && (
+            <div className="mt-1.5">
+              <span className={`inline-flex items-center gap-0.5 text-xs font-semibold font-mono tabular-nums ${Math.abs(delta) < 0.5 ? 'text-muted-foreground' : delta > 0 ? 'text-danger' : 'text-accent'}`} title="vs previous day">
+                <span>{Math.abs(delta) < 0.5 ? '0.0%' : `${delta > 0 ? '+' : '-'}${Math.abs(delta).toFixed(1)}% vs prev day`}</span>
+              </span>
+            </div>
+          )}
+        </div>
+
+        {/* Half-donut gauge */}
+        <div className="shrink-0 -mb-1" aria-hidden>
+          <PieChart width={76} height={42} margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
+            <Pie
+              data={[{ name: 'track', value: 100 }]}
+              cx={cx}
+              cy={cy}
+              startAngle={180}
+              endAngle={0}
+              innerRadius={innerRadius}
+              outerRadius={outerRadius}
+              cornerRadius={cornerRadius}
+              dataKey="value"
+              stroke="none"
+              isAnimationActive={false}
+            >
+              <Cell fill={trackColor} />
+            </Pie>
+
+            <Pie
+              data={[{ name: 'NRW', value: displayVal }]}
+              cx={cx}
+              cy={cy}
+              startAngle={180}
+              endAngle={180 - (displayVal / 100) * 180}
+              innerRadius={innerRadius}
+              outerRadius={outerRadius}
+              cornerRadius={cornerRadius}
+              dataKey="value"
+              stroke="none"
+              isAnimationActive={false}
+            >
+              <Cell fill={fillColor} />
+            </Pie>
+
+            <line
+              x1={tickInner.x} y1={tickInner.y}
+              x2={tickOuter.x} y2={tickOuter.y}
+              stroke="hsl(var(--foreground))"
+              strokeOpacity={0.45}
+              strokeWidth={1.5}
+              strokeLinecap="round"
+            />
+          </PieChart>
         </div>
       </div>
     </Card>

@@ -28,9 +28,7 @@ export function FleetHeader({
     <div className="p-4 rounded-2xl border border-border/80 bg-card shadow-2xs space-y-3">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
         <div className="flex items-center gap-3">
-          <div className="h-9 w-9 rounded-xl bg-primary-soft text-primary flex items-center justify-center shrink-0 shadow-2xs">
-            <ROTrainIcon className="h-5 w-5" />
-          </div>
+          <ROTrainIcon className="h-5 w-5 text-muted-foreground shrink-0" />
           <div>
             <div className="flex items-center gap-2">
               <h2 className="text-sm sm:text-base font-bold text-foreground tracking-tight">RO Trains &amp; Pre-treatment Fleet</h2>

@@ -20,9 +20,7 @@ export function ScorecardOversightStrip({
     <div className="p-4 rounded-xl border border-border/80 bg-card shadow-xs space-y-3.5">
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <div className="h-10 w-10 rounded-xl bg-primary-soft text-primary flex items-center justify-center shrink-0 shadow-2xs">
-            <UserCheck className="h-5 w-5" />
-          </div>
+          <UserCheck className="h-5 w-5 text-muted-foreground shrink-0" />
           <div>
             <div className="flex items-center gap-2.5 flex-wrap">
               <h2 className="text-sm font-bold text-foreground tracking-tight">Management Oversight Index</h2>

@@ -40,12 +40,10 @@ export function PowerChartHeader({
     <div className="flex items-start justify-between gap-2 flex-wrap">
       <div>
         <div className="flex items-center gap-2">
-          <div className="h-7 w-7 rounded-lg bg-primary-soft text-primary flex items-center justify-center shrink-0">
-            <TrendingUp className="h-4 w-4" />
-          </div>
+          <TrendingUp className="h-4 w-4 text-muted-foreground shrink-0" />
           <span className="text-sm font-bold text-foreground">Power Consumption &amp; Energy Mix</span>
         </div>
-        <p className="text-xs text-muted-foreground mt-0.5 pl-9">
+        <p className="text-xs text-muted-foreground mt-0.5">
           {rangeLabel} · daily totals · Solar vs Grid (kWh)
         </p>
       </div>

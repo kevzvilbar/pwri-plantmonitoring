@@ -139,9 +139,7 @@ export function PowerMetersCard({ plant }: { plant: any }) {
       <Card className="p-4 sm:p-5 space-y-4 rounded-lg border border-border shadow-xs">
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-2.5">
-            <div className="h-7 w-7 rounded-md bg-primary-soft text-primary flex items-center justify-center shrink-0">
-              <Gauge className="h-4 w-4" />
-            </div>
+            <Gauge className="h-4 w-4 text-muted-foreground shrink-0" />
             <div>
               <h3 className="font-semibold text-sm text-foreground">Power Meter Configuration</h3>
               <p className="text-xs text-muted-foreground mt-0.5">

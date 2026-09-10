@@ -51,44 +51,38 @@ function Staff() {
     <div className="space-y-3.5">
       {/* ── KPI Summary Strip ── */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-        <div className="p-3 rounded-xl border border-border/70 bg-card flex items-center gap-3 shadow-2xs">
-          <div className="h-9 w-9 rounded-lg bg-primary-soft text-primary flex items-center justify-center shrink-0">
-            <Users className="h-4.5 w-4.5" />
+        <div className="p-3 rounded-lg border border-border/80 bg-card space-y-1">
+          <div className="flex items-center gap-1.5 text-muted-foreground">
+            <Users className="h-3.5 w-3.5 shrink-0 text-muted-foreground/80" />
+            <p className="text-2xs font-semibold uppercase tracking-wider">Total Staff</p>
           </div>
-          <div>
-            <p className="text-3xs font-semibold text-muted-foreground uppercase tracking-wider">Total Staff</p>
-            <p className="text-base font-bold text-foreground">{staff.length}</p>
-          </div>
+          <p className="text-2xl font-bold font-mono tabular-nums text-foreground">{staff.length}</p>
         </div>
 
-        <div className="p-3 rounded-xl border border-border/70 bg-card flex items-center gap-3 shadow-2xs">
-          <div className="h-9 w-9 rounded-lg bg-accent-soft text-accent flex items-center justify-center shrink-0">
-            <div className="h-2.5 w-2.5 rounded-full bg-accent animate-pulse" />
+        <div className="p-3 rounded-lg border border-border/80 bg-card space-y-1">
+          <div className="flex items-center gap-1.5 text-muted-foreground">
+            <div className="h-2 w-2 rounded-full bg-accent animate-pulse shrink-0" />
+            <p className="text-2xs font-semibold uppercase tracking-wider">Live Online</p>
           </div>
-          <div>
-            <p className="text-3xs font-semibold text-muted-foreground uppercase tracking-wider">Live Online</p>
-            <p className="text-base font-bold text-accent">{onlineCount} <span className="text-3xs text-muted-foreground font-normal">active</span></p>
-          </div>
+          <p className="text-2xl font-bold font-mono tabular-nums text-foreground">
+            {onlineCount} <span className="text-xs text-muted-foreground font-normal font-sans">active</span>
+          </p>
         </div>
 
-        <div className="p-3 rounded-xl border border-border/70 bg-card flex items-center gap-3 shadow-2xs">
-          <div className="h-9 w-9 rounded-lg bg-info-soft text-info flex items-center justify-center shrink-0">
-            <Crown className="h-4.5 w-4.5" />
+        <div className="p-3 rounded-lg border border-border/80 bg-card space-y-1">
+          <div className="flex items-center gap-1.5 text-muted-foreground">
+            <Crown className="h-3.5 w-3.5 shrink-0 text-muted-foreground/80" />
+            <p className="text-2xs font-semibold uppercase tracking-wider">Leadership</p>
           </div>
-          <div>
-            <p className="text-3xs font-semibold text-muted-foreground uppercase tracking-wider">Leadership</p>
-            <p className="text-base font-bold text-foreground">{leadershipCount}</p>
-          </div>
+          <p className="text-2xl font-bold font-mono tabular-nums text-foreground">{leadershipCount}</p>
         </div>
 
-        <div className="p-3 rounded-xl border border-border/70 bg-card flex items-center gap-3 shadow-2xs">
-          <div className="h-9 w-9 rounded-lg bg-kpi-ro/15 text-kpi-ro flex items-center justify-center shrink-0">
-            <BarChart2 className="h-4.5 w-4.5" />
+        <div className="p-3 rounded-lg border border-border/80 bg-card space-y-1">
+          <div className="flex items-center gap-1.5 text-muted-foreground">
+            <BarChart2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground/80" />
+            <p className="text-2xs font-semibold uppercase tracking-wider">Analysts & Ops</p>
           </div>
-          <div>
-            <p className="text-3xs font-semibold text-muted-foreground uppercase tracking-wider">Analysts & Ops</p>
-            <p className="text-base font-bold text-foreground">{analystCount + operatorCount}</p>
-          </div>
+          <p className="text-2xl font-bold font-mono tabular-nums text-foreground">{analystCount + operatorCount}</p>
         </div>
       </div>
 

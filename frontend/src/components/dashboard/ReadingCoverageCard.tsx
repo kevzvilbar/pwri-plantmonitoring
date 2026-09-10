@@ -177,7 +177,7 @@ export function ReadingCoverageCard({ plantIds }: Props) {
   return (
     <Card className="p-3 space-y-3">
       <div className="flex items-center gap-2">
-        <ClipboardCheck className="h-4 w-4 text-info shrink-0" aria-hidden />
+        <ClipboardCheck className="h-4 w-4 text-muted-foreground/80 shrink-0" aria-hidden />
         <span className="text-xs font-medium">Today's coverage</span>
         {anyMissing && (
           <span className="ml-auto inline-flex items-center px-1.5 py-0.5 rounded-full bg-warn-soft text-warn border border-warn/70 text-2xs font-medium">

@@ -35,7 +35,6 @@ export function QualityCluster({
         <div className="lg:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
           <StatCard
             icon={FlaskConical}
-            accent="text-accent"
             label="Product TDS"
             value={avgPermTds ?? '—'}
             unit="ppm"
@@ -53,7 +52,6 @@ export function QualityCluster({
 
           <StatCard
             icon={Percent}
-            accent="text-emerald-500"
             label="Recovery"
             value={avgRecovery ?? '—'}
             unit="%"

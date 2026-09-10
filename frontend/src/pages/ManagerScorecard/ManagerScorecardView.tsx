@@ -22,9 +22,7 @@ export function ManagerScorecardView({ managerRollup, navigate }: ManagerScoreca
           <div key={m.name} className="p-3.5 rounded-xl border border-border/70 bg-card shadow-2xs space-y-2.5">
             <div className="flex items-start justify-between gap-2">
               <div className="flex items-center gap-2">
-                <div className="h-8 w-8 rounded-lg bg-primary-soft text-primary flex items-center justify-center shrink-0">
-                  <UserCheck className="h-4 w-4" />
-                </div>
+                <UserCheck className="h-4 w-4 text-muted-foreground shrink-0" />
                 <div>
                   <h3 className="font-bold text-sm text-foreground">{m.name}</h3>
                   <p className="text-2xs text-muted-foreground">{m.plants.join(', ') || 'No facility assigned'}</p>

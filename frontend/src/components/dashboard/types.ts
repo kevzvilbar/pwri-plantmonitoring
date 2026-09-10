@@ -58,15 +58,17 @@ export type StatTone = 'accent' | 'warn' | 'danger' | undefined;
 // Token-driven tone surfaces. Each semantic color (--accent/--warn/--danger)
 // already has its own light/dark values in index.css, so referencing the
 // token here means dark mode and any future theme swap are inherited for
-// free — no per-tone dark: overrides to keep in sync by hand.
+// Token-driven tone surfaces. For normal operating conditions (accent/undefined),
+// surfaces remain solid high-contrast neutral slate. Color is strictly reserved
+// for warnings and alarms (warn / danger).
 export const TONE_BG: Record<NonNullable<StatTone>, string> = {
-  accent: 'bg-gradient-to-br from-accent-soft/60 to-transparent border-accent/20',
-  warn:   'bg-gradient-to-br from-warn-soft/70 to-transparent border-warn/20',
-  danger: 'bg-gradient-to-br from-danger-soft/70 to-transparent border-danger/20',
+  accent: '',
+  warn:   'border-warn/40 bg-warn-soft/10',
+  danger: 'border-danger/50 bg-danger-soft/10',
 };
 
 export const TONE_ICON: Record<NonNullable<StatTone>, string> = {
-  accent: 'text-accent',
+  accent: 'text-muted-foreground',
   warn:   'text-warn',
   danger: 'text-danger',
 };

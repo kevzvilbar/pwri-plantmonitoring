@@ -44,12 +44,6 @@ function urgencyPillCls(days: number): string {
   return 'bg-info-soft text-info border border-info/20';
 }
 
-function urgencyIconCls(days: number): string {
-  if (days < 0)  return 'text-danger';
-  if (days <= 3) return 'text-warn';
-  return 'text-info';
-}
-
 interface Props {
   plantIds: string[];
 }
@@ -187,22 +181,11 @@ export function PMDueSoonCard({ plantIds }: Props) {
             key={item.templateId}
             className="flex items-center gap-2.5 p-2 rounded-md bg-muted/30 border border-border/40"
           >
-            {/* Clock icon */}
-            <div
-              className={cn(
-                'h-7 w-7 rounded-md flex items-center justify-center shrink-0',
-                item.daysUntilDue < 0
-                  ? 'bg-danger-soft'
-                  : item.daysUntilDue <= 3
-                    ? 'bg-warn-soft'
-                    : 'bg-info-soft',
-              )}
-            >
-              <Clock
-                className={cn('h-3.5 w-3.5', urgencyIconCls(item.daysUntilDue))}
-                aria-hidden
-              />
-            </div>
+            {/* Monochromatic bare clock icon */}
+            <Clock
+              className="h-3.5 w-3.5 text-muted-foreground/80 shrink-0"
+              aria-hidden
+            />
 
             {/* Content */}
             <div className="flex-1 min-w-0">

@@ -42,7 +42,7 @@ export function CostCluster({
       />
 
       <div className="stagger-grid grid gap-2 grid-cols-2 sm:[grid-template-columns:repeat(auto-fit,minmax(150px,1fr))]">
-        <StatCard icon={Banknote} accent="text-accent" label="Total Production Cost"
+        <StatCard icon={Banknote} label="Total Production Cost"
           calc
           calcTooltip={
             costIsStale && costDataDate
@@ -52,17 +52,17 @@ export function CostCluster({
           value={productionCost == null ? '—' : `₱${fmtNum(productionCost, 0)}`}
           onClick={onMetricClick('productionCost', 'Production Cost (Power + Chemical)')} />
 
-        <StatCard icon={Zap} accent="text-chart-6" label="Power Cost"
+        <StatCard icon={Zap} label="Power Cost"
           calc
           calcTooltip="Power Cost = Power kWh × tariff rate (₱/kWh) from power_tariffs — same formula as chart"
           value={powerCost == null ? '—' : `₱${fmtNum(powerCost, 0)}`}
           onClick={onMetricClick('productionCost', 'Production Cost (Power + Chemical)')} />
 
-        <StatCard icon={FlaskConical} accent="text-highlight" label="Chemical Cost"
+        <StatCard icon={FlaskConical} label="Chemical Cost"
           value={chemCost == null ? '—' : `₱${fmtNum(chemCost, 0)}`}
           onClick={onMetricClick('productionCost', 'Production Cost (Power + Chemical)')} />
 
-        <StatCard icon={Zap} accent="text-chart-6" label="Power kWh"
+        <StatCard icon={Zap} label="Power kWh"
           value={powerIsStale || kwh > 0 ? fmtNum(kwh) : '—'}
           unit={kwh > 0 ? 'kWh' : undefined}
           trend={dKwh}
@@ -70,7 +70,6 @@ export function CostCluster({
 
         <StatCard
           icon={Zap}
-          accent="text-chart-6"
           label="PV Ratio"
           value={pv == null ? '—' : pv}
           unit="kWh/m³"

@@ -83,7 +83,9 @@ export function StatCard({
   const isCompact = size === 'compact';
   const toneBg    = tone ? TONE_BG[tone] : '';
   const calcBg    = !tone && calc ? 'border-l-2 border-l-info' : '';
-  const iconCls   = tone ? TONE_ICON[tone] : (accent ?? 'text-muted-foreground');
+  // Icons are strictly bare and monochromatic adjacent to the label, letting the raw numerical value command primary visual focus.
+  // Color is reserved strictly for semantic alarm/warning tones (warn/danger).
+  const iconCls   = (tone === 'warn' || tone === 'danger') ? TONE_ICON[tone] : 'text-muted-foreground/80';
 
   return (
     <Card
@@ -228,13 +230,13 @@ export function PerWellSourceCard({
 
   return (
     <Card
-      className="stat-card min-w-0 hover:border-primary/40 hover:shadow-sm transition-all p-3 bg-gradient-to-br from-card to-card/60"
+      className="stat-card min-w-0 hover:border-border transition-colors p-3 bg-card"
       data-testid={testId}
     >
       {/* ── Header: icon · LABEL (uppercase) · per-well badge + expand ── */}
       <div className="flex items-center justify-between gap-1 min-w-0">
         <div className="flex items-center gap-1.5 min-w-0 overflow-hidden">
-          <Icon className="shrink-0 h-3.5 w-3.5 text-muted-foreground" />
+          <Icon className="shrink-0 h-3.5 w-3.5 text-muted-foreground/80" />
           <span className="uppercase tracking-wide font-semibold truncate leading-none text-2xs text-muted-foreground">
             {label}
           </span>
@@ -295,7 +297,7 @@ export function ClusterHeader({
         className={`h-3 w-[2px] rounded-full shrink-0 ${accent ?? 'bg-primary'}`}
         style={{ background: accent?.startsWith('#') ? accent : undefined }}
       />
-      <Icon className={`h-3.5 w-3.5 ${accent ?? 'text-muted-foreground'}`} />
+      <Icon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
       <h2 className="text-xs font-semibold uppercase tracking-wider text-foreground/90">{title}</h2>
       {subtitle && <span className="text-2xs text-muted-foreground/70 font-mono">({subtitle})</span>}
     </div>

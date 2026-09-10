@@ -125,9 +125,7 @@ function KpiTab({ staff, roles, plants }: { staff: any[]; roles: any[]; plants: 
       <div className="p-3.5 rounded-xl border border-border/70 bg-card/80 backdrop-blur-sm space-y-2.5 shadow-2xs">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
           <div className="flex items-center gap-2.5">
-            <div className="h-9 w-9 rounded-xl bg-primary-soft text-primary flex items-center justify-center shrink-0">
-              <Award className="h-5 w-5" />
-            </div>
+            <Award className="h-5 w-5 text-muted-foreground shrink-0" />
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="text-xs font-bold text-foreground">Operational KPI & Appraisal Index</h3>

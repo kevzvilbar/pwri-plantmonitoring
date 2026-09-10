@@ -95,8 +95,8 @@ export function ROTrainHero({
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3.5 pt-3.5 items-start">
           {/* 1. Fleet Train Status */}
           <div className="space-y-1">
-            <div className="text-3xs uppercase tracking-wider font-semibold text-teal-200/90 flex items-center gap-1.5">
-              <Zap className="h-3 w-3 text-teal-400" />
+            <div className="text-3xs uppercase tracking-wider font-semibold text-slate-300 flex items-center gap-1.5">
+              <Zap className="h-3 w-3 text-slate-400" />
               <span>Fleet Online</span>
             </div>
             <div className="flex items-baseline gap-1.5">
@@ -121,12 +121,12 @@ export function ROTrainHero({
 
           {/* 2. Permeate Flow */}
           <div className="space-y-1">
-            <div className="text-3xs uppercase tracking-wider font-semibold text-teal-200/90 flex items-center gap-1.5">
-              <Droplets className="h-3 w-3 text-cyan-400" />
+            <div className="text-3xs uppercase tracking-wider font-semibold text-slate-300 flex items-center gap-1.5">
+              <Droplets className="h-3 w-3 text-slate-400" />
               <span>Permeate Flow</span>
             </div>
             <div className="flex items-baseline gap-1">
-              <span className="readout-num readout-glow text-2xl sm:text-3xl font-bold leading-none text-cyan-300 font-mono-num">
+              <span className="readout-num readout-glow text-2xl sm:text-3xl font-bold leading-none text-white font-mono-num">
                 {permeateFlow != null ? fmtNum(permeateFlow, 2) : '—'}
               </span>
               {permeateFlow != null && <span className="text-xs font-mono text-slate-300">m³/h</span>}
@@ -138,12 +138,12 @@ export function ROTrainHero({
 
           {/* 3. Feed Flow */}
           <div className="space-y-1">
-            <div className="text-3xs uppercase tracking-wider font-semibold text-teal-200/90 flex items-center gap-1.5">
-              <Waves className="h-3 w-3 text-sky-400" />
+            <div className="text-3xs uppercase tracking-wider font-semibold text-slate-300 flex items-center gap-1.5">
+              <Waves className="h-3 w-3 text-slate-400" />
               <span>Feed Flow</span>
             </div>
             <div className="flex items-baseline gap-1">
-              <span className="readout-num readout-glow text-2xl sm:text-3xl font-bold leading-none text-sky-300 font-mono-num">
+              <span className="readout-num readout-glow text-2xl sm:text-3xl font-bold leading-none text-white font-mono-num">
                 {feedFlow != null ? fmtNum(feedFlow, 2) : '—'}
               </span>
               {feedFlow != null && <span className="text-xs font-mono text-slate-300">m³/h</span>}
@@ -155,12 +155,12 @@ export function ROTrainHero({
 
           {/* 4. Fleet Recovery Rate (Weighted physical flow yield) */}
           <div className="space-y-1">
-            <div className="text-3xs uppercase tracking-wider font-semibold text-teal-200/90 flex items-center gap-1.5">
-              <Activity className="h-3 w-3 text-emerald-400" />
+            <div className="text-3xs uppercase tracking-wider font-semibold text-slate-300 flex items-center gap-1.5">
+              <Activity className="h-3 w-3 text-slate-400" />
               <span>Fleet Recovery</span>
             </div>
             <div className="flex items-baseline gap-1">
-              <span className="readout-num readout-glow text-2xl sm:text-3xl font-bold leading-none text-emerald-300 font-mono-num">
+              <span className="readout-num readout-glow text-2xl sm:text-3xl font-bold leading-none text-white font-mono-num">
                 {fleetRecovery != null ? `${fmtNum(fleetRecovery, 2)}%` : '—'}
               </span>
             </div>
@@ -171,8 +171,8 @@ export function ROTrainHero({
 
           {/* 5. Membrane Differential Pressure ΔP */}
           <div className="space-y-1">
-            <div className="text-3xs uppercase tracking-wider font-semibold text-teal-200/90 flex items-center gap-1.5">
-              <Gauge className="h-3 w-3 text-teal-400" />
+            <div className="text-3xs uppercase tracking-wider font-semibold text-slate-300 flex items-center gap-1.5">
+              <Gauge className="h-3 w-3 text-slate-400" />
               <span>Fleet Avg ΔP</span>
             </div>
             <div className="flex items-baseline gap-1">
@@ -193,12 +193,12 @@ export function ROTrainHero({
 
           {/* 6. Salt Rejection & Permeate TDS */}
           <div className="space-y-1">
-            <div className="text-3xs uppercase tracking-wider font-semibold text-teal-200/90 flex items-center gap-1.5">
-              <ShieldCheck className="h-3 w-3 text-indigo-400" />
+            <div className="text-3xs uppercase tracking-wider font-semibold text-slate-300 flex items-center gap-1.5">
+              <ShieldCheck className="h-3 w-3 text-slate-400" />
               <span>Salt Rejection</span>
             </div>
             <div className="flex items-baseline gap-1">
-              <span className="readout-num readout-glow text-2xl sm:text-3xl font-bold leading-none text-indigo-300 font-mono-num">
+              <span className="readout-num readout-glow text-2xl sm:text-3xl font-bold leading-none text-white font-mono-num">
                 {avgRejection != null ? `${fmtNum(avgRejection, 2)}%` : '—'}
               </span>
             </div>

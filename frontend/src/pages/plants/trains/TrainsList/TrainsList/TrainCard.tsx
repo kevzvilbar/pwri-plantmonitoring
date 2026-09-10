@@ -79,16 +79,14 @@ export function TrainCard({
       <div className="p-3.5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-card border-b border-border/60">
         <div className="min-w-0 flex-1 space-y-1">
           <div className="flex items-center gap-2 flex-wrap">
-            <div className="h-7 w-7 rounded-md bg-primary-soft text-primary flex items-center justify-center shrink-0">
-              <ROTrainIcon className="h-4 w-4" />
-            </div>
+            <ROTrainIcon className="h-4 w-4 text-muted-foreground shrink-0" />
             <h3 className="font-semibold text-sm sm:text-base text-foreground tracking-tight flex items-center gap-2">
               <span>{trainLabel}</span>
             </h3>
             <span className="inline-flex items-center text-3xs font-medium px-2 py-0.5 rounded-full bg-primary-soft text-primary border border-primary/30">{mt} Media</span>
             <span className="inline-flex items-center text-3xs font-medium px-2 py-0.5 rounded-full bg-info-soft text-info border border-info/30">{ft}</span>
           </div>
-          <div className="text-xs text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-0.5 font-mono pl-9">
+          <div className="text-xs text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-0.5 font-mono">
             <span>{numAfm} AFM</span><span>·</span><span>{numBp} Booster</span>
             <span>·</span><span>{numCf} {ft === 'Bag Filter' ? 'Filter Housing' : 'CF Housing'}</span>
             <span>·</span><span>{numHpp} HPP</span>
