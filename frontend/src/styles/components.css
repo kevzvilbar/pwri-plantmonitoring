@@ -1,0 +1,281 @@
+/* PWRI Monitoring — Component Utilities & Touch Mechanics */
+
+/* ── Component utilities ───────────────────────────────────────────────────── */
+@layer components {
+
+  /* Pulse dot — live data indicator */
+  .pulse-dot {
+    @apply relative inline-flex h-2 w-2 rounded-full bg-danger;
+  }
+  .pulse-dot::after {
+    content: '';
+    @apply absolute inset-0 rounded-full bg-danger opacity-75;
+    animation: pulse-ring 1.5s cubic-bezier(0, 0, 0.2, 1) infinite;
+  }
+
+  /* Stat card — clickable metric surface */
+  .stat-card {
+    @apply rounded-xl border bg-card p-4 transition-all duration-200
+           cursor-pointer hover:shadow-[var(--shadow-elev)] hover:-translate-y-px;
+    border-top-width: 3px;
+  }
+
+  /* KPI data-color border-top helpers (used by StatCard tone system) */
+  .stat-tone-accent  { border-top-color: hsl(var(--accent));     }
+  .stat-tone-warn    { border-top-color: hsl(var(--warn));        }
+  .stat-tone-danger  { border-top-color: hsl(var(--danger));      }
+  .stat-tone-default { border-top-color: hsl(var(--border));      }
+  .stat-tone-info    { border-top-color: hsl(var(--info));        }
+
+  /* KPI column border-top tokens for the Employees/KPI tab */
+  .kpi-wells   { border-top-color: hsl(var(--kpi-wells));   }
+  .kpi-locator { border-top-color: hsl(var(--kpi-locator)); }
+  .kpi-ro      { border-top-color: hsl(var(--kpi-ro));      }
+  .kpi-meter   { border-top-color: hsl(var(--kpi-meter));   }
+  .kpi-solar   { border-top-color: hsl(var(--kpi-solar));   }
+  .kpi-grid    { border-top-color: hsl(var(--kpi-grid));    }
+  .kpi-chem    { border-top-color: hsl(var(--kpi-chem));    }
+
+  /* Page entry — wrap page root divs for route transition */
+  .page-enter {
+    animation: page-fade-up 180ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  /* Staggered grid/list entrance — apply to each child alongside an inline
+     `style={{ '--stagger-i': index }}`. Delay is capped at 8 items so long
+     lists don't leave the last rows waiting; items beyond that all animate
+     together with item 8's delay. */
+  .stagger-fade-in {
+    animation: stagger-fade-up 180ms cubic-bezier(0.16, 1, 0.3, 1) both;
+    animation-delay: calc(min(var(--stagger-i, 0), 8) * 28ms);
+  }
+
+  /* Zero-JS variant — put this on the grid/flex *container* and its direct
+     children stagger in automatically via nth-child, no index prop needed.
+     Capped at the first 8 children; anything past that just appears with
+     the 8th's delay instead of climbing forever. */
+  .stagger-grid > * {
+    animation: stagger-fade-up 180ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  .stagger-grid > *:nth-child(1) { animation-delay: 0ms;   }
+  .stagger-grid > *:nth-child(2) { animation-delay: 28ms;  }
+  .stagger-grid > *:nth-child(3) { animation-delay: 56ms;  }
+  .stagger-grid > *:nth-child(4) { animation-delay: 84ms;  }
+  .stagger-grid > *:nth-child(5) { animation-delay: 112ms; }
+  .stagger-grid > *:nth-child(6) { animation-delay: 140ms; }
+  .stagger-grid > *:nth-child(7) { animation-delay: 168ms; }
+  .stagger-grid > *:nth-child(n+8) { animation-delay: 196ms; }
+
+  /* ── Typography helpers ────────────────────────────────────────── */
+
+  /* Section divider label inside forms / cards */
+  .section-label {
+    @apply text-3xs font-bold uppercase tracking-[0.12em]
+           text-muted-foreground/50 px-0.5;
+  }
+
+  /* Legacy alias (used in existing pages) */
+  .section-divider   { @apply section-label; }
+  .form-section-label { @apply section-label; }
+
+  /* ── Card hover glow ───────────────────────────────────────────── */
+  .card-interactive {
+    @apply transition-all duration-200
+           hover:shadow-[var(--shadow-elev)] hover:-translate-y-px
+           active:translate-y-0 active:shadow-[var(--shadow-card)];
+  }
+
+  /* ── Status dot ────────────────────────────────────────────────── */
+  .status-online  { @apply h-2 w-2 rounded-full bg-accent shrink-0; }
+  .status-offline { @apply h-2 w-2 rounded-full bg-muted-foreground/40 shrink-0; }
+  .status-warn    { @apply h-2 w-2 rounded-full bg-warn shrink-0; }
+  .status-danger  { @apply h-2 w-2 rounded-full bg-danger shrink-0; }
+
+  /* ── Data table row ────────────────────────────────────────────── */
+  .table-row-hover {
+    @apply transition-colors duration-100 hover:bg-muted/40;
+  }
+
+  /* ── Sticky save bar (mobile forms) ───────────────────────────── */
+  .sticky-save {
+    position: sticky;
+    bottom: 0;
+    background: hsl(var(--background));
+    padding: 0.75rem 0;
+    border-top: 1px solid hsl(var(--border));
+    z-index: 10;
+  }
+
+  /* ── Field group spacing ───────────────────────────────────────── */
+  .field-group { @apply space-y-1.5; }
+
+  /* ── Digital readout — LCD-style housing for meter/multiplier
+     displays (PowerMeters.tsx). Pair with a glowing `text-info`
+     digit + `style={{ textShadow: '0 0 8px currentColor' }}`. ──── */
+  .digital-readout {
+    @apply flex items-center gap-1 rounded-md border px-2 py-1;
+    background: hsl(var(--display));
+    border-color: hsl(var(--display-border));
+  }
+  .digital-readout-dim { color: hsl(var(--display-dim)); }
+}
+
+/* ── Motion & Easing Design Tokens ────────────────────────────────────────── */
+:root {
+  --ease-spring: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-out: cubic-bezier(0, 0, 0.2, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --duration-micro: 120ms;
+  --duration-fast: 200ms;
+  --duration-normal: 300ms;
+  --duration-complex: 450ms;
+}
+
+@keyframes pulse-ring {
+  0%       { transform: scale(1); opacity: 0.6; }
+  80%, 100%{ transform: scale(2.5); opacity: 0; }
+}
+
+/* NOTE: `page-fade-up` / `stagger-fade-up` were previously declared twice —
+   once here and once further down — and the later definition silently won.
+   They now live in exactly one place: see "Route & stagger entrances" below.
+   (Last @keyframes definition with a given name wins the cascade.) */
+
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position:  200% 0; }
+}
+
+/* Skeleton loading shimmer */
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    hsl(var(--muted)) 25%,
+    hsl(var(--secondary)) 50%,
+    hsl(var(--muted)) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+  border-radius: calc(var(--radius) * 0.5);
+}
+
+/* ── Interaction & Gesture Mechanics (Touch, Drag, Precision) ───────────── */
+
+/* 1. Typographic Precision: strict tabular alignment for numbers & currency */
+body, table, input[type="number"], .font-mono, .font-numeral, .tabular-nums, .kpi-value, [data-tabular="true"] {
+  font-variant-numeric: tabular-nums lining-nums;
+  font-feature-settings: "tnum" 1, "lnum" 1;
+}
+
+/* 2. Header Offsetting for smooth scroll restoration & anchor jumps */
+h1[id], h2[id], h3[id], section[id], [data-scroll-target], .scroll-mt-header {
+  scroll-margin-top: calc(3.5rem + 1rem);
+}
+
+/* 3. Touch Hit Area Extension (44px Minimum Rule) */
+.touch-target-44 {
+  position: relative;
+}
+.touch-target-44::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  min-width: 44px;
+  min-height: 44px;
+  width: 100%;
+  height: 100%;
+}
+
+/* 4. Drag & Handle UI */
+.drag-handle {
+  touch-action: none;
+  cursor: grab;
+  user-select: none;
+}
+.drag-handle:active,
+.is-dragging {
+  cursor: grabbing !important;
+  transform: scale(1.02);
+  box-shadow: 0 12px 28px -4px hsl(215 30% 10% / 0.18);
+  outline: 2px solid hsl(var(--primary) / 0.4);
+  outline-offset: 2px;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+/* ── Hover trap avoidance & Sticky Hover Resolution for touch screens ─────── */
+@media (hover: hover) and (pointer: fine) {
+  .hover-lift:hover {
+    transform: translateY(-1.5px);
+    transition: transform var(--duration-fast) var(--ease-spring), box-shadow var(--duration-fast) var(--ease-spring);
+  }
+}
+
+/* ── Touch screen overrides: eliminate hover dependencies and sticky hover ── */
+@media (hover: none) or (pointer: coarse) {
+  /* Never hide primary actions or table controls behind hover on mobile */
+  .touch-visible,
+  .group:active .group-hover\:opacity-100,
+  .group-hover\:opacity-100 {
+    opacity: 1 !important;
+    visibility: visible !important;
+  }
+
+  /* Tactile active feedback for touch instead of sticky hover */
+  button:active,
+  a[role="button"]:active,
+  .card-interactive:active {
+    transform: scale(0.98);
+    transition: transform 0.08s ease;
+  }
+}
+
+/* ── Mobile tap targets (44px Hit Target Standards) ───────────────────────── */
+@media (pointer: coarse) and (max-width: 768px) {
+  button:not([role="switch"]):not([role="checkbox"]):not([role="tab"]):not(.shrink-0),
+  [role="button"]:not([role="switch"]):not([role="checkbox"]):not([role="tab"]),
+  a.button,
+  .btn {
+    min-height: 44px;
+  }
+
+  button[role="checkbox"], [role="checkbox"] {
+    min-height: unset !important;
+    min-width: unset !important;
+  }
+
+  button[role="switch"], [role="switch"] {
+    min-height: unset !important;
+    min-width: unset !important;
+  }
+
+  button[data-size="sm"] {
+    min-height: 40px;
+    padding-left: 0.875rem;
+    padding-right: 0.875rem;
+  }
+
+  button[data-size="icon"],
+  button[data-size="icon-sm"] {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  input:not([type="checkbox"]):not([type="radio"]):not(.h-6):not(.h-7):not(.h-8),
+  select:not(.h-6):not(.h-7):not(.h-8),
+  textarea {
+    min-height: 44px;
+    font-size: 16px !important; /* prevents iOS auto-zoom */
+  }
+
+  input[type="datetime-local"],
+  input[type="date"],
+  input[type="time"] {
+    width: 100%;
+    min-width: 0 !important;
+    min-height: 44px;
+    box-sizing: border-box;
+  }
+}
+

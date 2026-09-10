@@ -1,22 +1,22 @@
-## tsc: exit=2
-TSC_ERRORS=10
+## tsc: exit=0
+TSC_ERRORS=0
 ## vite build: exit=0
-BUILD_LINE=built in 17.43s
+BUILD_LINE=built in 13.23s
 ADMIN_1030_CHUNK_PRESENT=NO
 CHUNKS_LARGER_800_WARN=NO
-DIST_TOTAL_GZ_KB=1167.4 (117 assets)
+DIST_TOTAL_GZ_KB=1166.2 (120 assets)
 TOP 8 ASSETS (gzip kB):
-    166.9  MigrationsPanel-CYst0VqU.js
-     99.7  generateCategoricalChart-OkDb5I6_.js
-     95.9  vendor-react-D4g4XNhD.js
-     86.4  Dashboard-CcbQSG64.js
-     82.9  Plants-AxltmsRW.js
-     70.4  index-CibXBanJ.js
-     68.8  Operations-u5ybhiYe.js
-     58.9  index-BBSx3gw6.js
-## vitest: exit=1
+    174.0  MigrationsPanel-BfR3yYug.js
+     99.7  generateCategoricalChart-D1g31asw.js
+     92.7  vendor-react-BbhjsEkt.js
+     85.9  Dashboard-BfYcxT3p.js
+     82.6  Plants-ByYCZUmT.js
+     65.8  Operations-D3Qt6Pr6.js
+     64.5  index-DCwgAbcm.js
+     57.8  index-rZO6NBAh.js
+## vitest: exit=0
 TESTS_PASS=
 ## eslint: exit=0
-LINT_WARNINGS=32 warning
-## check-bundle-size: exit=1
-BSC_OUT=Bundle: 1167.4 kB gzipped across 117 JS/CSS asset(s). |     166.9 kB (raw 960)  MigrationsPanel-CYst0VqU.js |      99.7 kB (raw 359)  generateCategoricalChart-OkDb5I6_.js |      95.9 kB (raw 301)  vendor-react-D4g4XNhD.js |      86.4 kB (raw 346)  Dashboard-CcbQSG64.js |      82.9 kB (raw 363)  Plants-AxltmsRW.js |      70.4 kB (raw 303)  index-CibXBanJ.js |      68.8 kB (raw 272)  Operations-u5ybhiYe.js |      58.9 kB (raw 200)  index-BBSx3gw6.js |   … 109 more | Bundle grew: baseline is 1131.2 kB gzipped, actual is 1167.4 kB (+36.2 kB). | If the growth is intended (a real feature, not an accidental dependency import), re-baseline with | `node scripts/check-bundle-size.mjs --update` and commit bundle-size.json with a reason. | 
+LINT_WARNINGS=33 warning
+## check-bundle-size: exit=0
+BSC_OUT=Bundle: 1166.2 kB gzipped across 120 JS/CSS asset(s). |     174.0 kB (raw 1020)  MigrationsPanel-BfR3yYug.js |      99.7 kB (raw 359)  generateCategoricalChart-D1g31asw.js |      92.7 kB (raw 291)  vendor-react-BbhjsEkt.js |      85.9 kB (raw 344)  Dashboard-BfYcxT3p.js |      82.6 kB (raw 362)  Plants-ByYCZUmT.js |      65.8 kB (raw 263)  Operations-D3Qt6Pr6.js |      64.5 kB (raw 278)  index-DCwgAbcm.js |      57.8 kB (raw 195)  index-rZO6NBAh.js |   … 112 more | Matches committed baseline (1166.2 kB ±2). OK. | 

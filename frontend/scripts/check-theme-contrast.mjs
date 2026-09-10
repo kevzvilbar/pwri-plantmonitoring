@@ -30,14 +30,15 @@
  * this actually gates the thing it's checking, not just reports on it.
  */
 
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const srcRoot = path.resolve(__dirname, '..', 'src');
 const cssPath = path.join(srcRoot, 'index.css');
-const css = readFileSync(cssPath, 'utf8');
+const themesCssPath = path.join(srcRoot, 'styles', 'themes.css');
+const css = (existsSync(themesCssPath) ? readFileSync(themesCssPath, 'utf8') + '\n' : '') + readFileSync(cssPath, 'utf8');
 
 function hslToRgb(h, s, l) {
   s /= 100; l /= 100;

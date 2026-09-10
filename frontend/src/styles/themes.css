@@ -1,0 +1,1053 @@
+/* PWRI Monitoring — Themes & Design System Tokens */
+
+@layer base {
+  :root {
+    /* ── Surfaces ──────────────────────────────────────────────── */
+    --background:         210 40% 97%;
+    --foreground:         215 45% 11%;
+    --card:               0 0% 100%;
+    --card-foreground:    215 45% 11%;
+    --popover:            0 0% 100%;
+    --popover-foreground: 215 45% 11%;
+
+    /* ── Brand teal (buttons, rings, links) ─────────────────────── */
+    --primary:            175 84% 31%;
+    --primary-foreground: 0 0% 100%;
+    --primary-soft:       175 60% 93%;
+    --primary-glow:       175 70% 42%;
+
+    /* ── Secondary / muted ─────────────────────────────────────── */
+    --secondary:           210 30% 94%;
+    --secondary-foreground:215 55% 18%;
+    --muted:               210 25% 95%;
+    --muted-foreground:    215 12% 44%;
+
+    /* ── Semantic: Emerald (success / good readings) ────────────── */
+    --accent:              158 64% 40%;
+    --accent-foreground:   0 0% 100%;
+    --accent-soft:         158 50% 92%;
+
+    /* ── Semantic: Cyan (active highlights) ─────────────────────── */
+    --highlight:           189 96% 43%;
+    --highlight-foreground:0 0% 100%;
+    --highlight-soft:      189 80% 92%;
+
+    /* ── Semantic: Amber (warnings) ─────────────────────────────── */
+    --warn:                38 92% 50%;
+    --warn-foreground:     38 90% 16%;
+    --warn-soft:           38 85% 93%;
+
+    /* ── Semantic: Rose (danger / errors) ───────────────────────── */
+    --danger:              351 64% 47%;
+    --danger-foreground:   0 0% 100%;
+    --danger-soft:         351 60% 95%;
+    --destructive:         351 64% 47%;
+    --destructive-foreground: 0 0% 100%;
+
+    /* ── Semantic: Sky (informational) ─────────────────────────── */
+    --info:                199 89% 48%;
+    --info-soft:           199 80% 93%;
+
+    /* ── Semantic: Elevated / Special / Privileged ──────────────── */
+    --elevated:            258 90% 66%;
+    --elevated-foreground: 0 0% 100%;
+    --elevated-soft:       258 85% 94%;
+
+    /* ── Chrome ─────────────────────────────────────────────────── */
+    --border:              215 20% 88%;
+    --input:               215 20% 86%;
+    --ring:                175 84% 31%;
+    --radius:              0.75rem;
+
+    /* ── Topbar (deep navy) ──────────────────────────────────────── */
+    --topbar:              210 62% 11%;
+    --topbar-foreground:   210 40% 97%;
+    --topbar-muted:        210 25% 62%;
+
+    /* ── Hero / stat card gradients ─────────────────────────────── */
+    --gradient-stat:      linear-gradient(135deg, hsl(210 62% 13%) 0%, hsl(175 70% 22%) 100%);
+    --gradient-accent:    linear-gradient(135deg, hsl(175 84% 28%) 0%, hsl(189 96% 36%) 100%);
+    --gradient-highlight: linear-gradient(135deg, hsl(189 96% 36%) 0%, hsl(175 84% 28%) 100%);
+
+    /* ── Sidebar (deep navy, same as topbar for seamless chrome) ─── */
+    --sidebar-background:  210 62% 11%;
+    --sidebar-foreground:  210 40% 97%;
+    --sidebar-primary:     189 96% 43%;         /* Cyan active */
+    --sidebar-primary-foreground: 210 62% 11%;
+    --sidebar-accent:      210 50% 16%;         /* Hover bg */
+    --sidebar-accent-foreground:  210 40% 97%;
+    --sidebar-border:      210 40% 18%;
+    --sidebar-ring:        189 96% 43%;
+
+    /* ── KPI / Data palette ──────────────────────────────────────── */
+    --kpi-wells:    199 98% 48%;    /* #0ea5e9 Sky        — Wells / Production  */
+    --kpi-locator:  177 64% 40%;    /* #14b8a6 Teal-400   — Locator / Consumption */
+    --kpi-ro:       258 90% 66%;    /* #8b5cf6 Violet     — RO Train / Raw Water */
+    --kpi-meter:    38  92% 50%;    /* #f59e0b Amber      — Product Meter / Blending */
+    --kpi-solar:    22  96% 52%;    /* #f97316 Orange     — Solar / Alert */
+    --kpi-grid:     215 16% 47%;    /* #64748b Slate      — Grid / Neutral */
+    --kpi-chem:     158 64% 40%;    /* #10b981 Emerald    — Chemicals / NRW */
+
+    /* ── Charts (aligned with KPI palette) ──────────────────────── */
+    --chart-1: 199 98% 48%;    /* Sky       — production volume */
+    --chart-2: 22  96% 52%;    /* Orange    — consumption */
+    --chart-3: 158 64% 40%;    /* Emerald   — NRW / recovery */
+    --chart-4: 258 90% 66%;    /* Violet    — RO / raw water */
+    --chart-5: 351 64% 47%;    /* Rose      — alerts */
+    --chart-6: 38  92% 50%;    /* Amber     — meter / cost */
+
+    /* ── Plant Topology node colors ────────────────────────────────
+       Per-node-kind bg/border/text/lane for PlantTopology.tsx's SVG
+       flow diagram. Same hue drives all four per kind, and the .dark
+       overrides below just remap lightness/saturation on that hue —
+       PlantTopology.tsx itself never needs to know which mode is on. */
+    --topo-well-bg:            204 94% 94%;
+    --topo-well-border:        200 98% 39%;
+    --topo-well-text:          202 80% 24%;
+    --topo-well-lane:          204 100% 97%;
+
+    --topo-rawMeter-bg:        226 100% 94%;
+    --topo-rawMeter-border:    245 58% 51%;
+    --topo-rawMeter-text:      244 47% 20%;
+    --topo-rawMeter-lane:      226 100% 97%;
+
+    --topo-pretreat-bg:        141 84% 93%;
+    --topo-pretreat-border:    142 76% 36%;
+    --topo-pretreat-text:      144 61% 20%;
+    --topo-pretreat-lane:      138 76% 97%;
+
+    --topo-feedMeter-bg:       167 85% 89%;
+    --topo-feedMeter-border:   175 84% 32%;
+    --topo-feedMeter-text:     176 61% 19%;
+    --topo-feedMeter-lane:     166 76% 97%;
+
+    --topo-roTrain-bg:         269 100% 95%;
+    --topo-roTrain-border:     262 83% 58%;
+    --topo-roTrain-text:       264 67% 35%;
+    --topo-roTrain-lane:       270 100% 98%;
+
+    --topo-permeate-bg:        185 96% 90%;
+    --topo-permeate-border:    192 91% 36%;
+    --topo-permeate-text:      196 64% 24%;
+    --topo-permeate-lane:      183 100% 96%;
+
+    --topo-reject-bg:          0 93% 94%;
+    --topo-reject-border:      0 72% 51%;
+    --topo-reject-text:        0 63% 31%;
+    --topo-reject-lane:        0 86% 97%;
+
+    --topo-bulk-bg:            33 100% 96%;
+    --topo-bulk-border:        21 90% 48%;
+    --topo-bulk-text:          15 75% 28%;
+    --topo-bulk-lane:          33 100% 96%;
+
+    --topo-locator-bg:         210 40% 96%;
+    --topo-locator-border:     215 19% 35%;
+    --topo-locator-text:       217 33% 17%;
+    --topo-locator-lane:       210 40% 98%;
+
+    --topo-solarSource-bg:     55 92% 95%;
+    --topo-solarSource-border: 41 96% 40%;
+    --topo-solarSource-text:   28 73% 26%;
+    --topo-solarSource-lane:   55 92% 95%;
+
+    --topo-gridSource-bg:      226 100% 97%;
+    --topo-gridSource-border:  245 58% 51%;
+    --topo-gridSource-text:    244 47% 20%;
+    --topo-gridSource-lane:    226 100% 97%;
+
+    --topo-solarMeter-bg:      55 97% 88%;
+    --topo-solarMeter-border:  35 92% 33%;
+    --topo-solarMeter-text:    28 73% 26%;
+    --topo-solarMeter-lane:    55 97% 88%;
+
+    --topo-gridMeter-bg:       226 100% 94%;
+    --topo-gridMeter-border:   243 75% 59%;
+    --topo-gridMeter-text:     244 47% 20%;
+    --topo-gridMeter-lane:     226 100% 94%;
+
+    --topo-customNode-bg:      210 40% 96%;
+    --topo-customNode-border:  215 16% 47%;
+    --topo-customNode-text:    215 25% 27%;
+    --topo-customNode-lane:    210 40% 98%;
+    --topo-customNode-accent:  215 19% 35%;   /* only kind where accent ≠ border */
+
+    /* ── Digital readout (LCD-style meter display) ─────────────────
+       Deliberately dark regardless of light/dark theme — mimics a
+       physical meter's glowing digital counter, so it must NOT ride
+       the normal surface tokens (bg-card etc. follow the theme).
+       Used by PowerMeters.tsx's multiplier readout; the glowing
+       digit itself stays on the semantic `info` token. */
+    --display:        215 45% 10%;
+    --display-border: 215 25% 28%;
+    --display-dim:    215 15% 55%;
+
+    /* ── CIP chemical identity accents ──────────────────────────────
+       Distinguishes chemical cards on the CIP log (Caustic Soda / HCl
+       / SLS / custom) so a tech can tell them apart at a glance —
+       the same "identity color" role topo-* plays for the plant-flow
+       diagram. Deliberately its own set, not reused from warn/danger:
+       an HCl card isn't an alert, it's just HCl. */
+    --chem-caustic: 174 62% 42%;
+    --chem-hcl:      32 90% 50%;
+    --chem-sls:      48 92% 50%;
+    --chem-custom:  271 70% 60%;
+
+    /* Filter-cost/usage chart categories (FilterCostChart / FilterUsageChart) */
+    --filter-cartridge: 239 84% 67%;
+    --filter-bag:        38 92% 50%;
+
+    /* BlendingVolumeCard.tsx "Total" bar/gradient fill */
+    --blend-total: 255 92% 76%;
+
+    /* Employees.tsx daily-compliance status legend (KPI_STATUS) — a
+       6-point completion gradient, distinct from the 4-state
+       accent/warn/danger/info alert system so it gets its own set. */
+    --reading-status-complete: 142 71% 45%;
+    --reading-status-partial:   45 93% 47%;
+    --reading-status-minimal:   25 95% 53%;
+    --reading-status-missed:     0 84% 60%;
+    --reading-status-pending:  198 93% 60%;
+    --reading-status-na:       220 13% 91%;
+
+    /* User role identity accents (UsersPanel avatar badges) ─────
+       One hue per higher-privilege role. Operator / "No role" fall
+       back to the neutral muted token instead of getting their own
+       hue — matches the original design's own choice to leave the
+       most common, lowest-privilege role visually undistinguished. */
+    --role-admin:      246 60% 58%;
+    --role-analyst:    198 75% 42%;
+    --role-manager:    163 65% 38%;
+    --role-technician:  35 88% 48%;
+
+    /* Per-plant identity accents (teal-cyan family, plants/index.tsx) ─
+       Each plant gets a unique color driving its left accent strip,
+       capacity tint, and health ring — all from one token. Named plants
+       map onto the first 4; anything else round-robins the full 6. */
+    --plant-1: 199 89% 48%;
+    --plant-2: 175 84% 32%;
+    --plant-3: 189 94% 43%;
+    --plant-4: 175 77% 26%;
+    --plant-5: 192 91% 36%;
+    --plant-6: 193 82% 31%;
+
+    /* Dashboard trend-metric identity — the same metric (production,
+       consumption, NRW, etc.) always renders in the same color on
+       both the Dashboard trend chart and the per-entity history
+       chart. Both import from lib/chartColors.ts, which points here,
+       instead of each hardcoding its own copy. */
+    --metric-production:  142 71% 45%;
+    --metric-consumption: 217 91% 60%;
+    --metric-nrw:          45 93% 47%;
+    --metric-rawwater:    189 94% 43%;
+    --metric-recovery:     27 96% 61%;
+    --metric-tds:         255 92% 76%;
+    --metric-gridpv:       38 92% 50%;
+    /* % of a blending well's raw output that was diverted into blending —
+       EntityHistoryChart.tsx's per-well composed chart. Distinct hue from
+       --metric-nrw so the two ratio lines can't be mistaken for each other
+       if a reader has both charts open side by side. */
+    --metric-blendpct:    330 81% 60%;
+
+    /* Employees.tsx org-tree connector lines — PLANT_COLUMN_ACCENTS.line
+       and CONNECTOR_COLORS used to be two separately-hardcoded copies of
+       this exact 6-color set; now both read from here so they can't
+       drift apart. Indexed by tree depth, so distinct shades matter more
+       than semantic naming here. */
+    --org-line-1: 199 89% 48%;
+    --org-line-2: 173 80% 40%;
+    --org-line-3: 189 94% 43%;
+    --org-line-4: 201 96% 32%;
+    --org-line-5: 175 77% 26%;
+    --org-line-6: 193 82% 31%;
+
+    /* Drill-down palette extension (7–12) — cycles when more than 6
+       locators/plants are shown at once (per-locator lines, plus
+       ComplianceRadarCard polygons and CostSunburst arcs share this
+       exact array). The original hardcoded tail nearly duplicated
+       chart-4 and chart-6, which defeats the point of extending past
+       6 colors — these fill the gaps in the wheel instead. */
+    --chart-7:  118 55% 38%;   /* Green   */
+    --chart-8:  228 70% 60%;   /* Indigo  */
+    --chart-9:  330 81% 60%;   /* Pink    */
+    --chart-10: 173 80% 40%;   /* Teal    */
+    --chart-11: 300 60% 50%;   /* Magenta */
+    --chart-12: 84  81% 44%;   /* Lime    */
+
+    /* ── Elevation shadows ──────────────────────────────────────── */
+    --shadow-card:  0 1px 2px 0 hsl(215 50% 11% / 0.04),
+                    0 1px 3px 0 hsl(215 50% 11% / 0.06);
+    --shadow-elev:  0 4px 16px -4px hsl(215 50% 11% / 0.10),
+                    0 2px 6px -1px hsl(215 50% 11% / 0.05);
+    --shadow-modal: 0 24px 48px -12px hsl(215 60% 8% / 0.28);
+
+    --transition-base: 200ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  /* ── Dark mode (Cockpit / Instrument Panel) ────────────────────── */
+  .dark {
+    --background:          210 33% 4.1%;  /* #070B0E Anthracite Canvas */
+    --foreground:          203 20% 92%;   /* #E7ECEF Panel White */
+    --card:                210 33% 9.4%;  /* #101820 Instrument Housing */
+    --card-foreground:     203 20% 92%;
+    --popover:             210 32% 11.6%; /* #141E27 Elevated Housing */
+    --popover-foreground:  203 20% 92%;
+    --primary:             175 84% 31.6%; /* #0D9488 Treated Water Teal */
+    --primary-foreground:  0 0% 100%;
+    --primary-soft:        175 50% 14%;
+    --secondary:           210 30% 13%;
+    --secondary-foreground:203 20% 92%;
+    --muted:               210 28% 12%;
+    --muted-foreground:    211 13% 57%;   /* #8592A0 Gauge Grey */
+    --accent:              158 64% 51.8%; /* #34D399 Run Lamp Emerald */
+    --accent-foreground:   210 33% 4%;
+    --accent-soft:         158 40% 14%;
+    --highlight:           189 94% 53.3%; /* #22D3EE Signal Cyan */
+    --highlight-foreground:210 33% 4%;
+    --highlight-soft:      189 50% 14%;
+    --warn:                43 96% 56.3%;  /* #FBBF24 Caution Lamp Amber */
+    --warn-foreground:     43 90% 10%;
+    --warn-soft:           43 50% 14%;
+    --danger:              349 89% 60.2%; /* #F43F5E Alarm Lamp Rose */
+    --danger-foreground:   0 0% 100%;
+    --danger-soft:         349 50% 14%;
+    --destructive:         349 89% 60.2%;
+    --destructive-foreground: 0 0% 100%;
+    --info:                199 95% 60%;   /* #38BDF8 Sky */
+    --info-soft:           199 50% 14%;
+    --elevated:            258 90% 66%;   /* Violet — elevated/privileged access */
+    --elevated-foreground: 0 0% 100%;
+    --elevated-soft:       258 45% 18%;
+    --border:              210 20% 15%;   /* Hairline rgba(255,255,255,0.07) */
+    --input:               210 20% 18%;
+    --ring:                189 94% 53.3%; /* Signal Cyan */
+    --topbar:              210 33% 5.5%;
+    --topbar-foreground:   203 20% 92%;
+    --topbar-muted:        211 13% 57%;
+    --sidebar-background:  210 33% 6.5%;
+    --sidebar-foreground:  203 20% 92%;
+    --sidebar-border:      210 20% 13%;
+    --sidebar-accent:      210 30% 11%;
+    --sidebar-accent-foreground: 203 20% 92%;
+    --sidebar-primary:     189 94% 53.3%;
+    --sidebar-ring:        189 94% 53.3%;
+
+    /* Ambient downward shadows tinted to canvas hue */
+    --shadow-card:  0 4px 16px -2px hsl(210 60% 2% / 0.55), 0 2px 6px -1px hsl(210 60% 2% / 0.45);
+    --shadow-elev:  0 10px 24px -4px hsl(210 60% 2% / 0.65), 0 4px 10px -2px hsl(210 60% 2% / 0.45);
+    --shadow-modal: 0 20px 48px -8px hsl(210 60% 2% / 0.85);
+
+    /* Digital readout — glowing physical meter counter */
+    --display:        210 40% 6%;
+    --display-border: 210 25% 20%;
+    --display-dim:    211 13% 45%;
+
+    /* CIP chemical identity accents (dark) — desaturated for readability */
+    --chem-caustic: 174 50% 52%;
+    --chem-hcl:      32 85% 58%;
+    --chem-sls:      48 80% 58%;
+    --chem-custom:  271 65% 68%;
+
+    /* Role identity accents (dark) */
+    --role-admin:      246 55% 68%;
+    --role-analyst:    198 65% 55%;
+    --role-manager:    163 55% 50%;
+    --role-technician:  35 80% 58%;
+
+    /* Per-plant identity accents (dark) */
+    --plant-1: 199 75% 58%;
+    --plant-2: 175 70% 42%;
+    --plant-3: 189 80% 52%;
+    --plant-4: 175 65% 38%;
+    --plant-5: 192 75% 46%;
+    --plant-6: 193 68% 42%;
+
+    /* Employees.tsx daily-compliance status legend (dark) — na flips
+       from a near-white chip to a near-black one, everything else
+       just brightens slightly for a dark background. */
+    --reading-status-complete: 142 60% 55%;
+    --reading-status-partial:   45 85% 58%;
+    --reading-status-minimal:   25 85% 62%;
+    --reading-status-missed:     0 75% 65%;
+    --reading-status-pending:  198 85% 65%;
+    --reading-status-na:       220 13% 22%;
+
+    /* Employees.tsx org-tree connector lines (dark) */
+    --org-line-1: 201 75% 55%;
+    --org-line-2: 173 65% 48%;
+    --org-line-3: 189 75% 52%;
+    --org-line-4: 201 80% 42%;
+    --org-line-5: 175 60% 38%;
+    --org-line-6: 193 65% 42%;
+
+    /* ── Hero / stat card gradients (dark) ───────────────────────── */
+    --gradient-stat:      linear-gradient(135deg, hsl(210 55% 10%) 0%, hsl(175 60% 18%) 100%);
+    --gradient-accent:    linear-gradient(135deg, hsl(175 65% 32%) 0%, hsl(189 70% 38%) 100%);
+    --gradient-highlight: linear-gradient(135deg, hsl(189 70% 38%) 0%, hsl(175 65% 32%) 100%);
+    /* KPI palette in dark mode — slightly desaturated for readability */
+    --kpi-wells:    199 85% 55%;
+    --kpi-locator:  177 55% 48%;
+    --kpi-ro:       258 80% 72%;
+    --kpi-meter:    38  85% 58%;
+    --kpi-solar:    22  88% 60%;
+    --kpi-grid:     215 12% 55%;
+    --kpi-chem:     158 55% 48%;
+
+    /* Plant Topology node colors (dark) — same hue per kind as the
+       light values above, remapped to a dark tinted card + brighter
+       border + light tinted text so the flow diagram isn't the one
+       screen still stuck in light mode. Border/accent lightness is
+       capped at 58% (not just "whatever reads well on the dark bg")
+       because a few of these also sit under white badge text
+       (COLORS[type].accent used as a solid fill) — much past 58%
+       and white-on-fill contrast starts failing. */
+    --topo-well-bg:            200 45% 18%;
+    --topo-well-border:        200 88% 53%;
+    --topo-well-text:          200 35% 88%;
+    --topo-well-lane:          200 40% 12%;
+
+    --topo-rawMeter-bg:        245 43% 18%;
+    --topo-rawMeter-border:    245 48% 58%;
+    --topo-rawMeter-text:      245 28% 88%;
+    --topo-rawMeter-lane:      245 38% 12%;
+
+    --topo-pretreat-bg:        142 45% 18%;
+    --topo-pretreat-border:    142 66% 50%;
+    --topo-pretreat-text:      142 35% 88%;
+    --topo-pretreat-lane:      142 40% 12%;
+
+    --topo-feedMeter-bg:       175 45% 18%;
+    --topo-feedMeter-border:   175 74% 46%;
+    --topo-feedMeter-text:     175 35% 88%;
+    --topo-feedMeter-lane:     175 40% 12%;
+
+    --topo-roTrain-bg:         262 45% 18%;
+    --topo-roTrain-border:     262 73% 58%;
+    --topo-roTrain-text:       262 35% 88%;
+    --topo-roTrain-lane:       262 40% 12%;
+
+    --topo-permeate-bg:        192 45% 18%;
+    --topo-permeate-border:    192 81% 50%;
+    --topo-permeate-text:      192 35% 88%;
+    --topo-permeate-lane:      192 40% 12%;
+
+    --topo-reject-bg:          0 45% 18%;
+    --topo-reject-border:      0 62% 58%;
+    --topo-reject-text:        0 35% 88%;
+    --topo-reject-lane:        0 40% 12%;
+
+    --topo-bulk-bg:            21 45% 18%;
+    --topo-bulk-border:        21 80% 58%;
+    --topo-bulk-text:          21 35% 88%;
+    --topo-bulk-lane:          21 40% 12%;
+
+    --topo-locator-bg:         215 30% 18%;
+    --topo-locator-border:     215 45% 49%;
+    --topo-locator-text:       215 20% 88%;
+    --topo-locator-lane:       215 25% 12%;
+
+    --topo-solarSource-bg:     41 45% 18%;
+    --topo-solarSource-border: 41 86% 54%;
+    --topo-solarSource-text:   41 35% 88%;
+    --topo-solarSource-lane:   41 40% 12%;
+
+    --topo-gridSource-bg:      245 43% 18%;
+    --topo-gridSource-border:  245 48% 58%;
+    --topo-gridSource-text:    245 28% 88%;
+    --topo-gridSource-lane:    245 38% 12%;
+
+    --topo-solarMeter-bg:      35 45% 18%;
+    --topo-solarMeter-border:  35 82% 47%;
+    --topo-solarMeter-text:    35 35% 88%;
+    --topo-solarMeter-lane:    35 40% 12%;
+
+    --topo-gridMeter-bg:       243 45% 18%;
+    --topo-gridMeter-border:   243 65% 58%;
+    --topo-gridMeter-text:     243 35% 88%;
+    --topo-gridMeter-lane:     243 40% 12%;
+
+    --topo-customNode-bg:      215 30% 18%;
+    --topo-customNode-border:  215 45% 58%;
+    --topo-customNode-text:    215 20% 88%;
+    --topo-customNode-lane:    215 25% 12%;
+    --topo-customNode-accent:  215 45% 49%;
+  }
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   COLOR THEMES  —  applied via  data-theme="<id>"  on <html>
+   Each block overrides only the chrome tokens (topbar, sidebar, primary, ring,
+   gradients).  Semantic tokens (warn, danger, info, kpi-*) are intentionally
+   left at their defaults so alerts and chart data remain legible across themes.
+   ════════════════════════════════════════════════════════════════════════════ */
+
+/* ── Theme: Aerial Autumn  (#07202E · #008B7B · #D59D3A) ──────────────────── */
+[data-theme="aerial-autumn"] {
+  --primary:            174 100% 27%;   /* #008B7B teal */
+  --primary-foreground: 0 0% 100%;
+  --primary-soft:       174 60% 91%;
+  --primary-glow:       174 80% 38%;
+  --ring:               174 100% 27%;
+
+  --topbar:             206  77% 11%;   /* #07202E deep teal-navy */
+  --topbar-foreground:  174  30% 92%;
+  --topbar-muted:       174  15% 62%;
+
+  --sidebar-background: 206  77% 11%;
+  --sidebar-foreground: 174  30% 92%;
+  --sidebar-primary:    38   63% 52%;   /* #D59D3A amber active */
+  --sidebar-primary-foreground: 206 77% 11%;
+  --sidebar-accent:     206  60% 16%;
+  --sidebar-accent-foreground:  174  30% 92%;
+  --sidebar-border:     206  50% 18%;
+  --sidebar-ring:       38   63% 52%;
+
+  --gradient-stat:      linear-gradient(135deg, hsl(206 77% 13%) 0%, hsl(174 80% 20%) 100%);
+  --gradient-accent:    linear-gradient(135deg, hsl(174 100% 24%) 0%, hsl(38 63% 48%) 100%);
+  --gradient-highlight: linear-gradient(135deg, hsl(38 63% 48%) 0%, hsl(174 100% 24%) 100%);
+}
+
+/* ── Theme: Fire & Ocean  (#010313 · #326DA3 · #EF7D02) ───────────────────── */
+[data-theme="fire-ocean"] {
+  --primary:            210  52% 41%;   /* #326DA3 steel blue */
+  --primary-foreground: 0 0% 100%;
+  --primary-soft:       210  52% 92%;
+  --primary-glow:       210  60% 52%;
+  --ring:               210  52% 41%;
+
+  --topbar:             237  96%  5%;   /* #010313 near-black navy */
+  --topbar-foreground:  210  40% 94%;
+  --topbar-muted:       210  20% 58%;
+
+  --sidebar-background: 237  96%  5%;
+  --sidebar-foreground: 210  40% 94%;
+  --sidebar-primary:    30   98% 47%;   /* #EF7D02 vivid orange */
+  --sidebar-primary-foreground: 237 96% 5%;
+  --sidebar-accent:     225  60% 12%;
+  --sidebar-accent-foreground:  210  40% 94%;
+  --sidebar-border:     225  50% 15%;
+  --sidebar-ring:       30   98% 47%;
+
+  --gradient-stat:      linear-gradient(135deg, hsl(237 96% 7%) 0%, hsl(210 52% 25%) 100%);
+  --gradient-accent:    linear-gradient(135deg, hsl(210 52% 35%) 0%, hsl(30 98% 44%) 100%);
+  --gradient-highlight: linear-gradient(135deg, hsl(30 98% 44%) 0%, hsl(210 52% 35%) 100%);
+}
+
+/* ── Theme: Earth & Jade  (#020B0C · #0D382C · #DA9626) ───────────────────── */
+[data-theme="earth-jade"] {
+  --primary:            160  55% 14%;   /* #0D382C forest green */
+  --primary-foreground: 0 0% 100%;
+  --primary-soft:       100  30% 91%;
+  --primary-glow:       160  50% 25%;
+  --ring:               160  55% 20%;
+
+  --topbar:             188  90%  4%;   /* #020B0C near-black forest */
+  --topbar-foreground:  100  20% 90%;
+  --topbar-muted:       120  10% 55%;
+
+  --sidebar-background: 188  90%  4%;
+  --sidebar-foreground: 100  20% 90%;
+  --sidebar-primary:    38   78% 50%;   /* #DA9626 golden amber */
+  --sidebar-primary-foreground: 188 90% 4%;
+  --sidebar-accent:     160  50%  9%;
+  --sidebar-accent-foreground:  100  20% 90%;
+  --sidebar-border:     160  40% 12%;
+  --sidebar-ring:       38   78% 50%;
+
+  --gradient-stat:      linear-gradient(135deg, hsl(188 90% 5%) 0%, hsl(160 55% 16%) 100%);
+  --gradient-accent:    linear-gradient(135deg, hsl(160 55% 18%) 0%, hsl(38 78% 46%) 100%);
+  --gradient-highlight: linear-gradient(135deg, hsl(38 78% 46%) 0%, hsl(160 55% 18%) 100%);
+}
+
+/* ── Theme: Inferno Sky  (#120E0E · #4571A4 · #FE960D) ────────────────────── */
+[data-theme="inferno-sky"] {
+  --primary:            213  38% 47%;   /* #4571A4 steel blue */
+  --primary-foreground: 0 0% 100%;
+  --primary-soft:       213  38% 92%;
+  --primary-glow:       213  45% 58%;
+  --ring:               213  38% 47%;
+
+  --topbar:             10   14%  7%;   /* #120E0E near-black charred */
+  --topbar-foreground:  30   25% 90%;
+  --topbar-muted:       30   10% 55%;
+
+  --sidebar-background: 10   14%  7%;
+  --sidebar-foreground: 30   25% 90%;
+  --sidebar-primary:    35   99% 53%;   /* #FE960D vivid amber */
+  --sidebar-primary-foreground: 10 14% 7%;
+  --sidebar-accent:     20   30% 13%;
+  --sidebar-accent-foreground:  30  25% 90%;
+  --sidebar-border:     20   20% 16%;
+  --sidebar-ring:       35   99% 53%;
+
+  --gradient-stat:      linear-gradient(135deg, hsl(10 14% 9%) 0%, hsl(213 38% 28%) 100%);
+  --gradient-accent:    linear-gradient(135deg, hsl(213 38% 40%) 0%, hsl(35 99% 50%) 100%);
+  --gradient-highlight: linear-gradient(135deg, hsl(35 99% 50%) 0%, hsl(213 38% 40%) 100%);
+}
+
+/* ── Theme: Midnight Road  (#030816 · #0A97BE · #0BC9F8) ──────────────────── */
+[data-theme="midnight-road"] {
+  --primary:            194  82% 39%;   /* #0A97BE deep cyan */
+  --primary-foreground: 0 0% 100%;
+  --primary-soft:       194  70% 91%;
+  --primary-glow:       191  95% 52%;
+  --ring:               194  82% 39%;
+
+  --topbar:             226  93%  6%;   /* #030816 near-black midnight */
+  --topbar-foreground:  194  30% 92%;
+  --topbar-muted:       194  15% 58%;
+
+  --sidebar-background: 226  93%  6%;
+  --sidebar-foreground: 194  30% 92%;
+  --sidebar-primary:    191  95% 64%;   /* #0BC9F8 bright cyan */
+  --sidebar-primary-foreground: 226 93% 6%;
+  --sidebar-accent:     215  60% 12%;
+  --sidebar-accent-foreground:  194  30% 92%;
+  --sidebar-border:     215  50% 15%;
+  --sidebar-ring:       191  95% 64%;
+
+  --gradient-stat:      linear-gradient(135deg, hsl(226 93% 7%) 0%, hsl(194 82% 20%) 100%);
+  --gradient-accent:    linear-gradient(135deg, hsl(194 82% 32%) 0%, hsl(191 95% 50%) 100%);
+  --gradient-highlight: linear-gradient(135deg, hsl(191 95% 50%) 0%, hsl(194 82% 32%) 100%);
+}
+
+/* ── Theme: Cosmic Spark  (#0A3383 · #047CDF · #9344F4) ───────────────────── */
+[data-theme="cosmic-spark"] {
+  --primary:            210  96% 45%;   /* #047CDF vivid blue */
+  --primary-foreground: 0 0% 100%;
+  --primary-soft:       210  70% 92%;
+  --primary-glow:       210  90% 56%;
+  --ring:               210  96% 45%;
+
+  --topbar:             224  80% 27%;   /* #0A3383 cobalt navy */
+  --topbar-foreground:  220  30% 95%;
+  --topbar-muted:       220  15% 65%;
+
+  --sidebar-background: 224  80% 27%;
+  --sidebar-foreground: 220  30% 95%;
+  --sidebar-primary:    273  89% 60%;   /* #9344F4 vivid purple */
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent:     224  60% 32%;
+  --sidebar-accent-foreground:  220  30% 95%;
+  --sidebar-border:     224  50% 34%;
+  --sidebar-ring:       273  89% 60%;
+
+  --gradient-stat:      linear-gradient(135deg, hsl(224 80% 22%) 0%, hsl(210 96% 35%) 100%);
+  --gradient-accent:    linear-gradient(135deg, hsl(210 96% 38%) 0%, hsl(273 89% 55%) 100%);
+  --gradient-highlight: linear-gradient(135deg, hsl(273 89% 55%) 0%, hsl(210 96% 38%) 100%);
+}
+
+/* ── Theme: Titanium & Gold  (#0B0F19 · #334155 · #F59E0B) ─────────────────── */
+[data-theme="titanium-gold"] {
+  --primary:            215  25% 27%;   /* #334155 slate */
+  --primary-foreground: 0 0% 100%;
+  --primary-soft:       215  20% 92%;
+  --primary-glow:       38   92% 50%;
+  --ring:               38   92% 50%;
+
+  --topbar:             222  47%  8%;   /* #0B0F19 matte graphite */
+  --topbar-foreground:  210  20% 95%;
+  --topbar-muted:       215  15% 60%;
+
+  --sidebar-background: 222  47%  8%;
+  --sidebar-foreground: 210  20% 95%;
+  --sidebar-primary:    38   92% 50%;   /* #F59E0B champagne gold */
+  --sidebar-primary-foreground: 222 47% 8%;
+  --sidebar-accent:     217  33% 14%;
+  --sidebar-accent-foreground: 210 20% 95%;
+  --sidebar-border:     217  33% 16%;
+  --sidebar-ring:       38   92% 50%;
+
+  --gradient-stat:      linear-gradient(135deg, hsl(222 47% 8%) 0%, hsl(215 25% 22%) 100%);
+  --gradient-accent:    linear-gradient(135deg, hsl(215 25% 25%) 0%, hsl(38 92% 50%) 100%);
+  --gradient-highlight: linear-gradient(135deg, hsl(38 92% 50%) 0%, hsl(215 25% 25%) 100%);
+}
+
+/* ── Theme: Nordic Aurora  (#02141A · #059669 · #10B981) ──────────────────── */
+[data-theme="nordic-aurora"] {
+  --primary:            160  84% 39%;   /* #10B981 emerald */
+  --primary-foreground: 0 0% 100%;
+  --primary-soft:       160  60% 92%;
+  --primary-glow:       160  84% 45%;
+  --ring:               160  84% 39%;
+
+  --topbar:             198  80%  6%;   /* #02141A arctic fjord */
+  --topbar-foreground:  160  20% 95%;
+  --topbar-muted:       160  15% 60%;
+
+  --sidebar-background: 198  80%  6%;
+  --sidebar-foreground: 160  20% 95%;
+  --sidebar-primary:    160  84% 39%;
+  --sidebar-primary-foreground: 198 80% 6%;
+  --sidebar-accent:     198  50% 12%;
+  --sidebar-accent-foreground: 160 20% 95%;
+  --sidebar-border:     198  40% 14%;
+  --sidebar-ring:       160  84% 39%;
+
+  --gradient-stat:      linear-gradient(135deg, hsl(198 80% 6%) 0%, hsl(160 84% 20%) 100%);
+  --gradient-accent:    linear-gradient(135deg, hsl(160 84% 25%) 0%, hsl(175 80% 40%) 100%);
+  --gradient-highlight: linear-gradient(135deg, hsl(175 80% 40%) 0%, hsl(160 84% 25%) 100%);
+}
+
+/* ── Theme: Obsidian Rose  (#09090B · #E11D48 · #9333EA) ──────────────────── */
+[data-theme="obsidian-rose"] {
+  --primary:            347  77% 50%;   /* #E11D48 metallic rose */
+  --primary-foreground: 0 0% 100%;
+  --primary-soft:       347  60% 94%;
+  --primary-glow:       347  80% 60%;
+  --ring:               347  77% 50%;
+
+  --topbar:             240  10%  4%;   /* #09090B pitch obsidian */
+  --topbar-foreground:  340  20% 95%;
+  --topbar-muted:       340  10% 60%;
+
+  --sidebar-background: 240  10%  4%;
+  --sidebar-foreground: 340  20% 95%;
+  --sidebar-primary:    347  77% 50%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent:     240   8% 12%;
+  --sidebar-accent-foreground: 340 20% 95%;
+  --sidebar-border:     240   8% 15%;
+  --sidebar-ring:       347  77% 50%;
+
+  --gradient-stat:      linear-gradient(135deg, hsl(240 10% 4%) 0%, hsl(347 77% 24%) 100%);
+  --gradient-accent:    linear-gradient(135deg, hsl(347 77% 35%) 0%, hsl(270 70% 50%) 100%);
+  --gradient-highlight: linear-gradient(135deg, hsl(270 70% 50%) 0%, hsl(347 77% 35%) 100%);
+}
+
+/* ── Theme: Cyberpunk Amber  (#050505 · #2563EB · #EAB308) ────────────────── */
+[data-theme="cyberpunk-amber"] {
+  --primary:            45   93% 47%;   /* #EAB308 solar gold */
+  --primary-foreground: 0 0% 0%;
+  --primary-soft:       45   60% 92%;
+  --primary-glow:       45   93% 55%;
+  --ring:               45   93% 47%;
+
+  --topbar:             0    0%   3%;   /* #050505 OLED black */
+  --topbar-foreground:  45   20% 95%;
+  --topbar-muted:       45   15% 60%;
+
+  --sidebar-background: 0    0%   3%;
+  --sidebar-foreground: 45   20% 95%;
+  --sidebar-primary:    45   93% 47%;
+  --sidebar-primary-foreground: 0 0% 0%;
+  --sidebar-accent:     0    0%  10%;
+  --sidebar-accent-foreground: 45 20% 95%;
+  --sidebar-border:     0    0%  14%;
+  --sidebar-ring:       45   93% 47%;
+
+  --gradient-stat:      linear-gradient(135deg, hsl(0 0% 3%) 0%, hsl(217 91% 25%) 100%);
+  --gradient-accent:    linear-gradient(135deg, hsl(217 91% 35%) 0%, hsl(45 93% 47%) 100%);
+  --gradient-highlight: linear-gradient(135deg, hsl(45 93% 47%) 0%, hsl(217 91% 35%) 100%);
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   DARK MODE THEME ADAPTATIONS
+   Guarantees that when dark mode is enabled, theme primary colors and tints
+   have rich, deep contrast and don't wash out with light-mode pastels.
+   ════════════════════════════════════════════════════════════════════════════ */
+
+.dark[data-theme="aerial-autumn"] {
+  --primary:            174  75% 42%;
+  --primary-foreground: 206  77% 11%;
+  --primary-soft:       174  45% 16%;
+  --primary-glow:       174  75% 35%;
+  --ring:               174  75% 42%;
+  --gradient-stat:      linear-gradient(135deg, hsl(206 77% 10%) 0%, hsl(174 60% 16%) 100%);
+  --gradient-accent:    linear-gradient(135deg, hsl(174 75% 26%) 0%, hsl(38 63% 40%) 100%);
+  --gradient-highlight: linear-gradient(135deg, hsl(38 63% 40%) 0%, hsl(174 75% 26%) 100%);
+}
+
+.dark[data-theme="fire-ocean"] {
+  --primary:            210  70% 55%;
+  --primary-foreground: 237  96% 5%;
+  --primary-soft:       210  45% 18%;
+  --primary-glow:       210  70% 45%;
+  --ring:               210  70% 55%;
+  --gradient-stat:      linear-gradient(135deg, hsl(237 96% 6%) 0%, hsl(210 52% 16%) 100%);
+  --gradient-accent:    linear-gradient(135deg, hsl(210 52% 28%) 0%, hsl(30 98% 42%) 100%);
+  --gradient-highlight: linear-gradient(135deg, hsl(30 98% 42%) 0%, hsl(210 52% 28%) 100%);
+}
+
+.dark[data-theme="earth-jade"] {
+  --primary:            160  60% 42%;
+  --primary-foreground: 188  90% 4%;
+  --primary-soft:       160  40% 16%;
+  --primary-glow:       160  60% 32%;
+  --ring:               160  60% 42%;
+  --gradient-stat:      linear-gradient(135deg, hsl(188 90% 5%) 0%, hsl(160 55% 14%) 100%);
+  --gradient-accent:    linear-gradient(135deg, hsl(160 55% 22%) 0%, hsl(38 78% 42%) 100%);
+  --gradient-highlight: linear-gradient(135deg, hsl(38 78% 42%) 0%, hsl(160 55% 22%) 100%);
+}
+
+.dark[data-theme="inferno-sky"] {
+  --primary:            213  60% 58%;
+  --primary-foreground: 10   14% 7%;
+  --primary-soft:       213  40% 18%;
+  --primary-glow:       213  60% 48%;
+  --ring:               213  60% 58%;
+  --gradient-stat:      linear-gradient(135deg, hsl(10 14% 8%) 0%, hsl(213 38% 18%) 100%);
+  --gradient-accent:    linear-gradient(135deg, hsl(213 38% 30%) 0%, hsl(35 99% 45%) 100%);
+  --gradient-highlight: linear-gradient(135deg, hsl(35 99% 45%) 0%, hsl(213 38% 30%) 100%);
+}
+
+.dark[data-theme="midnight-road"] {
+  --primary:            191  90% 52%;
+  --primary-foreground: 226  93% 6%;
+  --primary-soft:       191  45% 16%;
+  --primary-glow:       191  95% 45%;
+  --ring:               191  90% 52%;
+  --gradient-stat:      linear-gradient(135deg, hsl(226 93% 6%) 0%, hsl(194 82% 16%) 100%);
+  --gradient-accent:    linear-gradient(135deg, hsl(194 82% 26%) 0%, hsl(191 95% 42%) 100%);
+  --gradient-highlight: linear-gradient(135deg, hsl(191 95% 42%) 0%, hsl(194 82% 26%) 100%);
+}
+
+.dark[data-theme="cosmic-spark"] {
+  --primary:            273  80% 65%;
+  --primary-foreground: 224  80% 10%;
+  --primary-soft:       273  45% 18%;
+  --primary-glow:       273  85% 55%;
+  --ring:               273  80% 65%;
+  --gradient-stat:      linear-gradient(135deg, hsl(224 80% 12%) 0%, hsl(273 60% 18%) 100%);
+  --gradient-accent:    linear-gradient(135deg, hsl(210 96% 32%) 0%, hsl(273 89% 50%) 100%);
+  --gradient-highlight: linear-gradient(135deg, hsl(273 89% 50%) 0%, hsl(210 96% 32%) 100%);
+}
+
+.dark[data-theme="titanium-gold"] {
+  --primary:            38   92% 54%;
+  --primary-foreground: 222  47% 8%;
+  --primary-soft:       38   40% 16%;
+  --primary-glow:       38   92% 50%;
+  --ring:               38   92% 54%;
+  --gradient-stat:      linear-gradient(135deg, hsl(222 47% 7%) 0%, hsl(215 25% 14%) 100%);
+  --gradient-accent:    linear-gradient(135deg, hsl(215 25% 20%) 0%, hsl(38 92% 48%) 100%);
+  --gradient-highlight: linear-gradient(135deg, hsl(38 92% 48%) 0%, hsl(215 25% 20%) 100%);
+}
+
+.dark[data-theme="nordic-aurora"] {
+  --primary:            160  70% 48%;
+  --primary-foreground: 198  80% 6%;
+  --primary-soft:       160  40% 16%;
+  --primary-glow:       160  84% 45%;
+  --ring:               160  70% 48%;
+  --gradient-stat:      linear-gradient(135deg, hsl(198 80% 5%) 0%, hsl(160 60% 14%) 100%);
+  --gradient-accent:    linear-gradient(135deg, hsl(160 60% 20%) 0%, hsl(175 70% 36%) 100%);
+  --gradient-highlight: linear-gradient(135deg, hsl(175 70% 36%) 0%, hsl(160 60% 20%) 100%);
+}
+
+.dark[data-theme="obsidian-rose"] {
+  --primary:            347  85% 62%;
+  --primary-foreground: 240  10% 4%;
+  --primary-soft:       347  40% 16%;
+  --primary-glow:       347  85% 62%;
+  --ring:               347  85% 62%;
+  --topbar-foreground:  210  20% 95%;
+  --topbar-muted:       215  15% 60%;
+
+  --sidebar-background: 222  47%  8%;
+  --sidebar-foreground: 210  20% 95%;
+  --sidebar-primary:    38   92% 50%;   /* #F59E0B champagne gold */
+  --sidebar-primary-foreground: 222 47% 8%;
+  --sidebar-accent:     217  33% 14%;
+  --sidebar-accent-foreground: 210 20% 95%;
+  --sidebar-border:     217  33% 16%;
+  --sidebar-ring:       38   92% 50%;
+
+  --gradient-stat:      linear-gradient(135deg, hsl(222 47% 8%) 0%, hsl(215 25% 22%) 100%);
+  --gradient-accent:    linear-gradient(135deg, hsl(215 25% 25%) 0%, hsl(38 92% 50%) 100%);
+  --gradient-highlight: linear-gradient(135deg, hsl(38 92% 50%) 0%, hsl(215 25% 25%) 100%);
+}
+
+/* ── Theme: Nordic Aurora  (#02141A · #059669 · #10B981) ──────────────────── */
+[data-theme="nordic-aurora"] {
+  --primary:            160  84% 39%;   /* #10B981 emerald */
+  --primary-foreground: 0 0% 100%;
+  --primary-soft:       160  60% 92%;
+  --primary-glow:       160  84% 45%;
+  --ring:               160  84% 39%;
+
+  --topbar:             198  80%  6%;   /* #02141A arctic fjord */
+  --topbar-foreground:  160  20% 95%;
+  --topbar-muted:       160  15% 60%;
+
+  --sidebar-background: 198  80%  6%;
+  --sidebar-foreground: 160  20% 95%;
+  --sidebar-primary:    160  84% 39%;
+  --sidebar-primary-foreground: 198 80% 6%;
+  --sidebar-accent:     198  50% 12%;
+  --sidebar-accent-foreground: 160 20% 95%;
+  --sidebar-border:     198  40% 14%;
+  --sidebar-ring:       160  84% 39%;
+
+  --gradient-stat:      linear-gradient(135deg, hsl(198 80% 6%) 0%, hsl(160 84% 20%) 100%);
+  --gradient-accent:    linear-gradient(135deg, hsl(160 84% 25%) 0%, hsl(175 80% 40%) 100%);
+  --gradient-highlight: linear-gradient(135deg, hsl(175 80% 40%) 0%, hsl(160 84% 25%) 100%);
+}
+
+/* ── Theme: Obsidian Rose  (#09090B · #E11D48 · #9333EA) ──────────────────── */
+[data-theme="obsidian-rose"] {
+  --primary:            347  77% 50%;   /* #E11D48 metallic rose */
+  --primary-foreground: 0 0% 100%;
+  --primary-soft:       347  60% 94%;
+  --primary-glow:       347  80% 60%;
+  --ring:               347  77% 50%;
+
+  --topbar:             240  10%  4%;   /* #09090B pitch obsidian */
+  --topbar-foreground:  340  20% 95%;
+  --topbar-muted:       340  10% 60%;
+
+  --sidebar-background: 240  10%  4%;
+  --sidebar-foreground: 340  20% 95%;
+  --sidebar-primary:    347  77% 50%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent:     240   8% 12%;
+  --sidebar-accent-foreground: 340 20% 95%;
+  --sidebar-border:     240   8% 15%;
+  --sidebar-ring:       347  77% 50%;
+
+  --gradient-stat:      linear-gradient(135deg, hsl(240 10% 4%) 0%, hsl(347 77% 24%) 100%);
+  --gradient-accent:    linear-gradient(135deg, hsl(347 77% 35%) 0%, hsl(270 70% 50%) 100%);
+  --gradient-highlight: linear-gradient(135deg, hsl(270 70% 50%) 0%, hsl(347 77% 35%) 100%);
+}
+
+/* ── Theme: Cyberpunk Amber  (#050505 · #2563EB · #EAB308) ────────────────── */
+[data-theme="cyberpunk-amber"] {
+  --primary:            45   93% 47%;   /* #EAB308 solar gold */
+  --primary-foreground: 0 0% 0%;
+  --primary-soft:       45   60% 92%;
+  --primary-glow:       45   93% 55%;
+  --ring:               45   93% 47%;
+
+  --topbar:             0    0%   3%;   /* #050505 OLED black */
+  --topbar-foreground:  45   20% 95%;
+  --topbar-muted:       45   15% 60%;
+
+  --sidebar-background: 0    0%   3%;
+  --sidebar-foreground: 45   20% 95%;
+  --sidebar-primary:    45   93% 47%;
+  --sidebar-primary-foreground: 0 0% 0%;
+  --sidebar-accent:     0    0%  10%;
+  --sidebar-accent-foreground: 45 20% 95%;
+  --sidebar-border:     0    0%  14%;
+  --sidebar-ring:       45   93% 47%;
+
+  --gradient-stat:      linear-gradient(135deg, hsl(0 0% 3%) 0%, hsl(217 91% 25%) 100%);
+  --gradient-accent:    linear-gradient(135deg, hsl(217 91% 35%) 0%, hsl(45 93% 47%) 100%);
+  --gradient-highlight: linear-gradient(135deg, hsl(45 93% 47%) 0%, hsl(217 91% 35%) 100%);
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   DARK MODE THEME ADAPTATIONS
+   Guarantees that when dark mode is enabled, theme primary colors and tints
+   have rich, deep contrast and don't wash out with light-mode pastels.
+   ════════════════════════════════════════════════════════════════════════════ */
+
+.dark[data-theme="aerial-autumn"] {
+  --primary:            174  75% 42%;
+  --primary-foreground: 206  77% 11%;
+  --primary-soft:       174  45% 16%;
+  --primary-glow:       174  75% 35%;
+  --ring:               174  75% 42%;
+  --gradient-stat:      linear-gradient(135deg, hsl(206 77% 10%) 0%, hsl(174 60% 16%) 100%);
+  --gradient-accent:    linear-gradient(135deg, hsl(174 75% 26%) 0%, hsl(38 63% 40%) 100%);
+  --gradient-highlight: linear-gradient(135deg, hsl(38 63% 40%) 0%, hsl(174 75% 26%) 100%);
+}
+
+.dark[data-theme="fire-ocean"] {
+  --primary:            210  70% 55%;
+  --primary-foreground: 237  96% 5%;
+  --primary-soft:       210  45% 18%;
+  --primary-glow:       210  70% 45%;
+  --ring:               210  70% 55%;
+  --gradient-stat:      linear-gradient(135deg, hsl(237 96% 6%) 0%, hsl(210 52% 16%) 100%);
+  --gradient-accent:    linear-gradient(135deg, hsl(210 52% 28%) 0%, hsl(30 98% 42%) 100%);
+  --gradient-highlight: linear-gradient(135deg, hsl(30 98% 42%) 0%, hsl(210 52% 28%) 100%);
+}
+
+.dark[data-theme="earth-jade"] {
+  --primary:            160  60% 42%;
+  --primary-foreground: 188  90% 4%;
+  --primary-soft:       160  40% 16%;
+  --primary-glow:       160  60% 32%;
+  --ring:               160  60% 42%;
+  --gradient-stat:      linear-gradient(135deg, hsl(188 90% 5%) 0%, hsl(160 55% 14%) 100%);
+  --gradient-accent:    linear-gradient(135deg, hsl(160 55% 22%) 0%, hsl(38 78% 42%) 100%);
+  --gradient-highlight: linear-gradient(135deg, hsl(38 78% 42%) 0%, hsl(160 55% 22%) 100%);
+}
+
+.dark[data-theme="inferno-sky"] {
+  --primary:            213  60% 58%;
+  --primary-foreground: 10   14% 7%;
+  --primary-soft:       213  40% 18%;
+  --primary-glow:       213  60% 48%;
+  --ring:               213  60% 58%;
+  --gradient-stat:      linear-gradient(135deg, hsl(10 14% 8%) 0%, hsl(213 38% 18%) 100%);
+  --gradient-accent:    linear-gradient(135deg, hsl(213 38% 30%) 0%, hsl(35 99% 45%) 100%);
+  --gradient-highlight: linear-gradient(135deg, hsl(35 99% 45%) 0%, hsl(213 38% 30%) 100%);
+}
+
+.dark[data-theme="midnight-road"] {
+  --primary:            191  90% 52%;
+  --primary-foreground: 226  93% 6%;
+  --primary-soft:       191  45% 16%;
+  --primary-glow:       191  95% 45%;
+  --ring:               191  90% 52%;
+  --gradient-stat:      linear-gradient(135deg, hsl(226 93% 6%) 0%, hsl(194 82% 16%) 100%);
+  --gradient-accent:    linear-gradient(135deg, hsl(194 82% 26%) 0%, hsl(191 95% 42%) 100%);
+  --gradient-highlight: linear-gradient(135deg, hsl(191 95% 42%) 0%, hsl(194 82% 26%) 100%);
+}
+
+.dark[data-theme="cosmic-spark"] {
+  --primary:            273  80% 65%;
+  --primary-foreground: 224  80% 10%;
+  --primary-soft:       273  45% 18%;
+  --primary-glow:       273  85% 55%;
+  --ring:               273  80% 65%;
+  --gradient-stat:      linear-gradient(135deg, hsl(224 80% 12%) 0%, hsl(273 60% 18%) 100%);
+  --gradient-accent:    linear-gradient(135deg, hsl(210 96% 32%) 0%, hsl(273 89% 50%) 100%);
+  --gradient-highlight: linear-gradient(135deg, hsl(273 89% 50%) 0%, hsl(210 96% 32%) 100%);
+}
+
+.dark[data-theme="titanium-gold"] {
+  --primary:            38   92% 54%;
+  --primary-foreground: 222  47% 8%;
+  --primary-soft:       38   40% 16%;
+  --primary-glow:       38   92% 50%;
+  --ring:               38   92% 54%;
+  --gradient-stat:      linear-gradient(135deg, hsl(222 47% 7%) 0%, hsl(215 25% 14%) 100%);
+  --gradient-accent:      linear-gradient(135deg, hsl(215 25% 20%) 0%, hsl(38 92% 48%) 100%);
+  --gradient-highlight: linear-gradient(135deg, hsl(38 92% 48%) 0%, hsl(215 25% 20%) 100%);
+}
+
+.dark[data-theme="nordic-aurora"] {
+  --primary:            160  70% 48%;
+  --primary-foreground: 198  80% 6%;
+  --primary-soft:       160  40% 16%;
+  --primary-glow:       160  84% 45%;
+  --ring:               160  70% 48%;
+  --gradient-stat:      linear-gradient(135deg, hsl(198 80% 5%) 0%, hsl(160 60% 14%) 100%);
+  --gradient-accent:    linear-gradient(135deg, hsl(160 60% 20%) 0%, hsl(175 70% 36%) 100%);
+  --gradient-highlight: linear-gradient(135deg, hsl(175 70% 36%) 0%, hsl(160 60% 20%) 100%);
+}
+
+.dark[data-theme="obsidian-rose"] {
+  --primary:            347  85% 62%;
+  --primary-foreground: 240  10% 4%;
+  --primary-soft:       347  40% 16%;
+  --primary-glow:       347  85% 62%;
+  --ring:               347  85% 62%;
+  --gradient-stat:      linear-gradient(135deg, hsl(240 10% 3%) 0%, hsl(347 60% 16%) 100%);
+  --gradient-accent:    linear-gradient(135deg, hsl(347 60% 24%) 0%, hsl(270 60% 40%) 100%);
+  --gradient-highlight: linear-gradient(135deg, hsl(270 60% 40%) 0%, hsl(347 60% 24%) 100%);
+}
+
+.dark[data-theme="cyberpunk-amber"] {
+  --primary:            45   96% 53%;
+  --primary-foreground: 0    0%  0%;
+  --primary-soft:       45   40% 16%;
+  --primary-glow:       45   96% 53%;
+  --ring:               45   96% 53%;
+  --gradient-stat:      linear-gradient(135deg, hsl(0 0% 2%) 0%, hsl(217 80% 15%) 100%);
+  --gradient-accent:    linear-gradient(135deg, hsl(217 80% 22%) 0%, hsl(45 93% 45%) 100%);
+  --gradient-highlight: linear-gradient(135deg, hsl(45 93% 45%) 0%, hsl(217 80% 22%) 100%);
+}
