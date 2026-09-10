@@ -11,14 +11,16 @@ import { cn } from '@/lib/utils';
 import { deriveTrainStatus, TrainCard } from '../ro-trains';
 import { loadThresholds, DEFAULT_THRESHOLDS } from '@/pages/Compliance';
 import { useTrainHourlyGaps, type TrainHourlyGap } from '@/hooks/useTrainHourlyGaps';
-import { Search, X, ShieldAlert } from 'lucide-react';
+import { Search, X, ShieldAlert, Gauge, LayoutGrid } from 'lucide-react';
 import { PlantPicker } from './shared/PlantPicker';
+import { FleetTelemetryBar } from './components/FleetTelemetryBar';
 
 // ─── Overview Dashboard ───────────────────────────────────────────────────────
 export function Overview() {
   const { selectedPlantId, addAlerts, removeAlerts } = useAppStore();
   const [plantId, setPlantId] = useState(selectedPlantId ?? '');
   const [statusFilter, setStatusFilter] = useState<'All' | 'Running' | 'Maintenance' | 'Offline'>('All');
+  const [viewMode, setViewMode] = useState<'compact' | 'diagnostics'>('diagnostics');
   const [search, setSearch] = useState('');
   const lastSyncedPlantRef = useRef<string | null>(null);
   useEffect(() => {
@@ -172,6 +174,36 @@ export function Overview() {
           })}
         </div>
 
+        {/* View Mode Segmented Controls */}
+        <div className="flex items-center gap-0.5 bg-muted/40 p-0.5 rounded-lg border border-border/40">
+          <button
+            onClick={() => setViewMode('diagnostics')}
+            title="Diagnostics mode: Complete industrial SCADA telemetry (Hydraulics, DP, Salt Rejection, Quality, Energy)"
+            className={cn(
+              'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-all',
+              viewMode === 'diagnostics'
+                ? 'bg-background text-foreground shadow-xs border border-border/50 font-semibold'
+                : 'text-muted-foreground hover:text-foreground hover:bg-muted/40'
+            )}
+          >
+            <Gauge className="h-3 w-3" />
+            <span>Diagnostics</span>
+          </button>
+          <button
+            onClick={() => setViewMode('compact')}
+            title="Compact mode: Summary gauges"
+            className={cn(
+              'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-all',
+              viewMode === 'compact'
+                ? 'bg-background text-foreground shadow-xs border border-border/50 font-semibold'
+                : 'text-muted-foreground hover:text-foreground hover:bg-muted/40'
+            )}
+          >
+            <LayoutGrid className="h-3 w-3" />
+            <span>Compact</span>
+          </button>
+        </div>
+
         {/* Search train */}
         <div className="relative min-w-[140px] sm:min-w-[180px]">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground h-3 w-3" />
@@ -193,6 +225,11 @@ export function Overview() {
         </div>
       </div>
 
+      {/* ── Fleet Real-Time Diagnostics & Telemetry Bar ── */}
+      {plantId && (trains ?? []).length > 0 && (
+        <FleetTelemetryBar trains={trains ?? []} lastReadings={lastReadings ?? {}} />
+      )}
+
       {/* ── Train Grid ── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
         {filtered.map((t: any) => (
@@ -207,6 +244,7 @@ export function Overview() {
             autoOpenTab={deepLogTab}
             autoOpenHighlightId={deepHighlight}
             onAutoOpenConsumed={clearDeepLinkParams}
+            viewMode={viewMode}
           />
         ))}
       </div>
