@@ -237,31 +237,36 @@ describe('buildKwhSummaryCsv — kWh Data Summary export', () => {
     // Sep 04: Estimated row (is_estimated = true), only Meter 0 = 502
     // Sep 05: Meter 0 = 505, Meter 2 = 9239.6
     // Multipliers: [1, 1, 2400]
+    // Use local Date components (matching the file-level iso() helper) so date-fns
+    // format() day-bucketing is timezone-independent in any CI environment (e.g. UTC).
+    const srpIso = (d: number, h: number, min: number) =>
+      new Date(2026, 8, d, h, min, 0, 0).toISOString();
+
     const readings: GridPowerReadingRow[] = [
       {
         plant_id: 'plant-srp',
-        reading_datetime: '2026-09-02T04:49:00+08:00',
+        reading_datetime: srpIso(2, 4, 49),
         meter_reading_kwh: 500,
         grid_meter_readings: { '0': 500, '2': 9214.0 },
         is_estimated: false,
       },
       {
         plant_id: 'plant-srp',
-        reading_datetime: '2026-09-03T12:00:00+08:00',
+        reading_datetime: srpIso(3, 12, 0),
         meter_reading_kwh: 501,
         grid_meter_readings: { '0': 501 },
         is_estimated: true,
       },
       {
         plant_id: 'plant-srp',
-        reading_datetime: '2026-09-04T12:00:00+08:00',
+        reading_datetime: srpIso(4, 12, 0),
         meter_reading_kwh: 502,
         grid_meter_readings: { '0': 502 },
         is_estimated: true,
       },
       {
         plant_id: 'plant-srp',
-        reading_datetime: '2026-09-05T05:39:00+08:00',
+        reading_datetime: srpIso(5, 5, 39),
         meter_reading_kwh: 505,
         grid_meter_readings: { '0': 505, '2': 9239.6 },
         is_estimated: false,

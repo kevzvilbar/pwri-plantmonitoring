@@ -767,12 +767,12 @@ export async function fetchOperatorStats(): Promise<OperatorStat[]> {
   const [locRes, wellRes, prodRes, roRes] = await Promise.allSettled([
     supabase
       .from('locator_readings')
-      .select('id, recorded_by, reading_datetime, norm_status, daily_volume, is_backward, is_meter_replacement')
+      .select('id, recorded_by, reading_datetime, norm_status, daily_volume, is_meter_replacement')
       .gte('reading_datetime', thirtyDaysAgo)
       .limit(5000),
     supabase
       .from('well_readings')
-      .select('id, recorded_by, reading_datetime, norm_status, daily_volume, is_backward, is_meter_replacement')
+      .select('id, recorded_by, reading_datetime, norm_status, daily_volume, is_meter_replacement')
       .gte('reading_datetime', thirtyDaysAgo)
       .limit(5000),
     supabase
@@ -792,7 +792,6 @@ export async function fetchOperatorStats(): Promise<OperatorStat[]> {
     reading_datetime: string;
     norm_status?: string | null;
     daily_volume?: number | null;
-    is_backward?: boolean | null;
     is_meter_replacement?: boolean | null;
   }
 
@@ -852,7 +851,7 @@ export async function fetchOperatorStats(): Promise<OperatorStat[]> {
     }
 
     const isReplacement = !!r.is_meter_replacement;
-    const isBackward = !isReplacement && (r.is_backward === true || (r.daily_volume != null && r.daily_volume < 0));
+    const isBackward = !isReplacement && r.daily_volume != null && r.daily_volume < 0;
     const isPending = r.norm_status === 'pending_review';
     const isRetracted = r.norm_status === 'retracted';
 
