@@ -49,6 +49,8 @@ const createdTables = new Set();
 const IGNORED_TABLES = new Set([
   'backfill_sweep_log',
   'ro_train_data_gaps',
+  'cascade_config',
+  'cascade_depth_audit',
 ]);
 
 const migrationFiles = readdirSync(MIGRATIONS_DIR).filter((f) => f.endsWith('.sql')).sort();

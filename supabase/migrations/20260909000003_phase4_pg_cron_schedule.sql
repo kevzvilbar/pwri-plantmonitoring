@@ -4,8 +4,9 @@
 -- Schedule the compute-production-costs Edge Function to run every 5 minutes
 -- This replaces the synchronous cost triggers with async computation.
 
--- Enable pg_cron extension (run once)
+-- Enable required extensions
 CREATE EXTENSION IF NOT EXISTS pg_cron;
+CREATE EXTENSION IF NOT EXISTS pg_net;
 
 -- Schedule: Every 5 minutes, recompute costs for last 7 days
 SELECT cron.schedule(

@@ -21,7 +21,7 @@ CREATE TRIGGER trg_chem_cost
     )) OR
     (TG_OP = 'DELETE')
   )
-  EXECUTE FUNCTION public.fn_sync_chem_cost_to_production_costs();
+  EXECUTE FUNCTION public.trg_recompute_cost();
 
 -- 2. Power readings cost trigger - only fire on consumption columns
 DROP TRIGGER IF EXISTS trg_power_cost ON public.power_readings;
@@ -38,7 +38,7 @@ CREATE TRIGGER trg_power_cost
     )) OR
     (TG_OP = 'DELETE')
   )
-  EXECUTE FUNCTION public.fn_sync_power_cost_to_production_costs();
+  EXECUTE FUNCTION public.trg_recompute_cost();
 
 -- 3. Well readings cost trigger - only fire on daily_volume (drives well energy cost)
 DROP TRIGGER IF EXISTS trg_well_cost ON public.well_readings;
@@ -53,7 +53,7 @@ CREATE TRIGGER trg_well_cost
     )) OR
     (TG_OP = 'DELETE')
   )
-  EXECUTE FUNCTION public.fn_sync_well_cost_to_production_costs();
+  EXECUTE FUNCTION public.trg_recompute_cost();
 
 -- 4. Filter replacement cost trigger - only fire on cost-related columns
 DROP TRIGGER IF EXISTS trg_filter_replacements_sync_cost ON public.filter_replacements;
@@ -91,17 +91,16 @@ CREATE TRIGGER trg_pretreatment_sync_filter_cost
 DROP TRIGGER IF EXISTS trg_sync_dps_production ON public.daily_plant_summary;
 
 CREATE TRIGGER trg_sync_dps_production
-  AFTER INSERT OR UPDATE ON public.daily_plant_summary
+  BEFORE INSERT OR UPDATE ON public.daily_plant_summary
   FOR EACH ROW
   WHEN (
     (TG_OP = 'INSERT') OR
     (TG_OP = 'UPDATE' AND (
       OLD.production_m3 IS DISTINCT FROM NEW.production_m3 OR
-      OLD.locator_consumption_m3 IS DISTINCT FROM NEW.locator_consumption_m3 OR
-      OLD.raw_water_consumption_m3 IS DISTINCT FROM NEW.raw_water_consumption_m3
+      OLD.product_water_m3 IS DISTINCT FROM NEW.product_water_m3
     ))
   )
-  EXECUTE FUNCTION public.fn_sync_dps_production();
+  EXECUTE FUNCTION public.sync_daily_plant_summary_production();
 
 -- =============================================================================
 -- END OF COLUMN-RESTRICTED TRIGGERS

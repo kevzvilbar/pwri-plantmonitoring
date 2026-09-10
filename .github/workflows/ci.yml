@@ -50,6 +50,36 @@ jobs:
           fi
           echo "✅ Baseline migration size: $SIZE bytes"
 
+      - name: Verify Phase 4 migrations exist
+        run: |
+          for f in \
+            "20260909000001_phase4_missing_indexes.sql" \
+            "20260909000002_phase4_column_restricted_triggers.sql" \
+            "20260909000003_phase4_pg_cron_schedule.sql" \
+            "20260909000004_phase4_cascade_circuit_breaker.sql" \
+            "20260909000005_phase4_lag_window_views.sql"
+          do
+            if [ ! -f "supabase/migrations/$f" ]; then
+              echo "::error::Phase 4 migration missing from supabase/migrations/: $f"
+              exit 1
+            fi
+            echo "✅ Verified Phase 4 migration: $f"
+          done
+
+      - name: Fail if temp_migrations or rogue migration directories exist
+        run: |
+          if [ -d temp_migrations ]; then
+            echo "::error::temp_migrations/ directory exists! All active migrations must live in supabase/migrations/."
+            exit 1
+          fi
+          ROGUE_SQL=$(find . -maxdepth 2 -name "*.sql" -not -path "./supabase/*" -not -path "./tests/*" 2>/dev/null || true)
+          if [ -n "$ROGUE_SQL" ]; then
+            echo "::error::Rogue SQL files found outside allowed directories:"
+            echo "$ROGUE_SQL"
+            exit 1
+          fi
+          echo "✅ No rogue migration directories or SQL files found"
+
   typescript:
     name: TypeScript — type-check + build
     runs-on: ubuntu-latest

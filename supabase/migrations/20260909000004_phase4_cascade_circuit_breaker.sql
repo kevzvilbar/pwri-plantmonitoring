@@ -55,6 +55,10 @@ ON CONFLICT (id) DO UPDATE SET
   enable_circuit_breaker = EXCLUDED.enable_circuit_breaker,
   updated_at = now();
 
+ALTER TABLE public.cascade_config ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "cascade_config_read" ON public.cascade_config;
+CREATE POLICY "cascade_config_read" ON public.cascade_config FOR SELECT TO authenticated USING (true);
+
 -- 3. Wrapper function for cascade correction with depth limiting
 CREATE OR REPLACE FUNCTION public.fn_cascade_reading_correction_safe(
   p_table text,
@@ -129,6 +133,10 @@ CREATE TABLE IF NOT EXISTS public.cascade_depth_audit (
 
 CREATE INDEX IF NOT EXISTS idx_cascade_depth_audit_triggered 
   ON public.cascade_depth_audit (triggered_at DESC);
+
+ALTER TABLE public.cascade_depth_audit ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "cascade_depth_audit_read" ON public.cascade_depth_audit;
+CREATE POLICY "cascade_depth_audit_read" ON public.cascade_depth_audit FOR SELECT TO authenticated USING (true);
 
 -- 6. Wrapper that logs depth events
 CREATE OR REPLACE FUNCTION public.fn_cascade_reading_correction_monitored(

@@ -238,6 +238,66 @@ export type Database = {
         }
         Relationships: []
       }
+      cascade_config: {
+        Row: {
+          enable_circuit_breaker: boolean
+          id: number
+          max_depth: number
+          max_rows_per_call: number
+          updated_at: string | null
+        }
+        Insert: {
+          enable_circuit_breaker?: boolean
+          id?: number
+          max_depth?: number
+          max_rows_per_call?: number
+          updated_at?: string | null
+        }
+        Update: {
+          enable_circuit_breaker?: boolean
+          id?: number
+          max_depth?: number
+          max_rows_per_call?: number
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      cascade_depth_audit: {
+        Row: {
+          aborted: boolean | null
+          depth_after: number | null
+          depth_before: number | null
+          error_message: string | null
+          id: number
+          max_depth: number | null
+          row_id: string
+          table_name: string
+          triggered_at: string | null
+        }
+        Insert: {
+          aborted?: boolean | null
+          depth_after?: number | null
+          depth_before?: number | null
+          error_message?: string | null
+          id?: number
+          max_depth?: number | null
+          row_id: string
+          table_name: string
+          triggered_at?: string | null
+        }
+        Update: {
+          aborted?: boolean | null
+          depth_after?: number | null
+          depth_before?: number | null
+          error_message?: string | null
+          id?: number
+          max_depth?: number | null
+          row_id?: string
+          table_name?: string
+          triggered_at?: string | null
+        }
+        Relationships: []
+      }
       cartridge_readings: {
         Row: {
           bag_replaced: boolean
