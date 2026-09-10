@@ -69,12 +69,12 @@ export function EMFlowRow({
             </Label>
             {emFeedInferred ? (
               <ComputedInput
-                value={effFeedFlow != null ? String(effFeedFlow) : ''}
+                value={effFeedFlow != null ? Number(effFeedFlow).toFixed(2) : ''}
                 className="border-info text-info font-semibold"
               />
             ) : (
               <Input type="number" step="any" {...f('feed_flow')}
-                placeholder={feedFlowMeter != null ? `≈ ${feedFlowMeter} (meter)` : 'EM reading'}
+                placeholder={feedFlowMeter != null ? `≈ ${Number(feedFlowMeter).toFixed(2)} (meter)` : 'EM reading'}
                 className="placeholder:text-2xs placeholder:text-muted-foreground/50" id="pretreat-feed-flowrate"/>
             )}
           </div>
@@ -86,12 +86,12 @@ export function EMFlowRow({
             </Label>
             {emPermInferred ? (
               <ComputedInput
-                value={effPermFlow != null ? String(effPermFlow) : ''}
+                value={effPermFlow != null ? Number(effPermFlow).toFixed(2) : ''}
                 className="border-info text-info font-semibold"
               />
             ) : (
               <Input type="number" step="any" {...f('permeate_flow')}
-                placeholder={permFlowMeter != null ? `≈ ${permFlowMeter} (meter)` : 'EM reading'}
+                placeholder={permFlowMeter != null ? `≈ ${Number(permFlowMeter).toFixed(2)} (meter)` : 'EM reading'}
                 className="placeholder:text-2xs placeholder:text-muted-foreground/50" id="pretreat-field-3"/>
             )}
             <div className="mt-1">
@@ -109,12 +109,12 @@ export function EMFlowRow({
             </Label>
             {emRejInferred ? (
               <ComputedInput
-                value={effRejFlow != null ? String(effRejFlow) : ''}
+                value={effRejFlow != null ? Number(effRejFlow).toFixed(2) : ''}
                 className="border-info text-info font-semibold"
               />
             ) : (
               <Input type="number" step="any" {...f('reject_flow')}
-                placeholder={rejFlowMeter != null ? `≈ ${rejFlowMeter} (meter)` : 'EM reading'}
+                placeholder={rejFlowMeter != null ? `≈ ${Number(rejFlowMeter).toFixed(2)} (meter)` : 'EM reading'}
                 className="placeholder:text-2xs placeholder:text-muted-foreground/50" id="pretreat-reject-flowrate"/>
             )}
           </div>

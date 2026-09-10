@@ -238,7 +238,7 @@ export function RoLogTable({
               <td className="px-2 py-2 text-right font-mono tabular-nums whitespace-nowrap">
                 {isRepl ? <span className="text-kpi-solar text-2xs">—</span>
                   : r._perm_flow_meter != null
-                    ? <span className="text-primary font-mono tabular-nums text-xs">{r._perm_flow_meter}<span className="text-muted-foreground/60 ml-0.5 text-3xs">m³/h</span></span>
+                    ? <span className="text-primary font-mono tabular-nums text-xs">{Number(r._perm_flow_meter).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}<span className="text-muted-foreground/60 ml-0.5 text-3xs">m³/h</span></span>
                     : <span className="text-muted-foreground/30">—</span>}
               </td>
               <td className="px-2 py-2 text-right font-mono tabular-nums whitespace-nowrap">{fmtVal(r.feed_flow, 'm³/h')}</td>

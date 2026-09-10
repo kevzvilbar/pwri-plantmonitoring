@@ -105,7 +105,7 @@ export function MeterColumn({
       </div>
       <div>
         <Label htmlFor={flowId} className="text-xs text-muted-foreground">{label} Flowrate (m³/hr)</Label>
-        <ComputedInput value={flowrate != null ? String(flowrate) : ''} className="text-foreground font-medium" id={flowId}/>
+        <ComputedInput value={flowrate != null ? Number(flowrate).toFixed(2) : ''} className="text-foreground font-medium" id={flowId}/>
       </div>
     </div>
   );
