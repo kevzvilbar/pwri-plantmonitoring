@@ -102,7 +102,7 @@ export async function fetchKpiReadings(since: string): Promise<KpiReadings> {
       .select('plant_id, log_datetime, recorded_by')
       .gte('log_datetime', since),
     supabase.from('blending_events')
-      .select('plant_id, well_id, event_date, recorded_by, is_estimated')
+      .select('plant_id, well_id, event_date, is_estimated')
       .gte('event_date', since.slice(0, 10)),
   ]);
   
@@ -128,7 +128,8 @@ export async function fetchKpiReadings(since: string): Promise<KpiReadings> {
     chemReadings: ((chemReadings.data ?? []) as any[])
       .filter(r => r.recorded_by != null) as { plant_id: string; log_datetime: string; recorded_by: string }[],
     blendingReadings: ((blendingReadings.data ?? []) as any[])
-      .filter(r => !r.is_estimated && r.recorded_by != null) as { plant_id: string; well_id: string; event_date: string; recorded_by: string | null }[],
+      .filter(r => !r.is_estimated)
+      .map(r => ({ ...r, recorded_by: null })) as { plant_id: string; well_id: string; event_date: string; recorded_by: string | null }[],
   };
 }
 
@@ -214,9 +215,10 @@ export async function fetchChemReadings(since: string): Promise<Array<{ plant_id
 
 export async function fetchBlendingReadings(since: string): Promise<Array<{ plant_id: string; well_id: string; event_date: string; recorded_by: string | null }>> {
   const { data, error } = await supabase.from('blending_events')
-    .select('plant_id, well_id, event_date, recorded_by, is_estimated')
+    .select('plant_id, well_id, event_date, is_estimated')
     .gte('event_date', since.slice(0, 10));
   if (error) throw error;
   return ((data ?? []) as any[])
-    .filter(r => !r.is_estimated && r.recorded_by != null) as Array<{ plant_id: string; well_id: string; event_date: string; recorded_by: string | null }>;
+    .filter(r => !r.is_estimated)
+    .map(r => ({ ...r, recorded_by: null })) as Array<{ plant_id: string; well_id: string; event_date: string; recorded_by: string | null }>;
 }

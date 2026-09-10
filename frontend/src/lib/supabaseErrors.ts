@@ -45,6 +45,9 @@ const NOT_NULL_PATTERN = /null value in column "(\w+)" .* violates not-null/i;
 /** Column-does-not-exist pattern (schema drift) */
 const MISSING_COLUMN_PATTERN = /column "(\w+)" of relation "\w+" does not exist/i;
 
+/** PostgREST schema-cache missing column pattern */
+const SCHEMA_COLUMN_PATTERN = /could not find the ['"]?(\w+)['"]? column of ['"]?(\w+)['"]? in the schema cache/i;
+
 /**
  * Postgres row-level security violation, e.g.:
  *   "new row violates row-level security policy for table \"reading_gap_reasons\""
@@ -61,12 +64,17 @@ const RLS_PATTERN = /row-level security policy for table "?(\w+)"?/i;
  * Falls back to the raw message if no specific match is found.
  */
 export function friendlyError(err: AnyError, fallback = 'An unexpected error occurred.'): string {
-  const msg =
-    err instanceof Error
-      ? err.message
-      : (err as SupabaseError)?.message ?? String(err ?? '');
+  let msg = '';
+  if (err instanceof Error) {
+    msg = err.message;
+  } else if (typeof err === 'string') {
+    msg = err;
+  } else if (err && typeof err === 'object') {
+    const e = err as Record<string, any>;
+    msg = e.message || e.error_description || e.error || e.details || '';
+  }
 
-  if (!msg) return fallback;
+  if (!msg || msg === '[object Object]') return fallback;
 
   // 1. Known constraint violations
   const dupMatch = msg.match(DUPLICATE_KEY_PATTERN);
@@ -120,6 +128,13 @@ export function friendlyError(err: AnyError, fallback = 'An unexpected error occ
     return (
       `A database field ("${colMatch[1]}") is missing. ` +
       'The latest migration may not have been applied yet.'
+    );
+  }
+  const schemaColMatch = msg.match(SCHEMA_COLUMN_PATTERN);
+  if (schemaColMatch) {
+    return (
+      `Database column "${schemaColMatch[1]}" was not found on "${schemaColMatch[2]}". ` +
+      'Please check the database schema or run latest migrations.'
     );
   }
 

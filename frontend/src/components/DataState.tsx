@@ -1,6 +1,7 @@
 import { cn } from '@/lib/utils';
 import { AlertTriangle, CloudOff, Inbox, Loader2, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { friendlyError } from '@/lib/supabaseErrors';
 import type { ReactNode } from 'react';
 
 type Props = {
@@ -77,7 +78,7 @@ export function DataState({
     );
   }
   if (error) {
-    const msg = (error instanceof Error ? error.message : String(error)) || 'Failed to load';
+    const msg = friendlyError(error, 'Failed to load');
     return (
       <div className={cn('rounded-md border border-danger bg-danger-soft/50 p-4 text-sm', className)}>
         <div className="flex items-start gap-2">

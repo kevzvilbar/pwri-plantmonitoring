@@ -53,21 +53,21 @@ export function usePretreatmentData(
     enabled: !!trainId,
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('ro_train_readings' as any)
-        .select('feed_meter_delta, permeate_meter_delta, reject_meter_delta, feed_meter_curr, permeate_meter_curr, reject_meter_curr, power_meter_curr, reading_datetime')
+        .from('ro_train_readings')
+        .select('feed_meter_delta, permeate_meter_delta, reject_meter_delta, feed_meter, permeate_meter, reject_meter, power_meter_reading_kwh, reading_datetime')
         .eq('train_id', trainId)
         .order('reading_datetime', { ascending: false })
         .limit(1)
         .maybeSingle();
       if (error) throw error;
-      return data as any;
+      return data;
     },
   });
 
-  const prevFeedMeter = prevReadings?.feed_meter_curr ?? null;
-  const prevPermMeter = prevReadings?.permeate_meter_curr ?? null;
-  const prevRejMeter = prevReadings?.reject_meter_curr ?? null;
-  const prevPowerMeter = prevReadings?.power_meter_curr ?? null;
+  const prevFeedMeter = prevReadings?.feed_meter ?? null;
+  const prevPermMeter = prevReadings?.permeate_meter ?? null;
+  const prevRejMeter = prevReadings?.reject_meter ?? null;
+  const prevPowerMeter = prevReadings?.power_meter_reading_kwh ?? null;
 
   // Auto-duration: minutes since last reading
   const lastReadingTime = prevReadings?.reading_datetime;

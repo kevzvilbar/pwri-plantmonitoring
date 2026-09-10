@@ -859,7 +859,7 @@ export function useDashboardQueries({
       ] as const;
       let dashDosingPeso = 0;
       for (const r of dosingRes.data ?? []) {
-        const stored = +r.calculated_cost || 0;
+        const stored = +(r.calculated_cost ?? 0);
         const live   = DOSING_KEYS.reduce((s, c) => s + (+r[c.key] || 0) * (priceMap[c.name] ?? 0), 0);
         dashDosingPeso += stored > 0 ? stored : live;
       }

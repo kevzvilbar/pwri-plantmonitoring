@@ -79,7 +79,7 @@ const queryClient = new QueryClient({
   },
   queryCache: new QueryCache({
     onError: (error, query) => {
-      const msg = error instanceof Error ? error.message : String(error);
+      const msg = friendlyError(error) || (error instanceof Error ? error.message : (error as any)?.message) || 'Query failed';
       if (!msg || /abort/i.test(msg)) return;
       // Queries with meta.silent = true silently fail (backend unavailable in static deploy)
       if (query.meta?.silent) return;
