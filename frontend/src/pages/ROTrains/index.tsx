@@ -66,15 +66,64 @@ export default function ROTrains() {
     refetchInterval: 180_000,
   });
 
-  const allReadings = Object.values(lastReadings ?? {});
-  const onlineCount = (trains ?? []).filter((t: any) => deriveTrainStatus(t, lastReadings?.[t.id]) === 'Running').length;
-  const maintCount = (trains ?? []).filter((t: any) => deriveTrainStatus(t, lastReadings?.[t.id]) === 'Maintenance').length;
-  const offlineCount = (trains ?? []).filter((t: any) => deriveTrainStatus(t, lastReadings?.[t.id]) === 'Offline').length;
-  const avgRecovery = allReadings.filter(r => r.recovery_pct != null).length
-    ? (allReadings.reduce((s, r) => s + (r.recovery_pct ?? 0), 0) / allReadings.filter(r => r.recovery_pct != null).length).toFixed(1)
+  const activeTrains = (trains ?? []).filter(
+    (t: any) => deriveTrainStatus(t, lastReadings?.[t.id]) === 'Running'
+  );
+  const activeReadings = activeTrains
+    .map((t: any) => lastReadings?.[t.id])
+    .filter(Boolean);
+
+  const onlineCount = activeTrains.length;
+  const maintCount = (trains ?? []).filter(
+    (t: any) => deriveTrainStatus(t, lastReadings?.[t.id]) === 'Maintenance'
+  ).length;
+  const offlineCount = (trains ?? []).filter(
+    (t: any) => deriveTrainStatus(t, lastReadings?.[t.id]) === 'Offline'
+  ).length;
+
+  const totalPermFlow = activeReadings.reduce((s: number, r: any) => s + (r.permeate_flow ?? 0), 0);
+  const hasPermFlow = activeReadings.some((r: any) => r.permeate_flow != null && r.permeate_flow > 0);
+
+  const totalFeedFlow = activeReadings.reduce((s: number, r: any) => s + (r.feed_flow ?? 0), 0);
+  const hasFeedFlow = activeReadings.some((r: any) => r.feed_flow != null && r.feed_flow > 0);
+
+  const fleetRecovery =
+    totalFeedFlow > 0 && totalPermFlow > 0
+      ? (totalPermFlow / totalFeedFlow) * 100
+      : activeReadings.filter((r: any) => r.recovery_pct != null).length
+      ? activeReadings.reduce((s: number, r: any) => s + (r.recovery_pct ?? 0), 0) /
+        activeReadings.filter((r: any) => r.recovery_pct != null).length
+      : null;
+
+  const tdsReadings = activeReadings.filter((r: any) => r.permeate_tds != null);
+  const avgPermTDS = tdsReadings.length
+    ? tdsReadings.reduce((s: number, r: any) => s + (r.permeate_tds ?? 0), 0) / tdsReadings.length
     : null;
-  const avgPermTDS = allReadings.filter(r => r.permeate_tds != null).length
-    ? (allReadings.reduce((s, r) => s + (r.permeate_tds ?? 0), 0) / allReadings.filter(r => r.permeate_tds != null).length).toFixed(0)
+
+  const dpReadings = activeReadings
+    .map((r: any) => {
+      if (r.dp_psi != null) return r.dp_psi;
+      if (r.feed_pressure_psi != null && r.reject_pressure_psi != null) {
+        return r.feed_pressure_psi - r.reject_pressure_psi;
+      }
+      return null;
+    })
+    .filter((v: any) => v != null);
+  const avgDp = dpReadings.length
+    ? dpReadings.reduce((s: number, v: number) => s + v, 0) / dpReadings.length
+    : null;
+
+  const rejReadings = activeReadings
+    .map((r: any) => {
+      if (r.rejection_pct != null) return r.rejection_pct;
+      if (r.feed_tds != null && r.permeate_tds != null && r.feed_tds > 0) {
+        return (1 - r.permeate_tds / r.feed_tds) * 100;
+      }
+      return null;
+    })
+    .filter((v: any) => v != null);
+  const avgRejection = rejReadings.length
+    ? rejReadings.reduce((s: number, v: number) => s + v, 0) / rejReadings.length
     : null;
 
   // Keep local tab state in sync if the URL changes from outside this
@@ -101,8 +150,12 @@ export default function ROTrains() {
         onlineCount={onlineCount}
         maintCount={maintCount}
         offlineCount={offlineCount}
-        avgRecovery={avgRecovery}
+        permeateFlow={hasPermFlow ? totalPermFlow : null}
+        feedFlow={hasFeedFlow ? totalFeedFlow : null}
+        fleetRecovery={fleetRecovery}
         avgPermTDS={avgPermTDS}
+        avgDp={avgDp}
+        avgRejection={avgRejection}
         permTdsLimit={thresholds?.permeate_tds_max}
         recoveryMin={thresholds?.recovery_pct_min}
       />

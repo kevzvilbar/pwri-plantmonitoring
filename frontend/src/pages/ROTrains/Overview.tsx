@@ -13,11 +13,10 @@ import { loadThresholds, DEFAULT_THRESHOLDS } from '@/pages/Compliance';
 import { useTrainHourlyGaps, type TrainHourlyGap } from '@/hooks/useTrainHourlyGaps';
 import { Search, X, ShieldAlert, Gauge, LayoutGrid } from 'lucide-react';
 import { PlantPicker } from './shared/PlantPicker';
-import { FleetTelemetryBar } from './components/FleetTelemetryBar';
 
 // ─── Overview Dashboard ───────────────────────────────────────────────────────
 export function Overview() {
-  const { selectedPlantId, addAlerts, removeAlerts } = useAppStore();
+  const { selectedPlantId, setSelectedPlantId, addAlerts, removeAlerts } = useAppStore();
   const [plantId, setPlantId] = useState(selectedPlantId ?? '');
   const [statusFilter, setStatusFilter] = useState<'All' | 'Running' | 'Maintenance' | 'Offline'>('All');
   const [viewMode, setViewMode] = useState<'compact' | 'diagnostics'>('diagnostics');
@@ -148,7 +147,13 @@ export function Overview() {
       <div className="p-1.5 rounded-xl border border-border/50 bg-card flex flex-wrap gap-2 items-center justify-between">
         <div className="flex items-center gap-2 flex-1 min-w-[180px] max-w-xs">
           <div className="flex-1">
-            <PlantPicker value={plantId} onChange={setPlantId} />
+            <PlantPicker
+              value={plantId}
+              onChange={(newId) => {
+                setPlantId(newId);
+                setSelectedPlantId(newId || null);
+              }}
+            />
           </div>
         </div>
 
@@ -225,10 +230,6 @@ export function Overview() {
         </div>
       </div>
 
-      {/* ── Fleet Real-Time Diagnostics & Telemetry Bar ── */}
-      {plantId && (trains ?? []).length > 0 && (
-        <FleetTelemetryBar trains={trains ?? []} lastReadings={lastReadings ?? {}} />
-      )}
 
       {/* ── Train Grid ── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
