@@ -134,11 +134,39 @@ export function Overview() {
     return matchStatus && matchSearch;
   });
 
+  const sortedFiltered = useMemo(() => {
+    const statusPriority: Record<string, number> = {
+      Running: 0,
+      Maintenance: 1,
+      Offline: 2,
+    };
+    return [...filtered].sort((a: any, b: any) => {
+      const statusA = statusPriority[deriveTrainStatus(a, lastReadings?.[a.id])] ?? 99;
+      const statusB = statusPriority[deriveTrainStatus(b, lastReadings?.[b.id])] ?? 99;
+      if (statusA !== statusB) return statusA - statusB;
+      return (Number(a.train_number) || 0) - (Number(b.train_number) || 0);
+    });
+  }, [filtered, lastReadings]);
+
+  const { activeTrains, offlineTrains } = useMemo(() => {
+    const active: any[] = [];
+    const offline: any[] = [];
+    for (const t of sortedFiltered) {
+      const st = deriveTrainStatus(t, lastReadings?.[t.id]);
+      if (st === 'Offline') {
+        offline.push(t);
+      } else {
+        active.push(t);
+      }
+    }
+    return { activeTrains: active, offlineTrains: offline };
+  }, [sortedFiltered, lastReadings]);
+
   const STATUS_FILTERS = [
     { key: 'All', label: 'All', dot: null },
     { key: 'Running', label: 'Running', dot: 'bg-accent' },
     { key: 'Maintenance', label: 'Maintenance', dot: 'bg-warn' },
-    { key: 'Offline', label: 'Offline', dot: 'bg-danger' },
+    { key: 'Offline', label: 'Offline', dot: 'bg-rose-500' },
   ] as const;
 
   return (
@@ -232,25 +260,81 @@ export function Overview() {
 
 
       {/* ── Train Grid ── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
-        {filtered.map((t: any) => (
-          <TrainCard
-            key={t.id}
-            train={t}
-            last={lastReadings?.[t.id] ?? null}
-            spark={sparkData?.[t.id] ?? []}
-            permTdsLimit={PERM_TDS_LIMIT}
-            hourlyGaps={hourlyGapsByTrain[t.id] ?? []}
-            autoOpenLog={deepLog && deepTrain === t.id}
-            autoOpenTab={deepLogTab}
-            autoOpenHighlightId={deepHighlight}
-            onAutoOpenConsumed={clearDeepLinkParams}
-            viewMode={viewMode}
-          />
-        ))}
-      </div>
+      {statusFilter === 'All' && activeTrains.length > 0 && offlineTrains.length > 0 ? (
+        <div className="space-y-4">
+          {/* Active Production Trains */}
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 text-2xs font-semibold text-muted-foreground uppercase tracking-wider">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 shrink-0 animate-pulse" />
+              <span>Active Production Trains ({activeTrains.length})</span>
+              <div className="h-px bg-border/40 flex-1" />
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+              {activeTrains.map((t: any) => (
+                <TrainCard
+                  key={t.id}
+                  train={t}
+                  last={lastReadings?.[t.id] ?? null}
+                  spark={sparkData?.[t.id] ?? []}
+                  permTdsLimit={PERM_TDS_LIMIT}
+                  hourlyGaps={hourlyGapsByTrain[t.id] ?? []}
+                  autoOpenLog={deepLog && deepTrain === t.id}
+                  autoOpenTab={deepLogTab}
+                  autoOpenHighlightId={deepHighlight}
+                  onAutoOpenConsumed={clearDeepLinkParams}
+                  viewMode={viewMode}
+                />
+              ))}
+            </div>
+          </div>
 
-      {plantId && !filtered.length && (
+          {/* Offline / Standby Units (Stacked Half-Height Grid) */}
+          <div className="space-y-2 pt-1">
+            <div className="flex items-center gap-2 text-2xs font-semibold text-muted-foreground uppercase tracking-wider">
+              <span className="h-1.5 w-1.5 rounded-full bg-rose-500 shrink-0" />
+              <span>Offline / Standby Units ({offlineTrains.length})</span>
+              <div className="h-px bg-border/40 flex-1" />
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+              {offlineTrains.map((t: any) => (
+                <TrainCard
+                  key={t.id}
+                  train={t}
+                  last={lastReadings?.[t.id] ?? null}
+                  spark={sparkData?.[t.id] ?? []}
+                  permTdsLimit={PERM_TDS_LIMIT}
+                  hourlyGaps={hourlyGapsByTrain[t.id] ?? []}
+                  autoOpenLog={deepLog && deepTrain === t.id}
+                  autoOpenTab={deepLogTab}
+                  autoOpenHighlightId={deepHighlight}
+                  onAutoOpenConsumed={clearDeepLinkParams}
+                  viewMode={viewMode}
+                />
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+          {sortedFiltered.map((t: any) => (
+            <TrainCard
+              key={t.id}
+              train={t}
+              last={lastReadings?.[t.id] ?? null}
+              spark={sparkData?.[t.id] ?? []}
+              permTdsLimit={PERM_TDS_LIMIT}
+              hourlyGaps={hourlyGapsByTrain[t.id] ?? []}
+              autoOpenLog={deepLog && deepTrain === t.id}
+              autoOpenTab={deepLogTab}
+              autoOpenHighlightId={deepHighlight}
+              onAutoOpenConsumed={clearDeepLinkParams}
+              viewMode={viewMode}
+            />
+          ))}
+        </div>
+      )}
+
+      {plantId && !sortedFiltered.length && (
         <Card className="p-6 text-center space-y-1 rounded-xl border border-dashed shadow-none">
           <p className="text-xs font-semibold text-foreground">No trains match your filter</p>
           <p className="text-3xs text-muted-foreground">Try resetting the status filter or searching for another train number.</p>

@@ -82,10 +82,10 @@ export function TrainCard({
     },
     Offline: {
       label: 'Offline',
-      dot: 'bg-slate-400',
-      text: 'text-slate-400',
-      border: 'border-slate-400/30',
-      bg: 'bg-slate-500/10',
+      dot: 'bg-rose-500',
+      text: 'text-rose-400',
+      border: 'border-rose-500/30',
+      bg: 'bg-rose-500/10',
     },
   }[status];
 
@@ -130,8 +130,8 @@ export function TrainCard({
   return (
     <Card
       className={cn(
-        'p-3 space-y-2.5 rounded-xl border bg-card transition-all duration-150 shadow-2xs hover:border-primary/40 flex flex-col justify-between',
-        isOnline ? 'border-border/60' : 'border-border/40 bg-card/60'
+        'p-3 rounded-xl border bg-card transition-all duration-150 shadow-2xs hover:border-primary/40 flex flex-col justify-between',
+        isOnline ? 'space-y-2.5 border-border/60' : 'space-y-2 border-border/40 bg-card/50'
       )}
     >
       <div className="space-y-2">
@@ -412,9 +412,9 @@ export function TrainCard({
           )
         ) : (
           /* Offline / Standby state */
-          <div className="p-3 rounded-lg bg-muted/20 border border-border/30 flex items-center justify-between text-2xs text-muted-foreground">
+          <div className="p-2.5 rounded-lg bg-muted/20 border border-border/30 flex items-center justify-between text-2xs text-muted-foreground">
             <span className="flex items-center gap-1.5">
-              <PowerOff className="h-3.5 w-3.5 opacity-60" /> Unit inactive / offline
+              <PowerOff className="h-3.5 w-3.5 opacity-60 text-muted-foreground" /> Unit inactive / offline
             </span>
             <span className="text-3xs font-mono">
               Last: {recovery !== '—' ? recovery : 'No data'}

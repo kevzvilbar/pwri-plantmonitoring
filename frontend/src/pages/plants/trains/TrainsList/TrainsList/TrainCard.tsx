@@ -99,11 +99,11 @@ export function TrainCard({
             className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full border transition-all ${
               effectiveStatus === 'Running' ? 'text-accent bg-accent-soft border-accent/40 hover:bg-accent-soft/80'
               : effectiveStatus === 'Maintenance' ? 'text-warn bg-warn-soft border-warn/40 hover:bg-warn-soft/80'
-              : 'text-muted-foreground bg-muted border-border hover:bg-muted/80'
+              : 'text-rose-400 bg-rose-500/10 border-rose-500/30 hover:bg-rose-500/20'
             } ${isManager ? 'cursor-pointer' : 'cursor-default'}`}>
             <span className={`h-1.5 w-1.5 rounded-full ${
               effectiveStatus === 'Running' ? 'bg-accent'
-              : effectiveStatus === 'Maintenance' ? 'bg-warn' : 'bg-muted-foreground'
+              : effectiveStatus === 'Maintenance' ? 'bg-warn' : 'bg-rose-500'
             }`} /><span>{effectiveStatus}</span>
           </button>
           <div className="flex items-center gap-1">
