@@ -15,9 +15,9 @@
 
   /* Stat card — clickable metric surface */
   .stat-card {
-    @apply rounded-xl border bg-card p-4 transition-all duration-200
-           cursor-pointer hover:shadow-[var(--shadow-elev)] hover:-translate-y-px;
-    border-top-width: 3px;
+    @apply rounded-lg border border-border/80 bg-card p-3.5 transition-colors duration-150
+           cursor-pointer hover:border-border;
+    border-top-width: 2px;
   }
 
   /* KPI data-color border-top helpers (used by StatCard tone system) */
@@ -78,11 +78,10 @@
   .section-divider   { @apply section-label; }
   .form-section-label { @apply section-label; }
 
-  /* ── Card hover glow ───────────────────────────────────────────── */
+  /* ── Card interactive state (Impeccable: crisp border focus, no blurry float) ── */
   .card-interactive {
-    @apply transition-all duration-200
-           hover:shadow-[var(--shadow-elev)] hover:-translate-y-px
-           active:translate-y-0 active:shadow-[var(--shadow-card)];
+    @apply transition-colors duration-150
+           hover:border-border active:border-border/60;
   }
 
   /* ── Status dot ────────────────────────────────────────────────── */

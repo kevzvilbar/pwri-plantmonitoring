@@ -31,16 +31,20 @@ export function OverviewCluster({
     <section id="overview-cluster" className="scroll-mt-28 space-y-2.5">
       <ClusterHeader icon={Droplet} title="Overview" accent="text-primary" subtitle="Distribution & Sources" />
 
-      <div className="grid gap-2 grid-cols-2 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard
-          icon={Receipt}
-          accent="text-highlight"
-          label="Locators Consumption"
-          value={fmtNum(consumption)}
-          unit="m³"
-          trend={dConsumption}
-          onClick={onMetricClick('production', 'Production vs Consumption')}
-        />
+      <div className="grid gap-2.5 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="sm:col-span-2 lg:col-span-2">
+          <StatCard
+            icon={Receipt}
+            accent="text-primary"
+            label="Locators Consumption (Billed)"
+            value={fmtNum(consumption)}
+            unit="m³"
+            size="hero"
+            trend={dConsumption}
+            onClick={onMetricClick('production', 'Production vs Consumption')}
+            subtext="Primary billed water revenue delivery"
+          />
+        </div>
 
         <NRWGaugeCard
           nrw={nrw}
@@ -48,23 +52,27 @@ export function OverviewCluster({
           onClick={onMetricClick('nrw', 'NRW Trend')}
         />
 
-        <StatCard
-          icon={RawWaterIcon}
-          accent="text-info"
-          label="Raw Water"
-          value={fmtNum(rawWaterVol)}
-          unit="m³"
-          trend={dRawWater}
-          onClick={onMetricClick('rawwater', 'Raw Water (m³)')}
-        />
+        <div className="grid grid-cols-2 sm:grid-cols-1 gap-2">
+          <StatCard
+            icon={RawWaterIcon}
+            accent="text-info"
+            label="Raw Water In"
+            value={fmtNum(rawWaterVol)}
+            unit="m³"
+            size="compact"
+            trend={dRawWater}
+            onClick={onMetricClick('rawwater', 'Raw Water (m³)')}
+          />
 
-        <StatCard
-          icon={Waves}
-          accent="text-kpi-ro"
-          label="Blending"
-          value={fmtNum(blending)}
-          unit="m³"
-        />
+          <StatCard
+            icon={Waves}
+            accent="text-kpi-ro"
+            label="Blending Flow"
+            value={fmtNum(blending)}
+            unit="m³"
+            size="compact"
+          />
+        </div>
       </div>
 
       <ClusterCharts metrics={OVERVIEW_CHART_METRICS} viewMode={viewMode} expandedMetric={expandedMetric} plantIds={plantIds} clusterId="overview" />

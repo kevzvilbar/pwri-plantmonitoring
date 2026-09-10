@@ -30,71 +30,81 @@ export function QualityCluster({
     <section id="quality-cluster" className="scroll-mt-28 space-y-2.5">
       <ClusterHeader icon={FlaskConical} title="Quality" accent="text-accent" subtitle="RO output" />
 
-      <div className="stagger-grid grid gap-2 grid-cols-2 sm:[grid-template-columns:repeat(auto-fit,minmax(150px,1fr))]">
-        <StatCard
-          icon={Gauge}
-          label="Feed TDS"
-          value={avgFeedTds ?? '—'}
-          unit="ppm"
-          expandRows={roByTrain.map((r) => ({
-            label: r.train_name ?? (r.train_number != null ? `Train ${r.train_number}` : '?'),
-            value: r.feed_tds != null ? Math.round(r.feed_tds) : null,
-          }))}
-          expandUnit="ppm"
-        />
+      <div className="grid gap-2.5 grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 items-stretch">
+        {/* Primary Compliance North Stars */}
+        <div className="lg:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <StatCard
+            icon={FlaskConical}
+            accent="text-accent"
+            label="Product TDS"
+            value={avgPermTds ?? '—'}
+            unit="ppm"
+            size="lg"
+            threshold={`≤${thresholds.permeate_tds_max}`}
+            calc
+            calcTooltip={`Product TDS compliance limit: ≤ ${thresholds.permeate_tds_max} ppm`}
+            onClick={onMetricClick('tds', 'Permeate TDS Trend')}
+            expandRows={roByTrain.map((r) => ({
+              label: r.train_name ?? (r.train_number != null ? `Train ${r.train_number}` : '?'),
+              value: r.permeate_tds != null ? Math.round(r.permeate_tds) : null,
+            }))}
+            expandUnit="ppm"
+          />
 
-        <StatCard
-          icon={FlaskConical}
-          accent="text-accent"
-          label="Product TDS"
-          value={avgPermTds ?? '—'}
-          unit="ppm"
-          threshold={`≤${thresholds.permeate_tds_max}`}
-          calc
-          calcTooltip={`Product TDS compliance limit: ≤ ${thresholds.permeate_tds_max} ppm`}
-          onClick={onMetricClick('tds', 'Permeate TDS Trend')}
-          expandRows={roByTrain.map((r) => ({
-            label: r.train_name ?? (r.train_number != null ? `Train ${r.train_number}` : '?'),
-            value: r.permeate_tds != null ? Math.round(r.permeate_tds) : null,
-          }))}
-          expandUnit="ppm"
-        />
+          <StatCard
+            icon={Percent}
+            accent="text-emerald-500"
+            label="Recovery"
+            value={avgRecovery ?? '—'}
+            unit="%"
+            size="lg"
+            threshold={`≥${thresholds.recovery_pct_min}%`}
+            calc
+            calcTooltip={`Recovery compliance target: ≥ ${thresholds.recovery_pct_min}%`}
+            onClick={onMetricClick('recovery', 'Recovery Trendline')}
+          />
+        </div>
 
-        <PerWellSourceCard
-          icon={Gauge}
-          label="Raw TDS"
-          unit="ppm"
-          aggregate={avgRawTds}
-          rows={wellsByQuality}
-          field="tds_ppm"
-          plantCodeById={plantCodeById}
-          multiPlant={plantIds.length > 1}
-          testId="raw-tds-per-well-source"
-        />
+        {/* Upstream Quality Conditions */}
+        <div className="lg:col-span-3 grid grid-cols-1 sm:grid-cols-3 gap-2">
+          <StatCard
+            icon={Gauge}
+            label="Feed TDS"
+            value={avgFeedTds ?? '—'}
+            unit="ppm"
+            size="compact"
+            expandRows={roByTrain.map((r) => ({
+              label: r.train_name ?? (r.train_number != null ? `Train ${r.train_number}` : '?'),
+              value: r.feed_tds != null ? Math.round(r.feed_tds) : null,
+            }))}
+            expandUnit="ppm"
+          />
 
-        <PerWellSourceCard
-          icon={Cloud}
-          label="Raw NTU"
-          unit="NTU"
-          aggregate={avgRawTurb}
-          rows={wellsByQuality}
-          field="turbidity_ntu"
-          plantCodeById={plantCodeById}
-          multiPlant={plantIds.length > 1}
-          testId="raw-ntu-per-well-source"
-          decimals={2}
-        />
+          <PerWellSourceCard
+            icon={Gauge}
+            label="Raw TDS"
+            unit="ppm"
+            aggregate={avgRawTds}
+            rows={wellsByQuality}
+            field="tds_ppm"
+            plantCodeById={plantCodeById}
+            multiPlant={plantIds.length > 1}
+            testId="raw-tds-per-well-source"
+          />
 
-        <StatCard
-          icon={Percent}
-          label="Recovery"
-          value={avgRecovery ?? '—'}
-          unit="%"
-          threshold={`≥${thresholds.recovery_pct_min}%`}
-          calc
-          calcTooltip={`Recovery compliance target: ≥ ${thresholds.recovery_pct_min}%`}
-          onClick={onMetricClick('recovery', 'Recovery Trendline')}
-        />
+          <PerWellSourceCard
+            icon={Cloud}
+            label="Raw NTU"
+            unit="NTU"
+            aggregate={avgRawTurb}
+            rows={wellsByQuality}
+            field="turbidity_ntu"
+            plantCodeById={plantCodeById}
+            multiPlant={plantIds.length > 1}
+            testId="raw-ntu-per-well-source"
+            decimals={2}
+          />
+        </div>
       </div>
 
       <ClusterCharts metrics={QUALITY_CHART_METRICS} viewMode={viewMode} expandedMetric={expandedMetric} plantIds={plantIds} clusterId="quality" />

@@ -87,41 +87,37 @@ export function PlantHeroBanner({
         </div>
       </div>
 
-      {/* ── Double-Bezel Facility Cockpit Hero ── */}
-      <div className="rounded-[1.75rem] bg-white/[0.03] ring-1 ring-white/10 p-1 sm:p-1.5 shadow-[var(--shadow-elev)]">
-        <div className="rounded-[calc(1.75rem-0.375rem)] bg-gradient-stat text-white p-4 sm:p-5 shadow-[inset_0_1px_1px_rgba(255,255,255,0.08)] relative overflow-hidden space-y-4">
-          
-          {/* Top Row: Facility Tag + Name + Status Badge + Live Clock */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-white/15">
-            <div className="flex items-center gap-2.5 flex-wrap">
-              <div className="p-1.5 rounded-lg bg-gradient-to-br from-primary to-highlight text-white shadow-xs shrink-0">
-                <Building2 className="h-4 w-4" />
-              </div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-3xs font-mono font-bold px-2 py-0.5 rounded bg-primary/20 text-teal-300 border border-primary/40 uppercase tracking-wider">
-                  FACILITY COCKPIT
-                </span>
-                <h1 className="text-lg sm:text-xl font-bold tracking-tight text-white">
-                  {plant.name}
-                </h1>
-                <span className={`inline-flex items-center gap-1.5 text-2xs font-semibold px-2.5 py-0.5 rounded-full border ${
-                  isOnline
-                    ? 'bg-emerald-950/80 text-emerald-300 border-emerald-500/40'
-                    : 'bg-amber-950/80 text-amber-300 border-amber-500/40'
-                }`}>
-                  <Lamp tone={isOnline ? 'good' : 'warn'} pulse={isOnline} size={6} />
-                  <span>{plant.status}</span>
-                </span>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2 font-mono text-2xs text-slate-300 self-start sm:self-auto">
-              <Lamp tone="live" pulse size={6} />
-              <span className="text-cyan-300 font-semibold">Live Telemetry</span>
-              <span className="text-white/30">&bull;</span>
-              <span className="tabular-nums">{timeStr || '—'}</span>
+      {/* ── Facility Cockpit Hero (Impeccable: crisp 1px border, solid slate-900) ── */}
+      <div className="rounded-lg border border-slate-800 bg-slate-900 text-white p-4 sm:p-5 relative overflow-hidden space-y-4">
+        {/* Top Row: Facility Tag + Name + Status Badge + Live Clock */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <Building2 className="h-5 w-5 text-teal-400 shrink-0" />
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-3xs font-mono font-bold px-2 py-0.5 rounded-md bg-slate-800 text-teal-300 border border-teal-500/30 uppercase tracking-wider">
+                FACILITY COCKPIT
+              </span>
+              <h1 className="text-lg sm:text-xl font-bold tracking-tight text-white">
+                {plant.name}
+              </h1>
+              <span className={`inline-flex items-center gap-1.5 text-2xs font-semibold px-2.5 py-0.5 rounded-md border ${
+                isOnline
+                  ? 'bg-emerald-950/80 text-emerald-300 border-emerald-500/40'
+                  : 'bg-amber-950/80 text-amber-300 border-amber-500/40'
+              }`}>
+                <Lamp tone={isOnline ? 'good' : 'warn'} pulse={isOnline} size={6} />
+                <span>{plant.status}</span>
+              </span>
             </div>
           </div>
+
+          <div className="flex items-center gap-2 font-mono text-2xs text-slate-300 self-start sm:self-auto tabular-nums">
+            <Lamp tone="live" pulse size={6} />
+            <span className="text-cyan-300 font-semibold">Live Telemetry</span>
+            <span className="text-white/30">&bull;</span>
+            <span>{timeStr || '—'}</span>
+          </div>
+        </div>
 
           {/* Main Hero Metrics Grid */}
           <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-center">
@@ -194,10 +190,8 @@ export function PlantHeroBanner({
             </div>
 
           </div>
-
         </div>
       </div>
-    </div>
   );
 }
 

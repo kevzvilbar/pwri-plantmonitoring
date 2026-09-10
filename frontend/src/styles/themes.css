@@ -57,17 +57,17 @@
     --border:              215 20% 88%;
     --input:               215 20% 86%;
     --ring:                175 84% 31%;
-    --radius:              0.75rem;
+    --radius:              0.5rem;
 
     /* ── Topbar (deep navy) ──────────────────────────────────────── */
     --topbar:              210 62% 11%;
     --topbar-foreground:   210 40% 97%;
     --topbar-muted:        210 25% 62%;
 
-    /* ── Hero / stat card gradients ─────────────────────────────── */
-    --gradient-stat:      linear-gradient(135deg, hsl(210 62% 13%) 0%, hsl(175 70% 22%) 100%);
-    --gradient-accent:    linear-gradient(135deg, hsl(175 84% 28%) 0%, hsl(189 96% 36%) 100%);
-    --gradient-highlight: linear-gradient(135deg, hsl(189 96% 36%) 0%, hsl(175 84% 28%) 100%);
+    /* ── Hero / stat card surfaces (Solid industrial high-contrast per Impeccable) ── */
+    --gradient-stat:      hsl(215 28% 13%);
+    --gradient-accent:    hsl(175 84% 28%);
+    --gradient-highlight: hsl(189 96% 36%);
 
     /* ── Sidebar (deep navy, same as topbar for seamless chrome) ─── */
     --sidebar-background:  210 62% 11%;
@@ -274,11 +274,9 @@
     --chart-11: 300 60% 50%;   /* Magenta */
     --chart-12: 84  81% 44%;   /* Lime    */
 
-    /* ── Elevation shadows ──────────────────────────────────────── */
-    --shadow-card:  0 1px 2px 0 hsl(215 50% 11% / 0.04),
-                    0 1px 3px 0 hsl(215 50% 11% / 0.06);
-    --shadow-elev:  0 4px 16px -4px hsl(215 50% 11% / 0.10),
-                    0 2px 6px -1px hsl(215 50% 11% / 0.05);
+    /* ── Elevation shadows (Structural separation uses 1px borders; shadows reserved for overlays) ── */
+    --shadow-card:  none;
+    --shadow-elev:  0 4px 12px -2px hsl(215 50% 11% / 0.08);
     --shadow-modal: 0 24px 48px -12px hsl(215 60% 8% / 0.28);
 
     --transition-base: 200ms cubic-bezier(0.4, 0, 0.2, 1);
@@ -332,9 +330,9 @@
     --sidebar-primary:     189 94% 53.3%;
     --sidebar-ring:        189 94% 53.3%;
 
-    /* Ambient downward shadows tinted to canvas hue */
-    --shadow-card:  0 4px 16px -2px hsl(210 60% 2% / 0.55), 0 2px 6px -1px hsl(210 60% 2% / 0.45);
-    --shadow-elev:  0 10px 24px -4px hsl(210 60% 2% / 0.65), 0 4px 10px -2px hsl(210 60% 2% / 0.45);
+    /* Ambient downward shadows (Clean 1px borders for structure; shadows reserved for overlays) */
+    --shadow-card:  none;
+    --shadow-elev:  0 4px 12px -2px hsl(210 60% 2% / 0.4);
     --shadow-modal: 0 20px 48px -8px hsl(210 60% 2% / 0.85);
 
     /* Digital readout — glowing physical meter counter */

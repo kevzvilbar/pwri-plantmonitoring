@@ -146,35 +146,29 @@ export function PlantPulseHero({
   }, [chartData, fallbackSparkline]);
 
   return (
-    <div className="rounded-[1.75rem] bg-white/[0.03] ring-1 ring-white/10 p-1 sm:p-1.5 shadow-[var(--shadow-elev)]">
-      {/* Focal entrance (the app's ONE authored moment): the hero powers on
-          like an instrument panel, then a single charge of light sweeps the
-          top edge once. The element is already relative overflow-hidden, so
-          the sweep is clipped to the panel. See .hero-arrival in index.css. */}
-      <div className="hero-arrival rounded-[calc(1.75rem-0.375rem)] bg-gradient-stat text-white p-4 sm:p-5 shadow-[inset_0_1px_1px_rgba(255,255,255,0.08)] edge-light-teal relative overflow-hidden">
-        
-        {/* ── Top Bar: Title, Facility Badge, Incident Flag, Downtime & View Toggle ── */}
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pb-3.5 border-b border-white/15">
-          <div className="flex items-center gap-2.5 flex-wrap">
-            <h1 className="text-base sm:text-lg font-bold tracking-tight text-white">
-              PWRI Operations Telemetry
-            </h1>
-            <span className="px-2.5 py-0.5 rounded-full text-2xs font-semibold bg-teal-950/80 text-teal-300 border border-teal-500/40 flex items-center gap-1">
-              <Building2 className="h-3 w-3 text-teal-400" />
-              {selectedPlantName}
-            </span>
-            {openIncidentCount > 0 && (
-              <button
-                type="button"
-                onClick={onViewIncidents}
-                className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-rose-950/80 text-rose-300 border border-rose-500/40 text-2xs font-semibold hover:bg-rose-900/80 transition-colors"
-                title={`${openIncidentCount} open incident${openIncidentCount > 1 ? 's' : ''} — click to view`}
-              >
-                <ShieldAlert className="h-3 w-3 text-rose-400" aria-hidden />
-                <span>{openIncidentCount} open incident{openIncidentCount > 1 ? 's' : ''}</span>
-              </button>
-            )}
-          </div>
+    <div className="rounded-lg border border-slate-800 bg-slate-900 text-white p-4 sm:p-5 relative overflow-hidden">
+      {/* ── Top Bar: Title, Facility Badge, Incident Flag, Downtime & View Toggle ── */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pb-3.5 border-b border-slate-800">
+        <div className="flex items-center gap-2.5 flex-wrap">
+          <h1 className="text-base sm:text-lg font-bold tracking-tight text-white">
+            PWRI Operations Telemetry
+          </h1>
+          <span className="px-2.5 py-0.5 rounded-md text-2xs font-semibold bg-slate-800 text-teal-300 border border-teal-500/30 flex items-center gap-1 font-mono">
+            <Building2 className="h-3 w-3 text-teal-400" />
+            {selectedPlantName}
+          </span>
+          {openIncidentCount > 0 && (
+            <button
+              type="button"
+              onClick={onViewIncidents}
+              className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md bg-rose-950/80 text-rose-300 border border-rose-500/40 text-2xs font-semibold hover:bg-rose-900/80 transition-colors"
+              title={`${openIncidentCount} open incident${openIncidentCount > 1 ? 's' : ''} — click to view`}
+            >
+              <ShieldAlert className="h-3 w-3 text-rose-400" aria-hidden />
+              <span>{openIncidentCount} open incident{openIncidentCount > 1 ? 's' : ''}</span>
+            </button>
+          )}
+        </div>
 
           <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
             <Button
@@ -244,18 +238,18 @@ export function PlantPulseHero({
               {dProduction !== null && <TrendBadge delta={dProduction} />}
             </div>
 
-            <div className="text-2xs text-slate-300 flex items-center gap-1.5 pt-0.5 font-mono">
+            <div className="text-2xs text-slate-300 flex items-center gap-1.5 pt-0.5 font-mono tabular-nums">
               <Lamp tone="live" pulse size={6} />
               <span className="text-cyan-300 font-semibold">Live Telemetry</span>
               <span className="text-white/30">&bull;</span>
-              <span>{secondsAgo}s ago</span>
+              <span>Updated {secondsAgo}s ago</span>
               <span className="text-white/30">&bull;</span>
-              <span>{timeStr || '—'}</span>
+              <span>24h Period ({timeStr || '—'})</span>
             </div>
           </div>
 
           {/* Middle: 7-Day Sparkline */}
-          <div className="md:col-span-4 flex flex-col justify-center bg-black/30 border border-white/10 rounded-xl px-3 py-2">
+          <div className="md:col-span-4 flex flex-col justify-center bg-slate-950/60 border border-slate-800 rounded-md px-3 py-2">
             <div className="flex items-center justify-between gap-2 mb-1">
               <span className="text-3xs font-mono font-semibold uppercase tracking-wider text-teal-200/90">
                 7-Day Production Trend
@@ -303,7 +297,7 @@ export function PlantPulseHero({
 
           {/* Right: Fleet Health Status Lamps */}
           <div className="md:col-span-3 flex md:flex-col justify-start md:justify-center md:items-end gap-2 text-2xs font-mono">
-            <div className="flex items-center gap-2 bg-black/40 border border-white/15 rounded-lg px-3 py-2 shadow-xs">
+            <div className="flex items-center gap-2 bg-slate-950/60 border border-slate-800 rounded-md px-3 py-2">
               <span className="flex items-center gap-1.5">
                 <Lamp tone="good" size={6} />
                 <span className="font-semibold text-white">{fleetCounts.online}</span>
@@ -328,8 +322,6 @@ export function PlantPulseHero({
             </div>
           </div>
         </div>
-
       </div>
-    </div>
   );
 }

@@ -3,6 +3,7 @@ import { Card } from '@/components/ui/card';
 import { StatusPill } from '@/components/StatusPill';
 import { TrendingUp, TrendingDown, Minus, ChevronDown, ChevronUp } from 'lucide-react';
 import { StatTone, TONE_BG, TONE_ICON } from './types';
+import { cn } from '@/lib/utils';
 
 // ── Geometric sans-serif for KPI numbers — matches the Solar/Grid/Total cards ──
 // DM Sans is a low-contrast geometric sans with perfectly circular bowls,
@@ -29,7 +30,7 @@ function useValueTick(value: unknown): number {
   return tick;
 }
 
-// Tiny up/down/flat arrow with percent label — shown BELOW the value.
+// Concise inline trend indicator with tabular numbers (no jitter, no floating pills)
 // Renders nothing when `delta` is null or non-finite.
 export function TrendBadge({ delta }: { delta: number | null }) {
   if (delta === null || !Number.isFinite(delta)) return null;
@@ -39,9 +40,9 @@ export function TrendBadge({ delta }: { delta: number | null }) {
     ? 'text-muted-foreground'
     : delta > 0 ? 'text-accent' : 'text-danger';
   return (
-    <span className={`inline-flex items-center gap-0.5 text-xs font-semibold ${cls}`} title="vs previous day">
-      <Icon className="h-3.5 w-3.5" />
-      {abs < 0.5 ? '0%' : `${abs.toFixed(0)}% vs prev day`}
+    <span className={`inline-flex items-center gap-0.5 text-xs font-semibold font-mono tabular-nums ${cls}`} title="vs previous day">
+      <Icon className="h-3.5 w-3.5 shrink-0" />
+      <span>{abs < 0.5 ? '0.0%' : `${delta > 0 ? '+' : '-'}${abs.toFixed(1)}% vs prev day`}</span>
     </span>
   );
 }
@@ -60,7 +61,7 @@ export function StatCard({
   icon: any; label: string; value: any; unit?: string;
   tone?: StatTone; onClick?: () => void; accent?: string;
   calc?: boolean; threshold?: string;
-  size?: 'default' | 'lg';
+  size?: 'compact' | 'default' | 'lg' | 'hero';
   trend?: number | null;
   calcTooltip?: string;
   // Optional per-train breakdown revealed by a chevron toggle (hidden by default).
@@ -77,21 +78,29 @@ export function StatCard({
   const showExpand  = liveRows.length >= 2;
   const rowUnit     = expandUnit ?? unit ?? '';
 
-  const lg      = size === 'lg';
-  const toneBg  = tone ? TONE_BG[tone] : '';
-  const calcBg  = !tone && calc ? 'border-l-2 border-l-info' : '';
-  const iconCls = tone ? TONE_ICON[tone] : (accent ?? 'text-muted-foreground');
+  const isHero    = size === 'hero';
+  const isLg      = size === 'lg' || isHero;
+  const isCompact = size === 'compact';
+  const toneBg    = tone ? TONE_BG[tone] : '';
+  const calcBg    = !tone && calc ? 'border-l-2 border-l-info' : '';
+  const iconCls   = tone ? TONE_ICON[tone] : (accent ?? 'text-muted-foreground');
 
   return (
     <Card
-      className={`stat-card min-w-0 hover:border-border/90 hover:shadow-[var(--shadow-card)] transition-all ${onClick ? 'cursor-pointer' : 'cursor-default'} ${lg ? 'p-3.5' : 'p-3'} ${toneBg} ${calcBg}`}
+      className={cn(
+        'stat-card min-w-0 transition-colors hover:border-border',
+        onClick ? 'cursor-pointer' : 'cursor-default',
+        isHero ? 'p-4 sm:p-5' : isLg ? 'p-3.5' : isCompact ? 'p-2.5' : 'p-3',
+        toneBg,
+        calcBg
+      )}
       onClick={onClick}
     >
       {/* ── Header row: icon · LABEL (uppercase) · badges/expand ── */}
       <div className="flex items-center justify-between gap-1 min-w-0">
         <div className="flex items-center gap-1.5 min-w-0 overflow-hidden">
-          <Icon className={`shrink-0 ${lg ? 'h-4 w-4' : 'h-3.5 w-3.5'} ${iconCls}`} />
-          <span className={`uppercase tracking-wide font-semibold truncate leading-none ${lg ? 'text-xs' : 'text-2xs'} text-muted-foreground`}>
+          <Icon className={cn('shrink-0', isHero ? 'h-4 w-4' : isLg ? 'h-4 w-4' : 'h-3.5 w-3.5', iconCls)} />
+          <span className={cn('uppercase tracking-wide font-semibold truncate leading-none text-muted-foreground', isHero ? 'text-xs' : isLg ? 'text-xs' : isCompact ? 'text-3xs' : 'text-2xs')}>
             {label}
           </span>
           {threshold && (
@@ -125,10 +134,14 @@ export function StatCard({
           restarting the tick so background-sync updates are legible. */}
       <div
         key={valueTick}
-        className={`mt-2 text-foreground leading-none whitespace-nowrap overflow-hidden text-ellipsis font-mono tabular-nums ${lg ? 'text-2xl sm:text-3xl font-bold' : 'text-2xl font-bold'} ${valueTick > 0 ? 'animate-value-tick' : ''}`}
+        className={cn(
+          'mt-2 text-foreground leading-none whitespace-nowrap overflow-hidden text-ellipsis font-mono tabular-nums',
+          isHero ? 'text-3xl sm:text-4xl font-bold' : isLg ? 'text-2xl sm:text-3xl font-bold' : isCompact ? 'text-xl font-bold' : 'text-2xl font-bold',
+          valueTick > 0 ? 'animate-value-tick' : ''
+        )}
       >
         {value}
-        {unit && <span className={`font-sans font-normal text-muted-foreground ml-1.5 ${lg ? 'text-sm' : 'text-xs'}`}>{unit}</span>}
+        {unit && <span className={cn('font-sans font-normal text-muted-foreground ml-1.5', isHero ? 'text-base sm:text-lg' : isLg ? 'text-sm' : 'text-xs')}>{unit}</span>}
       </div>
 
       {/* ── Below-value: trend badge (matches Image 1 "↑ 1.4% vs prev day") ── */}

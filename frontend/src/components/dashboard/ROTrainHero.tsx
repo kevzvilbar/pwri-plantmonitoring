@@ -62,37 +62,34 @@ export function ROTrainHero({
   const hasOffline = offlineCount > 0;
 
   return (
-    <div className="rounded-[1.75rem] bg-white/[0.03] ring-1 ring-white/10 p-1 sm:p-1.5 shadow-[var(--shadow-elev)]">
-      <div className="rounded-[calc(1.75rem-0.375rem)] bg-gradient-stat text-white p-4 sm:p-5 shadow-[inset_0_1px_1px_rgba(255,255,255,0.08)] relative overflow-hidden">
-        {/* ── Top Bar: Title, Identity Tag, Facility Badge, and Live Clock ── */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-3 border-b border-white/15">
-          <div className="flex items-center gap-2.5 flex-wrap">
-            <div className="p-1.5 rounded-lg bg-gradient-to-br from-primary to-highlight text-white shadow-xs shrink-0">
-              <ROTrainIcon className="h-4 w-4" />
-            </div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-base sm:text-lg font-bold tracking-tight text-white">
-                RO Trains & Pre-Treatment
-              </h1>
-              <span className="px-2 py-0.5 rounded-full text-3xs font-semibold uppercase tracking-wider bg-[hsl(var(--kpi-ro))]/20 text-[hsl(var(--kpi-ro))] border border-[hsl(var(--kpi-ro))]/40">
-                Membrane SCADA Telemetry
+    <div className="rounded-lg border border-slate-800 bg-slate-900 text-white p-4 sm:p-5 relative overflow-hidden">
+      {/* ── Top Bar: Title, Identity Tag, Facility Badge, and Live Clock ── */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-3 border-b border-slate-800">
+        <div className="flex items-center gap-2.5 flex-wrap">
+          <ROTrainIcon className="h-5 w-5 text-teal-400 shrink-0" />
+          <div className="flex items-center gap-2 flex-wrap">
+            <h1 className="text-base sm:text-lg font-bold tracking-tight text-white">
+              RO Trains & Pre-Treatment
+            </h1>
+            <span className="px-2 py-0.5 rounded-md text-3xs font-semibold uppercase tracking-wider bg-slate-800 text-teal-300 border border-teal-500/30 font-mono">
+              Membrane SCADA Telemetry
+            </span>
+            {plantName && (
+              <span className="px-2.5 py-0.5 rounded-md text-2xs font-semibold bg-slate-800 text-teal-300 border border-teal-500/30 flex items-center gap-1 font-mono">
+                <Building2 className="h-3 w-3 text-teal-400" />
+                {plantName}
               </span>
-              {plantName && (
-                <span className="px-2.5 py-0.5 rounded-full text-2xs font-semibold bg-teal-950/80 text-teal-300 border border-teal-500/40 flex items-center gap-1">
-                  <Building2 className="h-3 w-3 text-teal-400" />
-                  {plantName}
-                </span>
-              )}
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 font-mono text-2xs text-slate-300 self-start sm:self-auto">
-            <Lamp tone="live" pulse size={6} />
-            <span className="text-cyan-300 font-semibold">Live System</span>
-            <span className="text-white/30">&bull;</span>
-            <span className="tabular-nums">{timeStr || '—'}</span>
+            )}
           </div>
         </div>
+
+        <div className="flex items-center gap-2 font-mono text-2xs text-slate-300 self-start sm:self-auto tabular-nums">
+          <Lamp tone="live" pulse size={6} />
+          <span className="text-cyan-300 font-semibold">Live System</span>
+          <span className="text-white/30">&bull;</span>
+          <span>{timeStr || '—'}</span>
+        </div>
+      </div>
 
         {/* ── Consolidated Industrial SCADA Telemetry Grid ── */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3.5 pt-3.5 items-start">
@@ -213,6 +210,5 @@ export function ROTrainHero({
           </div>
         </div>
       </div>
-    </div>
   );
 }
