@@ -93,14 +93,14 @@ export function PivotTable({
     // either. The header row stays pinned via `sticky top-0` on its cells
     // (see TH/TH_DATE/TH_TOTAL) instead of living in a non-scrolling div.
     <div className="h-full overflow-auto">
-      <table className="border-collapse text-xs w-full table-fixed" style={{ minWidth: `${72 + entities.length * 72 + 80}px` }}>
+      <table className="border-collapse text-xs w-full table-fixed" style={{ minWidth: `${84 + entities.length * 100 + 100}px` }}>
         <colgroup>
-          <col style={{ width: '72px', minWidth: '72px' }} />
-          {entities.map((e) => <col key={e.id} style={{ minWidth: '72px' }} />)}
-          <col style={{ width: '80px', minWidth: '80px' }} />
+          <col style={{ width: '84px', minWidth: '84px' }} />
+          {entities.map((e) => <col key={e.id} style={{ width: '100px', minWidth: '100px' }} />)}
+          <col style={{ width: '100px', minWidth: '100px' }} />
         </colgroup>
         <thead>
-          <tr className="bg-muted/95">
+          <tr className="bg-card">
             <th className={TH_DATE}>Date</th>
             {entities.map((e) => (
               <th key={e.id} className={TH} title={e.label}>
@@ -119,8 +119,8 @@ export function PivotTable({
             return (
               <tr key={date} className={isEven ? 'bg-background hover:bg-muted/15' : 'bg-muted/10 hover:bg-muted/25'}>
                 <td className={[
-                  'px-3 py-1.5 whitespace-nowrap font-medium text-xs text-muted-foreground sticky left-0 z-10 border-r border-border',
-                  isEven ? 'bg-background' : 'bg-muted/10',
+                  'px-3 py-1.5 whitespace-nowrap font-medium text-xs text-muted-foreground sticky left-0 z-10 border-r border-border shadow-[4px_0_6px_-2px_rgba(0,0,0,0.06)]',
+                  isEven ? 'bg-card' : 'bg-muted',
                 ].join(' ')}>
                   {fmtDateKey(date)}
                 </td>
@@ -197,7 +197,7 @@ export function PivotTable({
                 <td className={[
                   TD_TOTAL_COL,
                   colorClass,
-                  isEven ? 'bg-background' : 'bg-muted/10',
+                  isEven ? 'bg-card' : 'bg-muted',
                 ].join(' ')}>
                   {rowTotal !== 0 ? <span className={rowTotal < 0 ? 'text-destructive font-semibold' : ''}>{rowTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span> : '—'}
                 </td>

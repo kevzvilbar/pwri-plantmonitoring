@@ -1,7 +1,8 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
+import { calc } from '@/lib/calculations';
 import {
   DSMTab, buildEntityPivot, fillDateRange, fmtDateKey,
   computeGridMeterBreakdown, buildKwhSummaryCsv, type GridPowerReadingRow,
@@ -114,13 +115,36 @@ export function useDataSummaryData({
 }: DataSummaryDataProps): DataSummaryData {
   const [tab, setTab] = useState<DSMTab>('overview');
 
-  const allDates = chartData
-    .map((d) => (d.isoDate ? format(new Date(d.isoDate as string), 'yyyy-MM-dd') : undefined))
-    .filter((d): d is string => !!d);
+  const allDates = useMemo(() => {
+    const datesFromChart = chartData
+      .map((d) => (d.isoDate ? format(new Date(d.isoDate as string), 'yyyy-MM-dd') : undefined))
+      .filter((d): d is string => !!d);
+    if (datesFromChart.length > 0) return datesFromChart;
+
+    const datesFromReadings = new Set<string>();
+    const addDate = (r: any) => {
+      if (r?.reading_datetime) {
+        try {
+          datesFromReadings.add(format(new Date(r.reading_datetime), 'yyyy-MM-dd'));
+        } catch { /* ignore */ }
+      }
+    };
+    locReadings?.forEach(addDate);
+    productReadings?.forEach(addDate);
+    wellReadings?.forEach(addDate);
+    roReadings?.forEach(addDate);
+    return Array.from(datesFromReadings).sort();
+  }, [chartData, locReadings, productReadings, wellReadings, roReadings]);
+
   const defaultFrom = allDates.length ? allDates[0] : '';
   const defaultTo = allDates.length ? allDates[allDates.length - 1] : '';
   const [filterFrom, setFilterFrom] = useState(defaultFrom);
   const [filterTo, setFilterTo] = useState(defaultTo);
+
+  useEffect(() => {
+    if (!filterFrom && defaultFrom) setFilterFrom(defaultFrom);
+    if (!filterTo && defaultTo) setFilterTo(defaultTo);
+  }, [defaultFrom, defaultTo]);
 
   const parsedFrom = filterFrom ? new Date(`${filterFrom}T00:00:00`) : null;
   const parsedTo = filterTo ? new Date(`${filterTo}T23:59:59`) : null;
@@ -412,14 +436,21 @@ export function useDataSummaryData({
   }, [prodDateKeys, filterFrom, filterTo]);
 
   const overviewDates = useMemo(() => {
+    if (filterFrom && filterTo) {
+      return fillDateRange(filterFrom, filterTo);
+    }
     const allKeys = filteredChartData
       .filter((d) => d.isoDate)
       .map((d) => format(new Date(d.isoDate as string), 'yyyy-MM-dd'));
-    if (allKeys.length === 0) return [];
-    const start = filterFrom || allKeys[0];
-    const end   = filterTo   || allKeys[allKeys.length - 1];
-    return fillDateRange(start, end);
-  }, [filteredChartData, filterFrom, filterTo]);
+    if (allKeys.length > 0) {
+      const start = filterFrom || allKeys[0];
+      const end   = filterTo   || allKeys[allKeys.length - 1];
+      return fillDateRange(start, end);
+    }
+    if (prodDates.length > 0) return prodDates;
+    if (consDates.length > 0) return consDates;
+    return [];
+  }, [filteredChartData, filterFrom, filterTo, prodDates, consDates]);
 
   const overviewByDate = useMemo(() => {
     const map = new Map<string, any>();
@@ -437,35 +468,48 @@ export function useDataSummaryData({
       const trainRecoveries = roTrainRecoveryByDate.get(dk);
       const trainTds = roTrainTdsByDate.get(dk);
 
-      if (metric === 'rawwater') {
-        const pivotTotal = prodEntities.reduce(
-          (s, e) => s + (prodPivotMap.get(dk)?.get(e.id) ?? 0), 0,
-        );
-        const rawwater = pivotTotal > 0 ? pivotTotal : null;
-        return existing
-          ? { ...existing, rawwater, trainRecoveries, trainTds }
-          : {
-              date: format(new Date(dk + 'T00:00:00'), 'MMM d'),
-              isoDate: dk + 'T00:00:00.000Z',
-              production: null, consumption: null, rawwater,
-              recovery: null, tds: null, kwh: null, solarKwh: null,
-              nrw: null, powerCost: null, chemCost: null, totalCost: null,
-              trainRecoveries, trainTds,
-            };
-      }
+      const pivotProdTotal = prodEntities.reduce(
+        (s, e) => s + (prodPivotMap.get(dk)?.get(e.id) ?? 0), 0,
+      );
+      const pivotConsTotal = consEntities.reduce(
+        (s, e) => s + (consPivot.get(dk)?.get(e.id) ?? 0), 0,
+      );
 
-      if (existing) return { ...existing, trainRecoveries, trainTds };
-      return {
+      const production = existing?.production != null
+        ? existing.production
+        : (pivotProdTotal > 0 ? pivotProdTotal : null);
+
+      const consumption = existing?.consumption != null
+        ? existing.consumption
+        : (pivotConsTotal > 0 ? pivotConsTotal : null);
+
+      const rawwater = existing?.rawwater != null
+        ? existing.rawwater
+        : (metric === 'rawwater' && pivotProdTotal > 0 ? pivotProdTotal : null);
+
+      const nrw = existing?.nrw != null
+        ? existing.nrw
+        : (production != null && consumption != null ? calc.nrw(production, consumption) : null);
+
+      const base = existing ?? {
         date: format(new Date(dk + 'T00:00:00'), 'MMM d'),
         isoDate: dk + 'T00:00:00.000Z',
-        production: null, consumption: null, rawwater: null,
         recovery: null, tds: null, kwh: null, solarKwh: null,
-        nrw: null, powerCost: null, chemCost: null, totalCost: null,
-        trainRecoveries, trainTds,
+        powerCost: null, chemCost: null, totalCost: null,
+      };
+
+      return {
+        ...base,
+        production,
+        consumption,
+        rawwater,
+        nrw,
+        trainRecoveries,
+        trainTds,
       };
     });
   }, [overviewDates, overviewByDate, metric, prodDates, prodEntities, prodPivotMap,
-      roTrainRecoveryByDate, roTrainTdsByDate]);
+      consEntities, consPivot, roTrainRecoveryByDate, roTrainTdsByDate]);
 
   const activeTab: DSMTab =
     (!hasProdTab && tab === 'production') ||

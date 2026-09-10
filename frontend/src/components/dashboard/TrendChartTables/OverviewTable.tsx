@@ -141,7 +141,7 @@ export function OverviewTable({
     // header instead of a second independently-scrolling header div.
     <div className="h-full overflow-auto">
       <table className="w-full border-collapse text-xs">
-        <thead className="bg-muted/95">
+        <thead className="bg-card">
           <tr>
             <th className={TH_DATE}>Date</th>
             {cols.map((c) => <th key={c.key} className={TH}>{c.label}</th>)}
@@ -151,8 +151,8 @@ export function OverviewTable({
           {[...chartData].reverse().map((d, i) => (
             <tr key={d.date} className={i % 2 === 0 ? 'bg-background hover:bg-muted/15' : 'bg-muted/10 hover:bg-muted/25'}>
               <td className={[
-                'px-3 py-1.5 whitespace-nowrap font-medium text-xs text-muted-foreground sticky left-0 z-10',
-                i % 2 === 0 ? 'bg-background' : 'bg-muted/10',
+                'px-3 py-1.5 whitespace-nowrap font-medium text-xs text-muted-foreground sticky left-0 z-10 border-r border-border shadow-[4px_0_6px_-2px_rgba(0,0,0,0.06)]',
+                i % 2 === 0 ? 'bg-card' : 'bg-muted',
               ].join(' ')}>{d.date}</td>
               {cols.map((c) => <td key={c.key} className={TD}>{c.fmt(d)}</td>)}
             </tr>

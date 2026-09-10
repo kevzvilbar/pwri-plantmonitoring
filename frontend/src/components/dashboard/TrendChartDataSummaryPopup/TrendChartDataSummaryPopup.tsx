@@ -53,7 +53,7 @@ export function DataSummaryPopup({
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
       <DialogContent
-        className="max-w-[94vw] w-full max-h-[90vh] flex flex-col p-0 gap-0 overflow-hidden"
+        className="max-w-[94vw] w-full max-h-[90vh] h-[90vh] flex flex-col p-0 gap-0 overflow-hidden"
         data-testid={`dsm-popup-${metric}`}
       >
         <DialogHeader className="px-5 pt-4 pb-0 border-b shrink-0 bg-card">
@@ -81,25 +81,25 @@ export function DataSummaryPopup({
           <DialogDescription className="sr-only">
             Multi-tab data summary for {title ?? metric}.
           </DialogDescription>
-
-          <Body
-            activeTab={data.activeTab}
-            metric={metric}
-            hasProdTab={data.hasProdTab}
-            hasConsTab={data.hasConsTab}
-            overviewChartRows={data.overviewChartRows}
-            overviewDates={data.overviewDates}
-            roTrainEntities={data.roTrainEntities}
-            gridBreakdown={data.gridBreakdown}
-            prodDates={data.prodDates}
-            prodEntities={data.prodEntities}
-            prodPivotMap={data.prodPivotMap}
-            hasPermeateData={data.hasPermeateData}
-            consDates={data.consDates}
-            consEntities={data.consEntities}
-            consPivot={data.consPivot}
-          />
         </DialogHeader>
+
+        <Body
+          activeTab={data.activeTab}
+          metric={metric}
+          hasProdTab={data.hasProdTab}
+          hasConsTab={data.hasConsTab}
+          overviewChartRows={data.overviewChartRows}
+          overviewDates={data.overviewDates}
+          roTrainEntities={data.roTrainEntities}
+          gridBreakdown={data.gridBreakdown}
+          prodDates={data.prodDates}
+          prodEntities={data.prodEntities}
+          prodPivotMap={data.prodPivotMap}
+          hasPermeateData={data.hasPermeateData}
+          consDates={data.consDates}
+          consEntities={data.consEntities}
+          consPivot={data.consPivot}
+        />
 
         <Footer
           tabDates={data.tabDates}
