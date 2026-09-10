@@ -93,11 +93,11 @@ export async function fetchTopologyData(plantId: string): Promise<TopologyData> 
       'unit_type,feed_source_train_id,reject_routing'
     ).eq('plant_id', plantId).order('train_number'),
     supabase.from('locators').select('id,name,status,product_meter_id').eq('plant_id', plantId).order('name'),
-    (supabase.from('product_meters' as any) as any).select('id,name,status').eq('plant_id', plantId).order('name'),
-    (supabase.from('plant_power_config' as any) as any)
+    supabase.from('product_meters').select('id,name,status').eq('plant_id', plantId).order('name'),
+    supabase.from('plant_power_config')
       .select('solar_meter_count,solar_meter_names,grid_meter_count,grid_meter_names')
       .eq('plant_id', plantId).maybeSingle(),
-    (supabase.from('plant_meter_config' as any) as any)
+    supabase.from('plant_meter_config')
       .select('config,permeate_is_production')
       .eq('plant_id', plantId).maybeSingle(),
   ]);
@@ -113,7 +113,7 @@ export async function fetchTopologyData(plantId: string): Promise<TopologyData> 
   // Fetch saved links
   let savedLinks: TopoLink[] = [];
   try {
-    const { data: linkRows } = await (supabase.from('plant_topology_links' as any) as any)
+    const { data: linkRows } = await supabase.from('plant_topology_links')
       .select('from_id,to_id').eq('plant_id', plantId);
     if (linkRows?.length) savedLinks = linkRows;
   } catch {
@@ -133,7 +133,7 @@ export async function fetchTopologyData(plantId: string): Promise<TopologyData> 
 
 /** Fetch topology links */
 export async function fetchTopologyLinks(plantId: string): Promise<TopoLink[]> {
-  const { data, error } = await (supabase.from('plant_topology_links' as any) as any)
+  const { data, error } = await supabase.from('plant_topology_links')
     .select('from_id,to_id').eq('plant_id', plantId);
   if (error) throw error;
   return (data ?? []) as unknown as TopoLink[];
@@ -164,13 +164,13 @@ export async function fetchLocatorsForTopology(plantId: string): Promise<TopoLoc
 }
 
 export async function fetchProductMetersForTopology(plantId: string): Promise<TopoProductMeter[]> {
-  const { data, error } = await (supabase.from('product_meters' as any) as any).select('id,name,status').eq('plant_id', plantId).order('name');
+  const { data, error } = await supabase.from('product_meters').select('id,name,status').eq('plant_id', plantId).order('name');
   if (error) throw error;
   return (data ?? []) as unknown as TopoProductMeter[];
 }
 
 export async function fetchPowerConfigForTopology(plantId: string): Promise<TopoPowerConfig | null> {
-  const { data, error } = await (supabase.from('plant_power_config' as any) as any)
+  const { data, error } = await supabase.from('plant_power_config')
     .select('solar_meter_count,solar_meter_names,grid_meter_count,grid_meter_names')
     .eq('plant_id', plantId).maybeSingle();
   if (error) throw error;
@@ -178,7 +178,7 @@ export async function fetchPowerConfigForTopology(plantId: string): Promise<Topo
 }
 
 export async function fetchMeterConfigForTopology(plantId: string): Promise<TopoMeterConfig | null> {
-  const { data, error } = await (supabase.from('plant_meter_config' as any) as any)
+  const { data, error } = await supabase.from('plant_meter_config')
     .select('config,permeate_is_production')
     .eq('plant_id', plantId).maybeSingle();
   if (error) throw error;

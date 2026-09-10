@@ -39,9 +39,9 @@ const ALLOWLIST = [
   { file: 'components/manual/bookPrimitives.tsx', value: '17px', reason: 'Manual reader serif type system, not the dashboard compact scale.' },
   { file: 'components/manual/bookPrimitives.tsx', value: '18px', reason: 'Manual reader serif type system, not the dashboard compact scale.' },
   { file: 'components/manual/bookPrimitives.tsx', value: '13.5px', reason: 'Manual reader serif type system, not the dashboard compact scale.' },
-  { file: 'components/OdometerRollerInput.tsx', value: '17px', reason: 'Odometer digit readability, a separate choice from the compact scale.' },
-  { file: 'components/OdometerRollerInput.tsx', value: '18px', reason: 'Odometer digit readability, a separate choice from the compact scale.' },
-  { file: 'components/OdometerRollerInput.tsx', value: '19px', reason: 'Odometer digit readability, a separate choice from the compact scale.' },
+  { file: 'components/OdometerRollerInput/useOdometerRoller.ts', value: '17px', reason: 'Odometer digit readability, a separate choice from the compact scale.' },
+  { file: 'components/OdometerRollerInput/OdometerRollerInput.tsx', value: '18px', reason: 'Odometer digit readability, a separate choice from the compact scale.' },
+  { file: 'components/OdometerRollerInput/useOdometerRoller.ts', value: '19px', reason: 'Odometer digit readability, a separate choice from the compact scale.' },
 ];
 
 function getAllFiles(dir) {

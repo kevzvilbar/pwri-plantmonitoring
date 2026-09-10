@@ -5702,9 +5702,9 @@ export type Database = {
       }
       fn_cascade_reading_correction: {
         Args: {
-          p_admin_id: string
+          p_admin_id?: string | null
           p_new_current: number
-          p_reason?: string
+          p_reason?: string | null
           p_row_id: string
           p_table: string
         }
