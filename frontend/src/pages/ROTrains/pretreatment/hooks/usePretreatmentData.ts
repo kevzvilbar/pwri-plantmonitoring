@@ -19,7 +19,6 @@ export interface PretreatmentData {
   meterCfg: any;
   latestStatusLog: any;
   siblingTrains: any[];
-  trains: any[];
 }
 
 export function usePretreatmentData(
@@ -28,7 +27,7 @@ export function usePretreatmentData(
   roValues: Record<string, string>,
   isSynchronized: boolean,
 ) {
-  const { config: meterCfg } = usePlantMeterConfig(plantId);
+  const { data: meterCfg } = usePlantMeterConfig(plantId);
 
   // Trains for the selected plant
   const { data: trains } = useQuery({
@@ -180,6 +179,5 @@ export function usePretreatmentData(
     meterCfg,
     latestStatusLog,
     siblingTrains,
-    trains: trains ?? [],
   };
 }

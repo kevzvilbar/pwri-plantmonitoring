@@ -33,9 +33,9 @@ export interface PretreatmentCalculations {
   feedNegWarn: boolean;
   permNegWarn: boolean;
   rejNegWarn: boolean;
-  feedSpike: ReturnType<typeof evaluateROMeterSpike>;
-  permSpike: ReturnType<typeof evaluateROMeterSpike>;
-  rejSpike: ReturnType<typeof evaluateROMeterSpike>;
+  feedSpike: { tier: string };
+  permSpike: { tier: string };
+  rejSpike: { tier: string };
   feedHighWarn: boolean;
   permHighWarn: boolean;
   rejHighWarn: boolean;
@@ -86,7 +86,6 @@ export function usePretreatmentCalculations(
     const rejNegWarn = prevRejMeter != null && !isNaN(rejCurr) && rejCurr < prevRejMeter;
 
     const feedSpike = evaluateROMeterSpike('feed', feedDelta, mDurHr, avgFeedFlowRate);
-    const permSpike = evaluateROMeterSpike('permeate', permDelta, mDurHr, avgPermFlowRate);
     const rejSpike = evaluateROMeterSpike('reject', rejDelta, mDurHr, avgRejFlowRate);
 
     const feedHighWarn = !feedNegWarn && feedSpike.tier === 'critical';
