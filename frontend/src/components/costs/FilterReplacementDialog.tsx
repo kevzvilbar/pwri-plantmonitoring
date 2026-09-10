@@ -5,8 +5,9 @@
 // Gate rendering of this component's trigger at the call site to
 // Manager/Admin only — see CostsFiltersTab.tsx's `canEdit` prop.
 //
-// ⚠ Adjust the useToast import path if this repo's toast hook lives
-//   somewhere else.
+// ⚠ The toast system was migrated from shadcn useToast → Sonner in the
+//   2026-09-10 code-review fix pass. Use `toast.success/error/warning` from
+//   `@/components/ui/sonner` for any new notifications in this file.
 import { useEffect, useState } from "react";
 import { ResponsiveDialog } from "@/components/ui/responsive-dialog";
 import { Button } from "@/components/ui/button";
@@ -16,7 +17,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Plus } from "lucide-react";
 import { DatePicker } from "@/components/ui/date-picker";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "@/components/ui/sonner";
 import { useAuth } from "@/hooks/useAuth";
 import {
   FilterHousingType,
@@ -45,7 +46,6 @@ export function FilterReplacementDialog({
   trainName,
   onLogged,
 }: Props) {
-  const { toast } = useToast();
   const { user } = useAuth();
   const [open, setOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -114,9 +114,7 @@ export function FilterReplacementDialog({
 
   const handleSubmit = async () => {
     if (qtyNum <= 0 || priceNum < 0 || !replacementDate) {
-      toast({
-        variant: "destructive",
-        title: "Check the form",
+      toast.error("Check the form", {
         description: "Quantity must be at least 1 and unit price can't be negative.",
       });
       return;
@@ -151,8 +149,7 @@ export function FilterReplacementDialog({
         /* non-fatal */
       }
 
-      toast({
-        title: "Replacement logged",
+      toast.success("Replacement logged", {
         description: priceSynced
           ? `₱${totalCost.toLocaleString()} recorded for ${plantName}. Prices tab updated too.`
           : `₱${totalCost.toLocaleString()} recorded for ${plantName}.`,
@@ -161,15 +158,14 @@ export function FilterReplacementDialog({
       setOpen(false);
       onLogged?.();
     } catch (err) {
-      toast({
-        variant: "destructive",
-        title: "Couldn't save",
+      toast.error("Couldn't save", {
         description: err instanceof Error ? err.message : "Unknown error",
       });
     } finally {
       setSubmitting(false);
     }
   };
+
 
   return (
     <>

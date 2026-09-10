@@ -73,42 +73,46 @@ SECURITY DEFINER
 SET search_path = public, pg_temp
 AS $$
 DECLARE
-  v_max_depth integer;
-  v_current_depth integer;
-  v_rows_affected integer := 0;
+  v_enabled      boolean;   -- circuit breaker on/off flag (boolean)
+  v_max_depth    integer;
+  v_current_depth integer := 0;
 BEGIN
-  -- Check if circuit breaker is enabled
+  -- Read config: keep boolean and integer in separate variables so there is
+  -- no implicit boolean→integer coercion (previously enable_circuit_breaker
+  -- was selected INTO v_current_depth which is an integer — a latent bug).
   SELECT enable_circuit_breaker, max_depth
-  INTO v_current_depth, v_max_depth
-  FROM public.cascade_config
-  WHERE id = 1;
+  INTO   v_enabled, v_max_depth
+  FROM   public.cascade_config
+  WHERE  id = 1;
 
-  IF NOT v_current_depth THEN
-    -- Circuit breaker disabled, call original function
+  IF NOT v_enabled THEN
+    -- Circuit breaker disabled; call original function directly.
     PERFORM public.fn_cascade_reading_correction(p_table, p_id, p_new_value, p_editor_id, p_reason);
     RETURN;
   END IF;
 
-  -- Check current depth
+  -- Check current depth from session variable.
   v_current_depth := public.get_cascade_depth();
-  
+
   IF v_current_depth >= v_max_depth THEN
-    RAISE EXCEPTION 'Cascade depth limit exceeded (max: %). Aborting to prevent runaway recursion. Current depth: %', v_max_depth, v_current_depth
+    RAISE EXCEPTION 'Cascade depth limit exceeded (max: %). Aborting to prevent runaway recursion. Current depth: %',
+      v_max_depth, v_current_depth
       USING HINT = 'Increase cascade_config.max_depth or investigate recursive trigger chain';
   END IF;
 
-  -- Increment depth counter
+  -- Increment depth counter, call the real function, then restore.
   PERFORM public.increment_cascade_depth();
 
-  -- Call original function
   PERFORM public.fn_cascade_reading_correction(p_table, p_id, p_new_value, p_editor_id, p_reason);
 
-  -- Decrement depth counter
+  -- Restore depth to what it was before this call (not decrement-by-one,
+  -- which would be wrong if the inner call itself incremented further).
   PERFORM public.set_cascade_depth(v_current_depth);
-  
+
 EXCEPTION
   WHEN OTHERS THEN
-    -- Ensure depth counter is decremented even on error
+    -- Restore depth even on error so a failed call does not leave the counter
+    -- permanently inflated and block all subsequent corrections.
     PERFORM public.set_cascade_depth(GREATEST(public.get_cascade_depth() - 1, 0));
     RAISE;
 END;

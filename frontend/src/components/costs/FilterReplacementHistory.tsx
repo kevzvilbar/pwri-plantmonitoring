@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Download, Trash2 } from "lucide-react";
 import { FilterReplacement, deleteFilterReplacement } from "@/lib/filterReplacements";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "@/components/ui/sonner";
 
 interface Props {
   rows: FilterReplacement[];
@@ -21,8 +21,6 @@ interface Props {
 }
 
 export function FilterReplacementHistory({ rows, canDelete, onChanged }: Props) {
-  const { toast } = useToast();
-
   const csvHref = useMemo(() => {
     const header = "date,housing_type,quantity,unit_price,total_cost,supplier,remarks\n";
     const body = rows
@@ -52,16 +50,15 @@ export function FilterReplacementHistory({ rows, canDelete, onChanged }: Props) 
     }
     try {
       await deleteFilterReplacement(id);
-      toast({ title: "Removed" });
+      toast.success("Removed");
       onChanged?.();
     } catch (err) {
-      toast({
-        variant: "destructive",
-        title: "Couldn't remove",
+      toast.error("Couldn't remove", {
         description: err instanceof Error ? err.message : "Unknown error",
       });
     }
   };
+
 
   return (
     <div className="space-y-2">

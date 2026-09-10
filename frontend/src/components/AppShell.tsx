@@ -11,6 +11,7 @@ import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 import { PullToRefreshIndicator } from './PullToRefresh';
 import { ShiftHandoverModal } from './ShiftHandoverModal';
 import { useQueryClient } from '@tanstack/react-query';
+import { ErrorBoundary } from './ErrorBoundary';
 
 /**
  * BackgroundSyncMount
@@ -112,7 +113,16 @@ export function AppShell() {
           */}
           <main className="flex-1 flex flex-col min-w-0">
             <PageAnimationWrapper>
-              <Outlet />
+              {/*
+                Per-route ErrorBoundary: keeps the shell (sidebar, topbar,
+                nav) alive when a single page crashes, so operators can still
+                navigate to a working page. The global ErrorBoundary in
+                App.tsx is a last-resort backstop for errors outside the shell
+                (e.g. AuthProvider, PresenceProvider).
+              */}
+              <ErrorBoundary>
+                <Outlet />
+              </ErrorBoundary>
             </PageAnimationWrapper>
           </main>
 

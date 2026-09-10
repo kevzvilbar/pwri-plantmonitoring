@@ -354,22 +354,21 @@ export function useDashboardQueries({
         .in('plant_id', plantIds)
         .gte('reading_datetime', today);
       if (todayErr) throw todayErr;
-      // Fetch the most-recent row BEFORE today for each plant (delta baseline)
-      const prevRows: any[] = [];
-      await Promise.all(plantIds.map(async (pid) => {
-        // Deliberately soft-fail per plant here (unlike the two queries
-        // above) — one plant's lookup failing shouldn't abort Promise.all
-        // and kill the power card for every other plant. Was fully silent
-        // though; at least log it so a persistent per-plant issue is
-        // debuggable instead of just "that plant's delta looks a bit off."
-        const { data, error } = await supabase
-          .from('power_readings')
-          .select('meter_reading_kwh,grid_meter_readings,plant_id,reading_datetime')
-          .eq('plant_id', pid).lt('reading_datetime', today)
-          .order('reading_datetime', { ascending: false }).limit(1);
-        if (error) { console.warn('[Dashboard] prevRow lookup failed for plant', pid, error); return; }
-        if (data?.[0]) prevRows.push(data[0]);
-      }));
+
+      // FIX (N+1 → 1): Replace the previous Promise.all loop that fired one
+      // query per plant with a single RPC call using DISTINCT ON internally.
+      // Migration: 20260910000001_latest_power_readings_fn.sql
+      const { data: prevData, error: prevErr } = await (supabase.rpc as any)(
+        'latest_power_readings_before',
+        { plant_ids: plantIds, before_ts: today },
+      );
+      if (prevErr) {
+        // Soft-fail: log and proceed with empty prevRows rather than killing
+        // the whole power card (same policy as the old per-plant loop).
+        console.warn('[Dashboard] latest_power_readings_before failed:', prevErr);
+      }
+      const prevRows: any[] = prevData ?? [];
+
       if ((todayData ?? []).length) return { rows: todayData!, prevRows, isStale: false };
       // Fallback: latest reading per plant
       const { data: recent, error: recentErr } = await supabase
@@ -389,6 +388,7 @@ export function useDashboardQueries({
     staleTime: 120_000,
     refetchInterval: 120_000,
   });
+
   const todayPower   = todayPowerRaw?.rows ?? [];
   const powerIsStale = todayPowerRaw?.isStale ?? false;
   // Per-plant CT multiplier arrays — needed for kWh delta computation
@@ -478,23 +478,22 @@ export function useDashboardQueries({
         .select('daily_consumption_kwh,daily_grid_kwh,meter_reading_kwh,grid_meter_readings,is_meter_replacement,plant_id,reading_datetime')
         .in('plant_id', plantIds).gte('reading_datetime', yesterday).lt('reading_datetime', today);
       if (rowsErr) throw rowsErr;
-      // Fetch pre-yesterday baseline rows for delta computation
-      const prevRows: any[] = [];
-      await Promise.all(plantIds.map(async (pid) => {
-        // Soft-fail per plant, same reasoning as todayPowerRaw above.
-        const { data, error } = await supabase.from('power_readings')
-          .select('meter_reading_kwh,grid_meter_readings,plant_id,reading_datetime')
-          .eq('plant_id', pid).lt('reading_datetime', yesterday)
-          .order('reading_datetime', { ascending: false }).limit(1);
-        if (error) { console.warn('[Dashboard] yesterday prevRow lookup failed for plant', pid, error); return; }
-        if (data?.[0]) prevRows.push(data[0]);
-      }));
-      return { rows: rows ?? [], prevRows };
+      // FIX (N+1 → 1): same pattern as todayPowerRaw above.
+      // Fetch the pre-yesterday baseline in one round-trip.
+      const { data: prevData, error: prevErr } = await (supabase.rpc as any)(
+        'latest_power_readings_before',
+        { plant_ids: plantIds, before_ts: yesterday },
+      );
+      if (prevErr) {
+        console.warn('[Dashboard] yesterday latest_power_readings_before failed:', prevErr);
+      }
+      return { rows: rows ?? [], prevRows: prevData ?? [] };
     },
     enabled: plantIds.length > 0,
     staleTime: 12 * 60 * 60_000, // yesterday is immutable — cache for 12 hours
     refetchInterval: false,
   });
+
   // ── Step 1: Resolve all RO train IDs + metadata for the selected plants ─────
   // BUG FIX (same root cause as permeate path, line ~1007):
   // ro_train_readings does NOT have a plant_id column.  Any query that uses

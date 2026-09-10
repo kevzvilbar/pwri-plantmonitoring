@@ -1,14 +1,17 @@
-import { useTheme } from "next-themes";
+import { useThemeStore } from "@/store/themeStore";
 import { Toaster as Sonner, toast } from "sonner";
 
 type ToasterProps = React.ComponentProps<typeof Sonner>;
 
 const Toaster = ({ ...props }: ToasterProps) => {
-  const { theme = "system" } = useTheme();
+  // Use the app's own Zustand themeStore instead of next-themes (which is a
+  // Next.js library and shouldn't be a dependency of this Vite SPA).
+  const darkMode = useThemeStore((s) => s.darkMode);
+  const theme: ToasterProps["theme"] = darkMode ? "dark" : "light";
 
   return (
     <Sonner
-      theme={theme as ToasterProps["theme"]}
+      theme={theme}
       className="toaster group"
       toastOptions={{
         classNames: {
@@ -29,3 +32,4 @@ const Toaster = ({ ...props }: ToasterProps) => {
 };
 
 export { Toaster, toast };
+

@@ -2,7 +2,6 @@ import { lazy, Suspense, useEffect } from "react";
 import { QueryClient, QueryClientProvider, QueryCache, MutationCache } from "@tanstack/react-query";
 import { BrowserRouter, Route, Routes, Navigate } from "react-router-dom";
 import { Toaster as Sonner, toast } from "@/components/ui/sonner";
-import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider } from "@/hooks/useAuth";
 import { PresenceProvider, globalStampActivity } from "@/hooks/usePresence";
@@ -107,7 +106,6 @@ const App = () => (
   <QueryClientProvider client={queryClient}>
     <ThemeEffect />
     <TooltipProvider>
-      <Toaster />
       <Sonner position="top-center" />
       <BrowserRouter basename={import.meta.env.BASE_URL}>
         <AuthProvider>

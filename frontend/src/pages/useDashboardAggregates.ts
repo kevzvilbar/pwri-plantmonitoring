@@ -19,7 +19,61 @@ import { useTrainAutoOffline } from '@/hooks/useTrainAutoOffline';
 import { useReadingGaps } from '@/hooks/useReadingGaps';
 import { useTrainHourlyGaps } from '@/hooks/useTrainHourlyGaps';
 
-export function useDashboardAggregates(p: Record<string, any>) {
+/** Typed parameter bag for useDashboardAggregates.
+ *
+ *  All fields that originate from Supabase query results are typed as
+ *  `unknown[] | undefined` or `unknown | undefined` because the underlying
+ *  tables may not yet be in types.ts (see IGNORED_TABLES in
+ *  scripts/check-types-sync.mjs). Using unknown instead of any means the
+ *  compiler will flag any attempt to use a field without a narrowing guard,
+ *  making accidental misuse visible rather than silently allowed.
+ */
+interface DashboardAggregatesParams {
+  plantIds: string[];
+  today: string;
+  yesterday: string;
+  _localDateStr: string;
+  _yesterdayKey: string;
+  plants: unknown[] | undefined;
+  selectedPlantId: string | null;
+  // Entity-ID sets / arrays
+  _directLocatorIds: Set<string> | undefined;
+  _directProductMeterIds: Set<string> | undefined;
+  // Today's raw reading rows
+  todayLocators: unknown[] | undefined;
+  todayWells: unknown[] | undefined;
+  todayProductMeters: unknown[] | undefined;
+  // Plant-configuration sets
+  permeateProductionPlantIds: string[];
+  productExcludedPlantIds: Set<string>;
+  // RO permeate
+  todayRoPermeate: unknown[] | undefined;
+  yRoPermeate: unknown[] | undefined;
+  // Power
+  todayPowerRaw: { rows: unknown[]; prevRows: unknown[]; isStale: boolean } | undefined;
+  todayPower: unknown[];
+  dashPowerConfigMap: Map<string, number[]> | undefined;
+  // Yesterday readings
+  yLocators: unknown[] | undefined;
+  yWells: unknown[] | undefined;
+  yProductMeters: unknown[] | undefined;
+  yPower: { rows: unknown[]; prevRows: unknown[] } | undefined;
+  // RO quality metadata
+  _qualityTrainMeta2: Map<string, { plant_id: string; train_number: number | null; train_name: string | null; well_id: string | null; unit_type: string | null }>;
+  _wellNamesByTrainWell: Map<string, string> | undefined;
+  latestRO: unknown[] | undefined;
+  // Production fallback
+  todayAllPermeate: unknown[] | undefined;
+  // Costs
+  todayCosts: unknown[] | undefined;
+  costIsStale: boolean;
+  dashTariffByPlant: Map<string, number> | undefined;
+  dashDosingPeso: number;
+  // Blending
+  blendingTodayRows: unknown[] | undefined;
+}
+
+export function useDashboardAggregates(p: DashboardAggregatesParams) {
   const {
     plantIds, today, yesterday, _localDateStr, _yesterdayKey, plants, selectedPlantId,
     _directLocatorIds, _directProductMeterIds,
@@ -31,15 +85,16 @@ export function useDashboardAggregates(p: Record<string, any>) {
     todayAllPermeate, todayCosts, costIsStale, dashTariffByPlant, dashDosingPeso,
     blendingTodayRows,
   } = p;
+
   // ── Stat card aggregates ────────────────────────────────────────────────────
   // Uses computePivotFromReadings (same replacement-aware logic as TrendChart)
   // so meter-replacement spikes don't inflate today's totals.
   const _todayKey = format(new Date(), 'yyyy-MM-dd');
   // _yesterdayKey is defined earlier (line ~565) so the permeate-production queries can use it.
 
-  const rawWaterVol = useMemo(() => pivotDayTotal(
+  const rawWaterVol = useMemo((): number => pivotDayTotal(
     // FIX: Use no-cache variant — see production useMemo comment above.
-    computePivotFromReadingsNoCache(todayWells ?? [], 'well_id', 'daily_volume'), _todayKey,
+    computePivotFromReadingsNoCache((todayWells as any[]) ?? [], 'well_id', 'daily_volume'), _todayKey,
   ), [todayWells, _todayKey]);
 
   // RO permeate contribution to production — applies cut-off bucketing and date-range
@@ -49,21 +104,25 @@ export function useDashboardAggregates(p: Record<string, any>) {
   // The old cutoff / displaceToNearestBoundary logic has been removed system-wide:
   // every reading is attributed to the calendar day it was actually recorded.
   // This matches the values shown in the Data Summary table exactly.
-  const roPermeateProduction = useMemo(() =>
-    (todayRoPermeate ?? []).reduce((s: number, r: any) => {
+  const roPermeateProduction = useMemo((): number =>
+    // Cast unknown[] → any[] here: these are raw Supabase rows whose column
+    // types aren't yet in types.ts. The outer DashboardAggregatesParams
+    // interface enforces the correct argument type at the call site.
+    ((todayRoPermeate as any[]) ?? []).reduce((s: number, r: any) => {
       const dateKey = format(new Date(r.reading_datetime as string), 'yyyy-MM-dd');
       if (dateKey !== _localDateStr) return s;
       return s + (+(r.permeate_meter_delta ?? 0));
     }, 0),
   [todayRoPermeate, _localDateStr]);
 
-  const yRoPermeateProduction = useMemo(() =>
-    (yRoPermeate ?? []).reduce((s: number, r: any) => {
+  const yRoPermeateProduction = useMemo((): number =>
+    ((yRoPermeate as any[]) ?? []).reduce((s: number, r: any) => {
       const dateKey = format(new Date(r.reading_datetime as string), 'yyyy-MM-dd');
       if (dateKey !== _yesterdayKey) return s;
       return s + (+(r.permeate_meter_delta ?? 0));
     }, 0),
   [yRoPermeate, _yesterdayKey]);
+
 
   // Production = product meter delta (excluding exclusive-permeate plants)
   //            + RO permeate delta (permeate_is_production plants).
@@ -71,12 +130,12 @@ export function useDashboardAggregates(p: Record<string, any>) {
   // ALL trains for the selected plants — "how much treated water left the membranes."
   // This ensures the Production Volume card never shows 0 just because product meters
   // haven't been configured or haven't been read yet today.
-  const production = useMemo(() => {
+  const production = useMemo((): number => {
     // Exclude readings from plants in EXCLUSIVE permeate mode — their product
     // meter reads the same water roPermeateProduction already counts below.
     // Plants in 'both' mode are NOT excluded here — they have two genuinely
     // independent sources, so their product meter reading is summed in.
-    const meterReadingsForProduction = (todayProductMeters ?? []).filter(
+    const meterReadingsForProduction = ((todayProductMeters as any[]) ?? []).filter(
       (r: any) => !productExcludedPlantIds.has(r.plant_id),
     );
     // FIX: Use no-cache variant so the stat-card computation does not write
@@ -92,7 +151,7 @@ export function useDashboardAggregates(p: Record<string, any>) {
     // the permeate_is_production path (to avoid double-counting), and never for
     // secondary (2nd-pass) units — their permeate is a re-metering of water an
     // upstream primary train already counted (ro_trains.unit_type).
-    const fallbackTotal = (todayAllPermeate ?? []).reduce((s: number, r: any) => {
+    const fallbackTotal = ((todayAllPermeate as any[]) ?? []).reduce((s: number, r: any) => {
       const trainMeta = _qualityTrainMeta2.get(r.train_id);
       if (trainMeta?.unit_type === 'secondary') return s;
       // Skip trains already included in roPermeateProduction
@@ -102,9 +161,9 @@ export function useDashboardAggregates(p: Record<string, any>) {
     return fallbackTotal;
   }, [todayProductMeters, _todayKey, roPermeateProduction, todayAllPermeate, _qualityTrainMeta2, permeateProductionPlantIds, productExcludedPlantIds, _directProductMeterIds]);
 
-  const consumption = useMemo(() => pivotDayTotal(
+  const consumption = useMemo((): number => pivotDayTotal(
     // FIX: Use no-cache variant — see production useMemo comment above.
-    computePivotFromReadingsNoCache(todayLocators ?? [], 'locator_id', 'daily_volume', _directLocatorIds), _todayKey,
+    computePivotFromReadingsNoCache((todayLocators as any[]) ?? [], 'locator_id', 'daily_volume', _directLocatorIds), _todayKey,
   ), [todayLocators, _todayKey, _directLocatorIds]);
 
   // Compute daily grid kWh from raw meter readings. Priority order mirrors TrendChart exactly:
@@ -198,26 +257,26 @@ export function useDashboardAggregates(p: Record<string, any>) {
   const nrw = calc.nrw(production, consumption);
   const pv = calc.pvRatio(kwh, production);
 
-  const yRawWaterVol = useMemo(() => pivotDayTotal(
+  const yRawWaterVol = useMemo((): number => pivotDayTotal(
     // FIX: Use no-cache variant — see production useMemo comment above.
-    computePivotFromReadingsNoCache(yWells ?? [], 'well_id', 'daily_volume'), _yesterdayKey,
+    computePivotFromReadingsNoCache((yWells as any[]) ?? [], 'well_id', 'daily_volume'), _yesterdayKey,
   ), [yWells, _yesterdayKey]);
 
-  const yProduction = useMemo(() =>
+  const yProduction = useMemo((): number =>
     pivotDayTotal(
       // FIX: Use no-cache variant — see production useMemo comment above.
       // Same exclusion as `production` above — exclude exclusive-permeate
       // plants' product meter so yesterday's total stays comparable to today's.
       computePivotFromReadingsNoCache(
-        (yProductMeters ?? []).filter((r: any) => !productExcludedPlantIds.has(r.plant_id)),
+        ((yProductMeters as any[]) ?? []).filter((r: any) => !productExcludedPlantIds.has(r.plant_id)),
         'meter_id', 'daily_volume', _directProductMeterIds,
       ), _yesterdayKey,
     ) + yRoPermeateProduction,
   [yProductMeters, _yesterdayKey, yRoPermeateProduction, productExcludedPlantIds, _directProductMeterIds]);
 
-  const yConsumption = useMemo(() => pivotDayTotal(
+  const yConsumption = useMemo((): number => pivotDayTotal(
     // FIX: Use no-cache variant — see production useMemo comment above.
-    computePivotFromReadingsNoCache(yLocators ?? [], 'locator_id', 'daily_volume', _directLocatorIds), _yesterdayKey,
+    computePivotFromReadingsNoCache((yLocators as any[]) ?? [], 'locator_id', 'daily_volume', _directLocatorIds), _yesterdayKey,
   ), [yLocators, _yesterdayKey, _directLocatorIds]);
 
   const { kwh: yKwh } = computePowerKwh(yPower?.rows ?? [], yPower?.prevRows ?? [], dashPowerConfigMap);
@@ -334,13 +393,13 @@ export function useDashboardAggregates(p: Record<string, any>) {
   // skip production_costs.chem_cost because that row's value belongs to a different day.
   // Today's chemical cost is then sourced from dashDosingPeso (today's dosing logs) only.
   // This prevents stale/accumulated chem_cost values from inflating the stat card total.
-  const hasCostData = todayCosts.length > 0;
+  const hasCostData = (todayCosts ?? []).length > 0;
 
   // Chemical cost: only include production_costs.chem_cost when the row is for TODAY.
   // Stale fallback rows are excluded — their chem_cost belongs to a prior day's total.
   const prodCostsChem = costIsStale
     ? 0
-    : todayCosts.reduce((s, r: any) => s + (+r.chem_cost || 0), 0);
+    : (todayCosts as any[] ?? []).reduce((s: number, r: any) => s + (+r.chem_cost || 0), 0);
   const chemCostTotal = prodCostsChem + dashDosingPeso;
   const chemCost      = (chemCostTotal > 0) ? chemCostTotal
     : hasCostData ? null  // row exists but all-zero — still show '—'
@@ -355,7 +414,9 @@ export function useDashboardAggregates(p: Record<string, any>) {
     ? (chemCost ?? 0) + (powerCost ?? 0)
     : null;
 
-  const blending = (blendingTodayRows ?? []).reduce((s: number, r) => s + (+r.volume_m3 || 0), 0);
+  const blending = ((blendingTodayRows as any[]) ?? []).reduce((s: number, r: any) => s + (+r.volume_m3 || 0), 0);
+
+
 
   const { data: chemInv } = useQuery({
     queryKey: ['dash-chem', plantIds],

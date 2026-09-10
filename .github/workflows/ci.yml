@@ -57,7 +57,8 @@ jobs:
             "20260909000002_phase4_column_restricted_triggers.sql" \
             "20260909000003_phase4_pg_cron_schedule.sql" \
             "20260909000004_phase4_cascade_circuit_breaker.sql" \
-            "20260909000005_phase4_lag_window_views.sql"
+            "20260909000005_phase4_lag_window_views.sql" \
+            "20260910000001_latest_power_readings_fn.sql"
           do
             if [ ! -f "supabase/migrations/$f" ]; then
               echo "::error::Phase 4 migration missing from supabase/migrations/: $f"
