@@ -5,12 +5,10 @@ import { TrendingUp, TrendingDown, Minus, ChevronDown, ChevronUp } from 'lucide-
 import { StatTone, TONE_BG, TONE_ICON } from './types';
 import { cn } from '@/lib/utils';
 
-// ── Geometric sans-serif for KPI numbers — matches the Solar/Grid/Total cards ──
-// DM Sans is a low-contrast geometric sans with perfectly circular bowls,
-// identical stroke weight, and clean tabular figures. This is the same
-// typeface used by the energy cluster cards. Declared once as the `font-numeral`
-// Tailwind token (tailwind.config.ts) and loaded via the single app-wide
-// @import in index.css — see those files rather than re-declaring it here.
+// ── Technical mono numerals for KPI readouts — matches all dashboard cards ──
+// JetBrains Mono / IBM Plex Mono with clean tabular figures. Declared once as
+// the `font-numeral` Tailwind token (tailwind.config.ts) and configured in
+// index.css — see those files rather than re-declaring it here.
 
 // Re-triggers a CSS animation on the readout whenever the underlying value
 // actually changes. Background sync refreshes telemetry silently — without

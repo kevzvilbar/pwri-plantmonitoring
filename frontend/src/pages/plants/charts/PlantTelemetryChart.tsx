@@ -14,21 +14,12 @@ import { Card } from '@/components/ui/card';
 import { TrendingUp } from 'lucide-react';
 import { fmtNum, fmtVol } from '@/lib/format';
 import { ModernChartLegend } from '@/components/dashboard/TrendChartLegend';
-import { C_PRODUCTION, C_CONSUMPTION } from '@/lib/chartColors';
+import { C_PRODUCTION, C_CONSUMPTION, INSTRUMENT_TOOLTIP_STYLE } from '@/lib/chartColors';
 import { cn } from '@/lib/utils';
 import { useTrendChartQueries } from '@/components/dashboard/useTrendChartQueries';
 import { useTrendChartData } from '@/components/dashboard/useTrendChartData';
 
 export type TimeRange = '7d' | '30d' | '90d';
-
-const INSTRUMENT_TOOLTIP_STYLE = {
-  backgroundColor: 'hsl(var(--popover))',
-  borderColor: 'hsl(var(--border))',
-  borderRadius: '0.75rem',
-  color: 'hsl(var(--popover-foreground))',
-  fontSize: '12px',
-  boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-};
 
 interface PlantTelemetryChartProps {
   plantId: string;

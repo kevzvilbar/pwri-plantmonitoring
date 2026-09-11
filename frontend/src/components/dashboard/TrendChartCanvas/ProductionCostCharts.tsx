@@ -1,15 +1,6 @@
 import React from 'react';
-import { ResponsiveContainer,  BarChart, LineChart, Bar, Line, XAxis, YAxis, Tooltip, CartesianGrid  } from 'recharts';
-
-const INSTRUMENT_TOOLTIP_STYLE: React.CSSProperties = {
-  background: 'hsl(var(--card))',
-  border: '1px solid hsl(var(--border) / 0.8)',
-  borderRadius: 12,
-  fontSize: 11,
-  boxShadow: 'var(--shadow-card)',
-  color: 'hsl(var(--foreground))',
-  padding: '8px 12px',
-};
+import { ResponsiveContainer, BarChart, LineChart, Bar, Line, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
+import { INSTRUMENT_TOOLTIP_STYLE } from '@/lib/chartColors';
 
 const CHART_CURSOR = {
   stroke: 'hsl(var(--highlight))',

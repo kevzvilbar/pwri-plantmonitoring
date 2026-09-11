@@ -2,18 +2,8 @@ import React from 'react';
 import { ResponsiveContainer, 
   ComposedChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Legend, LineChart, Line,
  } from 'recharts';
-import { C_PRODUCTION, C_CONSUMPTION, C_NRW } from '@/lib/chartColors';
+import { C_PRODUCTION, C_CONSUMPTION, C_NRW, INSTRUMENT_TOOLTIP_STYLE } from '@/lib/chartColors';
 import { makeDrillableBarShape } from '../TrendChartDrillKit';
-
-const INSTRUMENT_TOOLTIP_STYLE: React.CSSProperties = {
-  background: 'hsl(var(--card))',
-  border: '1px solid hsl(var(--border) / 0.8)',
-  borderRadius: 12,
-  fontSize: 11,
-  boxShadow: 'var(--shadow-card)',
-  color: 'hsl(var(--foreground))',
-  padding: '8px 12px',
-};
 
 const CHART_CURSOR = {
   stroke: 'hsl(var(--highlight))',

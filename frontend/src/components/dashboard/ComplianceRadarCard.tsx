@@ -8,7 +8,7 @@
 // (InlineTrendChart's compact `p-3` Card, the 13px bold title + tiny
 // muted-right-side row, hsl(var(--border/--muted-foreground)) axis
 // colors) rather than the generic shadcn Card header/content padding —
-// and reuses StatusPill + the DM Sans "tnum" numeral treatment that
+// and reuses StatusPill + the font-numeral (JetBrains Mono) "tnum" numeral treatment that
 // StatCard already uses for every other KPI on this dashboard.
 import { useMemo } from 'react';
 import { format, parseISO } from 'date-fns';

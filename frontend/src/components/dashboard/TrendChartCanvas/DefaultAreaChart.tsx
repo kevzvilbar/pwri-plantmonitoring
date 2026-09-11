@@ -1,31 +1,20 @@
 import React from 'react';
-import { ResponsiveContainer,  AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid, ReferenceLine  } from 'recharts';
-import { C_PRODUCTION, C_CONSUMPTION, C_RECOVERY, C_TDS } from '@/lib/chartColors';
-
-const INSTRUMENT_TOOLTIP_STYLE: React.CSSProperties = {
-  background: 'hsl(var(--card))',
-  border: '1px solid hsl(var(--border) / 0.8)',
-  borderRadius: 12,
-  fontSize: 11,
-  boxShadow: 'var(--shadow-card)',
-  color: 'hsl(var(--foreground))',
-  padding: '8px 12px',
-};
+import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid, ReferenceLine } from 'recharts';
+import { C_PRODUCTION, C_CONSUMPTION, C_RECOVERY } from '@/lib/chartColors';
 
 export function DefaultAreaChart({
-  trendRows, metric, roDrillMode, formatYAxis, recoveryMinPct, permTdsMax, NegativeAwareTooltip,
+  trendRows, metric, roDrillMode, formatYAxis, recoveryMinPct, permTdsMax: _permTdsMax, NegativeAwareTooltip,
 }: {
   trendRows: any[];
   metric: string;
   roDrillMode: string;
   formatYAxis: (v: number) => string;
   recoveryMinPct: number;
-  permTdsMax: number;
+  permTdsMax?: number;
   NegativeAwareTooltip: React.ComponentType<any>;
 }) {
   const showProduction = metric === 'production';
   const showRecovery = metric === 'recovery' && roDrillMode === 'default';
-  const showTds = metric === 'tds' && roDrillMode === 'default';
 
   return (
     <ResponsiveContainer width="100%" height="100%">
@@ -64,19 +53,8 @@ export function DefaultAreaChart({
           <Area type="monotone" dataKey="recovery" stroke={C_RECOVERY} strokeWidth={2.5} fill="url(#recoveryFill)" dot={false} name="Recovery (%)" />
         </>
       )}
-      {showTds && (
-        <>
-          <ReferenceLine
-            y={permTdsMax}
-            stroke="#f59e0b"
-            strokeDasharray="4 4"
-            strokeWidth={1.5}
-            label={{ value: `Limit: ${permTdsMax} ppm`, fill: '#f59e0b', fontSize: 10, position: 'top' }}
-          />
-          <Area type="monotone" dataKey="tds" stroke={C_TDS} strokeWidth={2.5} fill="url(#tdsFill)" dot={false} name="Permeate TDS (ppm)" />
-        </>
-      )}
     </AreaChart>
     </ResponsiveContainer>
   );
 }
+

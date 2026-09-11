@@ -1,15 +1,7 @@
 import React from 'react';
-import { ResponsiveContainer,  ComposedChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid  } from 'recharts';
-
-const INSTRUMENT_TOOLTIP_STYLE: React.CSSProperties = {
-  background: 'hsl(var(--card))',
-  border: '1px solid hsl(var(--border) / 0.8)',
-  borderRadius: 12,
-  fontSize: 11,
-  boxShadow: 'var(--shadow-card)',
-  color: 'hsl(var(--foreground))',
-  padding: '8px 12px',
-};
+import { ResponsiveContainer, ComposedChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
+import { C_SOLAR, C_GRID } from '@/lib/chartColors';
+import { Sun, Zap } from 'lucide-react';
 
 const CHART_CURSOR = {
   stroke: 'hsl(var(--highlight))',
@@ -33,13 +25,15 @@ function KwhTooltip({ active, payload, label, hasSolarData, hasGridData, kwhSour
     }}>
       <p style={{ margin: '0 0 5px', fontWeight: 600, color: 'hsl(var(--foreground))' }}>{label}</p>
       {hasSolarData && kwhSource !== 'grid' && solarVal > 0 && (
-        <p style={{ margin: '1px 0', color: 'hsl(48,96%,40%)' }}>
-          ☀ Solar: <strong>{fmt(solarVal)} kWh</strong>
+        <p style={{ margin: '1px 0', color: C_SOLAR }} className="flex items-center gap-1.5">
+          <Sun className="h-3 w-3 inline text-kpi-solar shrink-0" />
+          <span>Solar: <strong>{fmt(solarVal)} kWh</strong></span>
         </p>
       )}
       {hasGridData && kwhSource !== 'solar' && gridVal > 0 && (
-        <p style={{ margin: '1px 0', color: 'hsl(213,94%,55%)' }}>
-          ⚡ Grid: <strong>{fmt(gridVal)} kWh</strong>
+        <p style={{ margin: '1px 0', color: C_GRID }} className="flex items-center gap-1.5">
+          <Zap className="h-3 w-3 inline text-kpi-grid shrink-0" />
+          <span>Grid: <strong>{fmt(gridVal)} kWh</strong></span>
         </p>
       )}
       {total > 0 && (
@@ -49,7 +43,7 @@ function KwhTooltip({ active, payload, label, hasSolarData, hasGridData, kwhSour
           </p>
           {pct && hasSolarData && kwhSource === 'both' && (
             <p style={{ margin: '2px 0 0', fontSize: 10, color: 'hsl(var(--muted-foreground))' }}>
-              Solar: <span style={{ color: 'hsl(48,96%,40%)', fontWeight: 600 }}>{pct}%</span> of mix
+              Solar: <span style={{ color: C_SOLAR, fontWeight: 600 }}>{pct}%</span> of mix
             </p>
           )}
         </div>
@@ -100,12 +94,12 @@ export function KwhChart({
         cursor={CHART_CURSOR}
       />
       {hasSolarData && kwhSource !== 'grid' && (
-        <Bar dataKey="solarKwh" name="☀ Solar (kWh)" fill="hsl(48,96%,53%)"
+        <Bar dataKey="solarKwh" name="Solar (kWh)" fill={C_SOLAR}
           stackId={stackMode === 'stacked' ? 'kwh' : undefined}
           radius={stackMode === 'stacked' ? [0, 0, 0, 0] : [3, 3, 0, 0]} />
       )}
       {hasGridData && kwhSource !== 'solar' && (
-        <Bar dataKey="gridKwh"  name="⚡ Grid (kWh)"  fill="hsl(213,94%,68%)"
+        <Bar dataKey="gridKwh" name="Grid (kWh)" fill={C_GRID}
           stackId={stackMode === 'stacked' ? 'kwh' : undefined}
           radius={[3, 3, 0, 0]} />
       )}

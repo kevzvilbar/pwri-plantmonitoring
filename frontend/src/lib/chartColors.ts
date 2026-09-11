@@ -1,3 +1,5 @@
+import type React from 'react';
+
 /**
  * Shared, named chart-series colors — kept in one place so the same
  * metric always renders in the same color everywhere it appears.
@@ -18,6 +20,8 @@ export const C_RAWWATER    = 'hsl(var(--metric-rawwater))';     // raw (untreate
 export const C_RECOVERY    = 'hsl(var(--metric-recovery))';     // RO recovery rate
 export const C_TDS         = 'hsl(var(--metric-tds))';          // permeate TDS
 export const C_GRID_PV     = 'hsl(var(--metric-gridpv))';       // grid power / PV ratio
+export const C_SOLAR       = 'hsl(var(--kpi-solar))';           // solar power generation
+export const C_GRID        = 'hsl(var(--kpi-grid))';            // utility grid power
 export const C_BLEND_PCT   = 'hsl(var(--metric-blendpct))';     // % of a well's raw output diverted to blending
 
 /** Same fill BlendingVolumeCard.tsx uses for its "Total" blending bar/gradient
@@ -28,3 +32,18 @@ export const C_BLEND_VOLUME = 'hsl(var(--blend-total))';
 /** FilterCostChart.tsx / FilterUsageChart.tsx categorical bar colors. */
 export const C_FILTER_CARTRIDGE = 'hsl(var(--filter-cartridge))';
 export const C_FILTER_BAG       = 'hsl(var(--filter-bag))';
+
+/**
+ * Standardized Instrument Panel tooltip style for Recharts
+ * Replaces copy-pasted styles across dashboard and plant telemetry charts.
+ */
+export const INSTRUMENT_TOOLTIP_STYLE: React.CSSProperties = {
+  background: 'hsl(var(--card))',
+  border: '1px solid hsl(var(--border) / 0.8)',
+  borderRadius: 12,
+  fontSize: 11,
+  boxShadow: 'var(--shadow-card)',
+  color: 'hsl(var(--foreground))',
+  padding: '8px 12px',
+};
+
