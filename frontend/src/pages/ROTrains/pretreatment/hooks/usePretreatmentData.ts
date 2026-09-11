@@ -11,7 +11,8 @@ export interface PretreatmentData {
   prevPowerMeter: number | null;
   autoDurationMin: number | null;
   lastReadingTime: string | null;
-  isPastHourMissing: boolean;
+  isPastTwoHoursMissing: boolean;
+  isPastHourMissing?: boolean;
   isEffectivelyOffline: boolean;
   feedCurr: number;
   permCurr: number;
@@ -67,20 +68,42 @@ export function usePretreatmentData(
     },
   });
 
+  const { data: prevPretreatReadings } = useQuery({
+    queryKey: ['ro-pretreat-prev-dt', trainId],
+    enabled: !!trainId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('ro_pretreatment_readings')
+        .select('reading_datetime')
+        .eq('train_id', trainId)
+        .order('reading_datetime', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+  });
+
   const prevFeedMeter = prevReadings?.feed_meter ?? null;
   const prevPermMeter = prevReadings?.permeate_meter ?? null;
   const prevRejMeter = prevReadings?.reject_meter ?? null;
   const prevPowerMeter = prevReadings?.power_meter_reading_kwh ?? null;
 
-  // Auto-duration: minutes since last reading
-  const lastReadingTime = prevReadings?.reading_datetime ?? null;
+  // Auto-duration: minutes since last reading (from either RO or Pretreatment)
+  const roTime = prevReadings?.reading_datetime ? new Date(prevReadings.reading_datetime).getTime() : 0;
+  const preTime = prevPretreatReadings?.reading_datetime ? new Date(prevPretreatReadings.reading_datetime).getTime() : 0;
+  const maxTime = Math.max(roTime, preTime);
+  const lastReadingTime = maxTime > 0
+    ? (maxTime === preTime ? prevPretreatReadings!.reading_datetime : prevReadings!.reading_datetime)
+    : (prevReadings?.reading_datetime ?? null);
+
   const autoDurationMin = lastReadingTime
     ? Math.max(0, (Date.now() - new Date(lastReadingTime).getTime()) / 60000)
     : null;
-  const ONE_HOUR_MS = 60 * 60 * 1000;
-  const isPastHourMissing = !lastReadingTime || (Date.now() - new Date(lastReadingTime).getTime() > ONE_HOUR_MS);
+  const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
+  const isPastTwoHoursMissing = !lastReadingTime || (Date.now() - new Date(lastReadingTime).getTime() >= TWO_HOURS_MS);
   const isEffectivelyOffline = train
-    ? (train.status === 'Offline' || (train.status !== 'Maintenance' && isPastHourMissing))
+    ? (train.status === 'Offline' || (train.status !== 'Maintenance' && isPastTwoHoursMissing))
     : false;
   // Average flow rates (10-day rolling)
   const { data: avgFlowRates } = useQuery({
@@ -180,7 +203,8 @@ export function usePretreatmentData(
     prevPowerMeter,
     autoDurationMin,
     lastReadingTime,
-    isPastHourMissing,
+    isPastTwoHoursMissing,
+    isPastHourMissing: isPastTwoHoursMissing,
     isEffectivelyOffline,
     feedCurr,
     permCurr,

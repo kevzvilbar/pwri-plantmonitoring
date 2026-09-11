@@ -109,7 +109,7 @@ export function PretreatmentAndROLog() {
     form.setHppTarget(train?.hpp_target_pressure_psi != null ? String(train.hpp_target_pressure_psi) : '');
   }, [train?.id, train?.hpp_target_pressure_psi]);
 
-  // Auto-set offline when train is offline in DB or has no readings in past hour
+  // Auto-set offline when train is offline in DB or has no readings in past 2 hours
   const autoInitializedTrainId = useRef<string | null>(null);
   useEffect(() => {
     if (!train) return;
