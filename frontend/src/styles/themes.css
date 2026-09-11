@@ -59,6 +59,17 @@
     --ring:                175 84% 31%;
     --radius:              0.5rem;
 
+    /* ── Console / Tactical Telemetry surface tokens ─────────────── */
+    --console-bg:          210 45% 7%;
+    --console-bg-recessed: 210 50% 5%;
+    --console-border:      205 30% 22%;
+    --console-foreground:  210 40% 95%;
+    --console-muted:       210 20% 62%;
+
+    /* ── Solid alert & breach tokens ─────────────────────────────── */
+    --danger-solid-wash:   351 55% 16%;
+    --danger-edge:         351 90% 55%;
+
     /* ── Topbar (deep navy) ──────────────────────────────────────── */
     --topbar:              210 62% 11%;
     --topbar-foreground:   210 40% 97%;

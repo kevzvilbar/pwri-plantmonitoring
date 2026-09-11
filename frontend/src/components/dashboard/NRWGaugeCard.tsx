@@ -81,7 +81,13 @@ export function NRWGaugeCard({ nrw, yNrw, onClick, size = 'default', className }
   const tone       = nrwTone(nrw, limitPct);
   const trackColor = 'hsl(var(--muted))';
   const fillColor  = nrwFill(tone);
-  const displayVal = Math.min(Math.max(nrw ?? 0, 0), 100);
+
+  // Proposed in redesign plan: scale the arc's domain to the limit, not to a fixed 100,
+  // so the limit tick sits at a readable position and the fill communicates
+  // "how far over the limit" rather than collapsing against the foot of the gauge.
+  const gaugeMax = Math.max(limitPct * 2, (nrw ?? 0) * 1.1, 10);
+  const displayVal = Math.min(Math.max(((nrw ?? 0) / gaugeMax) * 100, 0), 100);
+  const limitAnglePct = Math.min((limitPct / gaugeMax) * 100, 100);
 
   const isLg = size === 'lg';
   // Gauge geometry — compact or prominent half-donut placed cleanly on the right
@@ -91,8 +97,8 @@ export function NRWGaugeCard({ nrw, yNrw, onClick, size = 'default', className }
   const outerRadius = isLg ? 40 : 34;
   const cornerRadius = 5;
 
-  const tickInner = polarPoint(cx, cy, innerRadius - 2.5, Math.min(limitPct, 100));
-  const tickOuter = polarPoint(cx, cy, outerRadius + 2.5, Math.min(limitPct, 100));
+  const tickInner = polarPoint(cx, cy, innerRadius - 2.5, limitAnglePct);
+  const tickOuter = polarPoint(cx, cy, outerRadius + 2.5, limitAnglePct);
 
   // Trend vs yesterday
   const delta = nrw != null && yNrw != null && yNrw !== 0
@@ -102,7 +108,7 @@ export function NRWGaugeCard({ nrw, yNrw, onClick, size = 'default', className }
   return (
     <Card
       className={cn(
-        'stat-card min-w-0 h-full flex flex-col justify-between transition-colors hover:border-border',
+        'stat-card min-w-0 h-full flex flex-col justify-between transition-all rounded-2xl hover:border-border',
         isLg ? 'p-3.5 sm:p-4' : 'p-3.5',
         tone ? TONE_BG[tone] : '',
         onClick ? 'cursor-pointer' : 'cursor-default',
@@ -114,7 +120,7 @@ export function NRWGaugeCard({ nrw, yNrw, onClick, size = 'default', className }
       {/* ── Header row: icon · LABEL · limit · calc pill ── */}
       <div className="flex items-center justify-between gap-1 min-w-0">
         <div className="flex items-center gap-1.5 min-w-0 overflow-hidden">
-          <Activity className={cn('shrink-0', isLg ? 'h-4 w-4' : 'h-3.5 w-3.5', 'text-muted-foreground/80')} />
+          <Activity className={cn('shrink-0', isLg ? 'h-4 w-4' : 'h-3.5 w-3.5', tone === 'danger' ? 'text-rose-400' : 'text-muted-foreground/80')} />
           <span className={cn('uppercase tracking-wide font-semibold truncate leading-none text-muted-foreground', isLg ? 'text-xs' : 'text-2xs')}>
             NRW
           </span>
@@ -123,7 +129,7 @@ export function NRWGaugeCard({ nrw, yNrw, onClick, size = 'default', className }
           </span>
         </div>
         <span
-          className="text-3xs uppercase tracking-wider px-1 py-0.5 rounded font-mono bg-info/10 text-info border border-info/20 shrink-0"
+          className="text-3xs uppercase tracking-wider px-1.5 py-0.5 rounded-[4px] font-mono bg-info/10 text-info border border-info/20 shrink-0"
           title="Calculated: (Raw Water - Billed Consumption) / Raw Water"
         >
           calc
@@ -133,9 +139,13 @@ export function NRWGaugeCard({ nrw, yNrw, onClick, size = 'default', className }
       {/* ── Value & Gauge Row ── */}
       <div className="mt-2 flex items-center justify-between gap-2">
         <div className="min-w-0">
-          <div className={cn('font-bold font-mono tabular-nums text-foreground leading-none', isLg ? 'text-2xl sm:text-3xl' : 'text-2xl')}>
+          <div className={cn(
+            'font-bold font-mono tabular-nums leading-none',
+            isLg ? 'text-2xl sm:text-3xl' : 'text-2xl',
+            tone === 'danger' ? 'text-rose-200' : 'text-foreground'
+          )}>
             {nrw == null ? '—' : nrw}
-            <span className={cn('font-sans font-normal text-muted-foreground ml-1.5', isLg ? 'text-sm' : 'text-xs')}>%</span>
+            <span className={cn('font-sans font-normal ml-1.5', tone === 'danger' ? 'text-rose-300/80' : 'text-muted-foreground', isLg ? 'text-sm' : 'text-xs')}>%</span>
           </div>
           {delta !== null && (
             <div className="mt-1.5">
@@ -182,9 +192,9 @@ export function NRWGaugeCard({ nrw, yNrw, onClick, size = 'default', className }
             <line
               x1={tickInner.x} y1={tickInner.y}
               x2={tickOuter.x} y2={tickOuter.y}
-              stroke="hsl(var(--foreground))"
-              strokeOpacity={0.45}
-              strokeWidth={1.5}
+              stroke={tone === 'danger' ? '#f43f5e' : 'hsl(var(--foreground))'}
+              strokeOpacity={tone === 'danger' ? 0.95 : 0.6}
+              strokeWidth={2}
               strokeLinecap="round"
             />
           </PieChart>

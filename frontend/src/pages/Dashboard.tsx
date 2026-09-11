@@ -231,7 +231,7 @@ export default function Dashboard() {
         onSelectPlant={(pid) => navigate(`/plants/${pid}`)}
       />
 
-      <div className="p-2 rounded-xl border border-border/60 bg-card/70 backdrop-blur-xs flex flex-wrap items-center justify-between gap-2 shadow-2xs">
+      <div className="p-2 rounded-2xl border border-border/60 bg-card/80 backdrop-blur-xs flex flex-wrap items-center justify-between gap-2 shadow-xs">
         <div className="flex items-center gap-2 flex-wrap">
           {chartRange !== 'MONTHLY' && (
             <span className="text-3xs uppercase font-bold tracking-wider text-muted-foreground mr-0.5 flex items-center gap-1">

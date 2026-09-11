@@ -67,7 +67,7 @@ export function InlineTrendChart({
   compact?: boolean;
 }) {
   return (
-    <Card className="p-3" data-testid={`inline-trend-${metric}`}>
+    <Card className="rounded-2xl p-3.5 transition-all hover:border-border/90" data-testid={`inline-trend-${metric}`}>
       <TrendChart metric={metric} title={title} plantIds={plantIds} compact={compact} />
     </Card>
   );

@@ -38,10 +38,20 @@ export function TrendBadge({ delta, invert = false }: { delta: number | null; in
   const cls = abs < 0.5
     ? 'text-muted-foreground'
     : isPositive ? 'text-accent' : 'text-danger';
+
+  // Anomaly / low-baseline recovery framing: when abs(delta) >= 300%,
+  // render in magnitude mode (e.g. +52× vs prev day) so it doesn't look like a counter overflow.
+  const mult = Math.round(abs / 100);
+  const text = abs < 0.5
+    ? '0.0%'
+    : abs >= 300
+      ? `${delta > 0 ? '+' : '-'}${mult}× vs prev day (low baseline)`
+      : `${delta > 0 ? '+' : '-'}${abs.toFixed(1)}% vs prev day`;
+
   return (
     <span className={`inline-flex items-center gap-0.5 text-xs font-semibold font-mono tabular-nums ${cls}`} title="vs previous day">
       <Icon className="h-3.5 w-3.5 shrink-0" />
-      <span>{abs < 0.5 ? '0.0%' : `${delta > 0 ? '+' : '-'}${abs.toFixed(1)}% vs prev day`}</span>
+      <span>{text}</span>
     </span>
   );
 }
@@ -90,7 +100,7 @@ export function StatCard({
   return (
     <Card
       className={cn(
-        'stat-card min-w-0 h-full flex flex-col justify-between transition-colors hover:border-border',
+        'stat-card min-w-0 h-full flex flex-col justify-between transition-all rounded-2xl hover:border-border',
         onClick ? 'cursor-pointer' : 'cursor-default',
         isHero ? 'p-4 sm:p-5' : isLg ? 'p-3.5' : isCompact ? 'p-2.5' : 'p-3.5',
         toneBg,
@@ -115,7 +125,7 @@ export function StatCard({
             {badge}
             {calc && (
               <span
-                className="text-3xs uppercase tracking-wider px-1 py-0.5 rounded font-mono bg-info/10 text-info border border-info/20"
+                className="text-3xs uppercase tracking-wider px-1.5 py-0.5 rounded-[4px] font-mono bg-info/10 text-info border border-info/20"
                 title={calcTooltip ?? 'Calculated / derived metric'}
               >calc</span>
             )}
@@ -123,11 +133,11 @@ export function StatCard({
             {showExpand && (
               <button
                 onClick={(e) => { e.stopPropagation(); setExpanded((v) => !v); }}
-                className="h-4 w-4 flex items-center justify-center rounded text-muted-foreground hover:text-foreground transition-colors"
+                className="h-5 w-5 flex items-center justify-center rounded-[8px] text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
                 title={expanded ? 'Hide breakdown' : 'Show per-train breakdown'}
                 aria-label={expanded ? 'Collapse' : 'Expand'}
               >
-                {expanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                {expanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
               </button>
             )}
           </div>
@@ -166,7 +176,7 @@ export function StatCard({
 
         {/* ── Per-train expand rows ── */}
         {showExpand && expanded && (
-          <div className="mt-2 pt-1.5 border-t border-border/50 space-y-0.5 max-h-24 overflow-y-auto">
+          <div className="mt-2 p-2 rounded-[4px] bg-muted/40 border border-border/40 space-y-0.5 max-h-24 overflow-y-auto">
           {liveRows.map((row) => (
             <div key={row.label} className="flex items-center justify-between text-2xs">
               <span className="text-muted-foreground truncate">{row.label}</span>
@@ -235,7 +245,7 @@ export function PerWellSourceCard({
 
   return (
     <Card
-      className="stat-card min-w-0 hover:border-border transition-colors p-3 bg-card"
+      className="stat-card min-w-0 rounded-2xl hover:border-border transition-all p-3.5 bg-card"
       data-testid={testId}
     >
       {/* ── Header: icon · LABEL (uppercase) · per-well badge + expand ── */}
@@ -250,11 +260,11 @@ export function PerWellSourceCard({
           {showBreakdown && (
             <button
               onClick={(e) => { e.stopPropagation(); setExpanded((v) => !v); }}
-              className="h-4 w-4 flex items-center justify-center rounded text-muted-foreground hover:text-foreground transition-colors"
+              className="h-5 w-5 flex items-center justify-center rounded-[8px] text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
               title={expanded ? 'Hide breakdown' : 'Show per-train breakdown'}
               aria-label={expanded ? 'Collapse' : 'Expand'}
             >
-              {expanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+              {expanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
             </button>
           )}
         </div>
@@ -271,7 +281,7 @@ export function PerWellSourceCard({
 
       {/* ── Expand rows ── */}
       {showBreakdown && expanded && (
-        <div className="mt-2 pt-1.5 border-t border-border/50 space-y-0.5 max-h-24 overflow-y-auto">
+        <div className="mt-2 p-2 rounded-[4px] bg-muted/40 border border-border/40 space-y-0.5 max-h-24 overflow-y-auto">
           {liveRows.map((r) => (
             <div
               key={`${r.plant_id}-${r.well_id ?? r.train_id ?? r.train_number}`}

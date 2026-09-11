@@ -32,7 +32,7 @@ export function WaterBalanceBridgeCard({
     : `last ${days}d`;
 
   return (
-    <Card className="p-3" data-testid="water-balance-bridge">
+    <Card className="rounded-2xl p-3.5 transition-all hover:border-border/90" data-testid="water-balance-bridge">
       <BridgeHeader title={title} rangeLabel={rangeLabel} />
 
       {isLoading ? (

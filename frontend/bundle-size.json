@@ -1,6 +1,6 @@
 {
-  "maxTotalGzipKb": 1166.2,
-  "lastUpdated": "2026-09-10",
+  "maxTotalGzipKb": 1072.8,
+  "lastUpdated": "2026-09-11",
   "history": [
     {
       "date": "2026-09-06",
@@ -26,6 +26,11 @@
       "date": "2026-09-10",
       "maxTotalGzipKb": 1166.2,
       "previous": 1161.5
+    },
+    {
+      "date": "2026-09-11",
+      "maxTotalGzipKb": 1072.8,
+      "previous": 1166.2
     }
   ]
 }

@@ -132,6 +132,13 @@ export default {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+        console: {
+          DEFAULT: "hsl(var(--console-bg))",
+          recessed: "hsl(var(--console-bg-recessed))",
+          border: "hsl(var(--console-border))",
+          foreground: "hsl(var(--console-foreground))",
+          muted: "hsl(var(--console-muted))",
+        },
         topbar: {
           DEFAULT: "hsl(var(--topbar))",
           foreground: "hsl(var(--topbar-foreground))",

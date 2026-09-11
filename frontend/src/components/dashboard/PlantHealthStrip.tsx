@@ -118,7 +118,7 @@ export function PlantHealthStrip({ plantIds, onSelectPlant }: Props) {
       <div className="flex items-center gap-2 sm:flex-wrap min-w-max sm:min-w-0">
         <div className="flex items-center gap-1.5 text-2xs font-bold text-muted-foreground uppercase tracking-wider mr-1 shrink-0">
           <Activity className="h-3.5 w-3.5 text-primary" />
-          <span>Live Fleet</span>
+          <span>Fleet Telemetry</span>
         </div>
 
         {visiblePlants.map((plant) => {
@@ -131,7 +131,7 @@ export function PlantHealthStrip({ plantIds, onSelectPlant }: Props) {
               key={plant.id}
               onClick={() => onSelectPlant?.(plant.id)}
               className={cn(
-                'inline-flex items-center gap-2 px-3 py-1 rounded-lg border text-xs font-semibold whitespace-nowrap transition-all cursor-pointer select-none shrink-0',
+                'inline-flex items-center gap-2 px-3 py-1 rounded-[8px] border text-xs font-semibold whitespace-nowrap transition-all duration-150 ease-spring-out active:scale-[0.98] cursor-pointer select-none shrink-0 shadow-2xs',
                 status === 'online' && 'bg-card border-border/80 text-foreground hover:border-primary/50',
                 status === 'stale' && 'bg-warn-soft/30 border-warn/40 text-warn hover:border-warn',
                 status === 'offline' && 'bg-muted/30 border-border/50 text-muted-foreground hover:border-border',
@@ -140,13 +140,13 @@ export function PlantHealthStrip({ plantIds, onSelectPlant }: Props) {
             >
               <Lamp
                 tone={statusToLampTone(status)}
-                pulse={status === 'online'}
+                pulse={false}
                 size={7}
               />
               <span>{shortName}</span>
               {lastDt ? (
                 <span className="text-2xs font-normal opacity-75 font-mono">
-                  {formatDistanceToNow(new Date(lastDt), { addSuffix: false })}
+                  Last seen {formatDistanceToNow(new Date(lastDt), { addSuffix: false })}
                 </span>
               ) : (
                 <span className="text-2xs font-normal opacity-50 font-mono">Offline</span>
