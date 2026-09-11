@@ -135,6 +135,15 @@
   80%, 100%{ transform: scale(2.5); opacity: 0; }
 }
 
+@keyframes marquee-pingpong {
+  0%, 20% {
+    transform: translateX(0);
+  }
+  80%, 100% {
+    transform: translateX(var(--marquee-distance, -20px));
+  }
+}
+
 /* NOTE: `page-fade-up` / `stagger-fade-up` were previously declared twice —
    once here and once further down — and the later definition silently won.
    They now live in exactly one place: see "Route & stagger entrances" below.
