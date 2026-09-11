@@ -35,12 +35,12 @@ export interface KpiReadings {
 
 /** Fetch plant flags for KPI calculations */
 export async function fetchPlantFlags(): Promise<Record<string, PlantFlags>> {
-  const { data, error } = await supabase.from('plants').select('id, has_solar, has_grid, ro_hourly_target');
+  const { data, error } = await supabase.from('plants').select('id, has_solar, has_grid');
   if (error) throw error;
   
   const flags: Record<string, PlantFlags> = {};
   (data ?? []).forEach((p: any) => {
-    flags[p.id] = { has_solar: p.has_solar ?? false, has_grid: p.has_grid ?? true, ro_hourly_target: p.ro_hourly_target };
+    flags[p.id] = { has_solar: p.has_solar ?? false, has_grid: p.has_grid ?? true, ro_hourly_target: null };
   });
   return flags;
 }

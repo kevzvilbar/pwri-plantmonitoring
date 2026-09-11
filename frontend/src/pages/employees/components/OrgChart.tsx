@@ -119,16 +119,16 @@ function OrgNodeFixed({ member, allStaff, roles, depth = 0, accentLine }: {
 // Hierarchy Legend
 // ---------------------------------------------------------------------------
 
-function HierarchyLegend() {
+export function HierarchyLegend({ className }: { className?: string }) {
   return (
-    <div className="flex flex-wrap items-center gap-1.5 mb-3 p-2 rounded-xl bg-muted/40 border border-border/50">
+    <div className={cn('flex flex-wrap items-center gap-1', className)}>
       {ROLE_HIERARCHY.map((r, i) => (
-        <div key={r.role} className="flex items-center gap-1.5">
-          <span className={cn('inline-flex items-center gap-1 text-2xs font-semibold px-2.5 py-1 rounded-full border shadow-2xs', r.bg, r.color)}>
+        <div key={r.role} className="flex items-center gap-1">
+          <span className={cn('inline-flex items-center gap-1 text-3xs font-semibold px-2 py-0.5 rounded-full border shadow-2xs', r.bg, r.color)}>
             {r.icon} <span>{r.role}</span>
           </span>
           {i < ROLE_HIERARCHY.length - 1 && (
-            <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/40 shrink-0" />
+            <ChevronRight className="h-3 w-3 text-muted-foreground/40 shrink-0" />
           )}
         </div>
       ))}
@@ -140,7 +140,9 @@ function HierarchyLegend() {
 // Org Chart — fixed, always visible, always expanded
 // ---------------------------------------------------------------------------
 
-function OrgChart({ staff, roles, plants }: { staff: StaffMember[]; roles: any[]; plants: any[] }) {
+function OrgChart({ staff, roles, plants, hideLegend = false }: {
+  staff: StaffMember[]; roles: any[]; plants: any[]; hideLegend?: boolean;
+}) {
   const getRoleRank = (userId: string) => {
     const r = (roles as any[]).find((x) => x.user_id === userId)?.role;
     const idx = ROLE_HIERARCHY.findIndex((rh) => rh.role === r);
@@ -167,25 +169,29 @@ function OrgChart({ staff, roles, plants }: { staff: StaffMember[]; roles: any[]
 
   return (
     <div>
-      <HierarchyLegend />
+      {!hideLegend && (
+        <>
+          <HierarchyLegend className="mb-3 p-2 rounded-xl bg-muted/40 border border-border/50" />
 
-      {/* Summary strip */}
-      <div className="flex items-center gap-2 mb-3.5 flex-wrap">
-        {plantsWithStaff.map((plant, idx) => {
-          const accent = PLANT_COLUMN_ACCENTS[idx % PLANT_COLUMN_ACCENTS.length];
-          const count = staff.filter((s) => s.plant_assignments?.includes(plant.id)).length;
-          return (
-            <div key={plant.id}
-              className={cn('flex items-center gap-1.5 text-2xs font-semibold px-2.5 py-1 rounded-full border shadow-2xs', accent.bg, accent.border, accent.text)}
-            >
-              <span className="h-2 w-2 rounded-full shrink-0" style={{ background: accent.line }} />
-              {plant.name}
-              <span className="opacity-50 mx-0.5">·</span>
-              <span className="font-bold">{count} staff</span>
-            </div>
-          );
-        })}
-      </div>
+          {/* Summary strip */}
+          <div className="flex items-center gap-2 mb-3.5 flex-wrap">
+            {plantsWithStaff.map((plant, idx) => {
+              const accent = PLANT_COLUMN_ACCENTS[idx % PLANT_COLUMN_ACCENTS.length];
+              const count = staff.filter((s) => s.plant_assignments?.includes(plant.id)).length;
+              return (
+                <div key={plant.id}
+                  className={cn('flex items-center gap-1.5 text-2xs font-semibold px-2.5 py-1 rounded-full border shadow-2xs', accent.bg, accent.border, accent.text)}
+                >
+                  <span className="h-2 w-2 rounded-full shrink-0" style={{ background: accent.line }} />
+                  {plant.name}
+                  <span className="opacity-50 mx-0.5">·</span>
+                  <span className="font-bold">{count} staff</span>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
 
       {/* Plant columns — always expanded */}
       <div className={cn(
@@ -246,4 +252,4 @@ function OrgChart({ staff, roles, plants }: { staff: StaffMember[]; roles: any[]
 }
 
 
-export { OrgChart };
+export { OrgChart, HierarchyLegend };

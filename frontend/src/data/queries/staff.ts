@@ -69,12 +69,12 @@ export async function fetchPlantsWithStaff(): Promise<Array<{ id: string; name: 
 
 /** Fetch plant details with flags for KPI calculations */
 export async function fetchPlantFlags(): Promise<Record<string, { has_solar: boolean; has_grid: boolean; ro_hourly_target?: number | string | null }>> {
-  const { data, error } = await supabase.from('plants').select('id, has_solar, has_grid, ro_hourly_target');
+  const { data, error } = await supabase.from('plants').select('id, has_solar, has_grid');
   if (error) throw error;
   
   const flags: Record<string, { has_solar: boolean; has_grid: boolean; ro_hourly_target?: number | string | null }> = {};
   (data ?? []).forEach((p: any) => {
-    flags[p.id] = { has_solar: p.has_solar ?? false, has_grid: p.has_grid ?? true, ro_hourly_target: p.ro_hourly_target };
+    flags[p.id] = { has_solar: p.has_solar ?? false, has_grid: p.has_grid ?? true, ro_hourly_target: null };
   });
   return flags;
 }
