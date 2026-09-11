@@ -52,9 +52,11 @@ interface Props {
   nrw:     number | null;
   yNrw:    number | null;
   onClick?: () => void;
+  size?: 'default' | 'lg';
+  className?: string;
 }
 
-export function NRWGaugeCard({ nrw, yNrw, onClick }: Props) {
+export function NRWGaugeCard({ nrw, yNrw, onClick, size = 'default', className }: Props) {
   // Same scope convention the Compliance page itself uses (Compliance.tsx:
   // `thresholdScope = scope === 'plant' ? plantId : 'global'`) — a specific
   // plant selected on the dashboard reads that plant's override if one
@@ -80,8 +82,12 @@ export function NRWGaugeCard({ nrw, yNrw, onClick }: Props) {
   const fillColor  = nrwFill(tone);
   const displayVal = Math.min(Math.max(nrw ?? 0, 0), 100);
 
-  // Gauge geometry — compact half-donut placed cleanly on the right
-  const cx = 38, cy = 38, innerRadius = 22, outerRadius = 34;
+  const isLg = size === 'lg';
+  // Gauge geometry — compact or prominent half-donut placed cleanly on the right
+  const cx = isLg ? 44 : 38;
+  const cy = isLg ? 44 : 38;
+  const innerRadius = isLg ? 26 : 22;
+  const outerRadius = isLg ? 40 : 34;
   const cornerRadius = 5;
 
   const tickInner = polarPoint(cx, cy, innerRadius - 2.5, Math.min(limitPct, 100));
@@ -95,9 +101,11 @@ export function NRWGaugeCard({ nrw, yNrw, onClick }: Props) {
   return (
     <Card
       className={cn(
-        'stat-card min-w-0 h-full p-3 flex flex-col justify-between transition-colors hover:border-border',
+        'stat-card min-w-0 h-full flex flex-col justify-between transition-colors hover:border-border',
+        isLg ? 'p-3.5 sm:p-4' : 'p-3',
         tone ? TONE_BG[tone] : '',
         onClick ? 'cursor-pointer' : 'cursor-default',
+        className,
       )}
       onClick={onClick}
       aria-label={`NRW gauge: ${nrw ?? '—'}% (target < ${limitPct}%)`}
@@ -105,8 +113,8 @@ export function NRWGaugeCard({ nrw, yNrw, onClick }: Props) {
       {/* ── Header row: icon · LABEL · limit · calc pill ── */}
       <div className="flex items-center justify-between gap-1 min-w-0">
         <div className="flex items-center gap-1.5 min-w-0 overflow-hidden">
-          <Activity className="shrink-0 h-3.5 w-3.5 text-muted-foreground/80" />
-          <span className="uppercase tracking-wide font-semibold truncate leading-none text-2xs text-muted-foreground">
+          <Activity className={cn('shrink-0', isLg ? 'h-4 w-4' : 'h-3.5 w-3.5', 'text-muted-foreground/80')} />
+          <span className={cn('uppercase tracking-wide font-semibold truncate leading-none text-muted-foreground', isLg ? 'text-xs' : 'text-2xs')}>
             NRW
           </span>
           <span className="text-3xs text-muted-foreground/60 shrink-0 font-mono">
@@ -124,9 +132,9 @@ export function NRWGaugeCard({ nrw, yNrw, onClick }: Props) {
       {/* ── Value & Gauge Row ── */}
       <div className="mt-2 flex items-center justify-between gap-2">
         <div className="min-w-0">
-          <div className="text-2xl font-bold font-mono tabular-nums text-foreground leading-none">
+          <div className={cn('font-bold font-mono tabular-nums text-foreground leading-none', isLg ? 'text-2xl sm:text-3xl' : 'text-2xl')}>
             {nrw == null ? '—' : nrw}
-            <span className="font-sans font-normal text-muted-foreground ml-1 text-xs">%</span>
+            <span className={cn('font-sans font-normal text-muted-foreground ml-1', isLg ? 'text-sm' : 'text-xs')}>%</span>
           </div>
           {delta !== null && (
             <div className="mt-1.5">
@@ -139,7 +147,7 @@ export function NRWGaugeCard({ nrw, yNrw, onClick }: Props) {
 
         {/* Half-donut gauge */}
         <div className="shrink-0 -mb-1" aria-hidden>
-          <PieChart width={76} height={42} margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
+          <PieChart width={isLg ? 88 : 76} height={isLg ? 48 : 42} margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
             <Pie
               data={[{ name: 'track', value: 100 }]}
               cx={cx}

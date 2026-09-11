@@ -4,12 +4,7 @@ import { ResponsiveContainer,
  } from 'recharts';
 import { C_PRODUCTION, C_CONSUMPTION, C_NRW, INSTRUMENT_TOOLTIP_STYLE } from '@/lib/chartColors';
 import { makeDrillableBarShape } from '../TrendChartDrillKit';
-
-const CHART_CURSOR = {
-  stroke: 'hsl(var(--highlight))',
-  strokeWidth: 1,
-  strokeDasharray: '3 3',
-};
+import { CHART_CURSOR, CHART_LEGEND_WRAPPER_STYLE } from './chartShell';
 
 export function RoDrillByTrainChart({
   roTrainDrillData, roUnit, handleTrainLegendIsolate, visibleTrainEntities,
@@ -31,7 +26,7 @@ export function RoDrillByTrainChart({
         formatter={(v: any, name: string) => [v != null ? `${v} ${roUnit}` : '—', name]}
       />
       <Legend
-        wrapperStyle={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.03em', paddingTop: 6, cursor: 'pointer' }}
+        wrapperStyle={CHART_LEGEND_WRAPPER_STYLE}
         onClick={handleTrainLegendIsolate}
       />
       {visibleTrainEntities.map(({ id, label, color }) => (
@@ -70,7 +65,7 @@ export function RoDrillByTrainBarChart({
         formatter={(v: any, name: string) => [v != null ? `${v} ${roUnit}` : '—', name]}
       />
       <Legend
-        wrapperStyle={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.03em', paddingTop: 6, cursor: 'pointer' }}
+        wrapperStyle={CHART_LEGEND_WRAPPER_STYLE}
         onClick={handleTrainLegendIsolate}
       />
       {visibleTrainEntities.map(({ id, label, color }) => (

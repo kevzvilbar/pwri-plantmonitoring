@@ -146,179 +146,185 @@ export function PlantPulseHero({
   }, [chartData, fallbackSparkline]);
 
   return (
-    <div className="rounded-lg border border-border bg-card text-card-foreground p-4 sm:p-5 relative overflow-hidden hero-arrival">
-      {/* ── Top Bar: Title, Facility Badge, Incident Flag, Downtime & View Toggle ── */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pb-3.5 border-b border-border/80">
-        <div className="flex items-center gap-2.5 flex-wrap">
-          <h1 className="text-base sm:text-lg font-bold tracking-tight text-foreground">
-            PWRI Operations Telemetry
-          </h1>
-          <span className="px-2.5 py-0.5 rounded-md text-2xs font-semibold bg-primary/10 text-primary border border-primary/30 flex items-center gap-1 font-mono">
-            <Building2 className="h-3 w-3 text-primary" />
-            {selectedPlantName}
-          </span>
-          {openIncidentCount > 0 && (
-            <button
-              type="button"
-              onClick={onViewIncidents}
-              className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md bg-destructive/15 text-destructive border border-destructive/40 text-2xs font-semibold hover:bg-destructive/25 transition-colors"
-              title={`${openIncidentCount} open incident${openIncidentCount > 1 ? 's' : ''} — click to view`}
-            >
-              <ShieldAlert className="h-3 w-3 text-destructive" aria-hidden />
-              <span>{openIncidentCount} open incident{openIncidentCount > 1 ? 's' : ''}</span>
-            </button>
-          )}
-        </div>
+    <div className="rounded-2xl p-1 bg-gradient-to-b from-teal-500/20 via-teal-900/10 to-transparent border border-teal-500/30 shadow-xl shadow-teal-950/20">
+      <div className="hero-arrival rounded-[calc(1rem-2px)] sm:rounded-[calc(1.25rem-2px)] bg-gradient-to-br from-[#061822] via-[#082933] to-[#0c3c44] text-white p-4 sm:p-5 relative overflow-hidden shadow-inner">
+        {/* Decorative ambient blurred glow orbs */}
+        <div className="pointer-events-none absolute -top-20 -left-20 w-64 h-64 bg-teal-500/15 rounded-full blur-3xl" aria-hidden />
+        <div className="pointer-events-none absolute -bottom-20 -right-20 w-64 h-64 bg-cyan-400/10 rounded-full blur-3xl" aria-hidden />
 
-        <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={onOpenDowntime}
-            className="h-8 text-xs gap-1.5 font-medium border-border/80 bg-background/60 hover:bg-accent hover:text-accent-foreground text-foreground shadow-xs"
-          >
-            <History className="h-3.5 w-3.5 text-primary" />
-            <span className="hidden sm:inline">Downtime Log</span>
-          </Button>
-
-          {/* View Mode Toggle */}
-          <ToggleGroup
-            type="single"
-            value={viewMode}
-            onValueChange={(v) => v && onViewModeChange(v as DashboardViewMode)}
-            className="h-8 bg-muted/60 border border-border/80 rounded-lg p-0.5"
-            data-testid="dashboard-view-mode"
-          >
-            <ToggleGroupItem
-              value="inline"
-              className="h-7 px-2.5 text-xs gap-1 text-muted-foreground hover:text-foreground data-[state=on]:bg-background data-[state=on]:text-primary data-[state=on]:shadow-xs rounded-md font-medium transition-colors"
-              title="Inline — all trend graphs visible directly on the dashboard"
-              aria-label="Inline view"
-            >
-              <LayoutGrid className="h-3.5 w-3.5 shrink-0" aria-hidden />
-              <span className="hidden md:inline">Inline</span>
-            </ToggleGroupItem>
-            <ToggleGroupItem
-              value="sections"
-              className="h-7 px-2.5 text-xs gap-1 text-muted-foreground hover:text-foreground data-[state=on]:bg-background data-[state=on]:text-primary data-[state=on]:shadow-xs rounded-md font-medium transition-colors"
-              title="Sections — click any KPI card to fold/unfold its trend chart inline"
-              aria-label="Sections view"
-            >
-              <ListCollapse className="h-3.5 w-3.5 shrink-0" aria-hidden />
-              <span className="hidden md:inline">Sections</span>
-            </ToggleGroupItem>
-            <ToggleGroupItem
-              value="popup"
-              className="h-7 px-2.5 text-xs gap-1 text-muted-foreground hover:text-foreground data-[state=on]:bg-background data-[state=on]:text-primary data-[state=on]:shadow-xs rounded-md font-medium transition-colors"
-              title="Dialog — click a KPI card to open its trend chart in a dialog"
-              aria-label="Dialog view"
-            >
-              <ExternalLink className="h-3.5 w-3.5 shrink-0" aria-hidden />
-              <span className="hidden md:inline">Dialog</span>
-            </ToggleGroupItem>
-          </ToggleGroup>
-        </div>
-      </div>
-
-      {/* ── Main Hero Row: Headline Metric · Live Pulse Status · 7-Day Sparkline · Fleet Lamps ── */}
-      <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-center pt-3.5">
-        {/* Left: Headline Metric & Status */}
-        <div className="md:col-span-5 space-y-1.5">
-          <div className="flex items-baseline gap-2">
-            <span className="readout-num readout-glow text-4xl sm:text-5xl font-bold leading-none text-foreground">
-              {fmtNum(production)}
+        {/* ── Top Bar: Title, Facility Badge, Incident Flag, Downtime & View Toggle ── */}
+        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-3 pb-3.5 border-b border-white/10">
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <h1 className="text-base sm:text-lg font-bold tracking-tight text-white flex items-center gap-2">
+              <span>PWRI Operations Telemetry</span>
+            </h1>
+            <span className="px-2.5 py-0.5 rounded-full text-2xs font-semibold bg-teal-950/80 text-teal-300 border border-teal-500/40 flex items-center gap-1.5 font-mono shadow-xs">
+              <Building2 className="h-3 w-3 text-teal-400" />
+              {selectedPlantName}
             </span>
-            <span className="text-base font-sans font-normal text-muted-foreground">m³</span>
-          </div>
-          
-          <div className="flex items-center gap-2 pt-0.5">
-            <span className="text-3xs uppercase tracking-wider font-semibold text-primary/90">
-              Today's Production
-            </span>
-            {dProduction !== null && <TrendBadge delta={dProduction} />}
+            {openIncidentCount > 0 && (
+              <button
+                type="button"
+                onClick={onViewIncidents}
+                className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-rose-950/80 text-rose-300 border border-rose-500/40 text-2xs font-semibold hover:bg-rose-900/80 transition-colors shadow-xs"
+                title={`${openIncidentCount} open incident${openIncidentCount > 1 ? 's' : ''} — click to view`}
+              >
+                <ShieldAlert className="h-3 w-3 text-rose-400" aria-hidden />
+                <span>{openIncidentCount} open incident{openIncidentCount > 1 ? 's' : ''}</span>
+              </button>
+            )}
           </div>
 
-          <div className="text-2xs text-muted-foreground flex items-center gap-1.5 pt-0.5 font-mono tabular-nums">
-            <Lamp tone="live" pulse size={6} />
-            <span className="text-primary font-semibold">Live Telemetry</span>
-            <span className="text-border">&bull;</span>
-            <span>Updated {secondsAgo}s ago</span>
-            <span className="text-border">&bull;</span>
-            <span>24h Period ({timeStr || '—'})</span>
+          <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={onOpenDowntime}
+              className="h-8 text-xs gap-1.5 font-medium bg-white/10 hover:bg-white/20 border-white/20 text-white shadow-xs rounded-lg"
+            >
+              <History className="h-3.5 w-3.5 text-cyan-300" />
+              <span className="hidden sm:inline">Downtime Log</span>
+            </Button>
+
+            {/* View Mode Toggle */}
+            <ToggleGroup
+              type="single"
+              value={viewMode}
+              onValueChange={(v) => v && onViewModeChange(v as DashboardViewMode)}
+              className="h-8 bg-black/50 border border-white/15 rounded-lg p-0.5"
+              data-testid="dashboard-view-mode"
+            >
+              <ToggleGroupItem
+                value="inline"
+                className="h-7 px-2.5 text-xs gap-1 text-slate-300 hover:text-white data-[state=on]:bg-teal-500/25 data-[state=on]:text-cyan-300 data-[state=on]:border data-[state=on]:border-cyan-400/40 data-[state=on]:shadow-xs rounded-md font-medium transition-colors"
+                title="Inline — all trend graphs visible directly on the dashboard"
+                aria-label="Inline view"
+              >
+                <LayoutGrid className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                <span className="hidden md:inline">Inline</span>
+              </ToggleGroupItem>
+              <ToggleGroupItem
+                value="sections"
+                className="h-7 px-2.5 text-xs gap-1 text-slate-300 hover:text-white data-[state=on]:bg-teal-500/25 data-[state=on]:text-cyan-300 data-[state=on]:border data-[state=on]:border-cyan-400/40 data-[state=on]:shadow-xs rounded-md font-medium transition-colors"
+                title="Sections — click any KPI card to fold/unfold its trend chart inline"
+                aria-label="Sections view"
+              >
+                <ListCollapse className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                <span className="hidden md:inline">Sections</span>
+              </ToggleGroupItem>
+              <ToggleGroupItem
+                value="popup"
+                className="h-7 px-2.5 text-xs gap-1 text-slate-300 hover:text-white data-[state=on]:bg-teal-500/25 data-[state=on]:text-cyan-300 data-[state=on]:border data-[state=on]:border-cyan-400/40 data-[state=on]:shadow-xs rounded-md font-medium transition-colors"
+                title="Dialog — click a KPI card to open its trend chart in a dialog"
+                aria-label="Dialog view"
+              >
+                <ExternalLink className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                <span className="hidden md:inline">Dialog</span>
+              </ToggleGroupItem>
+            </ToggleGroup>
           </div>
         </div>
 
-        {/* Middle: 7-Day Sparkline */}
-        <div className="md:col-span-4 flex flex-col justify-center bg-muted/30 border border-border/80 rounded-md px-3 py-2">
-          <div className="flex items-center justify-between gap-2 mb-1">
-            <span className="text-3xs font-mono font-semibold uppercase tracking-wider text-muted-foreground">
-              7-Day Production Trend
-            </span>
-            {sparklineData.length >= 2 && (
-              <span className="text-3xs font-mono text-foreground font-bold">
-                {fmtNum(sparklineData[sparklineData.length - 1]?.val ?? 0)} m³
+        {/* ── Main Hero Row: Headline Metric · Live Pulse Status · 7-Day Sparkline · Fleet Lamps ── */}
+        <div className="relative z-10 grid grid-cols-1 md:grid-cols-12 gap-4 items-center pt-3.5">
+          {/* Left: Headline Metric & Status */}
+          <div className="md:col-span-5 space-y-1.5">
+            <div className="flex items-baseline gap-2">
+              <span className="readout-num text-4xl sm:text-5xl font-bold leading-none text-white tracking-tight drop-shadow-[0_2px_12px_rgba(45,212,191,0.25)]">
+                {fmtNum(production)}
               </span>
+              <span className="text-base font-sans font-normal text-teal-200/80">m³</span>
+            </div>
+            
+            <div className="flex items-center gap-2 pt-0.5">
+              <span className="text-3xs uppercase tracking-wider font-semibold text-teal-300">
+                Today's Production
+              </span>
+              {dProduction !== null && <TrendBadge delta={dProduction} />}
+            </div>
+
+            <div className="text-2xs text-slate-300/90 flex items-center gap-1.5 pt-0.5 font-mono tabular-nums">
+              <Lamp tone="live" pulse size={6} />
+              <span className="text-cyan-300 font-semibold">Live Telemetry</span>
+              <span className="text-white/30">&bull;</span>
+              <span>Updated {secondsAgo}s ago</span>
+              <span className="text-white/30">&bull;</span>
+              <span>24h Period ({timeStr || '—'})</span>
+            </div>
+          </div>
+
+          {/* Middle: 7-Day Sparkline */}
+          <div className="md:col-span-4 flex flex-col justify-center bg-black/40 border border-teal-500/25 rounded-xl px-3.5 py-2.5 backdrop-blur-md shadow-inner">
+            <div className="flex items-center justify-between gap-2 mb-1">
+              <span className="text-3xs font-mono font-semibold uppercase tracking-wider text-teal-200/90">
+                7-Day Production Trend
+              </span>
+              {sparklineData.length >= 2 && (
+                <span className="text-3xs font-mono text-cyan-300 font-bold">
+                  {fmtNum(sparklineData[sparklineData.length - 1]?.val ?? 0)} m³
+                </span>
+              )}
+            </div>
+            {sparklineData.length >= 2 ? (
+              <div className="h-7 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={sparklineData} margin={{ top: 2, right: 2, left: 2, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="heroSparklineFill" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#2dd4bf" stopOpacity={0.5} />
+                        <stop offset="100%" stopColor="#2dd4bf" stopOpacity={0.0} />
+                      </linearGradient>
+                    </defs>
+                    <YAxis
+                      hide
+                      domain={[
+                        0,
+                        (dataMax: number) => (Number.isFinite(dataMax) && dataMax > 0 ? Math.max(dataMax * 1.25, 10) : 100),
+                      ]}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="val"
+                      stroke="#2dd4bf"
+                      strokeWidth={2}
+                      fill="url(#heroSparklineFill)"
+                      isAnimationActive={false}
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            ) : (
+              <div className="text-3xs font-mono text-teal-200/70 flex items-center h-7">
+                Collecting 7-day sparkline telemetry…
+              </div>
             )}
           </div>
-          {sparklineData.length >= 2 ? (
-            <div className="h-7 w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={sparklineData} margin={{ top: 2, right: 2, left: 2, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="heroSparklineFill" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor={C_PRODUCTION} stopOpacity={0.45} />
-                      <stop offset="100%" stopColor={C_PRODUCTION} stopOpacity={0.0} />
-                    </linearGradient>
-                  </defs>
-                  <YAxis
-                    hide
-                    domain={[
-                      0,
-                      (dataMax: number) => (Number.isFinite(dataMax) && dataMax > 0 ? Math.max(dataMax * 1.25, 10) : 100),
-                    ]}
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="val"
-                    stroke={C_PRODUCTION}
-                    strokeWidth={2}
-                    fill="url(#heroSparklineFill)"
-                    isAnimationActive={false}
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-          ) : (
-            <div className="text-3xs font-mono text-muted-foreground flex items-center h-7">
-              Collecting 7-day sparkline telemetry…
-            </div>
-          )}
-        </div>
 
-        {/* Right: Fleet Health Status Lamps */}
-        <div className="md:col-span-3 flex md:flex-col justify-start md:justify-center md:items-end gap-2 text-2xs font-mono">
-          <div className="flex items-center gap-2 bg-muted/30 border border-border/80 rounded-md px-3 py-2">
-            <span className="flex items-center gap-1.5">
-              <Lamp tone="good" size={6} />
-              <span className="font-semibold text-foreground">{fleetCounts.online}</span>
-              <span className="text-muted-foreground">online</span>
-            </span>
-            <span className="text-border">|</span>
-            <span className="flex items-center gap-1.5">
-              <Lamp tone="warn" size={6} />
-              <span className="font-semibold text-foreground">{fleetCounts.stale}</span>
-              <span className="text-muted-foreground">stale</span>
-            </span>
-            {fleetCounts.offline > 0 && (
-              <>
-                <span className="text-border">|</span>
-                <span className="flex items-center gap-1.5">
-                  <Lamp tone="muted" size={6} />
-                  <span className="font-semibold text-foreground">{fleetCounts.offline}</span>
-                  <span className="text-muted-foreground">off</span>
-                </span>
-              </>
-            )}
+          {/* Right: Fleet Health Status Lamps */}
+          <div className="md:col-span-3 flex md:flex-col justify-start md:justify-center md:items-end gap-2 text-2xs font-mono">
+            <div className="flex items-center gap-2 bg-black/40 border border-teal-500/25 rounded-xl px-3.5 py-2.5 backdrop-blur-md shadow-inner">
+              <span className="flex items-center gap-1.5">
+                <Lamp tone="good" size={6} />
+                <span className="font-semibold text-white">{fleetCounts.online}</span>
+                <span className="text-slate-300">online</span>
+              </span>
+              <span className="text-white/20">|</span>
+              <span className="flex items-center gap-1.5">
+                <Lamp tone="warn" size={6} />
+                <span className="font-semibold text-white">{fleetCounts.stale}</span>
+                <span className="text-slate-300">stale</span>
+              </span>
+              {fleetCounts.offline > 0 && (
+                <>
+                  <span className="text-white/20">|</span>
+                  <span className="flex items-center gap-1.5">
+                    <Lamp tone="muted" size={6} />
+                    <span className="font-semibold text-white">{fleetCounts.offline}</span>
+                    <span className="text-slate-300">off</span>
+                  </span>
+                </>
+              )}
+            </div>
           </div>
         </div>
       </div>

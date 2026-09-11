@@ -1,11 +1,6 @@
 import React from 'react';
 import { ResponsiveContainer,  ComposedChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ReferenceLine  } from 'recharts';
-
-const CHART_CURSOR = {
-  stroke: 'hsl(var(--highlight))',
-  strokeWidth: 1,
-  strokeDasharray: '3 3',
-};
+import { CHART_CURSOR } from './chartShell';
 
 function PhTooltip({ active, payload, label, phActiveData }: any) {
   if (!active || !payload?.length) return null;

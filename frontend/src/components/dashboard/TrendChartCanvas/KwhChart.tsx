@@ -2,12 +2,7 @@ import React from 'react';
 import { ResponsiveContainer, ComposedChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
 import { C_SOLAR, C_GRID } from '@/lib/chartColors';
 import { Sun, Zap } from 'lucide-react';
-
-const CHART_CURSOR = {
-  stroke: 'hsl(var(--highlight))',
-  strokeWidth: 1,
-  strokeDasharray: '3 3',
-};
+import { CHART_CURSOR } from './chartShell';
 
 function KwhTooltip({ active, payload, label, hasSolarData, hasGridData, kwhSource }: any) {
   if (!active || !payload?.length) return null;

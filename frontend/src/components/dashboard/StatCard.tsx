@@ -54,7 +54,7 @@ export type ExpandRow = { label: string; value: string | number | null };
 export function StatCard({
   icon: Icon, label, value, unit, tone, onClick, accent, calc, threshold,
   size = 'default', trend = null, calcTooltip,
-  expandRows, expandUnit, subtext, badge,
+  expandRows, expandUnit, subtext, badge, className,
 }: {
   icon: any; label: string; value: any; unit?: string;
   tone?: StatTone; onClick?: () => void; accent?: string;
@@ -68,6 +68,7 @@ export function StatCard({
   expandUnit?: string;
   subtext?: React.ReactNode;
   badge?: React.ReactNode;
+  className?: string;
 }) {
   const [expanded, setExpanded] = useState(false);
   const valueTick = useValueTick(value);
@@ -92,7 +93,8 @@ export function StatCard({
         onClick ? 'cursor-pointer' : 'cursor-default',
         isHero ? 'p-4 sm:p-5' : isLg ? 'p-3.5' : isCompact ? 'p-2.5' : 'p-3',
         toneBg,
-        calcBg
+        calcBg,
+        className
       )}
       onClick={onClick}
     >

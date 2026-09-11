@@ -11,3 +11,4 @@ export { RawWaterByWellDailyChart, RawWaterByWellBarChart } from './RawWaterByWe
 export { RawWaterAreaChart } from './RawWaterAreaChart';
 export { TdsAreaChart } from './TdsAreaChart';
 export { DefaultAreaChart } from './DefaultAreaChart';
+export * from './chartShell';

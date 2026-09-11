@@ -71,7 +71,7 @@ export function TrendChartToolbar({
         <button
           type="button"
           onClick={onOpenSummary}
-          className="h-7 px-2.5 text-2xs font-semibold rounded-md border border-border/80 bg-card text-foreground hover:bg-muted/80 hover:text-primary transition-all flex items-center gap-1.5 shadow-2xs cursor-pointer"
+          className="h-8 px-3 text-xs font-semibold rounded-lg border border-border/80 bg-card text-foreground hover:bg-muted/80 hover:text-primary transition-all flex items-center gap-1.5 shadow-2xs cursor-pointer focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
           title={`Open ${title || metric} Data Summary`}
           data-testid={`trend-data-summary-${metric}`}
         >

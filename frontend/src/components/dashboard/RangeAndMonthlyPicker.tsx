@@ -58,10 +58,10 @@ export function RangeAndMonthlyPicker({
             onClick={() => onRangeChange(r)}
             data-testid={`${testIdPrefix}-${r}`}
             className={cn(
-              'h-7 px-2.5 text-2xs font-semibold rounded-md transition-all cursor-pointer',
+              'h-8 px-3 text-xs font-semibold rounded-md transition-all cursor-pointer focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring',
               range === r
-                ? 'bg-card text-primary shadow-xs border border-border/80'
-                : 'text-muted-foreground hover:text-foreground',
+                ? 'bg-card text-primary font-bold shadow-xs border border-border/80'
+                : 'text-muted-foreground hover:text-foreground hover:bg-card/50',
             )}
           >
             {r}
@@ -73,22 +73,22 @@ export function RangeAndMonthlyPicker({
           onClick={() => onRangeChange('CUSTOM')}
           data-testid={`${testIdPrefix}-CUSTOM`}
           className={cn(
-            'h-7 px-2.5 text-2xs font-semibold rounded-md transition-all cursor-pointer',
+            'h-8 px-3 text-xs font-semibold rounded-md transition-all cursor-pointer focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring',
             range === 'CUSTOM'
-              ? 'bg-card text-primary shadow-xs border border-border/80'
-              : 'text-muted-foreground hover:text-foreground',
+              ? 'bg-card text-primary font-bold shadow-xs border border-border/80'
+              : 'text-muted-foreground hover:text-foreground hover:bg-card/50',
           )}
         >
           Custom
         </button>
 
-        <div className="h-3.5 border-r border-border/40 mx-0.5" aria-hidden />
+        <div className="h-4 border-r border-border/50 mx-0.5" aria-hidden />
 
         <button
           type="button"
           onClick={() => onRangeChange('MONTHLY')}
           data-testid={`${testIdPrefix}-MONTHLY`}
-          className="h-7 px-2.5 text-2xs font-semibold rounded-md transition-all cursor-pointer text-muted-foreground hover:text-foreground"
+          className="h-8 px-3 text-xs font-semibold rounded-md transition-all cursor-pointer text-muted-foreground hover:text-foreground hover:bg-card/50 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
         >
           Monthly
         </button>

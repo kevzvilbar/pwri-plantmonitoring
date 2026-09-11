@@ -2,12 +2,7 @@ import React from 'react';
 import { ResponsiveContainer,  ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, CartesianGrid, ReferenceLine  } from 'recharts';
 import { C_PRODUCTION, C_CONSUMPTION, C_NRW } from '@/lib/chartColors';
 import { makeDrillableBarShape } from '../TrendChartDrillKit';
-
-const CHART_CURSOR = {
-  stroke: 'hsl(var(--highlight))',
-  strokeWidth: 1,
-  strokeDasharray: '3 3',
-};
+import { CHART_CURSOR } from './chartShell';
 
 export function NrwChart({
   focusedTrendRows, formatYAxis, handleDrillBarActivate, nrwLimitPct, stackMode,

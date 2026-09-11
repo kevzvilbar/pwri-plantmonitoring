@@ -2,12 +2,7 @@ import React from 'react';
 import { ResponsiveContainer,  ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, CartesianGrid, Legend  } from 'recharts';
 import { makeDrillableBarShape } from '../TrendChartDrillKit';
 import { INSTRUMENT_TOOLTIP_STYLE } from '@/lib/chartColors';
-
-const CHART_CURSOR = {
-  stroke: 'hsl(var(--highlight))',
-  strokeWidth: 1,
-  strokeDasharray: '3 3',
-};
+import { CHART_CURSOR, CHART_LEGEND_WRAPPER_STYLE } from './chartShell';
 
 export function RawWaterByWellDailyChart({
   wellEntityRows, formatYAxis, handleWellLegendIsolate, visibleWellEntities,
@@ -29,7 +24,7 @@ export function RawWaterByWellDailyChart({
         formatter={(v: any, name: string) => [v != null ? v.toLocaleString(undefined, { maximumFractionDigits: 1 }) : '—', name]}
       />
       <Legend
-        wrapperStyle={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.03em', paddingTop: 6, cursor: 'pointer' }}
+        wrapperStyle={CHART_LEGEND_WRAPPER_STYLE}
         onClick={handleWellLegendIsolate}
       />
       {visibleWellEntities.map(({ id, label, color }) => (
@@ -68,7 +63,7 @@ export function RawWaterByWellBarChart({
         formatter={(v: any, name: string) => [v != null ? v.toLocaleString(undefined, { maximumFractionDigits: 1 }) : '—', name]}
       />
       <Legend
-        wrapperStyle={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.03em', paddingTop: 6, cursor: 'pointer' }}
+        wrapperStyle={CHART_LEGEND_WRAPPER_STYLE}
         onClick={handleWellLegendIsolate}
       />
       {visibleWellEntities.map(({ id, label, color }) => (

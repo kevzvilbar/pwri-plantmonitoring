@@ -1,12 +1,7 @@
 import React from 'react';
 import { ResponsiveContainer, BarChart, LineChart, Bar, Line, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
 import { INSTRUMENT_TOOLTIP_STYLE } from '@/lib/chartColors';
-
-const CHART_CURSOR = {
-  stroke: 'hsl(var(--highlight))',
-  strokeWidth: 1,
-  strokeDasharray: '3 3',
-};
+import { CHART_CURSOR } from './chartShell';
 
 export function ProductionCostStackedChart({
   trendRows, formatYAxis, showPowerCostLine, showChemCostLine,

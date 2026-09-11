@@ -1,12 +1,7 @@
 import React from 'react';
 import { ResponsiveContainer,  AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid  } from 'recharts';
 import { C_TDS, C_RECOVERY, INSTRUMENT_TOOLTIP_STYLE } from '@/lib/chartColors';
-
-const CHART_CURSOR = {
-  stroke: 'hsl(var(--highlight))',
-  strokeWidth: 1,
-  strokeDasharray: '3 3',
-};
+import { CHART_CURSOR } from './chartShell';
 
 export function RoDrillByHourChart({
   roHourDrillData, metric, roUnit,

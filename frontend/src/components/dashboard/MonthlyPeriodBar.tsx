@@ -43,11 +43,11 @@ export function MonthlyPeriodBar({
         <button
           type="button"
           onClick={onBackToDays}
-          className="h-7 px-2 text-2xs font-semibold rounded-md border border-border/80 bg-muted/60 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors flex items-center gap-1 shrink-0 cursor-pointer"
+          className="h-8 px-2.5 text-xs font-semibold rounded-md border border-border/80 bg-muted/60 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors flex items-center gap-1 shrink-0 cursor-pointer focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
           title="Return to rolling day presets (7D, 14D, 30D…)"
           data-testid={`${testIdPrefix}-back-days`}
         >
-          <ArrowLeft className="h-3 w-3" />
+          <ArrowLeft className="h-3.5 w-3.5" />
           <span className="hidden xs:inline">Days</span>
         </button>
       )}
@@ -60,7 +60,7 @@ export function MonthlyPeriodBar({
           onValueChange={(y) => onPeriodChange(+y, selectedMonth)}
         >
           <SelectTrigger
-            className="h-7 w-20 px-2 rounded-md text-2xs font-semibold bg-background border-border/80"
+            className="h-8 w-20 px-2 rounded-md text-xs font-semibold bg-background border-border/80 focus:ring-2 focus:ring-ring"
             data-testid={`${testIdPrefix}-year-select`}
           >
             <SelectValue />
@@ -92,7 +92,7 @@ export function MonthlyPeriodBar({
           data-testid={`${testIdPrefix}-pill-YTD`}
           title={year > currentYear ? 'Future period — no data recorded yet' : undefined}
           className={cn(
-            'h-7 px-2.5 rounded-md font-semibold shrink-0 transition-all text-2xs',
+            'h-8 px-3 rounded-md font-semibold shrink-0 transition-all text-xs focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring',
             selectedMonth === 'YTD'
               ? 'bg-primary text-primary-foreground font-bold shadow-xs cursor-pointer'
               : year > currentYear
@@ -119,7 +119,7 @@ export function MonthlyPeriodBar({
               data-testid={`${testIdPrefix}-pill-${monthKey}`}
               title={isFuture ? 'Future period — no data recorded yet' : undefined}
               className={cn(
-                'h-7 px-2 rounded-md shrink-0 transition-all text-2xs font-medium',
+                'h-8 px-2.5 rounded-md shrink-0 transition-all text-xs font-medium focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring',
                 isSelected
                   ? 'bg-primary text-primary-foreground font-bold shadow-xs cursor-pointer'
                   : isFuture
