@@ -64,14 +64,14 @@ export type StatTone = 'accent' | 'warn' | 'danger' | undefined;
 // colored top rule, and high-visibility status contrast.
 export const TONE_BG: Record<NonNullable<StatTone>, string> = {
   accent: '',
-  warn:   'border-amber-500/50 bg-amber-950/30 text-amber-200 border-t-2 border-t-amber-500 shadow-[0_0_12px_-3px_rgba(245,158,11,0.2)]',
-  danger: 'border-rose-500/60 bg-rose-950/40 text-rose-200 border-t-2 border-t-rose-500 shadow-[0_0_15px_-3px_rgba(244,63,94,0.25)]',
+  warn:   'border-amber-500/60 bg-amber-500/10 dark:bg-amber-950/40 border-t-2 border-t-amber-500 shadow-[0_0_12px_-3px_rgba(245,158,11,0.2)]',
+  danger: 'border-rose-500/70 bg-rose-500/10 dark:bg-rose-950/40 border-t-2 border-t-rose-500 shadow-[0_0_15px_-3px_rgba(244,63,94,0.25)]',
 };
 
 export const TONE_ICON: Record<NonNullable<StatTone>, string> = {
   accent: 'text-muted-foreground',
-  warn:   'text-amber-400',
-  danger: 'text-rose-400',
+  warn:   'text-amber-600 dark:text-amber-400',
+  danger: 'text-rose-600 dark:text-rose-400',
 };
 
 // Trend metrics that have an associated chart. Used by ClusterCharts

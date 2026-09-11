@@ -136,13 +136,32 @@ export function StatCard({
         <div
           key={valueTick}
           className={cn(
-            'mt-2 text-foreground leading-none whitespace-nowrap overflow-hidden text-ellipsis font-mono tabular-nums',
+            'mt-2 leading-none whitespace-nowrap overflow-hidden text-ellipsis font-mono tabular-nums',
+            tone === 'danger'
+              ? 'text-rose-700 dark:text-rose-200'
+              : tone === 'warn'
+              ? 'text-amber-700 dark:text-amber-200'
+              : 'text-foreground',
             isHero ? 'text-3xl sm:text-4xl font-bold' : isLg ? 'text-2xl sm:text-3xl font-bold' : isCompact ? 'text-xl font-bold' : 'text-2xl font-bold',
             valueTick > 0 ? 'animate-value-tick' : ''
           )}
         >
           {value}
-          {unit && <span className={cn('font-sans font-normal text-muted-foreground ml-1.5', isHero ? 'text-base sm:text-lg' : isLg ? 'text-sm' : 'text-xs')}>{unit}</span>}
+          {unit && (
+            <span
+              className={cn(
+                'font-sans font-normal ml-1.5',
+                tone === 'danger'
+                  ? 'text-rose-600/80 dark:text-rose-300/80'
+                  : tone === 'warn'
+                  ? 'text-amber-600/80 dark:text-amber-300/80'
+                  : 'text-muted-foreground',
+                isHero ? 'text-base sm:text-lg' : isLg ? 'text-sm' : 'text-xs'
+              )}
+            >
+              {unit}
+            </span>
+          )}
         </div>
       </div>
 

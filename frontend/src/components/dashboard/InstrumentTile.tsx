@@ -38,7 +38,16 @@ export const InstrumentTile = React.forwardRef<HTMLDivElement, InstrumentTilePro
         )}
         {...props}
       >
-        <div className="recessed-core w-full h-full rounded-[14px] bg-card/60 backdrop-blur-xs p-3.5 flex flex-col justify-between">
+        <div
+          className={cn(
+            'recessed-core w-full h-full rounded-[14px] p-3.5 flex flex-col justify-between backdrop-blur-xs',
+            tone === 'danger'
+              ? 'bg-rose-500/10 dark:bg-rose-950/30'
+              : tone === 'warn'
+              ? 'bg-amber-500/10 dark:bg-amber-950/30'
+              : 'bg-card/60'
+          )}
+        >
           {children}
         </div>
       </div>

@@ -159,8 +159,8 @@ export function PlantPulseHero({
   }, [chartData, fallbackSparkline, production]);
 
   return (
-    <div className="rounded-2xl p-1 bg-gradient-to-b from-teal-500/20 via-teal-900/10 to-transparent border border-teal-500/30 shadow-xl shadow-teal-950/20">
-      <div className="hero-arrival rounded-[calc(1rem-2px)] sm:rounded-[calc(1.25rem-2px)] bg-gradient-to-br from-[#061822] via-[#082933] to-[#0c3c44] text-white p-4 sm:p-5 relative overflow-hidden shadow-inner">
+    <div className="rounded-[20px] sm:rounded-[24px] p-1 bg-gradient-to-b from-teal-500/20 via-teal-900/10 to-transparent border border-teal-500/30 shadow-xl shadow-teal-950/20">
+      <div className="hero-arrival rounded-[16px] sm:rounded-[20px] bg-gradient-to-br from-[#061822] via-[#082933] to-[#0c3c44] text-white p-4 sm:p-5 relative overflow-hidden shadow-inner">
         {/* Decorative ambient blurred glow orbs */}
         <div className="pointer-events-none absolute -top-20 -left-20 w-64 h-64 bg-teal-500/15 rounded-full blur-3xl" aria-hidden />
         <div className="pointer-events-none absolute -bottom-20 -right-20 w-64 h-64 bg-cyan-400/10 rounded-full blur-3xl" aria-hidden />

@@ -117,8 +117,8 @@ export function NRWGaugeCard({ nrw, yNrw, onClick, size = 'default', className }
         {/* ── Header row: icon · LABEL (decluttered) ── */}
         <div className="flex items-center justify-between gap-1 min-w-0">
           <div className="flex items-center gap-1.5 min-w-0 overflow-hidden">
-            <Activity className={cn('shrink-0', isLg ? 'h-4 w-4' : 'h-3.5 w-3.5', tone === 'danger' ? 'text-rose-400' : 'text-muted-foreground/80')} />
-            <span className={cn('uppercase tracking-wide font-semibold truncate leading-none text-muted-foreground', isLg ? 'text-xs' : 'text-2xs')}>
+            <Activity className={cn('shrink-0', isLg ? 'h-4 w-4' : 'h-3.5 w-3.5', tone === 'danger' ? 'text-rose-600 dark:text-rose-400' : 'text-muted-foreground/80')} />
+            <span className={cn('uppercase tracking-wide font-semibold truncate leading-none', tone === 'danger' ? 'text-rose-700 dark:text-rose-300' : 'text-muted-foreground', isLg ? 'text-xs' : 'text-2xs')}>
               NRW
             </span>
           </div>
@@ -130,10 +130,10 @@ export function NRWGaugeCard({ nrw, yNrw, onClick, size = 'default', className }
             <div className={cn(
               'font-bold font-mono tabular-nums leading-none',
               isLg ? 'text-2xl sm:text-3xl' : 'text-2xl',
-              tone === 'danger' ? 'text-rose-200' : 'text-foreground'
+              tone === 'danger' ? 'text-rose-700 dark:text-rose-200' : 'text-foreground'
             )}>
               {nrw == null ? '—' : nrw}
-              <span className={cn('font-sans font-normal ml-1.5', tone === 'danger' ? 'text-rose-300/80' : 'text-muted-foreground', isLg ? 'text-sm' : 'text-xs')}>%</span>
+              <span className={cn('font-sans font-normal ml-1.5', tone === 'danger' ? 'text-rose-600/80 dark:text-rose-300/80' : 'text-muted-foreground', isLg ? 'text-sm' : 'text-xs')}>%</span>
             </div>
           </div>
 
@@ -148,7 +148,7 @@ export function NRWGaugeCard({ nrw, yNrw, onClick, size = 'default', className }
                 endAngle={0}
                 innerRadius={innerRadius}
                 outerRadius={outerRadius}
-                cornerRadius={cornerRadius}
+                cornerRadius={0}
                 dataKey="value"
                 stroke="none"
                 isAnimationActive={false}
@@ -164,7 +164,7 @@ export function NRWGaugeCard({ nrw, yNrw, onClick, size = 'default', className }
                 endAngle={180 - (displayVal / 100) * 180}
                 innerRadius={innerRadius}
                 outerRadius={outerRadius}
-                cornerRadius={cornerRadius}
+                cornerRadius={2.5}
                 dataKey="value"
                 stroke="none"
                 isAnimationActive={false}
@@ -175,10 +175,10 @@ export function NRWGaugeCard({ nrw, yNrw, onClick, size = 'default', className }
               <line
                 x1={tickInner.x} y1={tickInner.y}
                 x2={tickOuter.x} y2={tickOuter.y}
-                stroke={tone === 'danger' ? '#f43f5e' : 'hsl(var(--foreground))'}
-                strokeOpacity={tone === 'danger' ? 0.95 : 0.6}
-                strokeWidth={2}
+                stroke={tone === 'danger' ? '#ffffff' : 'hsl(var(--foreground))'}
+                strokeWidth={2.5}
                 strokeLinecap="round"
+                className={tone === 'danger' ? 'drop-shadow-[0_0_1.5px_rgba(0,0,0,0.8)]' : ''}
               />
             </PieChart>
           </div>
@@ -193,7 +193,7 @@ export function NRWGaugeCard({ nrw, yNrw, onClick, size = 'default', className }
         >
           calc
         </span>
-        <span className="text-3xs text-muted-foreground/70 shrink-0 font-mono">
+        <span className={cn('text-3xs shrink-0 font-mono', tone === 'danger' ? 'text-rose-700/80 dark:text-rose-300/80 font-medium' : 'text-muted-foreground/70')}>
           (limit {limitPct}%)
         </span>
         {delta !== null && (
