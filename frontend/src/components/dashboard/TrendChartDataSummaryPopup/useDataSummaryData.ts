@@ -8,6 +8,7 @@ import {
   computeGridMeterBreakdown, buildKwhSummaryCsv, type GridPowerReadingRow,
   GRID_METER_OTHER_KEY,
 } from '../TrendChartPivotShared';
+import type { ChemicalDayBreakdown } from '../TrendChartTables';
 import { calculateDataSummaryStats } from './summaryStatsCalculator';
 
 export interface DataSummaryData {
@@ -32,6 +33,8 @@ export interface DataSummaryData {
   hasProdTab: boolean;
   hasConsTab: boolean;
   hasGridTab: boolean;
+  hasChemBreakdownTab: boolean;
+  chemicalBreakdown: Map<string, ChemicalDayBreakdown>;
   overviewLabel: string;
   prodTabLabel: string;
   roTrainEntities: { id: string; label: string }[];
@@ -232,6 +235,7 @@ export function useDataSummaryData({
   const hasProdTab = metric === 'production' || metric === 'nrw' || metric === 'pv';
   const hasConsTab = metric === 'production' || metric === 'nrw';
   const hasGridTab = metric === 'kwh';
+  const hasChemBreakdownTab = metric === 'productionCost' || metric === 'chemCost';
 
   const overviewLabel =
     metric === 'production' || metric === 'nrw' ? 'Prod. vs Consum.'
@@ -517,15 +521,93 @@ export function useDataSummaryData({
   }, [overviewDates, overviewByDate, metric, prodDates, prodEntities, prodPivotMap,
       consEntities, consPivot, roTrainRecoveryByDate, roTrainTdsByDate]);
 
+  const filteredCostReadings = useMemo(() => {
+    if (!costReadings) return [];
+    if (!filterFrom && !filterTo) return costReadings;
+    return costReadings.filter((r) => {
+      const dt = r.cost_date;
+      if (filterFrom && dt < filterFrom) return false;
+      if (filterTo && dt > filterTo) return false;
+      return true;
+    });
+  }, [costReadings, filterFrom, filterTo]);
+
+  const chemicalBreakdown = useMemo(() => {
+    const map = new Map<string, ChemicalDayBreakdown>();
+    if (!hasChemBreakdownTab) return map;
+
+    const prodVolMap = new Map<string, number>();
+    overviewChartRows.forEach((r) => {
+      if (r.isoDate) {
+        const dk = format(new Date(r.isoDate), 'yyyy-MM-dd');
+        if (r.production != null && r.production > 0) {
+          prodVolMap.set(dk, r.production);
+        } else if (r.rawwater != null && r.rawwater > 0) {
+          prodVolMap.set(dk, r.rawwater);
+        }
+      }
+    });
+
+    (filteredCostReadings ?? []).forEach((r: any) => {
+      const dk = r.cost_date;
+      if (!dk) return;
+      let entry = map.get(dk);
+      if (!entry) {
+        const prodVol = prodVolMap.get(dk) ?? null;
+        entry = {
+          chlorineKg: 0,
+          chlorineCost: 0,
+          smbsKg: 0,
+          smbsCost: 0,
+          antiScalantL: 0,
+          antiScalantCost: 0,
+          sodaAshKg: 0,
+          sodaAshCost: 0,
+          freeClPcs: 0,
+          freeClCost: 0,
+          otherCost: 0,
+          totalCost: 0,
+          prodVol,
+          chemCostPerM3: null,
+        };
+        map.set(dk, entry);
+      }
+      entry.chlorineKg += +(r.chlorine_kg ?? 0);
+      entry.chlorineCost += +(r.chlorine_cost ?? 0);
+      entry.smbsKg += +(r.smbs_kg ?? 0);
+      entry.smbsCost += +(r.smbs_cost ?? 0);
+      entry.antiScalantL += +(r.anti_scalant_l ?? 0);
+      entry.antiScalantCost += +(r.anti_scalant_cost ?? 0);
+      entry.sodaAshKg += +(r.soda_ash_kg ?? 0);
+      entry.sodaAshCost += +(r.soda_ash_cost ?? 0);
+      entry.freeClPcs += +(r.free_cl_pcs ?? 0);
+      entry.freeClCost += +(r.free_cl_cost ?? 0);
+      entry.otherCost += +(r.other_cost ?? 0);
+      entry.totalCost += +(r.chem_cost ?? 0);
+    });
+
+    map.forEach((entry, dk) => {
+      const prodVol = prodVolMap.get(dk) ?? null;
+      entry.prodVol = prodVol;
+      entry.chemCostPerM3 = (prodVol != null && prodVol > 0 && entry.totalCost > 0)
+        ? +(entry.totalCost / prodVol).toFixed(4)
+        : null;
+    });
+
+    return map;
+  }, [hasChemBreakdownTab, filteredCostReadings, overviewChartRows]);
+
   const activeTab: DSMTab =
     (!hasProdTab && tab === 'production') ||
     (!hasConsTab && tab === 'consumption') ||
-    (!hasGridTab && tab === 'grid-by-meter')
+    (!hasGridTab && tab === 'grid-by-meter') ||
+    (!hasChemBreakdownTab && tab === 'chemical-breakdown')
       ? 'overview' : tab;
 
   const tabDates = activeTab === 'consumption' ? consDates
     : activeTab === 'production' ? prodDates
     : activeTab === 'grid-by-meter' ? overviewDates
+    : activeTab === 'chemical-breakdown' ? overviewDates
     : metric === 'rawwater' ? prodDates
     : overviewDates;
 
@@ -540,13 +622,14 @@ export function useDataSummaryData({
     filteredChartData, filteredLocReadings, filteredProductReadings,
     filteredWellReadings, filteredRoReadings,
     gridMeterMeta, gridBreakdown,
-    hasProdTab, hasConsTab, hasGridTab,
+    hasProdTab, hasConsTab, hasGridTab, hasChemBreakdownTab,
     overviewLabel, prodTabLabel,
     roTrainEntities, roTrainRecoveryByDate, roTrainTdsByDate,
     prodEntities, prodPivotMap, prodDateKeys, prodDates,
     hasProductMeterData, hasPermeateData,
     consEntities, consPivot, consDateKeys, consDates,
     overviewDates, overviewChartRows, tabDates,
+    chemicalBreakdown,
     summaryStats,
   };
 }

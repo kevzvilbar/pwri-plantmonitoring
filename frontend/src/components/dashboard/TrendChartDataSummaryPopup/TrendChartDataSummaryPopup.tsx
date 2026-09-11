@@ -48,6 +48,7 @@ export function DataSummaryPopup({
     consPivot: data.consPivot,
     roTrainEntities: data.roTrainEntities,
     powerReadings,
+    chemicalBreakdown: data.chemicalBreakdown,
   });
 
   return (
@@ -71,6 +72,7 @@ export function DataSummaryPopup({
             hasProdTab={data.hasProdTab}
             hasConsTab={data.hasConsTab}
             hasGridTab={data.hasGridTab}
+            hasChemBreakdownTab={data.hasChemBreakdownTab}
             overviewLabel={data.overviewLabel}
             prodTabLabel={data.prodTabLabel}
             setTab={data.setTab}
@@ -99,6 +101,7 @@ export function DataSummaryPopup({
           consDates={data.consDates}
           consEntities={data.consEntities}
           consPivot={data.consPivot}
+          chemicalBreakdown={data.chemicalBreakdown}
         />
 
         <Footer
@@ -107,6 +110,7 @@ export function DataSummaryPopup({
           hasProdTab={data.hasProdTab}
           hasConsTab={data.hasConsTab}
           hasGridTab={data.hasGridTab}
+          hasChemBreakdownTab={data.hasChemBreakdownTab}
           metric={metric}
           prodEntities={data.prodEntities}
           consEntities={data.consEntities}

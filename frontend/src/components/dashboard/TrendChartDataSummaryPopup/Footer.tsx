@@ -6,6 +6,7 @@ interface FooterProps {
   hasProdTab: boolean;
   hasConsTab: boolean;
   hasGridTab: boolean;
+  hasChemBreakdownTab?: boolean;
   metric: string;
   prodEntities: { id: string; label: string; kind: string }[];
   consEntities: { id: string; label: string }[];
@@ -13,7 +14,7 @@ interface FooterProps {
 }
 
 export function Footer({
-  tabDates, activeTab, hasProdTab, hasConsTab, hasGridTab, metric,
+  tabDates, activeTab, hasProdTab, hasConsTab, hasGridTab, hasChemBreakdownTab, metric,
   prodEntities, consEntities, gridBreakdown,
 }: FooterProps) {
   const prodKindCounts = (() => {
@@ -39,6 +40,9 @@ export function Footer({
       )}
       {activeTab === 'grid-by-meter' && hasGridTab && (
         <span>· {gridBreakdown.columns.length} grid meter{gridBreakdown.columns.length === 1 ? '' : 's'}{gridBreakdown.hasUnattributed ? ' (some days only stored as daily totals)' : ''}</span>
+      )}
+      {activeTab === 'chemical-breakdown' && (
+        <span>· Dosed chemicals breakdown</span>
       )}
     </div>
   );

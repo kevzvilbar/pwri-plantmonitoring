@@ -1,4 +1,4 @@
-import { PivotTable, OverviewTable, GridMeterBreakdownTable } from '../TrendChartTables';
+import { PivotTable, OverviewTable, GridMeterBreakdownTable, ChemicalBreakdownTable, type ChemicalDayBreakdown } from '../TrendChartTables';
 import type { GridMeterBreakdown } from '../TrendChartPivotShared';
 
 interface BodyProps {
@@ -17,13 +17,14 @@ interface BodyProps {
   consDates: string[];
   consEntities: { id: string; label: string }[];
   consPivot: Map<string, Map<string, number>>;
+  chemicalBreakdown?: Map<string, ChemicalDayBreakdown>;
 }
 
 export function Body({
   activeTab, metric, hasProdTab, hasConsTab,
   overviewChartRows, overviewDates, roTrainEntities,
   gridBreakdown, prodDates, prodEntities, prodPivotMap, hasPermeateData,
-  consDates, consEntities, consPivot,
+  consDates, consEntities, consPivot, chemicalBreakdown,
 }: BodyProps) {
   return (
     <div className="flex-1 overflow-hidden min-h-0 flex flex-col">
@@ -46,6 +47,13 @@ export function Body({
               roTrainEntities={roTrainEntities}
             />
           )
+        )}
+        {activeTab === 'chemical-breakdown' && (
+          <ChemicalBreakdownTable
+            dates={overviewDates}
+            chemicalBreakdown={chemicalBreakdown ?? new Map()}
+            overviewChartRows={overviewChartRows}
+          />
         )}
         {activeTab === 'grid-by-meter' && (
           <GridMeterBreakdownTable dates={overviewDates} breakdown={gridBreakdown} />

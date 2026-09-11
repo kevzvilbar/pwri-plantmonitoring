@@ -493,7 +493,7 @@ export function useTrendChartQueries({
           .gte('cost_date', startKey)
           .lte('cost_date', endKey),
         supabase.from('chemical_dosing_logs')
-          .select('log_datetime,calculated_cost,plant_id,chlorine_kg,smbs_kg,anti_scalant_l,soda_ash_kg')
+          .select('log_datetime,calculated_cost,plant_id,chlorine_kg,smbs_kg,anti_scalant_l,soda_ash_kg,free_chlorine_reagent_pcs')
           .in('plant_id', plantIds)
           .gte('log_datetime', `${startKey}T00:00:00`)
           .lte('log_datetime', `${endKey}T23:59:59`),
@@ -514,41 +514,111 @@ export function useTrendChartQueries({
         if (!(base in priceMap))            priceMap[base]            = +p.unit_price;
       }
 
-      // chemical_name → dosing quantity field (matches DOSING_KEYS in ROTrains)
-      const DOSING_KEYS = [
-        { key: 'chlorine_kg',    name: 'Chlorine'    },
-        { key: 'smbs_kg',        name: 'SMBS'        },
-        { key: 'anti_scalant_l', name: 'Anti Scalant'},
-        { key: 'soda_ash_kg',    name: 'Soda Ash'    },
-      ];
-
-      // Build map: `${plant_id}|${yyyy-MM-dd}` → accumulated ₱
-      const costMap = new Map<string, number>();
+      interface ChemDayAcc {
+        chem_cost: number;
+        chlorine_kg: number;
+        chlorine_cost: number;
+        smbs_kg: number;
+        smbs_cost: number;
+        anti_scalant_l: number;
+        anti_scalant_cost: number;
+        soda_ash_kg: number;
+        soda_ash_cost: number;
+        free_cl_pcs: number;
+        free_cl_cost: number;
+        other_cost: number;
+      }
+      const dayAccMap = new Map<string, ChemDayAcc>();
+      const getAcc = (k: string): ChemDayAcc => {
+        let acc = dayAccMap.get(k);
+        if (!acc) {
+          acc = {
+            chem_cost: 0,
+            chlorine_kg: 0,
+            chlorine_cost: 0,
+            smbs_kg: 0,
+            smbs_cost: 0,
+            anti_scalant_l: 0,
+            anti_scalant_cost: 0,
+            soda_ash_kg: 0,
+            soda_ash_cost: 0,
+            free_cl_pcs: 0,
+            free_cl_cost: 0,
+            other_cost: 0,
+          };
+          dayAccMap.set(k, acc);
+        }
+        return acc;
+      };
 
       // 1. Seed from production_costs (manual entries)
       for (const r of (prodCostRes.data ?? []) as any[]) {
         const k = `${r.plant_id}|${r.cost_date}`;
-        costMap.set(k, (costMap.get(k) ?? 0) + +(r.chem_cost ?? 0));
+        const manualCost = +(r.chem_cost ?? 0);
+        if (manualCost > 0) {
+          const acc = getAcc(k);
+          acc.chem_cost += manualCost;
+          acc.other_cost += manualCost;
+        }
       }
 
       // 2. Merge dosing logs — mirror ROTrains fallback: use calculated_cost
       //    when > 0, else compute live from qty × price
       for (const r of (dosingRes.data ?? []) as any[]) {
         const storedCost = +r.calculated_cost || 0;
-        const liveCost   = DOSING_KEYS.reduce(
-          (s, c) => s + (+r[c.key] || 0) * (priceMap[c.name] ?? 0), 0,
-        );
+        const clKg = +r.chlorine_kg || 0;
+        const clCost = clKg * (priceMap['Chlorine'] ?? 0);
+        const smbsKg = +r.smbs_kg || 0;
+        const smbsCost = smbsKg * (priceMap['SMBS'] ?? 0);
+        const asL = +r.anti_scalant_l || 0;
+        const asCost = asL * (priceMap['Anti Scalant'] ?? 0);
+        const saKg = +r.soda_ash_kg || 0;
+        const saCost = saKg * (priceMap['Soda Ash'] ?? 0);
+        const clPcs = +r.free_chlorine_reagent_pcs || 0;
+        const clReagentCost = clPcs * (priceMap['Free Cl Reagent'] ?? 0);
+
+        const liveCost = clCost + smbsCost + asCost + saCost + clReagentCost;
         const cost = storedCost > 0 ? storedCost : liveCost;
-        if (cost <= 0) continue;
+        if (cost <= 0 && clKg <= 0 && smbsKg <= 0 && asL <= 0 && saKg <= 0 && clPcs <= 0) continue;
+
         const dateKey = format(new Date(r.log_datetime), 'yyyy-MM-dd');
         const k = `${r.plant_id}|${dateKey}`;
-        costMap.set(k, (costMap.get(k) ?? 0) + cost);
+        const acc = getAcc(k);
+        acc.chem_cost += cost;
+        acc.chlorine_kg += clKg;
+        acc.chlorine_cost += clCost;
+        acc.smbs_kg += smbsKg;
+        acc.smbs_cost += smbsCost;
+        acc.anti_scalant_l += asL;
+        acc.anti_scalant_cost += asCost;
+        acc.soda_ash_kg += saKg;
+        acc.soda_ash_cost += saCost;
+        acc.free_cl_pcs += clPcs;
+        acc.free_cl_cost += clReagentCost;
+        if (storedCost > liveCost && liveCost > 0) {
+          acc.other_cost += (storedCost - liveCost);
+        }
       }
 
-      // Return flat array in the shape the accumulator below expects
-      return Array.from(costMap.entries()).map(([key, chem_cost]) => {
+      // Return flat array in the shape the accumulator below expects, plus chemical breakdown
+      return Array.from(dayAccMap.entries()).map(([key, acc]) => {
         const [plant_id, cost_date] = key.split('|');
-        return { plant_id, cost_date, chem_cost };
+        return {
+          plant_id,
+          cost_date,
+          chem_cost: acc.chem_cost,
+          chlorine_kg: acc.chlorine_kg,
+          chlorine_cost: acc.chlorine_cost,
+          smbs_kg: acc.smbs_kg,
+          smbs_cost: acc.smbs_cost,
+          anti_scalant_l: acc.anti_scalant_l,
+          anti_scalant_cost: acc.anti_scalant_cost,
+          soda_ash_kg: acc.soda_ash_kg,
+          soda_ash_cost: acc.soda_ash_cost,
+          free_cl_pcs: acc.free_cl_pcs,
+          free_cl_cost: acc.free_cl_cost,
+          other_cost: acc.other_cost,
+        };
       });
     },
     enabled: plantIds.length > 0 && needsCostReadings,

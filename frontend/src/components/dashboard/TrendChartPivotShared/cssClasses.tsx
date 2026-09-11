@@ -1,4 +1,4 @@
-export type DSMTab = 'overview' | 'production' | 'consumption' | 'grid-by-meter';
+export type DSMTab = 'overview' | 'production' | 'consumption' | 'grid-by-meter' | 'chemical-breakdown';
 
 export const TH = 'px-3 py-2 text-right text-2xs font-bold text-muted-foreground uppercase tracking-wider border-b border-border/80 align-bottom sticky top-0 z-20 bg-card';
 export const TH_DATE = 'px-3.5 py-2 text-left text-2xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap border-b border-border/80 sticky left-0 top-0 z-30 bg-card border-r border-border shadow-[4px_0_6px_-2px_rgba(0,0,0,0.06)] w-[84px] min-w-[84px]';

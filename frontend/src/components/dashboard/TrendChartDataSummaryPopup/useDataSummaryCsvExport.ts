@@ -4,6 +4,7 @@ import {
   DSMTab, buildKwhSummaryCsv, type GridPowerReadingRow,
   GRID_METER_OTHER_KEY, type GridMeterBreakdown,
 } from '../TrendChartPivotShared';
+import type { ChemicalDayBreakdown } from '../TrendChartTables';
 
 export interface CsvExportOptions {
   activeTab: DSMTab;
@@ -19,13 +20,14 @@ export interface CsvExportOptions {
   consPivot: Map<string, Map<string, number>>;
   roTrainEntities: { id: string; label: string }[];
   powerReadings?: GridPowerReadingRow[];
+  chemicalBreakdown?: Map<string, ChemicalDayBreakdown>;
 }
 
 export function useDataSummaryCsvExport({
   activeTab, metric, overviewChartRows,
   gridBreakdown, overviewDates, prodDates, consDates,
   prodEntities, consEntities, prodPivotMap, consPivot,
-  roTrainEntities, powerReadings,
+  roTrainEntities, powerReadings, chemicalBreakdown,
 }: CsvExportOptions) {
   const handleExportCsv = () => {
     let csvContent = '';
@@ -126,6 +128,36 @@ export function useDataSummaryCsvExport({
         const entityVals = consEntities.map(e => consPivot.get(d)?.get(e.id) ?? 0);
         const rowTot = entityVals.reduce((a, b) => a + b, 0);
         return [format(new Date(d + 'T00:00:00'), 'MMM d'), ...entityVals, rowTot].join(',');
+      });
+      csvContent = [headers.join(','), ...rows].join('\n');
+    } else if (activeTab === 'chemical-breakdown') {
+      const headers = [
+        'Date',
+        'Chlorine (kg)', 'Chlorine (PHP)',
+        'SMBS (kg)', 'SMBS (PHP)',
+        'Anti Scalant (L)', 'Anti Scalant (PHP)',
+        'Soda Ash (kg)', 'Soda Ash (PHP)',
+        'Total Chem Cost (PHP)',
+        'Output (m3)',
+        'Chem Cost (PHP/m3)',
+      ];
+      const rows = [...overviewDates].reverse().map((dk) => {
+        const row = chemicalBreakdown?.get(dk);
+        const dateLabel = format(new Date(dk + 'T00:00:00'), 'MMM d');
+        return [
+          dateLabel,
+          row?.chlorineKg ? row.chlorineKg.toFixed(2) : '',
+          row?.chlorineCost ? row.chlorineCost.toFixed(2) : '',
+          row?.smbsKg ? row.smbsKg.toFixed(2) : '',
+          row?.smbsCost ? row.smbsCost.toFixed(2) : '',
+          row?.antiScalantL ? row.antiScalantL.toFixed(2) : '',
+          row?.antiScalantCost ? row.antiScalantCost.toFixed(2) : '',
+          row?.sodaAshKg ? row.sodaAshKg.toFixed(2) : '',
+          row?.sodaAshCost ? row.sodaAshCost.toFixed(2) : '',
+          row?.totalCost ? row.totalCost.toFixed(2) : '',
+          row?.prodVol ? row.prodVol.toFixed(2) : '',
+          row?.chemCostPerM3 ? row.chemCostPerM3.toFixed(4) : '',
+        ].join(',');
       });
       csvContent = [headers.join(','), ...rows].join('\n');
     }

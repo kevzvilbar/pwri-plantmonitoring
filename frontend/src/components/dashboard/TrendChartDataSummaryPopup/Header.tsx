@@ -19,6 +19,7 @@ interface HeaderProps {
   hasProdTab: boolean;
   hasConsTab: boolean;
   hasGridTab: boolean;
+  hasChemBreakdownTab?: boolean;
   overviewLabel: string;
   prodTabLabel: string;
   setTab: (t: string) => void;
@@ -58,7 +59,7 @@ interface HeaderProps {
 export function Header({
   title, metric, onExportCsv,
   filterFrom, filterTo, setFilterFrom, setFilterTo, defaultFrom, defaultTo,
-  activeTab, hasProdTab, hasConsTab, hasGridTab,
+  activeTab, hasProdTab, hasConsTab, hasGridTab, hasChemBreakdownTab,
   overviewLabel, prodTabLabel, setTab,
   summaryStats, prodEntities,
 }: HeaderProps) {
@@ -127,6 +128,7 @@ export function Header({
       <div className="flex gap-0 -mb-px">
         {([
           { key: 'overview', label: overviewLabel, show: true },
+          { key: 'chemical-breakdown', label: 'Chemical Specific', show: !!hasChemBreakdownTab },
           { key: 'grid-by-meter', label: 'Grid by Meter', show: hasGridTab },
           { key: 'production', label: prodTabLabel, show: hasProdTab },
           { key: 'consumption', label: 'Consumption', show: hasConsTab },
