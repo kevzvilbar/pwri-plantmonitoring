@@ -2,7 +2,13 @@
 
 Roadmap Phase 1 (critique 2026-09-06, item 11: "116 Unsquashed Migrations").
 
-## Read this first: the files are not what's actually live
+> [!NOTE]
+> **COMPLETED (2026-09-11)**: The migration squash has been executed and verified against live production (`sosfbfxovtleuvahxvpm`).
+> The live schema was extracted via `supabase db dump --linked`, reconciled via `supabase db pull`, and squashed into a single verified baseline: `supabase/migrations/20260911044610_baseline_schema.sql`.
+> `supabase db diff --linked` reports **0 differences** (No schema changes found).
+> All 41 out-of-band migrations and 14 production tables are incorporated. All previous migration files are preserved in `supabase/migrations_archive/`.
+
+## Historical Context: the files were not what was actually live
 
 Before squashing, a check against the live project
 (`sosfbfxovtleuvahxvpm`) via `supabase_migrations.schema_migrations` turned

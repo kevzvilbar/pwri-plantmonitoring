@@ -16,10 +16,9 @@ const REPO_ROOT = join(__dirname, '..');
 const MIGRATIONS_DIR = join(REPO_ROOT, 'supabase', 'migrations');
 const TYPES_FILE = join(REPO_ROOT, 'frontend', 'src', 'integrations', 'supabase', 'types.ts');
 
-// ── 1. Collect tables and altered columns from migrations ─────────────────────
-const createTableRe = /CREATE TABLE\s+(?:IF NOT EXISTS\s+)?(?:public\.)?(\w+)\s*\(/gi;
-const alterTableRe = /ALTER\s+TABLE\s+(?:ONLY\s+)?(?:IF\s+EXISTS\s+)?(?:public\.)?(\w+)\s+([\s\S]*?);/gi;
-const addColumnRe = /ADD\s+COLUMN\s+(?:IF\s+NOT\s+EXISTS\s+)?(\w+)/gi;
+const createTableRe = /CREATE TABLE\s+(?:IF NOT EXISTS\s+)?(?:"?public"?\.)?"?(\w+)"?\s*\(/gi;
+const alterTableRe = /ALTER\s+TABLE\s+(?:ONLY\s+)?(?:IF\s+EXISTS\s+)?(?:"?public"?\.)?"?(\w+)"?\s+([\s\S]*?);/gi;
+const addColumnRe = /ADD\s+COLUMN\s+(?:IF\s+NOT\s+EXISTS\s+)?"?(\w+)"?/gi;
 
 const createdTables = new Set();
 const alteredColumnsByTable = new Map(); // table -> Set<col>

@@ -678,6 +678,7 @@ BEGIN
 
   -- 5. product_meter_readings
   IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'product_meter_readings') THEN
+    ALTER TABLE public.product_meter_readings ADD COLUMN IF NOT EXISTS is_meter_replacement BOOLEAN NOT NULL DEFAULT false;
     ALTER TABLE public.product_meter_readings ADD COLUMN IF NOT EXISTS is_estimated BOOLEAN NOT NULL DEFAULT false;
   END IF;
 
@@ -3705,7 +3706,7 @@ NOTIFY pgrst, 'reload schema';
 -- <<<<<<< END ARCHIVED: 20260905000001_preserve_negative_reading_deltas.sql <<<<<<<
 
 -- >>>>>>> BEGIN ARCHIVED: 20260905000002_resync_all_reading_chains.sql >>>>>>>
-﻿-- =============================================================================
+-- =============================================================================
 -- Migration: 20260905000002_resync_all_reading_chains.sql
 --
 -- Retroactively resync all previous_reading and daily_volume chains across
@@ -9302,7 +9303,7 @@ END $$;
 -- <<<<<<< END ARCHIVED: 20260906000001_security_emergency_fixes.sql <<<<<<<
 
 -- >>>>>>> BEGIN ARCHIVED: 20260906000002_performance_indexes_and_cost_trigger_optimization.sql >>>>>>>
-﻿-- Performance indexes and cost trigger optimization identified during 2026-09-06 architecture review.
+-- Performance indexes and cost trigger optimization identified during 2026-09-06 architecture review.
 -- Addresses:
 --   1. Composite index on well_readings(well_id, reading_datetime DESC) for reading chain synchronization
 --   2. Unique constraint index on power_readings(plant_id, reading_datetime) to prevent duplicate submissions

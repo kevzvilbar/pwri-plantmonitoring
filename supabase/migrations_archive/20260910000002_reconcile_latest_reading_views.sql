@@ -1,4 +1,4 @@
-﻿-- =============================================================================
+-- =============================================================================
 -- Reconcile latest reading views to include non-retracted readings
 -- =============================================================================
 -- Previously, product_meter_readings_latest, locator_readings_latest, and

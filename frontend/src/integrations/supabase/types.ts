@@ -12,6 +12,31 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "14.5"
   }
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
   public: {
     Tables: {
       afm_readings: {
@@ -211,10 +236,8 @@ export type Database = {
         Row: {
           event_date: string
           id: string
-          is_estimated: boolean | null
+          is_estimated: boolean
           is_meter_replacement: boolean | null
-          is_meter_rollover: boolean | null
-          meter_rollover_max: number | null
           noted_at: string
           plant_id: string
           plant_name: string | null
@@ -228,10 +251,8 @@ export type Database = {
         Insert: {
           event_date: string
           id?: string
-          is_estimated?: boolean | null
+          is_estimated?: boolean
           is_meter_replacement?: boolean | null
-          is_meter_rollover?: boolean | null
-          meter_rollover_max?: number | null
           noted_at?: string
           plant_id: string
           plant_name?: string | null
@@ -245,10 +266,8 @@ export type Database = {
         Update: {
           event_date?: string
           id?: string
-          is_estimated?: boolean | null
+          is_estimated?: boolean
           is_meter_replacement?: boolean | null
-          is_meter_rollover?: boolean | null
-          meter_rollover_max?: number | null
           noted_at?: string
           plant_id?: string
           plant_name?: string | null
@@ -291,66 +310,6 @@ export type Database = {
           tagged_by?: string | null
           well_id?: string
           well_name?: string | null
-        }
-        Relationships: []
-      }
-      cascade_config: {
-        Row: {
-          enable_circuit_breaker: boolean
-          id: number
-          max_depth: number
-          max_rows_per_call: number
-          updated_at: string | null
-        }
-        Insert: {
-          enable_circuit_breaker?: boolean
-          id?: number
-          max_depth?: number
-          max_rows_per_call?: number
-          updated_at?: string | null
-        }
-        Update: {
-          enable_circuit_breaker?: boolean
-          id?: number
-          max_depth?: number
-          max_rows_per_call?: number
-          updated_at?: string | null
-        }
-        Relationships: []
-      }
-      cascade_depth_audit: {
-        Row: {
-          aborted: boolean | null
-          depth_after: number | null
-          depth_before: number | null
-          error_message: string | null
-          id: number
-          max_depth: number | null
-          row_id: string
-          table_name: string
-          triggered_at: string | null
-        }
-        Insert: {
-          aborted?: boolean | null
-          depth_after?: number | null
-          depth_before?: number | null
-          error_message?: string | null
-          id?: number
-          max_depth?: number | null
-          row_id: string
-          table_name: string
-          triggered_at?: string | null
-        }
-        Update: {
-          aborted?: boolean | null
-          depth_after?: number | null
-          depth_before?: number | null
-          error_message?: string | null
-          id?: number
-          max_depth?: number | null
-          row_id?: string
-          table_name?: string
-          triggered_at?: string | null
         }
         Relationships: []
       }
@@ -1268,6 +1227,13 @@ export type Database = {
             foreignKeyName: "custom_roles_created_by_fkey"
             columns: ["created_by"]
             isOneToOne: false
+            referencedRelation: "operator_error_rates_30d"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "custom_roles_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
             referencedRelation: "user_profiles"
             referencedColumns: ["id"]
           },
@@ -1468,6 +1434,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "derived_meter_sweep_log_mirror_reading_id_fkey"
+            columns: ["mirror_reading_id"]
+            isOneToOne: false
+            referencedRelation: "product_meter_readings_latest"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "derived_meter_sweep_log_reading_id_fkey"
             columns: ["reading_id"]
             isOneToOne: false
@@ -1479,6 +1452,13 @@ export type Database = {
             columns: ["reading_id"]
             isOneToOne: false
             referencedRelation: "locator_readings_clean"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "derived_meter_sweep_log_reading_id_fkey"
+            columns: ["reading_id"]
+            isOneToOne: false
+            referencedRelation: "locator_readings_latest"
             referencedColumns: ["id"]
           },
         ]
@@ -2104,6 +2084,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "locator_meter_replacements_reading_id_fkey"
+            columns: ["reading_id"]
+            isOneToOne: false
+            referencedRelation: "locator_readings_latest"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "locator_meter_replacements_replaced_by_fkey"
             columns: ["replaced_by"]
             isOneToOne: false
@@ -2374,6 +2361,7 @@ export type Database = {
         Row: {
           alert_type: string
           created_at: string
+          dismissed: boolean
           id: string
           link_path: string | null
           message: string | null
@@ -2386,6 +2374,7 @@ export type Database = {
         Insert: {
           alert_type: string
           created_at?: string
+          dismissed?: boolean
           id?: string
           link_path?: string | null
           message?: string | null
@@ -2398,6 +2387,7 @@ export type Database = {
         Update: {
           alert_type?: string
           created_at?: string
+          dismissed?: boolean
           id?: string
           link_path?: string | null
           message?: string | null
@@ -2869,6 +2859,20 @@ export type Database = {
             referencedRelation: "plants"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "power_meter_changes_reading_id_fkey"
+            columns: ["reading_id"]
+            isOneToOne: false
+            referencedRelation: "power_readings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "power_meter_changes_reading_id_fkey"
+            columns: ["reading_id"]
+            isOneToOne: false
+            referencedRelation: "v_power_readings_resolved"
+            referencedColumns: ["id"]
+          },
         ]
       }
       power_readings: {
@@ -2880,10 +2884,10 @@ export type Database = {
           daily_solar_kwh: number | null
           grid_meter_readings: Json | null
           id: string
-          is_estimated: boolean | null
+          is_estimated: boolean
           is_meter_replacement: boolean | null
           meter_multiplier: number | null
-          meter_reading_kwh: number
+          meter_reading_kwh: number | null
           multiplier: number | null
           plant_id: string
           reading_datetime: string
@@ -2898,10 +2902,10 @@ export type Database = {
           daily_solar_kwh?: number | null
           grid_meter_readings?: Json | null
           id?: string
-          is_estimated?: boolean | null
+          is_estimated?: boolean
           is_meter_replacement?: boolean | null
           meter_multiplier?: number | null
-          meter_reading_kwh: number
+          meter_reading_kwh?: number | null
           multiplier?: number | null
           plant_id: string
           reading_datetime?: string
@@ -2916,10 +2920,10 @@ export type Database = {
           daily_solar_kwh?: number | null
           grid_meter_readings?: Json | null
           id?: string
-          is_estimated?: boolean | null
+          is_estimated?: boolean
           is_meter_replacement?: boolean | null
           meter_multiplier?: number | null
-          meter_reading_kwh?: number
+          meter_reading_kwh?: number | null
           multiplier?: number | null
           plant_id?: string
           reading_datetime?: string
@@ -3212,6 +3216,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "product_meter_replacements_reading_id_fkey"
+            columns: ["reading_id"]
+            isOneToOne: false
+            referencedRelation: "product_meter_readings_latest"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "product_meter_replacements_replaced_by_fkey"
             columns: ["replaced_by"]
             isOneToOne: false
@@ -3491,56 +3502,6 @@ export type Database = {
         }
         Relationships: []
       }
-      reading_edit_audit_log: {
-        Row: {
-          action: string
-          actor_label: string | null
-          actor_user_id: string | null
-          changes: Json | null
-          edited_at: string
-          id: string
-          plant_id: string | null
-          reason: string | null
-          record_id: string | null
-          table_name: string
-          train_id: string | null
-        }
-        Insert: {
-          action?: string
-          actor_label?: string | null
-          actor_user_id?: string | null
-          changes?: Json | null
-          edited_at?: string
-          id?: string
-          plant_id?: string | null
-          reason?: string | null
-          record_id?: string | null
-          table_name: string
-          train_id?: string | null
-        }
-        Update: {
-          action?: string
-          actor_label?: string | null
-          actor_user_id?: string | null
-          changes?: Json | null
-          edited_at?: string
-          id?: string
-          plant_id?: string | null
-          reason?: string | null
-          record_id?: string | null
-          table_name?: string
-          train_id?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "reading_edit_audit_log_plant_id_fkey"
-            columns: ["plant_id"]
-            isOneToOne: false
-            referencedRelation: "plants"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       reading_anomaly_remarks: {
         Row: {
           avg_flow_rate: number | null
@@ -3593,6 +3554,56 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "reading_anomaly_remarks_plant_id_fkey"
+            columns: ["plant_id"]
+            isOneToOne: false
+            referencedRelation: "plants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      reading_edit_audit_log: {
+        Row: {
+          action: string
+          actor_label: string | null
+          actor_user_id: string | null
+          changes: Json | null
+          edited_at: string
+          id: string
+          plant_id: string | null
+          reason: string | null
+          record_id: string | null
+          table_name: string
+          train_id: string | null
+        }
+        Insert: {
+          action?: string
+          actor_label?: string | null
+          actor_user_id?: string | null
+          changes?: Json | null
+          edited_at?: string
+          id?: string
+          plant_id?: string | null
+          reason?: string | null
+          record_id?: string | null
+          table_name: string
+          train_id?: string | null
+        }
+        Update: {
+          action?: string
+          actor_label?: string | null
+          actor_user_id?: string | null
+          changes?: Json | null
+          edited_at?: string
+          id?: string
+          plant_id?: string | null
+          reason?: string | null
+          record_id?: string | null
+          table_name?: string
+          train_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reading_edit_audit_log_plant_id_fkey"
             columns: ["plant_id"]
             isOneToOne: false
             referencedRelation: "plants"
@@ -4070,7 +4081,7 @@ export type Database = {
           feed_tds: number | null
           id: string
           incomplete_reason: string | null
-          is_estimated: boolean | null
+          is_estimated: boolean
           is_feed_meter_replacement: boolean
           is_meter_replacement: boolean | null
           is_permeate_meter_replacement: boolean
@@ -4120,7 +4131,7 @@ export type Database = {
           feed_tds?: number | null
           id?: string
           incomplete_reason?: string | null
-          is_estimated?: boolean | null
+          is_estimated?: boolean
           is_feed_meter_replacement?: boolean
           is_meter_replacement?: boolean | null
           is_permeate_meter_replacement?: boolean
@@ -4170,7 +4181,7 @@ export type Database = {
           feed_tds?: number | null
           id?: string
           incomplete_reason?: string | null
-          is_estimated?: boolean | null
+          is_estimated?: boolean
           is_feed_meter_replacement?: boolean
           is_meter_replacement?: boolean | null
           is_permeate_meter_replacement?: boolean
@@ -4268,11 +4279,11 @@ export type Database = {
           reject_meter_installed_date: string | null
           reject_meter_serial: string | null
           reject_meter_size: string | null
-          reject_routing: string | null
+          reject_routing: string
           shared_power_meter_group: string | null
           status: Database["public"]["Enums"]["train_status"]
           train_number: number
-          unit_type: string | null
+          unit_type: string
           updated_at: string
           well_id: string | null
         }
@@ -4305,11 +4316,11 @@ export type Database = {
           reject_meter_installed_date?: string | null
           reject_meter_serial?: string | null
           reject_meter_size?: string | null
-          reject_routing?: string | null
+          reject_routing?: string
           shared_power_meter_group?: string | null
           status?: Database["public"]["Enums"]["train_status"]
           train_number: number
-          unit_type?: string | null
+          unit_type?: string
           updated_at?: string
           well_id?: string | null
         }
@@ -4342,15 +4353,22 @@ export type Database = {
           reject_meter_installed_date?: string | null
           reject_meter_serial?: string | null
           reject_meter_size?: string | null
-          reject_routing?: string | null
+          reject_routing?: string
           shared_power_meter_group?: string | null
           status?: Database["public"]["Enums"]["train_status"]
           train_number?: number
-          unit_type?: string | null
+          unit_type?: string
           updated_at?: string
           well_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "ro_trains_feed_source_train_id_fkey"
+            columns: ["feed_source_train_id"]
+            isOneToOne: false
+            referencedRelation: "ro_trains"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "ro_trains_plant_id_fkey"
             columns: ["plant_id"]
@@ -4469,6 +4487,36 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      user_permission_overrides: {
+        Row: {
+          allowed: boolean
+          created_at: string
+          created_by: string | null
+          id: string
+          permission_key: string
+          reason: string | null
+          user_id: string
+        }
+        Insert: {
+          allowed?: boolean
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          permission_key: string
+          reason?: string | null
+          user_id: string
+        }
+        Update: {
+          allowed?: boolean
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          permission_key?: string
+          reason?: string | null
+          user_id?: string
+        }
+        Relationships: []
       }
       user_profiles: {
         Row: {
@@ -4685,6 +4733,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "well_meter_replacements_reading_id_fkey"
+            columns: ["reading_id"]
+            isOneToOne: false
+            referencedRelation: "well_readings_latest"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "well_meter_replacements_replaced_by_fkey"
             columns: ["replaced_by"]
             isOneToOne: false
@@ -4802,7 +4857,7 @@ export type Database = {
           gps_lat: number | null
           gps_lng: number | null
           id: string
-          is_estimated: boolean | null
+          is_estimated: boolean
           is_meter_replacement: boolean | null
           is_meter_rollover: boolean
           locked_at: string | null
@@ -4828,7 +4883,7 @@ export type Database = {
           gps_lat?: number | null
           gps_lng?: number | null
           id?: string
-          is_estimated?: boolean | null
+          is_estimated?: boolean
           is_meter_replacement?: boolean | null
           is_meter_rollover?: boolean
           locked_at?: string | null
@@ -4854,7 +4909,7 @@ export type Database = {
           gps_lat?: number | null
           gps_lng?: number | null
           id?: string
-          is_estimated?: boolean | null
+          is_estimated?: boolean
           is_meter_replacement?: boolean | null
           is_meter_rollover?: boolean
           locked_at?: string | null
@@ -4933,7 +4988,6 @@ export type Database = {
           is_blending_well: boolean
           meter_brand: string | null
           meter_installed_date: string | null
-          meter_rollover_max: number | null
           meter_serial: string | null
           meter_size: string | null
           name: string
@@ -4957,7 +5011,6 @@ export type Database = {
           is_blending_well?: boolean
           meter_brand?: string | null
           meter_installed_date?: string | null
-          meter_rollover_max?: number | null
           meter_serial?: string | null
           meter_size?: string | null
           name: string
@@ -4981,7 +5034,6 @@ export type Database = {
           is_blending_well?: boolean
           meter_brand?: string | null
           meter_installed_date?: string | null
-          meter_rollover_max?: number | null
           meter_serial?: string | null
           meter_size?: string | null
           name?: string
@@ -5141,6 +5193,74 @@ export type Database = {
           },
         ]
       }
+      locator_readings_latest: {
+        Row: {
+          created_at: string | null
+          current_reading: number | null
+          daily_volume: number | null
+          gps_lat: number | null
+          gps_lng: number | null
+          id: string | null
+          is_estimated: boolean | null
+          is_meter_replacement: boolean | null
+          is_meter_rollover: boolean | null
+          locator_id: string | null
+          locked_at: string | null
+          locked_by: string | null
+          meter_rollover_max: number | null
+          norm_status: string | null
+          off_location_flag: boolean | null
+          plant_id: string | null
+          previous_reading: number | null
+          reading_datetime: string | null
+          recorded_by: string | null
+          remarks: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "locator_readings_locator_id_fkey"
+            columns: ["locator_id"]
+            isOneToOne: false
+            referencedRelation: "locators"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "locator_readings_locked_by_fkey"
+            columns: ["locked_by"]
+            isOneToOne: false
+            referencedRelation: "operator_error_rates_30d"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "locator_readings_locked_by_fkey"
+            columns: ["locked_by"]
+            isOneToOne: false
+            referencedRelation: "user_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "locator_readings_plant_id_fkey"
+            columns: ["plant_id"]
+            isOneToOne: false
+            referencedRelation: "plants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "locator_readings_recorded_by_fkey"
+            columns: ["recorded_by"]
+            isOneToOne: false
+            referencedRelation: "operator_error_rates_30d"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "locator_readings_recorded_by_fkey"
+            columns: ["recorded_by"]
+            isOneToOne: false
+            referencedRelation: "user_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       operator_error_rates_30d: {
         Row: {
           error_count: number | null
@@ -5204,6 +5324,57 @@ export type Database = {
           production_volume?: number | null
           reading_datetime?: string | null
           recorded_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_meter_readings_locked_by_fkey"
+            columns: ["locked_by"]
+            isOneToOne: false
+            referencedRelation: "operator_error_rates_30d"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "product_meter_readings_locked_by_fkey"
+            columns: ["locked_by"]
+            isOneToOne: false
+            referencedRelation: "user_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_meter_readings_meter_id_fkey"
+            columns: ["meter_id"]
+            isOneToOne: false
+            referencedRelation: "product_meters"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_meter_readings_plant_id_fkey"
+            columns: ["plant_id"]
+            isOneToOne: false
+            referencedRelation: "plants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      product_meter_readings_latest: {
+        Row: {
+          created_at: string | null
+          current_reading: number | null
+          daily_volume: number | null
+          id: string | null
+          is_estimated: boolean | null
+          is_meter_replacement: boolean | null
+          is_meter_rollover: boolean | null
+          locked_at: string | null
+          locked_by: string | null
+          meter_id: string | null
+          meter_rollover_max: number | null
+          norm_status: string | null
+          plant_id: string | null
+          previous_reading: number | null
+          production_volume: number | null
+          reading_datetime: string | null
+          recorded_by: string | null
         }
         Relationships: [
           {
@@ -5679,10 +5850,79 @@ export type Database = {
           },
         ]
       }
+      well_readings_latest: {
+        Row: {
+          created_at: string | null
+          current_reading: number | null
+          daily_power_kwh: number | null
+          daily_volume: number | null
+          gps_lat: number | null
+          gps_lng: number | null
+          id: string | null
+          is_meter_replacement: boolean | null
+          is_meter_rollover: boolean | null
+          locked_at: string | null
+          locked_by: string | null
+          meter_rollover_max: number | null
+          norm_status: string | null
+          off_location_flag: boolean | null
+          plant_id: string | null
+          power_meter_reading: number | null
+          pressure_psi: number | null
+          previous_reading: number | null
+          reading_datetime: string | null
+          recorded_by: string | null
+          tds_ppm: number | null
+          turbidity_ntu: number | null
+          well_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "well_readings_locked_by_fkey"
+            columns: ["locked_by"]
+            isOneToOne: false
+            referencedRelation: "operator_error_rates_30d"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "well_readings_locked_by_fkey"
+            columns: ["locked_by"]
+            isOneToOne: false
+            referencedRelation: "user_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "well_readings_plant_id_fkey"
+            columns: ["plant_id"]
+            isOneToOne: false
+            referencedRelation: "plants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "well_readings_recorded_by_fkey"
+            columns: ["recorded_by"]
+            isOneToOne: false
+            referencedRelation: "operator_error_rates_30d"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "well_readings_recorded_by_fkey"
+            columns: ["recorded_by"]
+            isOneToOne: false
+            referencedRelation: "user_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "well_readings_well_id_fkey"
+            columns: ["well_id"]
+            isOneToOne: false
+            referencedRelation: "wells"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
-      _get_power_multiplier: { Args: { p_plant_id: string }; Returns: number }
-      _recompute_power_row: { Args: { p_id: string }; Returns: undefined }
       admin_set_user_password: {
         Args: { _new_password: string; _user_id: string }
         Returns: undefined
@@ -5733,11 +5973,29 @@ export type Database = {
         }
         Returns: undefined
       }
+      fn_backfill_missing_readings: {
+        Args: { p_date?: string; p_lookback_days?: number }
+        Returns: Json
+      }
+      fn_blending_upsert_reading: {
+        Args: {
+          p_event_date: string
+          p_plant_id: string
+          p_plant_name: string
+          p_previous_reading?: number
+          p_raw_meter_reading: number
+          p_reading_datetime: string
+          p_update_previous_reading?: boolean
+          p_well_id: string
+          p_well_name: string
+        }
+        Returns: string
+      }
       fn_cascade_reading_correction: {
         Args: {
-          p_admin_id?: string | null
+          p_admin_id: string
           p_new_current: number
-          p_reason?: string | null
+          p_reason?: string
           p_row_id: string
           p_table: string
         }
@@ -5762,7 +6020,28 @@ export type Database = {
       }
       fn_manager_plant_scorecard: {
         Args: { p_from: string; p_to: string }
-        Returns: Json
+        Returns: {
+          chemicals_completeness_pct: number
+          error_rate_pct: number
+          flagged_in_window: number
+          locators_completeness_pct: number
+          manager_ids: string[]
+          manager_names: string[]
+          meters_completeness_pct: number
+          open_correction_count: number
+          open_correction_oldest_days: number
+          open_pending_review_count: number
+          open_pending_review_oldest_days: number
+          overall_completeness_pct: number
+          plant_id: string
+          plant_name: string
+          power_completeness_pct: number
+          readings_in_window: number
+          status: string
+          trains_completeness_pct: number
+          unexplained_gaps_in_window: number
+          wells_completeness_pct: number
+        }[]
       }
       fn_notify_derived_review: {
         Args: {
@@ -5781,9 +6060,10 @@ export type Database = {
         Args: { p_derived_from_locator_id: string; p_meter_id: string }
         Returns: undefined
       }
-      fn_sweep_derived_meters:
-        | { Args: { p_date?: string; p_lookback_days?: number }; Returns: Json }
-        | { Args: { p_lookback_days?: number }; Returns: Json }
+      fn_sweep_derived_meters: {
+        Args: { p_date?: string; p_lookback_days?: number }
+        Returns: Json
+      }
       fn_sweep_derived_meters_for_date: {
         Args: { p_date: string }
         Returns: Json
@@ -5818,20 +6098,9 @@ export type Database = {
       get_all_user_roles: {
         Args: never
         Returns: {
-          role: Database["public"]["Enums"]["app_role"]
+          role: string
           user_id: string
         }[]
-      }
-      get_dashboard_aggregates: {
-        Args: {
-          p_plant_ids: string[]
-          p_today_start: string
-          p_today_end: string
-          p_yesterday_start: string
-          p_yesterday_end: string
-          p_today_date?: string
-        }
-        Returns: Json
       }
       has_role: {
         Args: {
@@ -5844,6 +6113,10 @@ export type Database = {
       is_manager_or_admin: { Args: { _user_id: string }; Returns: boolean }
       is_manager_or_analyst_or_admin: {
         Args: { _user_id: string }
+        Returns: boolean
+      }
+      permission_overridden_denied: {
+        Args: { _key: string; _user_id: string }
         Returns: boolean
       }
       purge_expired_chat_messages: { Args: never; Returns: undefined }
@@ -5879,7 +6152,15 @@ export type Database = {
         Args: { p_meter_index: number; p_plant_id: string }
         Returns: number
       }
+      sync_user_role_to_app_metadata: {
+        Args: { _user_id: string }
+        Returns: undefined
+      }
       touch_last_seen: { Args: never; Returns: undefined }
+      touch_user_presence: {
+        Args: { p_action?: string; p_user_id?: string }
+        Returns: string
+      }
       update_own_profile: {
         Args: {
           _designation: string
@@ -5892,6 +6173,10 @@ export type Database = {
         Returns: undefined
       }
       user_has_plant_access: { Args: { _plant_id: string }; Returns: boolean }
+      user_has_ro_write_access: {
+        Args: { _plant_id: string }
+        Returns: boolean
+      }
     }
     Enums: {
       app_role: "Operator" | "Technician" | "Manager" | "Admin" | "Data Analyst"
@@ -5917,12 +6202,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -5946,11 +6231,11 @@ export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -5971,11 +6256,11 @@ export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -5996,11 +6281,11 @@ export type Enums<
   DefaultSchemaEnumNameOrOptions extends
     | keyof DefaultSchema["Enums"]
     | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -6013,11 +6298,11 @@ export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
+    : never) = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -6027,6 +6312,9 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {
       app_role: ["Operator", "Technician", "Manager", "Admin", "Data Analyst"],

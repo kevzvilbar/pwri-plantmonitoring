@@ -1268,7 +1268,8 @@ CREATE TABLE IF NOT EXISTS product_meter_readings (
   norm_status       TEXT        NOT NULL DEFAULT 'normal'
                     CHECK (norm_status IN ('normal', 'pending_review', 'erroneous', 'normalized', 'retracted')),
   is_meter_rollover  BOOLEAN     NOT NULL DEFAULT false,
-  meter_rollover_max NUMERIC
+  meter_rollover_max NUMERIC,
+  is_meter_replacement BOOLEAN NOT NULL DEFAULT false
 );
 
 -- Keep databases that already had this table aligned with fresh installs.

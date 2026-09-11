@@ -25,50 +25,25 @@ jobs:
   baseline-check:
     name: Baseline Migration — existence gate
     runs-on: ubuntu-latest
-    # Fails fast if any of the modular baseline migrations are missing.
-    # The baseline migrations (20260908000001 through 20260908000005) must exist
+    # Fails fast if the consolidated baseline migration is missing.
+    # The baseline migration (20260911044610_baseline_schema.sql) must exist
     # in supabase/migrations/ before any other migration jobs run.
     steps:
       - uses: actions/checkout@v4
 
-      - name: Verify baseline migrations exist and are non-empty
+      - name: Verify baseline migration exists and is non-empty
         run: |
-          for f in \
-            "20260908000001_001_core_schema.sql" \
-            "20260908000002_002_meters_and_audits.sql" \
-            "20260908000003_003_hamas_meter_wiring.sql" \
-            "20260908000004_004_custom_roles_and_readings.sql" \
-            "20260908000005_005_backfill_and_hardening.sql"
-          do
-            if [ ! -f "supabase/migrations/$f" ]; then
-              echo "::error::Baseline migration partition missing: supabase/migrations/$f"
-              echo "Run 'node scripts/partition-baseline.mjs' to regenerate baseline partitions."
-              exit 1
-            fi
-            SIZE=$(wc -c < "supabase/migrations/$f")
-            if [ "$SIZE" -lt 10000 ]; then
-              echo "::error::Baseline partition appears empty/truncated ($SIZE bytes): $f"
-              exit 1
-            fi
-            echo "✅ Baseline partition verified: $f ($SIZE bytes)"
-          done
-
-      - name: Verify Phase 4 migrations exist
-        run: |
-          for f in \
-            "20260909000001_phase4_missing_indexes.sql" \
-            "20260909000002_phase4_column_restricted_triggers.sql" \
-            "20260909000003_phase4_pg_cron_schedule.sql" \
-            "20260909000004_phase4_cascade_circuit_breaker.sql" \
-            "20260909000005_phase4_lag_window_views.sql" \
-            "20260910000001_latest_power_readings_fn.sql"
-          do
-            if [ ! -f "supabase/migrations/$f" ]; then
-              echo "::error::Phase 4 migration missing from supabase/migrations/: $f"
-              exit 1
-            fi
-            echo "✅ Verified Phase 4 migration: $f"
-          done
+          f="supabase/migrations/20260911044610_baseline_schema.sql"
+          if [ ! -f "$f" ]; then
+            echo "::error::Baseline migration missing: $f"
+            exit 1
+          fi
+          SIZE=$(wc -c < "$f")
+          if [ "$SIZE" -lt 100000 ]; then
+            echo "::error::Baseline migration appears empty/truncated ($SIZE bytes): $f"
+            exit 1
+          fi
+          echo "✅ Baseline migration verified: $f ($SIZE bytes)"
 
       - name: Fail if temp_migrations or rogue migration directories exist
         run: |
@@ -332,10 +307,9 @@ jobs:
     # Every test file creates its own plants/users/rows and ends in
     # ROLLBACK, so nothing here depends on (or pollutes) seed data.
     #
-    # 2026-09-08: Migrations are modular baseline partitions
-    # (20260908000001 through 20260908000005) + subsequent migrations.
-    # This job applies the baseline + any newer migrations, verifying
-    # the full schema can be recreated from scratch.
+    # 2026-09-11: Migrations squashed to single baseline (20260911044610_baseline_schema.sql)
+    # verified 1:1 against live production database.
+    # This job applies the baseline, verifying the full schema can be recreated from scratch.
     steps:
       - uses: actions/checkout@v4
 
