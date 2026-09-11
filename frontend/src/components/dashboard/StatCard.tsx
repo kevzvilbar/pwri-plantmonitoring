@@ -30,13 +30,14 @@ function useValueTick(value: unknown): number {
 
 // Concise inline trend indicator with tabular numbers (no jitter, no floating pills)
 // Renders nothing when `delta` is null or non-finite.
-export function TrendBadge({ delta }: { delta: number | null }) {
+export function TrendBadge({ delta, invert = false }: { delta: number | null; invert?: boolean }) {
   if (delta === null || !Number.isFinite(delta)) return null;
   const abs = Math.abs(delta);
   const Icon = abs < 0.5 ? Minus : delta > 0 ? TrendingUp : TrendingDown;
+  const isPositive = invert ? delta < 0 : delta > 0;
   const cls = abs < 0.5
     ? 'text-muted-foreground'
-    : delta > 0 ? 'text-accent' : 'text-danger';
+    : isPositive ? 'text-accent' : 'text-danger';
   return (
     <span className={`inline-flex items-center gap-0.5 text-xs font-semibold font-mono tabular-nums ${cls}`} title="vs previous day">
       <Icon className="h-3.5 w-3.5 shrink-0" />
@@ -89,80 +90,83 @@ export function StatCard({
   return (
     <Card
       className={cn(
-        'stat-card min-w-0 transition-colors hover:border-border',
+        'stat-card min-w-0 h-full flex flex-col justify-between transition-colors hover:border-border',
         onClick ? 'cursor-pointer' : 'cursor-default',
-        isHero ? 'p-4 sm:p-5' : isLg ? 'p-3.5' : isCompact ? 'p-2.5' : 'p-3',
+        isHero ? 'p-4 sm:p-5' : isLg ? 'p-3.5' : isCompact ? 'p-2.5' : 'p-3.5',
         toneBg,
         calcBg,
         className
       )}
       onClick={onClick}
     >
-      {/* ── Header row: icon · LABEL (uppercase) · badges/expand ── */}
-      <div className="flex items-center justify-between gap-1 min-w-0">
-        <div className="flex items-center gap-1.5 min-w-0 overflow-hidden">
-          <Icon className={cn('shrink-0', isHero ? 'h-4 w-4' : isLg ? 'h-4 w-4' : 'h-3.5 w-3.5', iconCls)} />
-          <span className={cn('uppercase tracking-wide font-semibold truncate leading-none text-muted-foreground', isHero ? 'text-xs' : isLg ? 'text-xs' : isCompact ? 'text-3xs' : 'text-2xs')}>
-            {label}
-          </span>
-          {threshold && (
-            <span className="text-3xs text-muted-foreground/60 shrink-0 font-mono">(limit {threshold})</span>
-          )}
+      <div>
+        {/* ── Header row: icon · LABEL (uppercase) · badges/expand ── */}
+        <div className="flex items-center justify-between gap-1 min-w-0">
+          <div className="flex items-center gap-1.5 min-w-0 overflow-hidden">
+            <Icon className={cn('shrink-0', isHero ? 'h-4 w-4' : isLg ? 'h-4 w-4' : 'h-3.5 w-3.5', iconCls)} />
+            <span className={cn('uppercase tracking-wide font-semibold truncate leading-none text-muted-foreground', isHero ? 'text-xs' : isLg ? 'text-xs' : isCompact ? 'text-3xs' : 'text-2xs')}>
+              {label}
+            </span>
+            {threshold && (
+              <span className="text-3xs text-muted-foreground/60 shrink-0 font-mono">(limit {threshold})</span>
+            )}
+          </div>
+          <div className="flex items-center gap-1 shrink-0">
+            {badge}
+            {calc && (
+              <span
+                className="text-3xs uppercase tracking-wider px-1 py-0.5 rounded font-mono bg-info/10 text-info border border-info/20"
+                title={calcTooltip ?? 'Calculated / derived metric'}
+              >calc</span>
+            )}
+            {tone && <StatusPill tone={tone} />}
+            {showExpand && (
+              <button
+                onClick={(e) => { e.stopPropagation(); setExpanded((v) => !v); }}
+                className="h-4 w-4 flex items-center justify-center rounded text-muted-foreground hover:text-foreground transition-colors"
+                title={expanded ? 'Hide breakdown' : 'Show per-train breakdown'}
+                aria-label={expanded ? 'Collapse' : 'Expand'}
+              >
+                {expanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+              </button>
+            )}
+          </div>
         </div>
-        <div className="flex items-center gap-1 shrink-0">
-          {badge}
-          {calc && (
-            <span
-              className="text-3xs uppercase tracking-wider px-1 py-0.5 rounded font-mono bg-info/10 text-info border border-info/20"
-              title={calcTooltip ?? 'Calculated / derived metric'}
-            >calc</span>
-          )}
-          {tone && <StatusPill tone={tone} />}
-          {showExpand && (
-            <button
-              onClick={(e) => { e.stopPropagation(); setExpanded((v) => !v); }}
-              className="h-4 w-4 flex items-center justify-center rounded text-muted-foreground hover:text-foreground transition-colors"
-              title={expanded ? 'Hide breakdown' : 'Show per-train breakdown'}
-              aria-label={expanded ? 'Collapse' : 'Expand'}
-            >
-              {expanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-            </button>
-          )}
-        </div>
-      </div>
 
-      {/* ── Value row ──
-          key={valueTick} remounts the readout when the value actually changes,
-          restarting the tick so background-sync updates are legible. */}
-      <div
-        key={valueTick}
-        className={cn(
-          'mt-2 text-foreground leading-none whitespace-nowrap overflow-hidden text-ellipsis font-mono tabular-nums',
-          isHero ? 'text-3xl sm:text-4xl font-bold' : isLg ? 'text-2xl sm:text-3xl font-bold' : isCompact ? 'text-xl font-bold' : 'text-2xl font-bold',
-          valueTick > 0 ? 'animate-value-tick' : ''
-        )}
-      >
-        {value}
-        {unit && <span className={cn('font-sans font-normal text-muted-foreground ml-1.5', isHero ? 'text-base sm:text-lg' : isLg ? 'text-sm' : 'text-xs')}>{unit}</span>}
+        {/* ── Value row ──
+            key={valueTick} remounts the readout when the value actually changes,
+            restarting the tick so background-sync updates are legible. */}
+        <div
+          key={valueTick}
+          className={cn(
+            'mt-2 text-foreground leading-none whitespace-nowrap overflow-hidden text-ellipsis font-mono tabular-nums',
+            isHero ? 'text-3xl sm:text-4xl font-bold' : isLg ? 'text-2xl sm:text-3xl font-bold' : isCompact ? 'text-xl font-bold' : 'text-2xl font-bold',
+            valueTick > 0 ? 'animate-value-tick' : ''
+          )}
+        >
+          {value}
+          {unit && <span className={cn('font-sans font-normal text-muted-foreground ml-1.5', isHero ? 'text-base sm:text-lg' : isLg ? 'text-sm' : 'text-xs')}>{unit}</span>}
+        </div>
       </div>
 
       {/* ── Below-value: trend badge (matches Image 1 "↑ 1.4% vs prev day") ── */}
-      {trend !== null && trend !== undefined && (
-        <div className="mt-1.5">
-          <TrendBadge delta={trend} />
-        </div>
-      )}
+      <div>
+        {trend !== null && trend !== undefined && (
+          <div className="mt-1.5">
+            <TrendBadge delta={trend} />
+          </div>
+        )}
 
-      {/* ── Subtext / Metadata footer ── */}
-      {subtext && (
-        <div className="mt-1.5 text-2xs text-muted-foreground truncate font-mono">
-          {subtext}
-        </div>
-      )}
+        {/* ── Subtext / Metadata footer ── */}
+        {subtext && (
+          <div className="mt-1.5 text-2xs text-muted-foreground truncate font-mono">
+            {subtext}
+          </div>
+        )}
 
-      {/* ── Per-train expand rows ── */}
-      {showExpand && expanded && (
-        <div className="mt-2 pt-1.5 border-t border-border/50 space-y-0.5 max-h-24 overflow-y-auto">
+        {/* ── Per-train expand rows ── */}
+        {showExpand && expanded && (
+          <div className="mt-2 pt-1.5 border-t border-border/50 space-y-0.5 max-h-24 overflow-y-auto">
           {liveRows.map((row) => (
             <div key={row.label} className="flex items-center justify-between text-2xs">
               <span className="text-muted-foreground truncate">{row.label}</span>
@@ -174,6 +178,7 @@ export function StatCard({
           ))}
         </div>
       )}
+      </div>
     </Card>
   );
 }

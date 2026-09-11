@@ -99,10 +99,15 @@ export function PlantPulseHero({
         .gte('summary_date', sinceDate)
         .order('summary_date', { ascending: true });
 
+      // Initialize past 7 days to guarantee 7 sequential points
       const dayMap: Record<string, number> = {};
+      for (let i = 6; i >= 0; i--) {
+        const d = format(new Date(Date.now() - i * 86400000), 'yyyy-MM-dd');
+        dayMap[d] = 0;
+      }
       (data ?? []).forEach((r: any) => {
         const d = r.summary_date;
-        if (d) {
+        if (d && dayMap[d] !== undefined) {
           dayMap[d] = (dayMap[d] ?? 0) + (Number(r.production_m3) || 0);
         }
       });
@@ -134,16 +139,24 @@ export function PlantPulseHero({
 
   // Last 7 days sparkline slice
   const sparklineData = useMemo(() => {
+    let pts: { val: number }[] = [];
     if (chartData && chartData.length > 0) {
-      return chartData.slice(-7).map((d) => ({
+      pts = chartData.slice(-7).map((d) => ({
         val: d.production != null && Number.isFinite(d.production) ? d.production : 0,
       }));
+    } else if (fallbackSparkline && fallbackSparkline.length > 0) {
+      pts = fallbackSparkline.map((p) => ({ val: p.val }));
     }
-    if (fallbackSparkline && fallbackSparkline.length > 0) {
-      return fallbackSparkline;
+
+    // If live production is active, ensure today's terminal point reflects it
+    if (pts.length > 0 && production != null && Number.isFinite(production) && production > 0) {
+      const lastIdx = pts.length - 1;
+      if (pts[lastIdx].val === 0 || pts[lastIdx].val < production) {
+        pts[lastIdx] = { val: production };
+      }
     }
-    return [];
-  }, [chartData, fallbackSparkline]);
+    return pts;
+  }, [chartData, fallbackSparkline, production]);
 
   return (
     <div className="rounded-2xl p-1 bg-gradient-to-b from-teal-500/20 via-teal-900/10 to-transparent border border-teal-500/30 shadow-xl shadow-teal-950/20">

@@ -6,6 +6,7 @@ import { loadThresholds, DEFAULT_THRESHOLDS } from '@/pages/Compliance';
 import { useAppStore } from '@/store/appStore';
 import { cn } from '@/lib/utils';
 import { TONE_BG, TONE_ICON, type StatTone } from './types';
+import { TrendBadge } from './StatCard';
 
 // Same numeral typeface as StatCard/ComplianceRadarCard/CostSunburst —
 // declared once as the `font-numeral` Tailwind token (tailwind.config.ts)
@@ -102,7 +103,7 @@ export function NRWGaugeCard({ nrw, yNrw, onClick, size = 'default', className }
     <Card
       className={cn(
         'stat-card min-w-0 h-full flex flex-col justify-between transition-colors hover:border-border',
-        isLg ? 'p-3.5 sm:p-4' : 'p-3',
+        isLg ? 'p-3.5 sm:p-4' : 'p-3.5',
         tone ? TONE_BG[tone] : '',
         onClick ? 'cursor-pointer' : 'cursor-default',
         className,
@@ -134,13 +135,11 @@ export function NRWGaugeCard({ nrw, yNrw, onClick, size = 'default', className }
         <div className="min-w-0">
           <div className={cn('font-bold font-mono tabular-nums text-foreground leading-none', isLg ? 'text-2xl sm:text-3xl' : 'text-2xl')}>
             {nrw == null ? '—' : nrw}
-            <span className={cn('font-sans font-normal text-muted-foreground ml-1', isLg ? 'text-sm' : 'text-xs')}>%</span>
+            <span className={cn('font-sans font-normal text-muted-foreground ml-1.5', isLg ? 'text-sm' : 'text-xs')}>%</span>
           </div>
           {delta !== null && (
             <div className="mt-1.5">
-              <span className={`inline-flex items-center gap-0.5 text-xs font-semibold font-mono tabular-nums ${Math.abs(delta) < 0.5 ? 'text-muted-foreground' : delta > 0 ? 'text-danger' : 'text-accent'}`} title="vs previous day">
-                <span>{Math.abs(delta) < 0.5 ? '0.0%' : `${delta > 0 ? '+' : '-'}${Math.abs(delta).toFixed(1)}% vs prev day`}</span>
-              </span>
+              <TrendBadge delta={delta} invert />
             </div>
           )}
         </div>

@@ -31,53 +31,41 @@ export function OverviewCluster({
     <section id="overview-cluster" className="scroll-mt-28 space-y-2.5">
       <ClusterHeader icon={Droplet} title="Overview" accent="text-primary" subtitle="Distribution & Sources" />
 
-      <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 items-stretch">
-        {/* Tier 1 Primary Bento Leads: Distribution & Loss KPIs */}
-        <div className="sm:col-span-1 lg:col-span-2">
-          <StatCard
-            icon={Receipt}
-            label="Locators Consumption"
-            value={fmtNum(consumption)}
-            unit="m³"
-            size="lg"
-            trend={dConsumption}
-            onClick={onMetricClick('production', 'Production vs Consumption')}
-            className="h-full border-primary/20 shadow-xs hover:border-primary/40 transition-all"
-          />
-        </div>
+      <div className="grid gap-2.5 sm:gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 items-stretch">
+        <StatCard
+          icon={Receipt}
+          label="Locators Consumption"
+          value={fmtNum(consumption)}
+          unit="m³"
+          trend={dConsumption}
+          onClick={onMetricClick('production', 'Production vs Consumption')}
+          className="border-border/80 bg-card hover:border-primary/40 transition-all shadow-xs hover:shadow-sm"
+        />
 
-        <div className="sm:col-span-1 lg:col-span-2">
-          <NRWGaugeCard
-            nrw={nrw}
-            yNrw={yNrw}
-            size="lg"
-            onClick={onMetricClick('nrw', 'NRW Trend')}
-            className="h-full border-primary/20 shadow-xs hover:border-primary/40 transition-all"
-          />
-        </div>
+        <NRWGaugeCard
+          nrw={nrw}
+          yNrw={yNrw}
+          onClick={onMetricClick('nrw', 'NRW Trend')}
+          className="border-border/80 bg-card hover:border-primary/40 transition-all shadow-xs hover:shadow-sm"
+        />
 
-        {/* Tier 2 Secondary Bento Tiles: Inflow Sources */}
-        <div className="sm:col-span-1 lg:col-span-2">
-          <StatCard
-            icon={RawWaterIcon}
-            label="Raw Water In"
-            value={fmtNum(rawWaterVol)}
-            unit="m³"
-            trend={dRawWater}
-            onClick={onMetricClick('rawwater', 'Raw Water (m³)')}
-            className="h-full"
-          />
-        </div>
+        <StatCard
+          icon={RawWaterIcon}
+          label="Raw Water In"
+          value={fmtNum(rawWaterVol)}
+          unit="m³"
+          trend={dRawWater}
+          onClick={onMetricClick('rawwater', 'Raw Water (m³)')}
+          className="border-border/80 bg-card hover:border-primary/40 transition-all shadow-xs hover:shadow-sm"
+        />
 
-        <div className="sm:col-span-1 lg:col-span-2">
-          <StatCard
-            icon={Waves}
-            label="Blending Flow"
-            value={fmtNum(blending)}
-            unit="m³"
-            className="h-full"
-          />
-        </div>
+        <StatCard
+          icon={Waves}
+          label="Blending Flow"
+          value={fmtNum(blending)}
+          unit="m³"
+          className="border-border/80 bg-card hover:border-border transition-all shadow-xs"
+        />
       </div>
 
       <ClusterCharts metrics={OVERVIEW_CHART_METRICS} viewMode={viewMode} expandedMetric={expandedMetric} plantIds={plantIds} clusterId="overview" />
