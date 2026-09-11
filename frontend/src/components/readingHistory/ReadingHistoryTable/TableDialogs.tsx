@@ -28,7 +28,6 @@ export function TableDialogs({ actions, module, entityId, plantId, assetMeterSer
           oldSerial={assetMeterSerial ?? null}
           readingId={actions.replaceReadingId}
           onSuccess={() => {
-            actions.setEditRow(prev => (prev && prev.id === actions.replaceReadingId ? { ...prev, isMeterReplacement: true } : prev));
             qc.invalidateQueries({ queryKey });
             if (module === 'well') invalidateWellDash(qc, [entityId]);
             else if (module === 'locator') invalidateLocatorDash(qc, [entityId]);

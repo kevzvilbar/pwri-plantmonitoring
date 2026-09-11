@@ -71,20 +71,57 @@ export function ReplaceMeterDialog({
       assetTable = 'wells';
     }
     const { data: inserted, error } = await supabase.from(replacementTable as any).insert(payload).select('id').single();
+    if (error) { toast.error(friendlyError(error)); return; }
+
     if (assetTable === 'product_meters') {
       await supabase.from(assetTable as any).update({ meter_serial: form.new_serial || null }).eq('id', assetId);
     } else {
       await supabase.from(assetTable as any).update({ meter_brand: form.new_brand, meter_size: form.new_size, meter_serial: form.new_serial, meter_installed_date: form.new_installed_date }).eq('id', assetId);
     }
 
-    if (readingId) {
-      const readingTable = kind === 'locator' ? 'locator_readings' : kind === 'well' ? 'well_readings' : 'product_meter_readings';
-      const { error: flagError } = await (supabase.from(readingTable as any) as any)
-        .update({ is_meter_replacement: true })
-        .eq('id', readingId);
-      // Non-fatal: the replacement record + asset update already succeeded —
-      // surface a toast but don't block onSuccess/onClose over a flag write.
-      if (flagError) toast.error(`Meter replaced, but couldn't flag the reading: ${friendlyError(flagError)}`);
+    // For wells and locators: insert two reading rows that correctly represent
+    // the meter swap in the reading chain.
+    //
+    //  Row 1 — old meter's FINAL reading  (is_meter_replacement = false)
+    //  Row 2 — new meter's INITIAL reading (is_meter_replacement = true)
+    //
+    // Both are timestamped to the replacement date: old at 00:00, new at 00:01
+    // so the ascending sort order is: old-final → new-initial → next normal readings.
+    // Downstream delta computation (buildEntityPivot / StandardRow) sees the REPL row
+    // as the correct baseline and computes subsequent deltas from the new meter's chain.
+    //
+    // The original readingId row (if any) is left untouched — it is a normal reading
+    // recorded before/after the swap and its delta will now correctly use the new
+    // meter's initial as its predecessor.
+    if (kind === 'well' || kind === 'locator') {
+      const readingTable = kind === 'well' ? 'well_readings' : 'locator_readings';
+      const entityField = kind === 'well' ? 'well_id' : 'locator_id';
+      const actorId = activeOperator?.id ?? user?.id ?? null;
+      const dtOldFinal   = `${form.replacement_date}T00:00:00`;
+      const dtNewInitial = `${form.replacement_date}T00:01:00`;
+
+      // Row 1: old meter final (normal row, not a replacement)
+      const { error: oldErr } = await (supabase.from(readingTable as any) as any).insert({
+        [entityField]: assetId,
+        plant_id: plantId,
+        current_reading: +form.old_final_reading,
+        reading_datetime: dtOldFinal,
+        is_meter_replacement: false,
+        recorded_by: actorId,
+      });
+      if (oldErr) toast.error(`Meter replaced, but couldn't insert old-meter reading: ${friendlyError(oldErr)}`);
+
+      // Row 2: new meter initial (REPL row — zeroes the delta for that entry,
+      // seeds lastSeen for all subsequent readings)
+      const { error: newErr } = await (supabase.from(readingTable as any) as any).insert({
+        [entityField]: assetId,
+        plant_id: plantId,
+        current_reading: +form.new_initial_reading,
+        reading_datetime: dtNewInitial,
+        is_meter_replacement: true,
+        recorded_by: actorId,
+      });
+      if (newErr) toast.error(`Meter replaced, but couldn't insert new-meter reading: ${friendlyError(newErr)}`);
     }
 
     toast.success('Meter replaced');
