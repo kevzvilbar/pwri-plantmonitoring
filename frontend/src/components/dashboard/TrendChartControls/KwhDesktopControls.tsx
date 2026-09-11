@@ -1,12 +1,9 @@
 import React from 'react';
-import { Button } from '@/components/ui/button';
 import { GranularityControl, StackToggle } from '../TrendChartDrill';
 import type { Granularity } from '../TrendChartAggregate';
 import type { StackMode } from '../TrendChartDrillKit';
 import { Sun } from 'lucide-react';
 import { GridPylonIcon } from '@/components/icons/water-icons';
-import { Download } from 'lucide-react';
-import { toast } from 'sonner';
 
 interface KwhDesktopControlsProps {
   viewGran: Granularity;
@@ -60,25 +57,6 @@ export function KwhDesktopControls({
           <StackToggle value={stackMode} onChange={setStackMode} testId="kwh-stack-toggle" />
         </>
       )}
-      <button
-        onClick={() => {
-          if (!chartData.length) { toast.error('No data to export'); return; }
-          const rows = chartData.map((d: any) =>
-            `${d.date},${+(d.solarKwh ?? 0).toFixed(2)},${+(d.kwh ?? 0).toFixed(2)},${+((d.solarKwh ?? 0) + (d.kwh ?? 0)).toFixed(2)}`
-          );
-          const csv = ['date,solar_kwh,grid_kwh,total_kwh', ...rows].join('\n');
-          const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
-          const a = document.createElement('a');
-          a.href = url; a.download = 'power_energy_mix.csv'; a.click();
-          URL.revokeObjectURL(url);
-          toast.success('CSV exported');
-        }}
-        className="h-5 px-1.5 rounded text-2xs font-medium transition-colors leading-none flex items-center gap-0.5 border bg-muted text-muted-foreground hover:text-foreground border-border"
-        title="Export CSV"
-      >
-        <Download className="h-3 w-3" />
-        <span className="hidden sm:inline">Export</span>
-      </button>
     </div>
   );
 }

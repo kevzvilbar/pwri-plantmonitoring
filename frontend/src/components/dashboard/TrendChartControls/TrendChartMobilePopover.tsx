@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { GranularityControl, StackToggle } from '../TrendChartDrill';
 import { isGranularityUsable, type Granularity } from '../TrendChartAggregate';
 import type { StackMode } from '../TrendChartDrillKit';
-import { MoreVertical, ChevronsDown, ChevronsUp, Download, Filter, Check, Search, X } from 'lucide-react';
+import { MoreVertical, ChevronsDown, ChevronsUp, Filter, Check, Search, X } from 'lucide-react';
 import { GridPylonIcon } from '@/components/icons/water-icons';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -181,20 +181,9 @@ export function TrendChartMobilePopover({
               ))}
             </div>
             <p className="text-2xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Bars</p>
-            <div className="mb-2">
+            <div>
               <StackToggle value={stackMode} onChange={setStackMode} />
             </div>
-            <button onClick={() => {
-                if (!chartData.length) return;
-                const rows = chartData.map((d: any) => `${d.date},${+(d.solarKwh??0).toFixed(2)},${+(d.kwh??0).toFixed(2)},${+((d.solarKwh??0)+(d.kwh??0)).toFixed(2)}`);
-                const csv = ['date,solar_kwh,grid_kwh,total_kwh',...rows].join('\n');
-                const url = URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
-                const a = document.createElement('a'); a.href=url; a.download='power_energy_mix.csv'; a.click();
-                URL.revokeObjectURL(url);
-              }}
-              className="w-full h-7 rounded border border-border bg-muted text-xs font-medium flex items-center justify-center gap-1 text-muted-foreground hover:text-foreground">
-              <Download className="h-3 w-3" /> Export CSV
-            </button>
           </div>
         )}
       </PopoverContent>

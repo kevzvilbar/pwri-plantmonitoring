@@ -1,5 +1,4 @@
 import { useQuery } from '@tanstack/react-query';
-import { PieChart, Pie, Cell } from 'recharts';
 import { Activity } from 'lucide-react';
 import { loadThresholds, DEFAULT_THRESHOLDS } from '@/pages/Compliance';
 import { useAppStore } from '@/store/appStore';
@@ -8,21 +7,6 @@ import { type StatTone } from './types';
 import { TrendBadge } from './StatCard';
 import { InstrumentTile } from './InstrumentTile';
 
-// Same numeral typeface as StatCard/ComplianceRadarCard/CostSunburst —
-// declared once as the `font-numeral` Tailwind token (tailwind.config.ts)
-// and loaded via the single app-wide @import in index.css.
-
-// ── Colour ramp ──────────────────────────────────────────────────────────
-// Was hardcoded to ALERTS.nrw_green_max/nrw_amber_max (calculations.ts) —
-// a completely separate, non-editable 13%/16% ramp that had nothing to do
-// with the "NRW Pct Max" an admin actually sets on the Compliance page's
-// Thresholds tab (global default 20%, overridable per plant — e.g. 8% for
-// SRP). This gauge would keep showing "(limit 13%)" and coloring off that
-// stale number even for a plant with its own configured override. Now
-// banded the same way ComplianceRadarCard already bands its axes off the
-// one real `nrw_pct_max` threshold: accent below 70% of it, warn from
-// there up to the limit, danger at/over — so the two compliance-driven
-// widgets on this dashboard always agree.
 function nrwTone(pct: number | null, limitPct: number): StatTone {
   if (pct === null)            return undefined;
   if (pct < limitPct * 0.7)   return 'accent';
@@ -30,23 +14,9 @@ function nrwTone(pct: number | null, limitPct: number): StatTone {
   return 'danger';
 }
 
-// Recharts' `fill` prop needs a resolved color, not a Tailwind class — read
-// the same CSS custom properties the tokens above are built from so the
-// donut segment always matches nrwTone()'s tone.
 function nrwFill(tone: StatTone): string {
   if (!tone) return 'hsl(var(--muted-foreground))';
   return `hsl(var(--${tone}))`;
-}
-
-// Maps a 0–100 gauge value to its angle on the arc (matches the Pie props
-// below: startAngle=180 at the left foot, sweeping to endAngle=0 at the
-// right foot) and that angle to an (x, y) point at a given radius — used to
-// place the threshold tick mark at the exact spot on the ring that
-// corresponds to the compliance-configured limit, independent of the
-// current value.
-function polarPoint(cx: number, cy: number, r: number, pct: number) {
-  const angleRad = ((180 - (pct / 100) * 180) * Math.PI) / 180;
-  return { x: cx + r * Math.cos(angleRad), y: cy - r * Math.sin(angleRad) };
 }
 
 interface Props {
@@ -58,12 +28,6 @@ interface Props {
 }
 
 export function NRWGaugeCard({ nrw, yNrw, onClick, size = 'default', className }: Props) {
-  // Same scope convention the Compliance page itself uses (Compliance.tsx:
-  // `thresholdScope = scope === 'plant' ? plantId : 'global'`) — a specific
-  // plant selected on the dashboard reads that plant's override if one
-  // exists, "All Plants" reads the global default. loadThresholds() is the
-  // exact function the Compliance page and ComplianceRadarCard already call,
-  // so this can't drift from what the Thresholds tab actually has saved.
   const selectedPlantId = useAppStore((s) => s.selectedPlantId);
   const thresholdScope  = selectedPlantId || 'global';
   const { data: thresholds } = useQuery({
@@ -71,34 +35,38 @@ export function NRWGaugeCard({ nrw, yNrw, onClick, size = 'default', className }
     queryFn:  () => loadThresholds(thresholdScope),
     staleTime: 2 * 60_000,
   });
-  // DEFAULT_THRESHOLDS.nrw_pct_max (20%) only while the query is still
-  // in flight on first load — the same fallback loadThresholds() itself
-  // uses internally if the read fails, so there's no moment where this
-  // shows a number that isn't one of "the real saved value" or "the same
-  // documented default everything else falls back to."
+
   const limitPct = thresholds?.nrw_pct_max ?? DEFAULT_THRESHOLDS.nrw_pct_max;
-
-  const tone       = nrwTone(nrw, limitPct);
-  const trackColor = 'hsl(var(--muted))';
-  const fillColor  = nrwFill(tone);
-
-  // Proposed in redesign plan: scale the arc's domain to the limit, not to a fixed 100,
-  // so the limit tick sits at a readable position and the fill communicates
-  // "how far over the limit" rather than collapsing against the foot of the gauge.
-  const gaugeMax = Math.max(limitPct * 2, (nrw ?? 0) * 1.1, 10);
-  const displayVal = Math.min(Math.max(((nrw ?? 0) / gaugeMax) * 100, 0), 100);
-  const limitAnglePct = Math.min((limitPct / gaugeMax) * 100, 100);
+  const tone = nrwTone(nrw, limitPct);
+  const fillColor = nrwFill(tone);
 
   const isLg = size === 'lg';
-  // Gauge geometry — compact or prominent half-donut placed cleanly on the right
+  const w = isLg ? 88 : 76;
+  const h = isLg ? 48 : 42;
   const cx = isLg ? 44 : 38;
-  const cy = isLg ? 44 : 38;
-  const innerRadius = isLg ? 26 : 22;
-  const outerRadius = isLg ? 40 : 34;
-  const cornerRadius = 5;
+  const cy = isLg ? 39 : 34;
+  const r = isLg ? 32 : 27;
+  const strokeWidth = isLg ? 6 : 5;
+  const arcLength = Math.PI * r;
 
-  const tickInner = polarPoint(cx, cy, innerRadius - 2.5, limitAnglePct);
-  const tickOuter = polarPoint(cx, cy, outerRadius + 2.5, limitAnglePct);
+  // True physical percentage scale (0% to 100%)
+  const safeVal = Math.min(Math.max(nrw ?? 0, 0), 100);
+  const offset = arcLength * (1 - safeVal / 100);
+
+  // Compliance limit tick mark position on the physical 0–100 scale
+  const safeLimit = Math.min(Math.max(limitPct, 0), 100);
+  const limitAngleRad = ((180 - safeLimit * 1.8) * Math.PI) / 180;
+  const tickR1 = r - strokeWidth / 2 - 2;
+  const tickR2 = r + strokeWidth / 2 + 2;
+  const tx1 = cx + tickR1 * Math.cos(limitAngleRad);
+  const ty1 = cy - tickR1 * Math.sin(limitAngleRad);
+  const tx2 = cx + tickR2 * Math.cos(limitAngleRad);
+  const ty2 = cy - tickR2 * Math.sin(limitAngleRad);
+
+  // Luminous beacon dot at the active arc tip
+  const valAngleRad = ((180 - safeVal * 1.8) * Math.PI) / 180;
+  const tipX = cx + r * Math.cos(valAngleRad);
+  const tipY = cy - r * Math.sin(valAngleRad);
 
   // Trend vs yesterday
   const delta = nrw != null && yNrw != null && yNrw !== 0
@@ -137,50 +105,59 @@ export function NRWGaugeCard({ nrw, yNrw, onClick, size = 'default', className }
             </div>
           </div>
 
-          {/* Half-donut gauge */}
+          {/* Precision SVG semi-donut telemetry arc */}
           <div className="shrink-0 -mb-1" aria-hidden>
-            <PieChart width={isLg ? 88 : 76} height={isLg ? 48 : 42} margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
-              <Pie
-                data={[{ name: 'track', value: 100 }]}
-                cx={cx}
-                cy={cy}
-                startAngle={180}
-                endAngle={0}
-                innerRadius={innerRadius}
-                outerRadius={outerRadius}
-                cornerRadius={0}
-                dataKey="value"
-                stroke="none"
-                isAnimationActive={false}
-              >
-                <Cell fill={trackColor} />
-              </Pie>
-
-              <Pie
-                data={[{ name: 'NRW', value: displayVal }]}
-                cx={cx}
-                cy={cy}
-                startAngle={180}
-                endAngle={180 - (displayVal / 100) * 180}
-                innerRadius={innerRadius}
-                outerRadius={outerRadius}
-                cornerRadius={2.5}
-                dataKey="value"
-                stroke="none"
-                isAnimationActive={false}
-              >
-                <Cell fill={fillColor} />
-              </Pie>
-
-              <line
-                x1={tickInner.x} y1={tickInner.y}
-                x2={tickOuter.x} y2={tickOuter.y}
-                stroke={tone === 'danger' ? '#ffffff' : 'hsl(var(--foreground))'}
-                strokeWidth={2.5}
+            <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} className="overflow-visible select-none">
+              {/* Recessed background track with smooth rounded caps */}
+              <path
+                d={`M ${cx - r} ${cy} A ${r} ${r} 0 0 1 ${cx + r} ${cy}`}
+                fill="none"
+                stroke={tone === 'danger' ? 'rgba(244, 63, 94, 0.2)' : 'hsl(var(--muted))'}
+                strokeWidth={strokeWidth}
                 strokeLinecap="round"
-                className={tone === 'danger' ? 'drop-shadow-[0_0_1.5px_rgba(0,0,0,0.8)]' : ''}
               />
-            </PieChart>
+
+              {/* Active value arc */}
+              {safeVal > 0 && (
+                <path
+                  d={`M ${cx - r} ${cy} A ${r} ${r} 0 0 1 ${cx + r} ${cy}`}
+                  fill="none"
+                  stroke={fillColor}
+                  strokeWidth={strokeWidth}
+                  strokeLinecap="round"
+                  strokeDasharray={`${arcLength} ${arcLength}`}
+                  strokeDashoffset={offset}
+                  className="transition-all duration-500 ease-out"
+                />
+              )}
+
+              {/* High-contrast compliance limit tick mark */}
+              <line
+                x1={tx1} y1={ty1}
+                x2={tx2} y2={ty2}
+                stroke={tone === 'danger' ? '#ffffff' : 'hsl(var(--foreground))'}
+                strokeWidth={2}
+                strokeLinecap="round"
+                className={tone === 'danger' ? 'drop-shadow-[0_0_2px_rgba(0,0,0,0.85)]' : ''}
+              />
+
+              {/* Beacon dot at tip of value arc */}
+              {safeVal > 0 && (
+                <circle
+                  cx={tipX}
+                  cy={tipY}
+                  r={isLg ? 2.5 : 2}
+                  fill="#ffffff"
+                  stroke={fillColor}
+                  strokeWidth={1.5}
+                  className="drop-shadow-[0_0_2px_rgba(0,0,0,0.6)]"
+                />
+              )}
+
+              {/* Subdued scale baseline labels (0 and 100) */}
+              <text x={cx - r} y={cy + 7} textAnchor="middle" fontSize={7} fontFamily="var(--font-mono, monospace)" fill="currentColor" opacity={0.4} className="tabular-nums">0</text>
+              <text x={cx + r} y={cy + 7} textAnchor="middle" fontSize={7} fontFamily="var(--font-mono, monospace)" fill="currentColor" opacity={0.4} className="tabular-nums">100</text>
+            </svg>
           </div>
         </div>
       </div>

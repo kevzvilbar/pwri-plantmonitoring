@@ -66,10 +66,10 @@ export function KwhChart({
       margin={{ top: 8, right: 8, left: -8, bottom: 20 }}
       barSize={barSize}
     >
-      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} strokeOpacity={0.6} />
+      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} strokeOpacity={0.25} />
       <XAxis
         dataKey="date"
-        tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }}
+        tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))', fontFamily: 'var(--font-mono, "JetBrains Mono", monospace)' }}
         angle={-30}
         textAnchor="end"
         height={36}
@@ -78,7 +78,7 @@ export function KwhChart({
         tickLine={false}
       />
       <YAxis
-        tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
+        tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))', fontFamily: 'var(--font-mono, "JetBrains Mono", monospace)' }}
         tickFormatter={formatYAxis}
         width={44}
         axisLine={false}
