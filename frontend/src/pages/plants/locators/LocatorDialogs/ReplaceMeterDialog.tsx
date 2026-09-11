@@ -40,8 +40,8 @@ export function ReplaceMeterDialog({
     // these the replacement record can't actually zero the delta correctly or
     // tell anyone later what the swap was.
     if (!form.new_serial) { toast.error('New serial required'); return; }
-    if (!form.old_final_reading) { toast.error("Old meter's final reading is required"); return; }
-    if (!form.new_initial_reading) { toast.error("New meter's initial reading is required"); return; }
+    if (form.old_final_reading === '' || form.old_final_reading == null) { toast.error("Old meter's final reading is required"); return; }
+    if (form.new_initial_reading === '' || form.new_initial_reading == null) { toast.error("New meter's initial reading is required"); return; }
     if (!form.replacement_date) { toast.error('Date & time changed is required'); return; }
 
     const replDateOnly = form.replacement_date ? form.replacement_date.slice(0, 10) : '';
@@ -57,18 +57,18 @@ export function ReplaceMeterDialog({
     if (kind === 'locator' || kind === 'product') {
       Object.assign(payload, {
         [kind === 'locator' ? 'locator_id' : 'meter_id']: assetId,
-        old_meter_serial: oldSerial, old_meter_final_reading: form.old_final_reading ? +form.old_final_reading : null,
+        old_meter_serial: oldSerial, old_meter_final_reading: form.old_final_reading !== '' ? +form.old_final_reading : null,
         new_meter_brand: form.new_brand, new_meter_size: form.new_size, new_meter_serial: form.new_serial,
-        new_meter_initial_reading: form.new_initial_reading ? +form.new_initial_reading : null,
+        new_meter_initial_reading: form.new_initial_reading !== '' ? +form.new_initial_reading : null,
         new_meter_installed_date: instDateOnly,
       });
       replacementTable = kind === 'locator' ? 'locator_meter_replacements' : 'product_meter_replacements';
       assetTable = kind === 'locator' ? 'locators' : 'product_meters';
     } else {
       Object.assign(payload, {
-        well_id: assetId, old_serial: oldSerial, old_final_reading: form.old_final_reading ? +form.old_final_reading : null,
+        well_id: assetId, old_serial: oldSerial, old_final_reading: form.old_final_reading !== '' ? +form.old_final_reading : null,
         new_brand: form.new_brand, new_size: form.new_size, new_serial: form.new_serial,
-        new_initial_reading: form.new_initial_reading ? +form.new_initial_reading : null,
+        new_initial_reading: form.new_initial_reading !== '' ? +form.new_initial_reading : null,
         new_installed_date: instDateOnly,
       });
       replacementTable = 'well_meter_replacements';
@@ -83,58 +83,81 @@ export function ReplaceMeterDialog({
       await supabase.from(assetTable as any).update({ meter_brand: form.new_brand, meter_size: form.new_size, meter_serial: form.new_serial, meter_installed_date: instDateOnly }).eq('id', assetId);
     }
 
-    // For wells and locators: insert two reading rows that correctly represent
-    // the meter swap in the reading chain.
-    //
-    //  Row 1 — old meter's FINAL reading  (is_meter_replacement = false)
-    //  Row 2 — new meter's INITIAL reading (is_meter_replacement = true)
-    //
-    // Both are timestamped to the replacement date & time: old at :00, new at :01
-    // so the ascending sort order is: old-final → new-initial → next normal readings.
-    // Downstream delta computation (buildEntityPivot / StandardRow) sees the REPL row
-    // as the correct baseline and computes subsequent deltas from the new meter's chain.
-    //
-    // The original readingId row (if any) is left untouched — it is a normal reading
-    // recorded before/after the swap and its delta will now correctly use the new
-    // meter's initial as its predecessor.
-    if (kind === 'well' || kind === 'locator') {
-      const readingTable = kind === 'well' ? 'well_readings' : 'locator_readings';
-      const entityField = kind === 'well' ? 'well_id' : 'locator_id';
-      const actorId = activeOperator?.id ?? user?.id ?? null;
+    // Convert local datetime inputs to proper ISO timestamps with timezone
+    // so the exact local time (e.g. 08:58 AM / 09:00 AM) is preserved and
+    // does not get shifted by UTC offsets.
+    const dtOldFinal = new Date(form.replacement_date).toISOString();
+    let newDtObj = new Date(form.new_installed_date || form.replacement_date);
+    if (newDtObj.getTime() <= new Date(form.replacement_date).getTime()) {
+      newDtObj = new Date(new Date(form.replacement_date).getTime() + 60_000);
+    }
+    const dtNewInitial = newDtObj.toISOString();
 
-      const rawDt = form.replacement_date.includes('T') ? form.replacement_date : `${form.replacement_date}T00:00`;
-      const parts = rawDt.split(':');
-      const hhmm = parts.slice(0, 2).join(':');
-      const dtOldFinal   = `${hhmm}:00`;
-      const dtNewInitial = `${hhmm}:01`;
+    if (kind === 'well' || kind === 'locator' || kind === 'product') {
+      const readingTable = kind === 'well' ? 'well_readings' : kind === 'locator' ? 'locator_readings' : 'product_meter_readings';
+      const entityField = kind === 'well' ? 'well_id' : kind === 'locator' ? 'locator_id' : 'meter_id';
+      const actorId = user?.id ?? activeOperator?.id ?? null;
 
-      // Row 1: old meter final (normal row, not a replacement)
-      const { error: oldErr } = await (supabase.from(readingTable as any) as any).insert({
-        [entityField]: assetId,
-        plant_id: plantId,
-        current_reading: +form.old_final_reading,
-        reading_datetime: dtOldFinal,
-        is_meter_replacement: false,
-        recorded_by: actorId,
-      });
-      if (oldErr) toast.error(`Meter replaced, but couldn't insert old-meter reading: ${friendlyError(oldErr)}`);
+      if (readingId) {
+        // The user clicked the Repl. checkbox on a specific row (`readingId`):
+        // 1. Update that row to become the new meter's initial reading row:
+        //    - current_reading = new initial reading (e.g. 0.00)
+        //    - reading_datetime = installed datetime (e.g. 09:00 AM)
+        //    - is_meter_replacement = true (checkbox checked [✓], repl. tag shown, Δ = 0.00)
+        //    - daily_volume = 0
+        const { error: updateErr } = await (supabase.from(readingTable as any) as any)
+          .update({
+            current_reading: +form.new_initial_reading,
+            reading_datetime: dtNewInitial,
+            is_meter_replacement: true,
+            daily_volume: 0,
+          })
+          .eq('id', readingId);
+        if (updateErr) toast.error(`Meter replaced, but couldn't update replacement reading: ${friendlyError(updateErr)}`);
 
-      // Row 2: new meter initial (REPL row — zeroes the delta for that entry,
-      // seeds lastSeen for all subsequent readings)
-      const { error: newErr } = await (supabase.from(readingTable as any) as any).insert({
-        [entityField]: assetId,
-        plant_id: plantId,
-        current_reading: +form.new_initial_reading,
-        reading_datetime: dtNewInitial,
-        is_meter_replacement: true,
-        recorded_by: actorId,
-      });
-      if (newErr) toast.error(`Meter replaced, but couldn't insert new-meter reading: ${friendlyError(newErr)}`);
+        // 2. Insert the old meter's final reading row:
+        //    - current_reading = old final reading (e.g. 5331.00)
+        //    - reading_datetime = date & time changed (e.g. 08:58 AM)
+        //    - is_meter_replacement = false
+        const { error: oldErr } = await (supabase.from(readingTable as any) as any).insert({
+          [entityField]: assetId,
+          plant_id: plantId,
+          current_reading: +form.old_final_reading,
+          reading_datetime: dtOldFinal,
+          is_meter_replacement: false,
+          recorded_by: actorId,
+        });
+        if (oldErr) toast.error(`Meter replaced, but couldn't insert old-meter reading: ${friendlyError(oldErr)}`);
+      } else {
+        // No specific row targeted: insert both rows fresh into the readings table
+        // Row 1: old meter final
+        const { error: oldErr } = await (supabase.from(readingTable as any) as any).insert({
+          [entityField]: assetId,
+          plant_id: plantId,
+          current_reading: +form.old_final_reading,
+          reading_datetime: dtOldFinal,
+          is_meter_replacement: false,
+          recorded_by: actorId,
+        });
+        if (oldErr) toast.error(`Meter replaced, but couldn't insert old-meter reading: ${friendlyError(oldErr)}`);
+
+        // Row 2: new meter initial (REPL row)
+        const { error: newErr } = await (supabase.from(readingTable as any) as any).insert({
+          [entityField]: assetId,
+          plant_id: plantId,
+          current_reading: +form.new_initial_reading,
+          reading_datetime: dtNewInitial,
+          is_meter_replacement: true,
+          daily_volume: 0,
+          recorded_by: actorId,
+        });
+        if (newErr) toast.error(`Meter replaced, but couldn't insert new-meter reading: ${friendlyError(newErr)}`);
+      }
     }
 
     toast.success('Meter replaced');
     onSuccess?.({
-      newInitialReading: form.new_initial_reading ? +form.new_initial_reading : null,
+      newInitialReading: form.new_initial_reading !== '' ? +form.new_initial_reading : null,
       replacementId: (inserted as any)?.id ?? null,
     });
     onClose();
