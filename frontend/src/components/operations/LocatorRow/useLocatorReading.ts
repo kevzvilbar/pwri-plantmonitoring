@@ -285,6 +285,22 @@ export function useLocatorReading({
       const vol  = savedRow?.daily_volume;
       toast.success(fmtSaveToast(locator.name, editingId ? 'updated' : 'saved', curr, prev, vol), { duration: 5000 });
     }
+
+    if (deviationLoc.tier !== 'ok' && isAnomalyRemarkValid(anomalyRemark) && savedRow?.id) {
+      void submitAnomalyRemark({
+        table_name: 'locator_readings',
+        record_id: savedRow.id,
+        plant_id: plantId,
+        tier: deviationLoc.tier,
+        direction: deviationLoc.direction!,
+        deviation_pct: deviationLoc.deviationPct ?? 0,
+        flow_rate: deviationLoc.rate,
+        avg_flow_rate: deviationLoc.avgRate,
+        rate_unit: 'm3/hr',
+        remark_text: anomalyRemark,
+      });
+    }
+    setAnomalyRemark('');
     setJustSaved(true);
     setTimeout(() => setJustSaved(false), 500);
     setReading(''); clearDraftReading(); setEditingId(null); onSaved();

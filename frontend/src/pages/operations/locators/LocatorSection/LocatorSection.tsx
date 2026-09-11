@@ -179,7 +179,7 @@ export function LocatorReadingForm({ highlightId }: { highlightId?: string | nul
       if (!locatorIds.length) return [];
       const start = new Date(); start.setDate(start.getDate() - 14);
       return (await supabase.from('locator_readings')
-        .select('id,locator_id,current_reading,reading_datetime,daily_volume,is_meter_replacement,is_estimated,anomaly_remark')
+        .select('id,locator_id,current_reading,reading_datetime,daily_volume,is_meter_replacement,is_estimated')
         .in('locator_id', locatorIds)
         .gte('reading_datetime', start.toISOString())
         .order('reading_datetime', { ascending: false })
