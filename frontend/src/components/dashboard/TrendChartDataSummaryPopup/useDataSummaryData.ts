@@ -359,9 +359,14 @@ export function useDataSummaryData({
 
   const prodPivot = useMemo(() => {
     if (metric === 'rawwater' || metric === 'pv') {
+      // Pass ALL wellReadings (including pre-window baseline rows fetched by the query)
+      // sorted ascending so buildEntityPivot can seed lastSeen/afterRepl from pre-window
+      // meter-replacement rows before skipping them via minDateKey.
       return buildEntityPivot(
-        [...(filteredWellReadings ?? [])].sort((a, b) => new Date(a.reading_datetime).getTime() - new Date(b.reading_datetime).getTime()),
+        [...(wellReadings ?? [])].sort((a, b) => new Date(a.reading_datetime).getTime() - new Date(b.reading_datetime).getTime()),
         'well_id',
+        undefined,
+        filterFrom || undefined, // minDateKey: pre-window rows seed state but are not emitted
       );
     }
 
@@ -402,7 +407,7 @@ export function useDataSummaryData({
     }
 
     return { pivot, dateKeys: Array.from(dateKeySet).sort() };
-  }, [metric, filteredWellReadings, hasProductMeterData, hasPermeateData,
+  }, [metric, wellReadings, filterFrom, hasProductMeterData, hasPermeateData,
       prodMeterReadingsForPivot, permeateReadingsForPivot, directMeterIds]);
 
   const prodPivotMap = prodPivot.pivot;
