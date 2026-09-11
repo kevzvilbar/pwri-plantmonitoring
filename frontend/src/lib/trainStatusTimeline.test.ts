@@ -101,6 +101,44 @@ describe('mergeSegmentsForDisplay', () => {
     const merged = mergeSegmentsForDisplay([readings[0]], [], (r) => r.reading_datetime);
     expect(merged).toEqual([{ kind: 'reading', row: readings[0] }]);
   });
+
+  it('places a restart reading at banner endAt ABOVE the banner in descending order', () => {
+    // A reading at 20:38 taken when the train resumed operation should come next
+    // after the offline period chronologically, meaning above the banner in descending list.
+    const offlineSegment = {
+      status: 'Offline' as const,
+      startAt: '2026-09-11T18:38:00Z',
+      endAt: '2026-09-11T20:38:00Z',
+      reason: 'Power Outage',
+    };
+    const testReadings = [
+      { id: 'restart-reading', reading_datetime: '2026-09-11T20:38:00Z' },
+      { id: 'prior-reading', reading_datetime: '2026-09-11T17:02:00Z' },
+    ];
+    const merged = mergeSegmentsForDisplay(testReadings, [offlineSegment], (r) => r.reading_datetime);
+    expect(merged.map((m) => (m.kind === 'banner' ? 'banner' : m.row.id))).toEqual([
+      'restart-reading',
+      'banner',
+      'prior-reading',
+    ]);
+  });
+
+  it('places a reading at banner startAt BELOW the banner in descending order', () => {
+    const offlineSegment = {
+      status: 'Offline' as const,
+      startAt: '2026-09-11T18:38:00Z',
+      endAt: '2026-09-11T20:38:00Z',
+      reason: 'Power Outage',
+    };
+    const testReadings = [
+      { id: 'shutdown-reading', reading_datetime: '2026-09-11T18:38:00Z' },
+    ];
+    const merged = mergeSegmentsForDisplay(testReadings, [offlineSegment], (r) => r.reading_datetime);
+    expect(merged.map((m) => (m.kind === 'banner' ? 'banner' : m.row.id))).toEqual([
+      'banner',
+      'shutdown-reading',
+    ]);
+  });
 });
 
 describe('formatSegmentDuration', () => {

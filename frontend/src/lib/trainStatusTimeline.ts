@@ -203,7 +203,21 @@ export function mergeSegmentsForDisplay<T>(
   return items.sort((a, b) => {
     const aAt = a.kind === 'banner' ? (a.segment.endAt ?? new Date().toISOString()) : getTimestamp(a.row);
     const bAt = b.kind === 'banner' ? (b.segment.endAt ?? new Date().toISOString()) : getTimestamp(b.row);
-    return new Date(bAt ?? 0).getTime() - new Date(aAt ?? 0).getTime();
+    const diff = new Date(bAt ?? 0).getTime() - new Date(aAt ?? 0).getTime();
+    if (diff !== 0) return diff;
+
+    // Tie-break when timestamps are identical:
+    // When a reading has the same timestamp as a banner's endAt (e.g. 20:38),
+    // the reading occurred when the train resumed operation — chronologically
+    // occurring AFTER the offline period ended. In a descending list (newest first),
+    // that restart reading must appear ABOVE the offline banner.
+    if (a.kind === 'reading' && b.kind === 'banner') {
+      return -1;
+    }
+    if (a.kind === 'banner' && b.kind === 'reading') {
+      return 1;
+    }
+    return 0;
   });
 }
 

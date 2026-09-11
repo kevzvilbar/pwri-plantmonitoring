@@ -42,7 +42,18 @@ export function isOfflineReadingRow(row: any): boolean {
   if (!row) return false;
 
   const reason = (row.incomplete_reason ?? '').trim().toLowerCase();
-  if (reason.startsWith('offline')) return true;
+  if (
+    reason.startsWith('offline') ||
+    reason.includes('outage') ||
+    reason.includes('power') ||
+    reason.includes('shutdown') ||
+    reason.includes('peak') ||
+    reason.includes('maintenance') ||
+    reason.includes('standby') ||
+    reason.includes('emergency')
+  ) {
+    return true;
+  }
 
   // Check whether this is a Pre-treatment row (has pretreatment-specific properties)
   const isPretreatRow =
@@ -128,8 +139,8 @@ export function isOfflineReadingRow(row: any): boolean {
     row.feed_tds == null &&
     row.permeate_tds == null;
 
-  // If there is zero flow, zero sensors, and no meter replacement flag, it's an empty check-in
-  if (hasNoFlow && hasNoSensors && !row.is_meter_replacement) {
+  // If there is zero flow, and either zero sensors or an incomplete reason was provided, and no meter replacement flag, it's an offline check-in
+  if (hasNoFlow && (hasNoSensors || reason.length > 0) && !row.is_meter_replacement) {
     return true;
   }
 

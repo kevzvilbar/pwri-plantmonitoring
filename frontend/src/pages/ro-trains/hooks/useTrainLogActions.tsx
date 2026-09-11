@@ -30,6 +30,7 @@ import {
 import {
   groupLogItemsWithOfflineSpans,
   formatSpanDuration,
+  isOfflineReadingRow,
   type OfflineSpan,
 } from '@/lib/downtimeRowMerger';
 import { reasonCategoryLabel } from '@/lib/reasonCodes';
@@ -249,14 +250,17 @@ export function useTrainLogActions(options: TrainLogActionsOptions): TrainLogAct
   const bannerSegments = useMemo(() => {
     if (!dateFrom || !untilNextDay) return [];
     const inRange = nonRunningSegmentsInRange(statusTimeline, `${dateFrom}T00:00:00`, `${untilNextDay}T00:00:00`);
-    const readingTimestamps = [...logs, ...preLogs].map((r: any) => r.reading_datetime);
-    const latestReadingAt = readingTimestamps.reduce<string | null>((latest, at) => {
+    const allReadings = [...logs, ...preLogs];
+    const productionReadingTimestamps = allReadings
+      .filter((r: any) => !isOfflineReadingRow(r))
+      .map((r: any) => r.reading_datetime);
+    const latestReadingAt = productionReadingTimestamps.reduce<string | null>((latest, at) => {
       if (!at) return latest;
       if (!latest) return at;
       return new Date(at).getTime() > new Date(latest).getTime() ? at : latest;
     }, null);
     const reconciled = reconcileOngoingSegmentWithReadings(inRange, latestReadingAt);
-    return flagConflictingClosedSegments(reconciled, readingTimestamps);
+    return flagConflictingClosedSegments(reconciled, productionReadingTimestamps);
   }, [statusTimeline, dateFrom, untilNextDay, logs, preLogs]);
 
   const gapReasonsBySourceTable = useMemo(() => {

@@ -27,6 +27,11 @@ describe('downtimeRowMerger', () => {
       expect(isOfflineReadingRow(offlineRO)).toBe(true);
     });
 
+    it('returns true for an RO reading with Power Outage or Peak Program reason even without Offline prefix', () => {
+      expect(isOfflineReadingRow({ id: 'ro-2a', incomplete_reason: 'Power Outage' })).toBe(true);
+      expect(isOfflineReadingRow({ id: 'ro-2b', incomplete_reason: 'Peak/Off-Peak Program' })).toBe(true);
+    });
+
     it('returns true for an RO reading with zero flow and missing sensors', () => {
       const emptyRO = {
         id: 'ro-3',
