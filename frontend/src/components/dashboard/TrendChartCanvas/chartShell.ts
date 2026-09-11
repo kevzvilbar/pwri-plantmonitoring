@@ -40,3 +40,4 @@ export const CHART_LEGEND_WRAPPER_STYLE: React.CSSProperties = {
   paddingTop: 6,
   cursor: 'pointer',
 };
+
