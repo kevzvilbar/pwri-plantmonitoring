@@ -39,21 +39,32 @@ function plantHealthScore(wells: { active: number; total: number }, locators: { 
   return Math.round(scores.reduce((a, b) => a + b, 0) / scores.length);
 }
 
-function sparklinePath(seed: number, w = 68, h = 16) {
+function sparklinePath(seed: number, w = 72, h = 20) {
   const vals = [
-    Math.max(20, seed - 14), Math.max(25, seed - 8), Math.max(30, seed - 12),
-    Math.max(25, seed - 4), Math.max(30, seed - 6), Math.max(35, seed - 2), seed,
+    Math.max(15, seed - 14), Math.max(20, seed - 6), Math.max(25, seed - 12),
+    Math.max(22, seed - 4), Math.max(28, seed - 8), Math.max(32, seed - 2), seed,
   ];
   const min = Math.min(...vals), max = Math.max(...vals);
   const range = max - min || 1;
-  const pts = vals.map((v, i) => {
-    const x = (i / (vals.length - 1)) * w;
-    const y = h - ((v - min) / range) * (h - 4) - 2;
-    return `${x.toFixed(1)},${y.toFixed(1)}`;
-  });
-  const line = `M ${pts.join(' L ')}`;
+  const pts = vals.map((v, i) => ({
+    x: Number(((i / (vals.length - 1)) * w).toFixed(1)),
+    y: Number((h - ((v - min) / range) * (h - 6) - 3).toFixed(1)),
+  }));
+
+  // Build cubic bezier curve for ultra-smooth rendering
+  let line = `M ${pts[0].x},${pts[0].y}`;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const curr = pts[i];
+    const next = pts[i + 1];
+    const cp1x = (curr.x + (next.x - curr.x) / 2).toFixed(1);
+    const cp1y = curr.y.toFixed(1);
+    const cp2x = (curr.x + (next.x - curr.x) / 2).toFixed(1);
+    const cp2y = next.y.toFixed(1);
+    line += ` C ${cp1x},${cp1y} ${cp2x},${cp2y} ${next.x},${next.y}`;
+  }
   const fill = `${line} L ${w},${h} L 0,${h} Z`;
-  return { line, fill };
+  const lastPt = pts[pts.length - 1];
+  return { line, fill, lastPt };
 }
 
 function PlantStatRow({ icon, label, active, total }: { icon: ReactNode; label: string; active: number; total: number }) {
@@ -62,19 +73,19 @@ function PlantStatRow({ icon, label, active, total }: { icon: ReactNode; label: 
   return (
     <div className="flex flex-col gap-1 min-w-0">
       <div className="flex items-center justify-between gap-2">
-        <span className="flex items-center gap-1 text-2xs uppercase tracking-wide text-muted-foreground font-medium">
+        <span className="flex items-center gap-1.5 text-3xs uppercase tracking-wider text-muted-foreground font-semibold">
           {icon}{label}
         </span>
         <span className="flex items-center gap-1.5 shrink-0">
-          <span className="text-xs font-medium text-foreground">
+          <span className="text-xs font-mono font-bold text-foreground">
             {active}<span className="text-muted-foreground font-normal">/{total}</span>
           </span>
-          <span className={`text-xs font-semibold px-1.5 py-0.5 rounded ${colors.textColor} ${colors.bg} border ${colors.border}`}>
+          <span className={`text-3xs font-mono font-bold px-1.5 py-0.5 rounded-md ${colors.textColor} ${colors.bg} border ${colors.border}`}>
             {p}%
           </span>
         </span>
       </div>
-      <div className="h-1 w-full rounded-full bg-muted overflow-hidden">
+      <div className="h-1.5 w-full rounded-full bg-muted/70 overflow-hidden">
         <div
           className={`h-full rounded-full transition-all duration-500 ${colors.bar}`}
           style={{ width: total > 0 ? `${p}%` : '0%' }}
@@ -125,12 +136,12 @@ function MetricRingGroup({ wells, locators, trains, size = 56, showLegend = fals
   const strokeW = Math.max(4, Math.round(size * 0.075));
   const gap = Math.max(2, Math.round(strokeW * 0.55));
   const cx = size / 2, cy = size / 2;
-  const showCaption = size >= 80;
+  const showCaption = size >= 75;
 
   return (
     <div className="flex items-center gap-4 shrink-0">
       <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} role="img"
-        aria-label={`Overall ${overall} percent. RO Trains ${pct(trains)} percent, Locators ${pct(locators)} percent, Wells ${pct(wells)} percent.`}>
+        aria-label={`Overall health ${overall} percent. RO Trains ${pct(trains)} percent, Locators ${pct(locators)} percent, Wells ${pct(wells)} percent.`}>
         <defs>
           {layers.map((l) => (
             <linearGradient key={l.key} id={`ringGrad-${uid}-${l.key}`} x1="0%" y1="0%" x2="100%" y2="100%">
@@ -159,14 +170,14 @@ function MetricRingGroup({ wells, locators, trains, size = 56, showLegend = fals
             </g>
           );
         })}
-        <text x={cx} y={cy - (showCaption ? size * 0.05 : 0)} textAnchor="middle" dominantBaseline="middle"
-          style={{ fontSize: size * 0.2, fontWeight: 800, fill: 'hsl(var(--foreground))' }}>
+        <text x={cx} y={cy - (showCaption ? size * 0.06 : 0)} textAnchor="middle" dominantBaseline="middle"
+          style={{ fontSize: size * 0.22, fontWeight: 800, fill: 'hsl(var(--foreground))', fontFamily: 'monospace' }}>
           {overall}%
         </text>
         {showCaption && (
           <text x={cx} y={cy + size * 0.16} textAnchor="middle" dominantBaseline="middle"
-            style={{ fontSize: size * 0.062, fontWeight: 700, letterSpacing: '0.08em', fill: 'hsl(var(--muted-foreground))' }}>
-            OVERALL
+            style={{ fontSize: size * 0.065, fontWeight: 700, letterSpacing: '0.08em', fill: 'hsl(var(--muted-foreground))' }}>
+            HEALTH
           </text>
         )}
       </svg>
@@ -201,16 +212,21 @@ function MetricChip({ icon, label, active, total, colorCls, pct, plantColor }: {
   plantColor: string;
 }) {
   return (
-    <div className="flex flex-col gap-1.5 rounded-lg border border-border/50 bg-muted/20 p-2.5 min-w-[90px] flex-1">
-      <div className="flex items-center justify-between text-2xs font-bold uppercase tracking-wider text-muted-foreground">
-        <span className="flex items-center gap-1">{icon} {label}</span>
-        <span className="font-mono font-bold" style={{ color: plantColor }}>{pct}%</span>
+    <div className="group/chip flex flex-col justify-between gap-2 rounded-xl border border-border/60 bg-muted/20 hover:bg-muted/30 transition-all duration-200 p-2.5 min-w-[100px] flex-1 shadow-2xs">
+      <div className="flex items-center justify-between text-3xs font-bold uppercase tracking-wider text-muted-foreground">
+        <span className="flex items-center gap-1.5">{icon} {label}</span>
+        <span
+          className="font-mono text-3xs font-bold px-1.5 py-0.5 rounded border bg-background/50 shadow-2xs"
+          style={{ color: plantColor, borderColor: `color-mix(in srgb, ${plantColor} 30%, transparent)` }}
+        >
+          {pct}%
+        </span>
       </div>
       <div className="font-mono text-sm font-bold text-foreground leading-none">
         {active}<span className="text-muted-foreground font-normal text-xs">/{total}</span>
       </div>
-      <div className="h-1 w-full bg-muted rounded-full overflow-hidden">
-        <div className={`h-full rounded-full transition-all ${colorCls}`} style={{ width: `${pct}%` }} />
+      <div className="h-1.5 w-full bg-muted/70 rounded-full overflow-hidden">
+        <div className={`h-full rounded-full transition-all duration-500 ${colorCls}`} style={{ width: `${pct}%` }} />
       </div>
     </div>
   );
@@ -237,7 +253,7 @@ export function PlantCard({ plant, summaryCounts, index, onNavigate, onInspect, 
   const lPct = locators.total > 0 ? Math.round((locators.active / locators.total) * 100) : 0;
   const tPct = trains.total > 0 ? Math.round((trains.active / trains.total) * 100) : 0;
 
-  const sp = sparklinePath(score, 68, 16);
+  const sp = sparklinePath(score, 72, 20);
 
   let incidentFlag: { text: string; tone: string } | null = null;
   if (trains.total > 0 && trains.active === 0) {
@@ -252,7 +268,7 @@ export function PlantCard({ plant, summaryCounts, index, onNavigate, onInspect, 
     <div
       role="button"
       tabIndex={0}
-      className="group relative flex overflow-hidden rounded-xl border border-border/70 bg-card hover:border-primary/50 hover:shadow-md transition-all duration-200 cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring"
+      className="group relative flex overflow-hidden rounded-2xl border border-border/70 bg-card hover:border-[var(--plant-color)]/60 hover:shadow-lg hover:shadow-[var(--plant-color)]/5 transition-all duration-300 cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring"
       style={{ ['--plant-color' as any]: plantColor }}
       onClick={() => onNavigate(`/plants/${plant.id}`)}
       onKeyDown={(e) => {
@@ -260,81 +276,107 @@ export function PlantCard({ plant, summaryCounts, index, onNavigate, onInspect, 
       }}
       data-testid={`plant-card-${plant.id}`}
     >
-      <div className="w-1.5 shrink-0 transition-all duration-300 group-hover:w-2" style={{ backgroundColor: plantColor }} />
+      <div
+        className="w-1.5 shrink-0 bg-gradient-to-b from-[var(--plant-color)] via-[var(--plant-color)] to-[var(--plant-color)]/40 transition-all duration-300 group-hover:w-2.5 group-hover:shadow-[0_0_12px_var(--plant-color)]"
+        style={{ backgroundColor: plantColor }}
+      />
 
       <div className="hidden md:flex flex-1 min-w-0 p-3.5 pr-4 items-center justify-between gap-4">
-        <div className="flex flex-col justify-center items-center p-2 rounded-lg bg-muted/30 border border-border/40 shrink-0 min-w-[90px] text-center">
-          <div className="text-3xl font-extrabold leading-none tracking-tight font-mono" style={{ color: plantColor }}>
+        {/* Capacity pod with smooth sparkline and live beacon */}
+        <div className="flex flex-col justify-center items-center px-3 py-2 rounded-xl bg-gradient-to-b from-muted/30 via-muted/15 to-transparent border border-border/50 shrink-0 min-w-[96px] text-center relative group-hover:border-[var(--plant-color)]/40 transition-colors">
+          <span className="text-3xs uppercase font-extrabold tracking-widest text-muted-foreground/80">
+            Capacity
+          </span>
+          <div className="text-2xl sm:text-3xl font-black font-mono tracking-tight leading-none my-1" style={{ color: plantColor }}>
             {fmtNum(plant.design_capacity_m3 ?? 0)}
           </div>
-          <div className="text-3xs font-bold mt-1 uppercase tracking-wider text-muted-foreground">
+          <span className="text-3xs font-bold font-mono px-1.5 py-0.5 rounded-sm bg-muted/60 text-muted-foreground mb-1">
             MLD CAP
+          </span>
+          <div className="relative w-[72px] h-[20px]">
+            <svg className="w-[72px] h-[20px] overflow-visible" viewBox="0 0 72 20">
+              <defs>
+                <linearGradient id={`sparkGrad-${plant.id}`} x1="0%" y1="0%" x2="0%" y2="100%">
+                  <stop offset="0%" stopColor={plantColor} stopOpacity={0.25} />
+                  <stop offset="100%" stopColor={plantColor} stopOpacity={0.0} />
+                </linearGradient>
+              </defs>
+              <path d={sp.fill} fill={`url(#sparkGrad-${plant.id})`} />
+              <path d={sp.line} fill="none" stroke={plantColor} strokeWidth={1.8} strokeLinecap="round" />
+              <circle cx={sp.lastPt.x} cy={sp.lastPt.y} r={2} fill={plantColor} />
+              <circle cx={sp.lastPt.x} cy={sp.lastPt.y} r={4} fill={plantColor} fillOpacity={0.4} className="animate-ping" />
+            </svg>
           </div>
-          <svg className="w-[68px] h-[16px] mt-1" viewBox="0 0 68 16">
-            <path d={sp.fill} fill={plantColor} fillOpacity={0.15} />
-            <path d={sp.line} fill="none" stroke={plantColor} strokeWidth={1.6} strokeLinecap="round" />
-          </svg>
         </div>
 
-        <div className="w-[185px] shrink-0 space-y-1">
-          <h2 className="font-bold text-base leading-tight truncate group-hover:text-primary transition-colors">
+        {/* Facility Info & Status */}
+        <div className="min-w-[170px] max-w-[220px] shrink-0 space-y-1.5">
+          <h2 className="font-bold text-base leading-tight truncate text-foreground group-hover:text-primary transition-colors tracking-tight">
             {plant.name}
           </h2>
-          <FadingAddressText address={plant.address || 'Unassigned'} />
+          <div className="flex items-center gap-1 text-xs text-muted-foreground truncate">
+            <MapPin className="h-3 w-3 shrink-0 text-muted-foreground/70" />
+            <FadingAddressText address={plant.address || 'Unassigned'} />
+          </div>
           <div>
             {incidentFlag ? (
-              <span className={`inline-flex items-center gap-1 text-2xs font-semibold px-2 py-0.5 rounded-full border ${
+              <span className={`inline-flex items-center gap-1.5 text-2xs font-semibold px-2.5 py-0.5 rounded-full border shadow-2xs ${
                 incidentFlag.tone === 'danger'
-                  ? 'bg-danger-soft text-danger border-danger'
-                  : 'bg-warn-soft text-warn border-warn'
+                  ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/25'
+                  : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/25'
               }`}>
-                <AlertTriangle className="h-2.5 w-2.5" />
+                <AlertTriangle className="h-3 w-3 shrink-0" />
                 {incidentFlag.text}
               </span>
             ) : (
-              <span className="inline-flex items-center gap-1 text-2xs font-semibold px-2 py-0.5 rounded-full bg-primary-soft text-primary border border-primary">
-                <CheckCircle2 className="h-2.5 w-2.5" />
+              <span className="inline-flex items-center gap-1.5 text-2xs font-semibold px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/25 shadow-2xs">
+                <span className="relative flex h-2 w-2 shrink-0">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-500 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                </span>
                 Active Nominal
               </span>
             )}
           </div>
         </div>
 
-        <div className="flex items-stretch gap-2 flex-1">
+        {/* Subsystems (Wells, Locators, RO Trains) */}
+        <div className="flex items-stretch gap-2.5 flex-1 min-w-0">
           <MetricChip
-            icon={<Droplet className="h-3 w-3 text-sky-500" />}
+            icon={<Droplet className="h-3.5 w-3.5 text-sky-500" />}
             label="Wells"
             active={wells.active}
             total={wells.total}
             pct={wPct}
-            colorCls="bg-sky-500"
+            colorCls="bg-gradient-to-r from-sky-500 to-sky-400"
             plantColor={plantColor}
           />
           <MetricChip
-            icon={<MapPin className="h-3 w-3 text-teal-500" />}
+            icon={<MapPin className="h-3.5 w-3.5 text-teal-500" />}
             label="Locators"
             active={locators.active}
             total={locators.total}
             pct={lPct}
-            colorCls="bg-teal-500"
+            colorCls="bg-gradient-to-r from-teal-500 to-teal-400"
             plantColor={plantColor}
           />
           <MetricChip
-            icon={<ROTrainIcon className="h-3 w-3 text-violet-500" />}
+            icon={<ROTrainIcon className="h-3.5 w-3.5 text-violet-500" />}
             label="RO Trains"
             active={trains.active}
             total={trains.total}
             pct={tPct}
-            colorCls={tPct === 0 ? 'bg-danger' : 'bg-violet-500'}
+            colorCls={tPct === 0 ? 'bg-rose-500' : 'bg-gradient-to-r from-violet-500 to-violet-400'}
             plantColor={plantColor}
           />
         </div>
 
+        {/* Action button & Manager menu */}
         <div className="flex items-center gap-2 shrink-0">
           <Button
             size="sm"
             variant="outline"
-            className="h-8 px-2.5 text-xs text-muted-foreground hover:text-primary gap-1.5 rounded-lg border-border/70"
+            className="h-8 px-3 text-xs font-medium text-muted-foreground hover:text-foreground hover:border-primary/50 hover:bg-primary/5 gap-1.5 rounded-xl border-border/70 transition-all shadow-2xs"
             onClick={(e) => {
               e.stopPropagation();
               onInspect(plant);
@@ -359,22 +401,43 @@ export function PlantCard({ plant, summaryCounts, index, onNavigate, onInspect, 
           )}
         </div>
 
+        {/* Health Radial Gauge */}
         <div className="flex items-center justify-center pl-1 shrink-0">
-          <MetricRingGroup wells={wells} locators={locators} trains={trains} size={78} />
+          <MetricRingGroup wells={wells} locators={locators} trains={trains} size={80} />
         </div>
       </div>
 
       <div className="md:hidden flex-1 min-w-0 p-3.5 space-y-3">
         <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0 flex-1">
-            <h2 className="font-semibold text-base leading-tight">{plant.name}</h2>
-            <FadingAddressText address={plant.address || 'Unassigned'} />
+          <div className="min-w-0 flex-1 space-y-1">
+            <h2 className="font-bold text-base leading-tight truncate">{plant.name}</h2>
+            <div className="flex items-center gap-1 text-xs text-muted-foreground truncate">
+              <MapPin className="h-3 w-3 shrink-0 text-muted-foreground/70" />
+              <FadingAddressText address={plant.address || 'Unassigned'} />
+            </div>
+            <div>
+              {incidentFlag ? (
+                <span className={`inline-flex items-center gap-1 text-2xs font-semibold px-2 py-0.5 rounded-full border ${
+                  incidentFlag.tone === 'danger'
+                    ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/25'
+                    : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/25'
+                }`}>
+                  <AlertTriangle className="h-2.5 w-2.5" />
+                  {incidentFlag.text}
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 text-2xs font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/25">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                  Active Nominal
+                </span>
+              )}
+            </div>
           </div>
-          <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
+          <div className="flex items-center gap-1.5 shrink-0" onClick={e => e.stopPropagation()}>
             <Button
               size="sm"
               variant="outline"
-              className="h-7 px-2 text-xs gap-1"
+              className="h-7 px-2.5 text-xs gap-1 rounded-lg border-border/70"
               onClick={() => onInspect(plant)}
             >
               <Activity className="h-3 w-3 text-primary" />
@@ -394,17 +457,17 @@ export function PlantCard({ plant, summaryCounts, index, onNavigate, onInspect, 
           </div>
         </div>
 
-        <div className="grid gap-2" style={{ gridTemplateColumns: 'auto 1fr' }}>
-          <div className="border-r border-border/50 pr-2.5 flex flex-col justify-center min-w-[65px] text-center">
-            <span className="text-xl font-bold font-mono" style={{ color: plantColor }}>
+        <div className="grid gap-3" style={{ gridTemplateColumns: 'auto 1fr' }}>
+          <div className="border-r border-border/50 pr-3 flex flex-col justify-center min-w-[70px] text-center">
+            <span className="text-xl font-black font-mono" style={{ color: plantColor }}>
               {fmtNum(plant.design_capacity_m3 ?? 0)}
             </span>
-            <span className="text-3xs text-muted-foreground uppercase font-bold">MLD CAP</span>
+            <span className="text-3xs text-muted-foreground uppercase font-bold tracking-wider mt-0.5">MLD CAP</span>
           </div>
-          <div className="flex flex-col gap-1.5 min-w-0">
-            <PlantStatRow icon={<Droplet className="h-3 w-3" />} label="Wells" active={wells.active} total={wells.total} />
-            <PlantStatRow icon={<MapPin className="h-3 w-3" />} label="Locators" active={locators.active} total={locators.total} />
-            <PlantStatRow icon={<ROTrainIcon className="h-3 w-3" />} label="RO trains" active={trains.active} total={trains.total} />
+          <div className="flex flex-col gap-2 min-w-0">
+            <PlantStatRow icon={<Droplet className="h-3 w-3 text-sky-500" />} label="Wells" active={wells.active} total={wells.total} />
+            <PlantStatRow icon={<MapPin className="h-3 w-3 text-teal-500" />} label="Locators" active={locators.active} total={locators.total} />
+            <PlantStatRow icon={<ROTrainIcon className="h-3 w-3 text-violet-500" />} label="RO trains" active={trains.active} total={trains.total} />
           </div>
         </div>
       </div>
