@@ -1,9 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
-import { ResponsiveContainer, AreaChart, Area, YAxis } from 'recharts';
 import { Lamp } from '@/components/ui/Lamp';
 import { TrendBadge } from './StatCard';
 import { fmtNum } from '@/lib/calculations';
-import { C_PRODUCTION } from '@/lib/chartColors';
 import { usePlants } from '@/hooks/usePlants';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -11,6 +9,7 @@ import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import {
   History, LayoutGrid, ListCollapse, ExternalLink, ShieldAlert, Building2,
+  Droplets, Gauge, Zap,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
@@ -23,6 +22,9 @@ interface PlantPulseHeroProps {
   secondsAgo?: number;
   production: number | null;
   dProduction: number | null;
+  rawWaterVol?: number | null;
+  recovery?: number | null;
+  specificPower?: number | null;
   chartData?: any[];
   viewMode: DashboardViewMode;
   onViewModeChange: (mode: DashboardViewMode) => void;
@@ -38,6 +40,9 @@ export function PlantPulseHero({
   secondsAgo = 2,
   production,
   dProduction,
+  rawWaterVol,
+  recovery,
+  specificPower,
   chartData,
   viewMode,
   onViewModeChange,
@@ -86,37 +91,6 @@ export function PlantPulseHero({
     staleTime: 60_000,
   });
 
-  // Query past 7 days production if chartData is not provided
-  const { data: fallbackSparkline } = useQuery({
-    queryKey: ['plant-pulse-hero-7d-sparkline', plantIds],
-    queryFn: async () => {
-      if (!plantIds.length) return [];
-      const sinceDate = format(new Date(Date.now() - 7 * 86400000), 'yyyy-MM-dd');
-      const { data } = await supabase
-        .from('daily_plant_summary')
-        .select('summary_date, production_m3')
-        .in('plant_id', plantIds)
-        .gte('summary_date', sinceDate)
-        .order('summary_date', { ascending: true });
-
-      // Initialize past 7 days to guarantee 7 sequential points
-      const dayMap: Record<string, number> = {};
-      for (let i = 6; i >= 0; i--) {
-        const d = format(new Date(Date.now() - i * 86400000), 'yyyy-MM-dd');
-        dayMap[d] = 0;
-      }
-      (data ?? []).forEach((r: any) => {
-        const d = r.summary_date;
-        if (d && dayMap[d] !== undefined) {
-          dayMap[d] = (dayMap[d] ?? 0) + (Number(r.production_m3) || 0);
-        }
-      });
-      return Object.entries(dayMap).map(([date, val]) => ({ date, val }));
-    },
-    enabled: (!chartData || !chartData.length) && plantIds.length > 0,
-    staleTime: 5 * 60_000,
-  });
-
   const fleetCounts = useMemo(() => {
     let online = 0;
     let stale = 0;
@@ -136,27 +110,6 @@ export function PlantPulseHero({
 
     return { online, stale, offline };
   }, [activePlants, wellLastDt]);
-
-  // Last 7 days sparkline slice
-  const sparklineData = useMemo(() => {
-    let pts: { val: number }[] = [];
-    if (chartData && chartData.length > 0) {
-      pts = chartData.slice(-7).map((d) => ({
-        val: d.production != null && Number.isFinite(d.production) ? d.production : 0,
-      }));
-    } else if (fallbackSparkline && fallbackSparkline.length > 0) {
-      pts = fallbackSparkline.map((p) => ({ val: p.val }));
-    }
-
-    // If live production is active, ensure today's terminal point reflects it
-    if (pts.length > 0 && production != null && Number.isFinite(production) && production > 0) {
-      const lastIdx = pts.length - 1;
-      if (pts[lastIdx].val === 0 || pts[lastIdx].val < production) {
-        pts[lastIdx] = { val: production };
-      }
-    }
-    return pts;
-  }, [chartData, fallbackSparkline, production]);
 
   return (
     <div className="rounded-[20px] sm:rounded-[24px] p-1 bg-gradient-to-b from-primary/25 via-primary/10 to-transparent border border-primary/30 shadow-xl shadow-black/20">
@@ -244,7 +197,7 @@ export function PlantPulseHero({
         {/* ── Main Hero Row: Headline Metric · Live Pulse Status · 7-Day Sparkline · Fleet Lamps ── */}
         <div className="relative z-10 grid grid-cols-1 md:grid-cols-12 gap-4 items-center pt-3.5">
           {/* Left: Headline Metric & Status */}
-          <div className="md:col-span-5 space-y-1.5">
+          <div className="md:col-span-4 space-y-1.5">
             <div className="flex items-baseline gap-2">
               <span className="readout-num text-4xl sm:text-5xl font-bold leading-none text-white tracking-tight drop-shadow-[0_2px_12px_rgba(0,0,0,0.4)]">
                 {fmtNum(production)}
@@ -269,51 +222,54 @@ export function PlantPulseHero({
             </div>
           </div>
 
-          {/* Middle: 7-Day Sparkline */}
-          <div className="md:col-span-4 flex flex-col justify-center bg-black/40 border border-white/15 rounded-xl px-3.5 py-2.5 backdrop-blur-md shadow-inner">
-            <div className="flex items-center justify-between gap-2 mb-1">
-              <span className="text-3xs font-mono font-semibold uppercase tracking-wider text-white/80">
-                7-Day Production Trend
-              </span>
-              {sparklineData.length >= 2 && (
-                <span className="text-3xs font-mono text-white font-bold">
-                  {fmtNum(sparklineData[sparklineData.length - 1]?.val ?? 0)} m³
+          {/* Middle: Live Plant Efficiency Trio */}
+          <div className="md:col-span-5 flex items-center justify-between bg-black/40 border border-white/15 rounded-xl p-2.5 sm:px-4 backdrop-blur-md shadow-inner divide-x divide-white/10">
+            {/* Raw Inflow */}
+            <div className="flex-1 px-2.5 first:pl-0">
+              <div className="flex items-center gap-1.5 mb-1">
+                <Droplets className="h-3.5 w-3.5 text-sky-400 shrink-0" />
+                <span className="text-3xs font-mono font-semibold uppercase tracking-wider text-white/75">
+                  Raw Inflow
                 </span>
-              )}
+              </div>
+              <div className="flex items-baseline gap-1">
+                <span className="font-mono text-base sm:text-lg font-bold text-white tracking-tight">
+                  {rawWaterVol != null ? fmtNum(rawWaterVol) : '—'}
+                </span>
+                <span className="text-3xs font-mono text-white/60">m³</span>
+              </div>
             </div>
-            {sparklineData.length >= 2 ? (
-              <div className="h-7 w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={sparklineData} margin={{ top: 2, right: 2, left: 2, bottom: 0 }}>
-                    <defs>
-                      <linearGradient id="heroSparklineFill" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity={0.5} />
-                        <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity={0.0} />
-                      </linearGradient>
-                    </defs>
-                    <YAxis
-                      hide
-                      domain={[
-                        0,
-                        (dataMax: number) => (Number.isFinite(dataMax) && dataMax > 0 ? Math.max(dataMax * 1.25, 10) : 100),
-                      ]}
-                    />
-                    <Area
-                      type="monotone"
-                      dataKey="val"
-                      stroke="hsl(var(--primary))"
-                      strokeWidth={2}
-                      fill="url(#heroSparklineFill)"
-                      isAnimationActive={false}
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
+
+            {/* RO Recovery */}
+            <div className="flex-1 px-2.5">
+              <div className="flex items-center gap-1.5 mb-1">
+                <Gauge className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
+                <span className="text-3xs font-mono font-semibold uppercase tracking-wider text-white/75">
+                  Recovery
+                </span>
               </div>
-            ) : (
-              <div className="text-3xs font-mono text-white/60 flex items-center h-7">
-                Collecting 7-day sparkline telemetry…
+              <div className="flex items-baseline gap-1">
+                <span className="font-mono text-base sm:text-lg font-bold text-emerald-400 tracking-tight">
+                  {recovery != null ? `${recovery.toFixed(1)}%` : '—'}
+                </span>
               </div>
-            )}
+            </div>
+
+            {/* Specific Energy */}
+            <div className="flex-1 px-2.5 last:pr-0">
+              <div className="flex items-center gap-1.5 mb-1">
+                <Zap className="h-3.5 w-3.5 text-amber-400 shrink-0" />
+                <span className="text-3xs font-mono font-semibold uppercase tracking-wider text-white/75">
+                  Spec. Energy
+                </span>
+              </div>
+              <div className="flex items-baseline gap-1">
+                <span className="font-mono text-base sm:text-lg font-bold text-white tracking-tight">
+                  {specificPower != null ? specificPower.toFixed(2) : '—'}
+                </span>
+                <span className="text-3xs font-mono text-white/60">kWh/m³</span>
+              </div>
+            </div>
           </div>
 
           {/* Right: Fleet Health Status Lamps */}

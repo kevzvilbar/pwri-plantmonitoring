@@ -219,6 +219,9 @@ export default function Dashboard() {
         secondsAgo={secondsAgo}
         production={prodStats.production}
         dProduction={prodStats.dProduction}
+        rawWaterVol={prodStats.rawWaterVol}
+        recovery={qualityStats.avgRecovery}
+        specificPower={powerStats.pv}
         viewMode={viewMode}
         onViewModeChange={persistViewMode}
         onOpenDowntime={() => setDowntimeOpen(true)}
