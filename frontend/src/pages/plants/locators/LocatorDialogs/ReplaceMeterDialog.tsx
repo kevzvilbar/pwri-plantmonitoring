@@ -31,8 +31,8 @@ export function ReplaceMeterDialog({
 }) {
   const { user, activeOperator } = useAuth();
   const [form, setForm] = useState({
-    replacement_date: format(new Date(), 'yyyy-MM-dd'),
-    old_final_reading: '', new_brand: '', new_size: '', new_serial: '', new_initial_reading: '', new_installed_date: format(new Date(), 'yyyy-MM-dd'), remarks: '',
+    replacement_date: format(new Date(), "yyyy-MM-dd'T'HH:mm"),
+    old_final_reading: '', new_brand: '', new_size: '', new_serial: '', new_initial_reading: '', new_installed_date: format(new Date(), "yyyy-MM-dd'T'HH:mm"), remarks: '',
   });
   const submit = async () => {
     // Required: new serial (who's now installed), the old meter's last reading,
@@ -42,9 +42,13 @@ export function ReplaceMeterDialog({
     if (!form.new_serial) { toast.error('New serial required'); return; }
     if (!form.old_final_reading) { toast.error("Old meter's final reading is required"); return; }
     if (!form.new_initial_reading) { toast.error("New meter's initial reading is required"); return; }
-    if (!form.replacement_date) { toast.error('Date changed is required'); return; }
+    if (!form.replacement_date) { toast.error('Date & time changed is required'); return; }
+
+    const replDateOnly = form.replacement_date ? form.replacement_date.slice(0, 10) : '';
+    const instDateOnly = form.new_installed_date ? form.new_installed_date.slice(0, 10) : null;
+
     const payload: any = {
-      plant_id: plantId, replacement_date: form.replacement_date,
+      plant_id: plantId, replacement_date: replDateOnly,
       reading_id: readingId ?? null,
       replaced_by: activeOperator?.id ?? user?.id, remarks: form.remarks || null,
     };
@@ -56,7 +60,7 @@ export function ReplaceMeterDialog({
         old_meter_serial: oldSerial, old_meter_final_reading: form.old_final_reading ? +form.old_final_reading : null,
         new_meter_brand: form.new_brand, new_meter_size: form.new_size, new_meter_serial: form.new_serial,
         new_meter_initial_reading: form.new_initial_reading ? +form.new_initial_reading : null,
-        new_meter_installed_date: form.new_installed_date,
+        new_meter_installed_date: instDateOnly,
       });
       replacementTable = kind === 'locator' ? 'locator_meter_replacements' : 'product_meter_replacements';
       assetTable = kind === 'locator' ? 'locators' : 'product_meters';
@@ -65,7 +69,7 @@ export function ReplaceMeterDialog({
         well_id: assetId, old_serial: oldSerial, old_final_reading: form.old_final_reading ? +form.old_final_reading : null,
         new_brand: form.new_brand, new_size: form.new_size, new_serial: form.new_serial,
         new_initial_reading: form.new_initial_reading ? +form.new_initial_reading : null,
-        new_installed_date: form.new_installed_date,
+        new_installed_date: instDateOnly,
       });
       replacementTable = 'well_meter_replacements';
       assetTable = 'wells';
@@ -76,7 +80,7 @@ export function ReplaceMeterDialog({
     if (assetTable === 'product_meters') {
       await supabase.from(assetTable as any).update({ meter_serial: form.new_serial || null }).eq('id', assetId);
     } else {
-      await supabase.from(assetTable as any).update({ meter_brand: form.new_brand, meter_size: form.new_size, meter_serial: form.new_serial, meter_installed_date: form.new_installed_date }).eq('id', assetId);
+      await supabase.from(assetTable as any).update({ meter_brand: form.new_brand, meter_size: form.new_size, meter_serial: form.new_serial, meter_installed_date: instDateOnly }).eq('id', assetId);
     }
 
     // For wells and locators: insert two reading rows that correctly represent
@@ -85,7 +89,7 @@ export function ReplaceMeterDialog({
     //  Row 1 — old meter's FINAL reading  (is_meter_replacement = false)
     //  Row 2 — new meter's INITIAL reading (is_meter_replacement = true)
     //
-    // Both are timestamped to the replacement date: old at 00:00, new at 00:01
+    // Both are timestamped to the replacement date & time: old at :00, new at :01
     // so the ascending sort order is: old-final → new-initial → next normal readings.
     // Downstream delta computation (buildEntityPivot / StandardRow) sees the REPL row
     // as the correct baseline and computes subsequent deltas from the new meter's chain.
@@ -97,8 +101,12 @@ export function ReplaceMeterDialog({
       const readingTable = kind === 'well' ? 'well_readings' : 'locator_readings';
       const entityField = kind === 'well' ? 'well_id' : 'locator_id';
       const actorId = activeOperator?.id ?? user?.id ?? null;
-      const dtOldFinal   = `${form.replacement_date}T00:00:00`;
-      const dtNewInitial = `${form.replacement_date}T00:01:00`;
+
+      const rawDt = form.replacement_date.includes('T') ? form.replacement_date : `${form.replacement_date}T00:00`;
+      const parts = rawDt.split(':');
+      const hhmm = parts.slice(0, 2).join(':');
+      const dtOldFinal   = `${hhmm}:00`;
+      const dtNewInitial = `${hhmm}:01`;
 
       // Row 1: old meter final (normal row, not a replacement)
       const { error: oldErr } = await (supabase.from(readingTable as any) as any).insert({
@@ -137,7 +145,7 @@ export function ReplaceMeterDialog({
         <DialogHeader><DialogTitle>Replace meter</DialogTitle></DialogHeader>
         <div className="space-y-2">
           <div className="grid grid-cols-2 gap-2">
-            <div><Label htmlFor="locatordialogs-date-changed">Date changed *</Label><Input type="date" value={form.replacement_date} onChange={e => setForm({ ...form, replacement_date: e.target.value })} id="locatordialogs-date-changed"/></div>
+            <div><Label htmlFor="locatordialogs-date-changed">Date &amp; time changed *</Label><Input type="datetime-local" value={form.replacement_date} onChange={e => setForm({ ...form, replacement_date: e.target.value })} id="locatordialogs-date-changed"/></div>
             <div><Label htmlFor="locatordialogs-old-meter-s-final-reading">Old meter's final reading *</Label><Input type="number" value={form.old_final_reading} onChange={e => setForm({ ...form, old_final_reading: e.target.value })} id="locatordialogs-old-meter-s-final-reading"/></div>
           </div>
           <div className="text-xs text-muted-foreground">Old serial: <span className="font-mono-num">{oldSerial ?? '—'}</span></div>
@@ -148,7 +156,7 @@ export function ReplaceMeterDialog({
           </div>
           <div className="grid grid-cols-2 gap-2">
             <div><Label htmlFor="locatordialogs-new-meter-s-initial-reading">New meter's initial reading *</Label><Input type="number" value={form.new_initial_reading} onChange={e => setForm({ ...form, new_initial_reading: e.target.value })} id="locatordialogs-new-meter-s-initial-reading"/></div>
-            <div><Label htmlFor="locatordialogs-installed-date">Installed date</Label><Input type="date" value={form.new_installed_date} onChange={e => setForm({ ...form, new_installed_date: e.target.value })} id="locatordialogs-installed-date"/></div>
+            <div><Label htmlFor="locatordialogs-installed-date">Installed date &amp; time</Label><Input type="datetime-local" value={form.new_installed_date} onChange={e => setForm({ ...form, new_installed_date: e.target.value })} id="locatordialogs-installed-date"/></div>
           </div>
           <div><Label htmlFor="locatordialogs-remarks">Remarks</Label><Input value={form.remarks} onChange={e => setForm({ ...form, remarks: e.target.value })} id="locatordialogs-remarks"/></div>
         </div>
