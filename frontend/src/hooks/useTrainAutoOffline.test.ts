@@ -28,3 +28,4 @@ describe('useTrainAutoOffline threshold & auto-flagging guards', () => {
     expect(shouldAutoFlagTrainOffline(10.0, 'Maintenance')).toBe(false);
   });
 });
+
