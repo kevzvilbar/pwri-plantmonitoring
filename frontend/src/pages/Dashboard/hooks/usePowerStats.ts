@@ -155,8 +155,8 @@ export function usePowerStats({
       return { rows, prevRows, isStale };
     },
     enabled: plantIds.length > 0,
-    staleTime: 120_000,
-    refetchInterval: 120_000,
+    staleTime: 5 * 60_000,
+    refetchInterval: 5 * 60_000,
   });
 
   const todayPower   = todayPowerRaw?.rows ?? [];

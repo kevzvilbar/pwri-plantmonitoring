@@ -79,8 +79,8 @@ export function useQualityStats({
       });
     },
     enabled: qualityTrainIds.length > 0,
-    staleTime: 2 * 60_000,
-    refetchInterval: 2 * 60_000,
+    staleTime: 5 * 60_000,
+    refetchInterval: 5 * 60_000,
   });
 
   const { data: roHistory10d = [] } = useQuery({
@@ -138,8 +138,8 @@ export function useQualityStats({
       return data ?? [];
     },
     enabled: plantIds.length > 0,
-    staleTime: 2 * 60_000,
-    refetchInterval: 2 * 60_000,
+    staleTime: 5 * 60_000,
+    refetchInterval: 5 * 60_000,
   });
 
   const { data: latestPumpReadings = [] } = useQuery({
@@ -162,8 +162,8 @@ export function useQualityStats({
       return Array.from(latestByPump.values());
     },
     enabled: plantIds.length > 0,
-    staleTime: 2 * 60_000,
-    refetchInterval: 2 * 60_000,
+    staleTime: 5 * 60_000,
+    refetchInterval: 5 * 60_000,
   });
 
   // ── Aggregates ────────────────────────────────────────────────────────────

@@ -27,9 +27,10 @@ import { useEffect, useRef, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useSyncStore } from '@/store/syncStore';
 
-const SYNC_INTERVAL_MS  = 120_000; // 2 minutes (cuts background polling frequency by 50%)
+const SYNC_INTERVAL_MS  = 300_000; // 5 minutes (reduced from 120s to cut PostgREST egress by 60%)
 const RETRY_DELAY_MS    = 10_000;  // 10 seconds between retries
 const MAX_RETRIES       = 3;       // silent retries before surfacing an error
+const IDLE_TIMEOUT_MS   = 15 * 60_000; // 15 min inactivity pauses background polling
 
 export function useBackgroundSync() {
   const qc                  = useQueryClient();
@@ -39,6 +40,7 @@ export function useBackgroundSync() {
   const retryTimeoutRef     = useRef<ReturnType<typeof setTimeout> | null>(null);
   const retryCountRef       = useRef(0);
   const isMountedRef        = useRef(true);
+  const lastActiveRef       = useRef<number>(Date.now());
 
   const clearRetryTimeout = useCallback(() => {
     if (retryTimeoutRef.current !== null) {
@@ -51,10 +53,13 @@ export function useBackgroundSync() {
   const runSync = useCallback(async (): Promise<boolean> => {
     if (!isMountedRef.current) return false;
 
-    // EGRESS OPTIMIZATION: Do not execute network sweeps while the tab is hidden.
-    // The visibilitychange listener will immediately trigger sync when tab is refocused.
+    // EGRESS OPTIMIZATION: Do not execute network sweeps while the tab is hidden
+    // or when the workstation has been idle for more than 15 minutes.
     if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
       return true; // Deliberately skipped — not a failure
+    }
+    if (Date.now() - lastActiveRef.current > IDLE_TIMEOUT_MS) {
+      return true; // Paused due to inactivity
     }
 
     setStatus('syncing');
@@ -135,15 +140,36 @@ export function useBackgroundSync() {
     // back after an absence). Throttled by react-query's own staleTime so
     // very recent data is not redundantly re-fetched.
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') triggerSync();
+      if (document.visibilityState === 'visible') {
+        lastActiveRef.current = Date.now();
+        triggerSync();
+      }
     };
     document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    // Track user presence: if user was idle >15m and returns, trigger sync
+    const recordActivity = () => {
+      const wasIdle = Date.now() - lastActiveRef.current > IDLE_TIMEOUT_MS;
+      lastActiveRef.current = Date.now();
+      if (wasIdle) {
+        triggerSync();
+      }
+    };
+
+    window.addEventListener('mousemove', recordActivity, { passive: true });
+    window.addEventListener('keydown', recordActivity, { passive: true });
+    window.addEventListener('touchstart', recordActivity, { passive: true });
+    window.addEventListener('scroll', recordActivity, { passive: true });
 
     return () => {
       isMountedRef.current = false;
       if (intervalRef.current !== null) clearInterval(intervalRef.current);
       clearRetryTimeout();
       document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('mousemove', recordActivity);
+      window.removeEventListener('keydown', recordActivity);
+      window.removeEventListener('touchstart', recordActivity);
+      window.removeEventListener('scroll', recordActivity);
     };
   }, [triggerSync, clearRetryTimeout]);
 }

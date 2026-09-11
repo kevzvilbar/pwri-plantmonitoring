@@ -132,8 +132,8 @@ export function useDashboardAlerts({
       ? (await supabase.from('chemical_inventory').select('*').in('plant_id', plantIds)).data ?? []
       : [],
     enabled: plantIds.length > 0 && !propChemInv,
-    staleTime: 120_000,
-    refetchInterval: 120_000,
+    staleTime: 5 * 60_000,
+    refetchInterval: 5 * 60_000,
   });
   const chemInv = propChemInv ?? internalChemInv;
 
@@ -229,8 +229,8 @@ export function useDashboardAlerts({
     },
     enabled: !propFeedAlerts,
     retry: false,
-    staleTime: 3 * 60_000,
-    refetchInterval: 3 * 60_000,
+    staleTime: 5 * 60_000,
+    refetchInterval: 5 * 60_000,
   });
   const feedAlerts = propFeedAlerts ?? internalFeed?.alerts ?? [];
 

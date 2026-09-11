@@ -40,6 +40,13 @@ export function useTrendChartQueries({
   // as the production source for plants where permeate_is_production = true.
   const needsPermeateProduction = metric === 'production' || metric === 'nrw' || metric === 'pv' || metric === 'productionCost';
 
+  // EGRESS OPTIMIZATION: If the selected range is strictly in the past, telemetry cannot
+  // change in real time, so disable recurring background refetching entirely.
+  const todayKey = format(new Date(), 'yyyy-MM-dd');
+  const isHistorical = endKey < todayKey;
+  const chartRefetchInterval = isHistorical ? false : 5 * 60_000;
+  const chartStaleTime = 5 * 60_000;
+
   // ── Entity name lookups — fetched once per plant selection ─────────────────
   const { data: wellNames } = useQuery({
     queryKey: ['entity-names-wells', plantIds],
@@ -202,8 +209,8 @@ export function useTrendChartQueries({
     },
     // Wait for locator IDs to resolve before fetching readings.
     enabled: plantIds.length > 0 && needsLocReadings && (_locatorIdsForReadings !== undefined),
-    staleTime: 180_000,
-    refetchInterval: 180_000,
+    staleTime: chartStaleTime,
+    refetchInterval: chartRefetchInterval,
   });
 
   // Product meter readings — the treated-water output meters installed on
@@ -237,8 +244,8 @@ export function useTrendChartQueries({
       return (data ?? []) as any[];
     },
     enabled: plantIds.length > 0 && needsProductMeterReadings,
-    staleTime: 180_000,
-    refetchInterval: 180_000,
+    staleTime: chartStaleTime,
+    refetchInterval: chartRefetchInterval,
   });
 
   // ── Well readings — fetch with well_id so deltas are scoped per well ────────
@@ -297,8 +304,8 @@ export function useTrendChartQueries({
       );
     },
     enabled: plantIds.length > 0 && needsWellReadings,
-    staleTime: 180_000,
-    refetchInterval: 180_000,
+    staleTime: chartStaleTime,
+    refetchInterval: chartRefetchInterval,
   });
 
   // ── BUG FIX: ro_train_readings may not have plant_id (same as locator_readings).
@@ -375,8 +382,8 @@ export function useTrendChartQueries({
       return (data ?? []) as any[];
     },
     enabled: plantIds.length > 0 && (needsRoReadings || needsPermeateProduction) && (_roTrainIdsForReadings !== undefined),
-    staleTime: 180_000,
-    refetchInterval: 180_000,
+    staleTime: chartStaleTime,
+    refetchInterval: chartRefetchInterval,
   });
 
   // RO train name lookup — reuses the IDs already fetched above
@@ -470,8 +477,8 @@ export function useTrendChartQueries({
       );
     },
     enabled: plantIds.length > 0 && needsPowerReadings,
-    staleTime: 180_000,
-    refetchInterval: 180_000,
+    staleTime: chartStaleTime,
+    refetchInterval: chartRefetchInterval,
   });
 
   // Chemical cost comes from TWO sources which are merged per day:
@@ -622,8 +629,8 @@ export function useTrendChartQueries({
       });
     },
     enabled: plantIds.length > 0 && needsCostReadings,
-    staleTime: 180_000,
-    refetchInterval: 180_000,
+    staleTime: chartStaleTime,
+    refetchInterval: chartRefetchInterval,
   });
 
   // Power tariffs: rate_per_kwh (₱/kWh) effective on or before each day.

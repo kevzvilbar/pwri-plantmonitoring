@@ -56,6 +56,10 @@ export function useDataSummaryQueries({ open, plantIds }: DataSummaryQueriesOpti
   const startISO = new Date(fromStr + 'T00:00:00').toISOString();
   const endISO   = new Date(toStr   + 'T23:59:59').toISOString();
 
+  // EGRESS OPTIMIZATION: Relax open-modal polling from 30s to 2min (cuts egress by 75%)
+  const MODAL_STALE_TIME = 2 * 60_000;
+  const MODAL_REFETCH_INTERVAL = open ? 2 * 60_000 : false;
+
   const { data: locators, isLoading: locatorsLoading } = useQuery({
     queryKey: ['dsm-locators', plantIds],
     queryFn: async () => {
@@ -66,8 +70,8 @@ export function useDataSummaryQueries({ open, plantIds }: DataSummaryQueriesOpti
       return data ?? [];
     },
     enabled: open && plantIds.length > 0,
-    staleTime: 30_000,
-    refetchInterval: open ? 30_000 : false,
+    staleTime: MODAL_STALE_TIME,
+    refetchInterval: MODAL_REFETCH_INTERVAL,
   });
 
   const locatorIds = useMemo(() => (locators ?? []).map((l) => l.id), [locators]);
@@ -95,7 +99,8 @@ export function useDataSummaryQueries({ open, plantIds }: DataSummaryQueriesOpti
       return data ?? [];
     },
     enabled: open && locatorIds.length > 0,
-    refetchInterval: open ? 30_000 : false,
+    staleTime: MODAL_STALE_TIME,
+    refetchInterval: MODAL_REFETCH_INTERVAL,
   });
 
   const { data: productMeters, isLoading: metersLoading } = useQuery({
@@ -107,7 +112,8 @@ export function useDataSummaryQueries({ open, plantIds }: DataSummaryQueriesOpti
       return data ?? [];
     },
     enabled: open && plantIds.length > 0,
-    refetchInterval: open ? 30_000 : false,
+    staleTime: MODAL_STALE_TIME,
+    refetchInterval: MODAL_REFETCH_INTERVAL,
   });
 
   const meterIds = useMemo(() => (productMeters ?? []).map((m) => m.id), [productMeters]);
@@ -130,7 +136,8 @@ export function useDataSummaryQueries({ open, plantIds }: DataSummaryQueriesOpti
       return data ?? [];
     },
     enabled: open && meterIds.length > 0,
-    refetchInterval: open ? 30_000 : false,
+    staleTime: MODAL_STALE_TIME,
+    refetchInterval: MODAL_REFETCH_INTERVAL,
   });
 
   const { data: modalMeterConfigs, isLoading: configLoading } = useQuery({
@@ -143,7 +150,7 @@ export function useDataSummaryQueries({ open, plantIds }: DataSummaryQueriesOpti
       return data ?? [];
     },
     enabled: open && plantIds.length > 0,
-    staleTime: 30_000,
+    staleTime: MODAL_STALE_TIME,
   });
 
   const permeateIsProductionPlantIds = useMemo(
@@ -183,7 +190,8 @@ export function useDataSummaryQueries({ open, plantIds }: DataSummaryQueriesOpti
       return data ?? [];
     },
     enabled: open && permeateIsProductionPlantIds.length > 0,
-    refetchInterval: open ? 30_000 : false,
+    staleTime: MODAL_STALE_TIME,
+    refetchInterval: MODAL_REFETCH_INTERVAL,
   });
 
   const { data: roMeterReadings, isLoading: roLoading } = useQuery({
@@ -201,8 +209,8 @@ export function useDataSummaryQueries({ open, plantIds }: DataSummaryQueriesOpti
       return data ?? [];
     },
     enabled: open && permeateIsProductionPlantIds.length > 0,
-    staleTime: 30_000,
-    refetchInterval: open ? 30_000 : false,
+    staleTime: MODAL_STALE_TIME,
+    refetchInterval: MODAL_REFETCH_INTERVAL,
   });
 
   const { data: roCurrentReadings } = useQuery({

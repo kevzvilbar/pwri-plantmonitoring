@@ -69,9 +69,12 @@ export function useProductionStats({
       return (data as unknown) as ServerDashboardAggregates;
     },
     enabled: plantIds.length > 0,
-    staleTime: 120_000,
-    refetchInterval: 120_000,
+    staleTime: 5 * 60_000,
+    refetchInterval: 5 * 60_000,
   });
+
+  // EGRESS OPTIMIZATION: Only fire heavy client-side reading queries if the server-side RPC is unavailable
+  const needsClientFallback = serverAggregates === null;
 
   const { data: locatorIds = [] } = useQuery({
     queryKey: ['dash-locator-ids', plantIds],
@@ -85,7 +88,7 @@ export function useProductionStats({
       if (error) throw error;
       return (data ?? []).map((l) => l.id);
     },
-    enabled: plantIds.length > 0,
+    enabled: needsClientFallback && plantIds.length > 0,
     staleTime: 10 * 60_000,
   });
 
@@ -105,7 +108,7 @@ export function useProductionStats({
           .map((l) => l.id),
       );
     },
-    enabled: plantIds.length > 0,
+    enabled: needsClientFallback && plantIds.length > 0,
     staleTime: 10 * 60_000,
   });
 
@@ -122,7 +125,7 @@ export function useProductionStats({
         (data ?? []).filter((m) => m.is_derived === true).map((m) => m.id),
       );
     },
-    enabled: plantIds.length > 0,
+    enabled: needsClientFallback && plantIds.length > 0,
     staleTime: 10 * 60_000,
   });
 
@@ -153,9 +156,9 @@ export function useProductionStats({
       if (error) throw error;
       return data ?? [];
     },
-    enabled: locatorIds.length > 0,
-    staleTime: 120_000,
-    refetchInterval: 120_000,
+    enabled: needsClientFallback && locatorIds.length > 0,
+    staleTime: 5 * 60_000,
+    refetchInterval: 5 * 60_000,
   });
 
   const { data: todayWells = [] } = useQuery({
@@ -183,8 +186,8 @@ export function useProductionStats({
       return fallback ?? [];
     },
     enabled: wellIds.length > 0,
-    staleTime: 120_000,
-    refetchInterval: 120_000,
+    staleTime: 5 * 60_000,
+    refetchInterval: 5 * 60_000,
   });
 
   const { data: todayProductMeters = [] } = useQuery({
@@ -209,9 +212,9 @@ export function useProductionStats({
       if (error) throw error;
       return data ?? [];
     },
-    enabled: plantIds.length > 0,
-    staleTime: 120_000,
-    refetchInterval: 120_000,
+    enabled: needsClientFallback && plantIds.length > 0,
+    staleTime: 5 * 60_000,
+    refetchInterval: 5 * 60_000,
   });
 
   const { data: plantMeterConfigs = [] } = useQuery({
@@ -257,7 +260,7 @@ export function useProductionStats({
       rows.forEach((t) => trainPlantMap.set(t.id, t.plant_id));
       return { ids: rows.map((t) => t.id), trainPlantMap };
     },
-    enabled: permeateProductionPlantIds.length > 0,
+    enabled: needsClientFallback && permeateProductionPlantIds.length > 0,
     staleTime: 10 * 60_000,
   });
   const permeateTrainIds = _permeateTrainMeta?.ids ?? [];
@@ -283,9 +286,9 @@ export function useProductionStats({
         plant_id: permeateTrainPlantMap.get(r.train_id) ?? null,
       }));
     },
-    enabled: permeateTrainIds.length > 0,
-    staleTime: 120_000,
-    refetchInterval: 120_000,
+    enabled: needsClientFallback && permeateTrainIds.length > 0,
+    staleTime: 5 * 60_000,
+    refetchInterval: 5 * 60_000,
   });
 
   const { data: yRoPermeate = [] } = useQuery({
@@ -308,7 +311,7 @@ export function useProductionStats({
         plant_id: permeateTrainPlantMap.get(r.train_id) ?? null,
       }));
     },
-    enabled: permeateTrainIds.length > 0,
+    enabled: needsClientFallback && permeateTrainIds.length > 0,
     staleTime: 12 * 60 * 60_000,
     refetchInterval: false,
   });
@@ -327,7 +330,7 @@ export function useProductionStats({
       if (error) throw error;
       return data ?? [];
     },
-    enabled: locatorIds.length > 0,
+    enabled: needsClientFallback && locatorIds.length > 0,
     staleTime: 12 * 60 * 60_000,
     refetchInterval: false,
   });
@@ -346,7 +349,7 @@ export function useProductionStats({
       if (error) throw error;
       return data ?? [];
     },
-    enabled: wellIds.length > 0,
+    enabled: needsClientFallback && wellIds.length > 0,
     staleTime: 12 * 60 * 60_000,
     refetchInterval: false,
   });
@@ -372,7 +375,7 @@ export function useProductionStats({
       if (pErr) throw pErr;
       return pData ?? [];
     },
-    enabled: plantIds.length > 0,
+    enabled: needsClientFallback && plantIds.length > 0,
     staleTime: 12 * 60 * 60_000,
     refetchInterval: false,
   });
@@ -395,9 +398,9 @@ export function useProductionStats({
       if (error) throw error;
       return data ?? [];
     },
-    enabled: !productMetersHaveData && qualityTrainIds.length > 0,
-    staleTime: 120_000,
-    refetchInterval: 120_000,
+    enabled: needsClientFallback && !productMetersHaveData && qualityTrainIds.length > 0,
+    staleTime: 5 * 60_000,
+    refetchInterval: 5 * 60_000,
   });
 
   const { data: blendingTodayRows = [] } = useQuery({
@@ -413,7 +416,7 @@ export function useProductionStats({
       if (error) throw error;
       return data ?? [];
     },
-    enabled: plantIds.length > 0,
+    enabled: needsClientFallback && plantIds.length > 0,
     staleTime: 5 * 60_000,
     refetchInterval: 5 * 60_000,
   });

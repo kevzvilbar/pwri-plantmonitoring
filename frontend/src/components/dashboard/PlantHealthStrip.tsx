@@ -48,7 +48,7 @@ export function PlantHealthStrip({ plantIds, onSelectPlant }: Props) {
         .select('plant_id, reading_datetime')
         .in('plant_id', plantIds)
         .order('reading_datetime', { ascending: false })
-        .limit(500);
+        .limit(Math.max(10, plantIds.length * 3));
       const map: Record<string, string> = {};
       (data ?? []).forEach((r) => {
         if (!map[r.plant_id]) map[r.plant_id] = r.reading_datetime;
@@ -56,11 +56,9 @@ export function PlantHealthStrip({ plantIds, onSelectPlant }: Props) {
       return map;
     },
     enabled: plantIds.length > 0,
-    // FIX (egress): staleTime matched to refetchInterval — was relying on the 30s
-    // global default, so the app-wide background-sync sweep force-refetched this
-    // well before its own interval was due.
-    staleTime: 60_000,
-    refetchInterval: 60_000,
+    // FIX (egress): 5 min interval cuts redundant polling
+    staleTime: 5 * 60_000,
+    refetchInterval: 5 * 60_000,
   });
 
   // Latest locator reading datetime per plant
@@ -73,7 +71,7 @@ export function PlantHealthStrip({ plantIds, onSelectPlant }: Props) {
         .select('plant_id, reading_datetime')
         .in('plant_id', plantIds)
         .order('reading_datetime', { ascending: false })
-        .limit(500);
+        .limit(Math.max(10, plantIds.length * 3));
       const map: Record<string, string> = {};
       (data ?? []).forEach((r) => {
         if (!map[r.plant_id]) map[r.plant_id] = r.reading_datetime;
@@ -81,11 +79,9 @@ export function PlantHealthStrip({ plantIds, onSelectPlant }: Props) {
       return map;
     },
     enabled: plantIds.length > 0,
-    // FIX (egress): staleTime matched to refetchInterval — was relying on the 30s
-    // global default, so the app-wide background-sync sweep force-refetched this
-    // well before its own interval was due.
-    staleTime: 60_000,
-    refetchInterval: 60_000,
+    // FIX (egress): 5 min interval cuts redundant polling
+    staleTime: 5 * 60_000,
+    refetchInterval: 5 * 60_000,
   });
 
   // Merge: most recent reading across both sources per plant
