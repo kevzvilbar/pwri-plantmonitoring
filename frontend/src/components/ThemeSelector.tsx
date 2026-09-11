@@ -1,5 +1,5 @@
 import { Palette, Check, Moon, Sun } from 'lucide-react';
-import { useAppStore } from '@/store/appStore';
+import { useThemeStore } from '@/store/themeStore';
 import { COLOR_THEMES } from '@/lib/themes';
 import { Button } from '@/components/ui/button';
 import {
@@ -10,7 +10,10 @@ import {
 import { cn } from '@/lib/utils';
 
 export function ThemeSelector() {
-  const { colorTheme, setColorTheme, darkMode, setDarkMode } = useAppStore();
+  const colorTheme = useThemeStore((s) => s.colorTheme);
+  const setColorTheme = useThemeStore((s) => s.setColorTheme);
+  const darkMode = useThemeStore((s) => s.darkMode);
+  const setDarkMode = useThemeStore((s) => s.setDarkMode);
 
   const currentThemeObj = COLOR_THEMES.find(t => t.id === colorTheme) || COLOR_THEMES[0];
 

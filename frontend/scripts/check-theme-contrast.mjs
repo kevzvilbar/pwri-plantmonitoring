@@ -102,7 +102,18 @@ function extractBlock(name) {
 }
 
 const root = extractBlock(':root');
-const THEME_IDS = ['aerial-autumn', 'fire-ocean', 'earth-jade', 'inferno-sky', 'midnight-road', 'cosmic-spark'];
+const THEME_IDS = [
+  'aerial-autumn',
+  'fire-ocean',
+  'earth-jade',
+  'inferno-sky',
+  'midnight-road',
+  'cosmic-spark',
+  'titanium-gold',
+  'nordic-aurora',
+  'obsidian-rose',
+  'cyberpunk-amber',
+];
 
 const PAIRS = [
   ['primary text on primary bg (buttons/badges)', 'primary-foreground', 'primary'],

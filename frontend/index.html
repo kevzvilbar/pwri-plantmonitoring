@@ -62,15 +62,25 @@
           var rawTheme = localStorage.getItem('pwri-theme-state');
           if (rawTheme) {
             var parsedTheme = JSON.parse(rawTheme);
-            if (parsedTheme && parsedTheme.state && parsedTheme.state.darkMode) {
-              document.documentElement.classList.add('dark');
+            if (parsedTheme && parsedTheme.state) {
+              if (parsedTheme.state.darkMode) {
+                document.documentElement.classList.add('dark');
+              }
+              if (parsedTheme.state.colorTheme && parsedTheme.state.colorTheme !== 'default') {
+                document.documentElement.setAttribute('data-theme', parsedTheme.state.colorTheme);
+              }
             }
           } else {
             var raw = localStorage.getItem('pwri-app-state');
             if (raw) {
               var parsed = JSON.parse(raw);
-              if (parsed && parsed.state && parsed.state.darkMode) {
-                document.documentElement.classList.add('dark');
+              if (parsed && parsed.state) {
+                if (parsed.state.darkMode) {
+                  document.documentElement.classList.add('dark');
+                }
+                if (parsed.state.colorTheme && parsed.state.colorTheme !== 'default') {
+                  document.documentElement.setAttribute('data-theme', parsed.state.colorTheme);
+                }
               }
             }
           }

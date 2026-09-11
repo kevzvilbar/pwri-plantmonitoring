@@ -159,11 +159,14 @@ export function PlantPulseHero({
   }, [chartData, fallbackSparkline, production]);
 
   return (
-    <div className="rounded-[20px] sm:rounded-[24px] p-1 bg-gradient-to-b from-teal-500/20 via-teal-900/10 to-transparent border border-teal-500/30 shadow-xl shadow-teal-950/20">
-      <div className="hero-arrival rounded-[16px] sm:rounded-[20px] bg-gradient-to-br from-[#061822] via-[#082933] to-[#0c3c44] text-white p-4 sm:p-5 relative overflow-hidden shadow-inner">
+    <div className="rounded-[20px] sm:rounded-[24px] p-1 bg-gradient-to-b from-primary/25 via-primary/10 to-transparent border border-primary/30 shadow-xl shadow-black/20">
+      <div
+        style={{ background: 'var(--gradient-stat)' }}
+        className="hero-arrival rounded-[16px] sm:rounded-[20px] text-white p-4 sm:p-5 relative overflow-hidden shadow-inner border border-white/10"
+      >
         {/* Decorative ambient blurred glow orbs */}
-        <div className="pointer-events-none absolute -top-20 -left-20 w-64 h-64 bg-teal-500/15 rounded-full blur-3xl" aria-hidden />
-        <div className="pointer-events-none absolute -bottom-20 -right-20 w-64 h-64 bg-cyan-400/10 rounded-full blur-3xl" aria-hidden />
+        <div className="pointer-events-none absolute -top-20 -left-20 w-64 h-64 bg-primary/20 rounded-full blur-3xl" aria-hidden />
+        <div className="pointer-events-none absolute -bottom-20 -right-20 w-64 h-64 bg-accent/15 rounded-full blur-3xl" aria-hidden />
 
         {/* ── Top Bar: Title, Facility Badge, Incident Flag, Downtime & View Toggle ── */}
         <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-3 pb-3.5 border-b border-white/10">
@@ -171,8 +174,8 @@ export function PlantPulseHero({
             <h1 className="text-base sm:text-lg font-bold tracking-tight text-white flex items-center gap-2">
               <span>PWRI Operations Telemetry</span>
             </h1>
-            <span className="px-2.5 py-0.5 rounded-full text-2xs font-semibold bg-teal-950/80 text-teal-300 border border-teal-500/40 flex items-center gap-1.5 font-mono shadow-xs">
-              <Building2 className="h-3 w-3 text-teal-400" />
+            <span className="px-2.5 py-0.5 rounded-full text-2xs font-semibold bg-black/40 text-white/90 border border-primary/40 flex items-center gap-1.5 font-mono shadow-xs">
+              <Building2 className="h-3 w-3 text-primary-foreground" />
               {selectedPlantName}
             </span>
             {openIncidentCount > 0 && (
@@ -195,7 +198,7 @@ export function PlantPulseHero({
               onClick={onOpenDowntime}
               className="h-8 text-xs gap-1.5 font-medium bg-white/10 hover:bg-white/20 border-white/20 text-white shadow-xs rounded-lg"
             >
-              <History className="h-3.5 w-3.5 text-cyan-300" />
+              <History className="h-3.5 w-3.5 text-white/80" />
               <span className="hidden sm:inline">Downtime Log</span>
             </Button>
 
@@ -209,7 +212,7 @@ export function PlantPulseHero({
             >
               <ToggleGroupItem
                 value="inline"
-                className="h-7 px-2.5 text-xs gap-1 text-slate-300 hover:text-white data-[state=on]:bg-teal-500/25 data-[state=on]:text-cyan-300 data-[state=on]:border data-[state=on]:border-cyan-400/40 data-[state=on]:shadow-xs rounded-md font-medium transition-colors"
+                className="h-7 px-2.5 text-xs gap-1 text-slate-300 hover:text-white data-[state=on]:bg-primary/30 data-[state=on]:text-white data-[state=on]:border data-[state=on]:border-primary/50 data-[state=on]:shadow-xs rounded-md font-medium transition-colors"
                 title="Inline — all trend graphs visible directly on the dashboard"
                 aria-label="Inline view"
               >
@@ -218,7 +221,7 @@ export function PlantPulseHero({
               </ToggleGroupItem>
               <ToggleGroupItem
                 value="sections"
-                className="h-7 px-2.5 text-xs gap-1 text-slate-300 hover:text-white data-[state=on]:bg-teal-500/25 data-[state=on]:text-cyan-300 data-[state=on]:border data-[state=on]:border-cyan-400/40 data-[state=on]:shadow-xs rounded-md font-medium transition-colors"
+                className="h-7 px-2.5 text-xs gap-1 text-slate-300 hover:text-white data-[state=on]:bg-primary/30 data-[state=on]:text-white data-[state=on]:border data-[state=on]:border-primary/50 data-[state=on]:shadow-xs rounded-md font-medium transition-colors"
                 title="Sections — click any KPI card to fold/unfold its trend chart inline"
                 aria-label="Sections view"
               >
@@ -227,7 +230,7 @@ export function PlantPulseHero({
               </ToggleGroupItem>
               <ToggleGroupItem
                 value="popup"
-                className="h-7 px-2.5 text-xs gap-1 text-slate-300 hover:text-white data-[state=on]:bg-teal-500/25 data-[state=on]:text-cyan-300 data-[state=on]:border data-[state=on]:border-cyan-400/40 data-[state=on]:shadow-xs rounded-md font-medium transition-colors"
+                className="h-7 px-2.5 text-xs gap-1 text-slate-300 hover:text-white data-[state=on]:bg-primary/30 data-[state=on]:text-white data-[state=on]:border data-[state=on]:border-primary/50 data-[state=on]:shadow-xs rounded-md font-medium transition-colors"
                 title="Dialog — click a KPI card to open its trend chart in a dialog"
                 aria-label="Dialog view"
               >
@@ -243,14 +246,14 @@ export function PlantPulseHero({
           {/* Left: Headline Metric & Status */}
           <div className="md:col-span-5 space-y-1.5">
             <div className="flex items-baseline gap-2">
-              <span className="readout-num text-4xl sm:text-5xl font-bold leading-none text-white tracking-tight drop-shadow-[0_2px_12px_rgba(45,212,191,0.25)]">
+              <span className="readout-num text-4xl sm:text-5xl font-bold leading-none text-white tracking-tight drop-shadow-[0_2px_12px_rgba(0,0,0,0.4)]">
                 {fmtNum(production)}
               </span>
-              <span className="text-base font-sans font-normal text-teal-200/80">m³</span>
+              <span className="text-base font-sans font-normal text-white/70">m³</span>
             </div>
             
             <div className="flex items-center gap-2 pt-0.5">
-              <span className="text-3xs uppercase tracking-wider font-semibold text-teal-300">
+              <span className="text-3xs uppercase tracking-wider font-semibold text-white/80">
                 Today's Production
               </span>
               {dProduction !== null && <TrendBadge delta={dProduction} />}
@@ -258,7 +261,7 @@ export function PlantPulseHero({
 
             <div className="text-2xs text-slate-300/90 flex items-center gap-1.5 pt-0.5 font-mono tabular-nums">
               <Lamp tone="live" pulse size={6} />
-              <span className="text-cyan-300 font-semibold">Live Telemetry</span>
+              <span className="text-emerald-400 font-semibold">Live Telemetry</span>
               <span className="text-white/30">&bull;</span>
               <span>Updated {secondsAgo}s ago</span>
               <span className="text-white/30">&bull;</span>
@@ -267,13 +270,13 @@ export function PlantPulseHero({
           </div>
 
           {/* Middle: 7-Day Sparkline */}
-          <div className="md:col-span-4 flex flex-col justify-center bg-black/40 border border-teal-500/25 rounded-xl px-3.5 py-2.5 backdrop-blur-md shadow-inner">
+          <div className="md:col-span-4 flex flex-col justify-center bg-black/40 border border-white/15 rounded-xl px-3.5 py-2.5 backdrop-blur-md shadow-inner">
             <div className="flex items-center justify-between gap-2 mb-1">
-              <span className="text-3xs font-mono font-semibold uppercase tracking-wider text-teal-200/90">
+              <span className="text-3xs font-mono font-semibold uppercase tracking-wider text-white/80">
                 7-Day Production Trend
               </span>
               {sparklineData.length >= 2 && (
-                <span className="text-3xs font-mono text-cyan-300 font-bold">
+                <span className="text-3xs font-mono text-white font-bold">
                   {fmtNum(sparklineData[sparklineData.length - 1]?.val ?? 0)} m³
                 </span>
               )}
@@ -284,8 +287,8 @@ export function PlantPulseHero({
                   <AreaChart data={sparklineData} margin={{ top: 2, right: 2, left: 2, bottom: 0 }}>
                     <defs>
                       <linearGradient id="heroSparklineFill" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#2dd4bf" stopOpacity={0.5} />
-                        <stop offset="100%" stopColor="#2dd4bf" stopOpacity={0.0} />
+                        <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity={0.5} />
+                        <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity={0.0} />
                       </linearGradient>
                     </defs>
                     <YAxis
@@ -298,7 +301,7 @@ export function PlantPulseHero({
                     <Area
                       type="monotone"
                       dataKey="val"
-                      stroke="#2dd4bf"
+                      stroke="hsl(var(--primary))"
                       strokeWidth={2}
                       fill="url(#heroSparklineFill)"
                       isAnimationActive={false}
@@ -307,7 +310,7 @@ export function PlantPulseHero({
                 </ResponsiveContainer>
               </div>
             ) : (
-              <div className="text-3xs font-mono text-teal-200/70 flex items-center h-7">
+              <div className="text-3xs font-mono text-white/60 flex items-center h-7">
                 Collecting 7-day sparkline telemetry…
               </div>
             )}
@@ -315,7 +318,7 @@ export function PlantPulseHero({
 
           {/* Right: Fleet Health Status Lamps */}
           <div className="md:col-span-3 flex md:flex-col justify-start md:justify-center md:items-end gap-2 text-2xs font-mono">
-            <div className="flex items-center gap-2 bg-black/40 border border-teal-500/25 rounded-xl px-3.5 py-2.5 backdrop-blur-md shadow-inner">
+            <div className="flex items-center gap-2 bg-black/40 border border-white/15 rounded-xl px-3.5 py-2.5 backdrop-blur-md shadow-inner">
               <span className="flex items-center gap-1.5">
                 <Lamp tone="good" size={6} />
                 <span className="font-semibold text-white">{fleetCounts.online}</span>
