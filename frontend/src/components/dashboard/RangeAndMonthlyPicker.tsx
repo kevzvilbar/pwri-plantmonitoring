@@ -50,7 +50,7 @@ export function RangeAndMonthlyPicker({
 
   return (
     <div className={cn('flex items-center gap-2 flex-wrap', className)}>
-      <div className="flex items-center gap-1 bg-muted/60 p-1 rounded-xl border border-border/50 flex-wrap">
+      <div className="flex items-center gap-0.5 sm:gap-1 bg-muted/60 p-0.5 sm:p-1 rounded-xl border border-border/50 flex-nowrap shrink-0 overflow-x-auto no-scrollbar">
         {PRESET_RANGES.map((r) => (
           <button
             key={r}
@@ -58,7 +58,7 @@ export function RangeAndMonthlyPicker({
             onClick={() => onRangeChange(r)}
             data-testid={`${testIdPrefix}-${r}`}
             className={cn(
-              'h-8 px-3 text-xs font-semibold rounded-[8px] transition-all duration-150 ease-spring-out active:scale-[0.98] cursor-pointer focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring',
+              'h-7 sm:h-8 px-2 sm:px-3 text-2xs sm:text-xs font-semibold rounded-[6px] sm:rounded-[8px] transition-all duration-150 ease-spring-out active:scale-[0.98] cursor-pointer shrink-0 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring',
               range === r
                 ? 'bg-card text-primary font-bold shadow-xs border border-border/80'
                 : 'text-muted-foreground hover:text-foreground hover:bg-card/50',
@@ -73,7 +73,7 @@ export function RangeAndMonthlyPicker({
           onClick={() => onRangeChange('CUSTOM')}
           data-testid={`${testIdPrefix}-CUSTOM`}
           className={cn(
-            'h-8 px-3 text-xs font-semibold rounded-[8px] transition-all duration-150 ease-spring-out active:scale-[0.98] cursor-pointer focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring',
+            'h-7 sm:h-8 px-2 sm:px-3 text-2xs sm:text-xs font-semibold rounded-[6px] sm:rounded-[8px] transition-all duration-150 ease-spring-out active:scale-[0.98] cursor-pointer shrink-0 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring',
             range === 'CUSTOM'
               ? 'bg-card text-primary font-bold shadow-xs border border-border/80'
               : 'text-muted-foreground hover:text-foreground hover:bg-card/50',
@@ -82,13 +82,13 @@ export function RangeAndMonthlyPicker({
           Custom
         </button>
 
-        <div className="h-4 border-r border-border/50 mx-0.5" aria-hidden />
+        <div className="h-3.5 sm:h-4 border-r border-border/50 mx-0.5 shrink-0" aria-hidden />
 
         <button
           type="button"
           onClick={() => onRangeChange('MONTHLY')}
           data-testid={`${testIdPrefix}-MONTHLY`}
-          className="h-8 px-3 text-xs font-semibold rounded-[8px] transition-all duration-150 ease-spring-out active:scale-[0.98] cursor-pointer text-muted-foreground hover:text-foreground hover:bg-card/50 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
+          className="h-7 sm:h-8 px-2 sm:px-3 text-2xs sm:text-xs font-semibold rounded-[6px] sm:rounded-[8px] transition-all duration-150 ease-spring-out active:scale-[0.98] cursor-pointer shrink-0 text-muted-foreground hover:text-foreground hover:bg-card/50 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
         >
           Monthly
         </button>

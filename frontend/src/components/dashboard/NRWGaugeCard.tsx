@@ -41,12 +41,12 @@ export function NRWGaugeCard({ nrw, yNrw, onClick, size = 'default', className }
   const fillColor = nrwFill(tone);
 
   const isLg = size === 'lg';
-  const w = isLg ? 88 : 76;
-  const h = isLg ? 48 : 42;
-  const cx = isLg ? 44 : 38;
-  const cy = isLg ? 39 : 34;
-  const r = isLg ? 32 : 27;
-  const strokeWidth = isLg ? 6 : 5;
+  const w = isLg ? 94 : 84;
+  const h = isLg ? 54 : 48;
+  const cx = isLg ? 47 : 42;
+  const cy = isLg ? 42 : 37;
+  const r = isLg ? 33 : 28;
+  const strokeWidth = isLg ? 11 : 9.5;
   const arcLength = Math.PI * r;
 
   // True physical percentage scale (0% to 100%)
@@ -56,8 +56,8 @@ export function NRWGaugeCard({ nrw, yNrw, onClick, size = 'default', className }
   // Compliance limit tick mark position on the physical 0–100 scale
   const safeLimit = Math.min(Math.max(limitPct, 0), 100);
   const limitAngleRad = ((180 - safeLimit * 1.8) * Math.PI) / 180;
-  const tickR1 = r - strokeWidth / 2 - 2;
-  const tickR2 = r + strokeWidth / 2 + 2;
+  const tickR1 = r - strokeWidth / 2 - 2.5;
+  const tickR2 = r + strokeWidth / 2 + 2.5;
   const tx1 = cx + tickR1 * Math.cos(limitAngleRad);
   const ty1 = cy - tickR1 * Math.sin(limitAngleRad);
   const tx2 = cx + tickR2 * Math.cos(limitAngleRad);
@@ -136,9 +136,9 @@ export function NRWGaugeCard({ nrw, yNrw, onClick, size = 'default', className }
                 x1={tx1} y1={ty1}
                 x2={tx2} y2={ty2}
                 stroke={tone === 'danger' ? '#ffffff' : 'hsl(var(--foreground))'}
-                strokeWidth={2}
+                strokeWidth={2.5}
                 strokeLinecap="round"
-                className={tone === 'danger' ? 'drop-shadow-[0_0_2px_rgba(0,0,0,0.85)]' : ''}
+                className="drop-shadow-[0_0_2px_rgba(0,0,0,0.85)]"
               />
 
               {/* Beacon dot at tip of value arc */}
@@ -146,7 +146,7 @@ export function NRWGaugeCard({ nrw, yNrw, onClick, size = 'default', className }
                 <circle
                   cx={tipX}
                   cy={tipY}
-                  r={isLg ? 2.5 : 2}
+                  r={isLg ? 3 : 2.5}
                   fill="#ffffff"
                   stroke={fillColor}
                   strokeWidth={1.5}
@@ -155,8 +155,8 @@ export function NRWGaugeCard({ nrw, yNrw, onClick, size = 'default', className }
               )}
 
               {/* Subdued scale baseline labels (0 and 100) */}
-              <text x={cx - r} y={cy + 7} textAnchor="middle" fontSize={7} fontFamily="var(--font-mono, monospace)" fill="currentColor" opacity={0.4} className="tabular-nums">0</text>
-              <text x={cx + r} y={cy + 7} textAnchor="middle" fontSize={7} fontFamily="var(--font-mono, monospace)" fill="currentColor" opacity={0.4} className="tabular-nums">100</text>
+              <text x={cx - r} y={cy + 9} textAnchor="middle" fontSize={7.5} fontFamily="var(--font-mono, monospace)" fill="currentColor" opacity={0.45} className="tabular-nums font-semibold">0</text>
+              <text x={cx + r} y={cy + 9} textAnchor="middle" fontSize={7.5} fontFamily="var(--font-mono, monospace)" fill="currentColor" opacity={0.45} className="tabular-nums font-semibold">100</text>
             </svg>
           </div>
         </div>

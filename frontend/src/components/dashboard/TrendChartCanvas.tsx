@@ -33,6 +33,7 @@ import {
   TdsAreaChart,
   DefaultAreaChart,
 } from './TrendChartCanvas/index';
+import { C_CHEM_COST, C_POWER_COST } from '@/lib/chartColors';
 
 export function TrendChartCanvas(props: Record<string, any>) {
   const {
@@ -114,7 +115,7 @@ export function TrendChartCanvas(props: Record<string, any>) {
         <CostAreaChart
           data={chartData}
           dataKey="chemCost"
-          strokeColor="hsl(var(--highlight))"
+          strokeColor={C_CHEM_COST}
           fillId="chemCostFill"
           name="Chemical Cost (₱)"
           formatYAxis={formatYAxis}
@@ -124,7 +125,7 @@ export function TrendChartCanvas(props: Record<string, any>) {
         <CostAreaChart
           data={chartData}
           dataKey="powerCost"
-          strokeColor="hsl(var(--chart-6))"
+          strokeColor={C_POWER_COST}
           fillId="powerCostFill"
           name="Power Cost (₱)"
           formatYAxis={formatYAxis}

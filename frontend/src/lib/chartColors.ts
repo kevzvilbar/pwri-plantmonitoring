@@ -34,6 +34,14 @@ export const C_FILTER_CARTRIDGE = 'hsl(var(--filter-cartridge))';
 export const C_FILTER_BAG       = 'hsl(var(--filter-bag))';
 
 /**
+ * Production Cost (Power + Chemical) theme-independent colors.
+ * Kept fixed so lines never collapse into the same color under amber/autumn themes.
+ */
+export const C_TOTAL_COST = '#0ea5e9'; // Sky Blue 500 — Prod Cost (Power + Chem)
+export const C_POWER_COST = '#f59e0b'; // Amber 500 — Power Cost
+export const C_CHEM_COST  = '#a855f7'; // Purple 500 — Chemical Cost
+
+/**
  * Standardized Instrument Panel tooltip style for Recharts
  * Replaces copy-pasted styles across dashboard and plant telemetry charts.
  */

@@ -7,7 +7,7 @@ function PhTooltip({ active, payload, label, phActiveData }: any) {
   const row = phActiveData.find((d: any) => d.date === label);
   if (!row) return null;
   const pct = row.healthPct ?? 0;
-  const dotColor = pct >= 80 ? 'hsl(var(--accent))' : pct >= 50 ? 'hsl(var(--warn))' : 'hsl(var(--danger))';
+  const dotColor = pct >= 80 ? '#10b981' : pct >= 50 ? 'hsl(var(--warn))' : 'hsl(var(--danger))';
   return (
     <div style={{
       background: 'hsl(var(--card))',
@@ -21,7 +21,7 @@ function PhTooltip({ active, payload, label, phActiveData }: any) {
       </p>
       {row.onlineCount != null && (
         <>
-          <p style={{ margin: '1px 0', color: 'hsl(var(--accent))' }}>
+          <p style={{ margin: '1px 0', color: '#10b981' }}>
             ● Online: {row.onlineCount} / {row.totalTrains}
           </p>
           <p style={{ margin: '1px 0', color: 'hsl(var(--danger))' }}>
@@ -47,7 +47,7 @@ function PhTooltip({ active, payload, label, phActiveData }: any) {
 
 function dotFill(entry: any) {
   const p = entry?.healthPct ?? 0;
-  return p >= 80 ? 'hsl(var(--accent))' : p >= 50 ? 'hsl(var(--warn))' : 'hsl(var(--danger))';
+  return p >= 80 ? '#10b981' : p >= 50 ? 'hsl(var(--warn))' : 'hsl(var(--danger))';
 }
 
 export function PlantHealthChart({
@@ -86,8 +86,8 @@ export function PlantHealthChart({
         tickLine={false}
       />
       <Tooltip content={<PhTooltip phActiveData={phActiveData} />} cursor={CHART_CURSOR} />
-      <ReferenceLine y={80} stroke="hsl(var(--accent))" strokeDasharray="4 3" strokeWidth={1}
-        label={{ value: '80%', position: 'right', fontSize: 9, fill: 'hsl(var(--accent))' }} />
+      <ReferenceLine y={80} stroke="#10b981" strokeDasharray="4 3" strokeWidth={1}
+        label={{ value: '80%', position: 'right', fontSize: 9, fill: '#10b981' }} />
       <ReferenceLine y={50} stroke="hsl(var(--warn))" strokeDasharray="4 3" strokeWidth={1}
         label={{ value: '50%', position: 'right', fontSize: 9, fill: 'hsl(var(--warn))' }} />
       <Line
@@ -120,7 +120,7 @@ export function PlantHealthChart({
             </g>
           );
         }}
-        stroke="hsl(var(--accent))"
+        stroke="#10b981"
         connectNulls
       />
     </ComposedChart>
