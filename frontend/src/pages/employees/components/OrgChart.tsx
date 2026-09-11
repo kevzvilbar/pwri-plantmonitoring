@@ -119,7 +119,7 @@ function OrgNodeFixed({ member, allStaff, roles, depth = 0, accentLine }: {
 // Hierarchy Legend
 // ---------------------------------------------------------------------------
 
-export function HierarchyLegend({ className }: { className?: string }) {
+function HierarchyLegend({ className }: { className?: string }) {
   return (
     <div className={cn('flex flex-wrap items-center gap-1', className)}>
       {ROLE_HIERARCHY.map((r, i) => (
