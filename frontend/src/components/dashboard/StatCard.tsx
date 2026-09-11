@@ -3,6 +3,7 @@ import { Card } from '@/components/ui/card';
 import { StatusPill } from '@/components/StatusPill';
 import { TrendingUp, TrendingDown, Minus, ChevronDown, ChevronUp } from 'lucide-react';
 import { StatTone, TONE_BG, TONE_ICON } from './types';
+import { InstrumentTile } from './InstrumentTile';
 import { cn } from '@/lib/utils';
 
 // ── Technical mono numerals for KPI readouts — matches all dashboard cards ──
@@ -98,37 +99,23 @@ export function StatCard({
   const iconCls   = (tone === 'warn' || tone === 'danger') ? TONE_ICON[tone] : 'text-muted-foreground/80';
 
   return (
-    <Card
-      className={cn(
-        'stat-card min-w-0 h-full flex flex-col justify-between transition-all rounded-2xl hover:border-border',
-        onClick ? 'cursor-pointer' : 'cursor-default',
-        isHero ? 'p-4 sm:p-5' : isLg ? 'p-3.5' : isCompact ? 'p-2.5' : 'p-3.5',
-        toneBg,
-        calcBg,
-        className
-      )}
+    <InstrumentTile
+      className={cn('stat-card min-w-0 h-full', className)}
       onClick={onClick}
+      tone={tone}
+      edgeLight={accent as any}
     >
       <div>
-        {/* ── Header row: icon · LABEL (uppercase) · badges/expand ── */}
+        {/* ── Header row: icon · LABEL (uppercase) · badges/expand (decluttered) ── */}
         <div className="flex items-center justify-between gap-1 min-w-0">
           <div className="flex items-center gap-1.5 min-w-0 overflow-hidden">
             <Icon className={cn('shrink-0', isHero ? 'h-4 w-4' : isLg ? 'h-4 w-4' : 'h-3.5 w-3.5', iconCls)} />
             <span className={cn('uppercase tracking-wide font-semibold truncate leading-none text-muted-foreground', isHero ? 'text-xs' : isLg ? 'text-xs' : isCompact ? 'text-3xs' : 'text-2xs')}>
               {label}
             </span>
-            {threshold && (
-              <span className="text-3xs text-muted-foreground/60 shrink-0 font-mono">(limit {threshold})</span>
-            )}
           </div>
           <div className="flex items-center gap-1 shrink-0">
             {badge}
-            {calc && (
-              <span
-                className="text-3xs uppercase tracking-wider px-1.5 py-0.5 rounded-[4px] font-mono bg-info/10 text-info border border-info/20"
-                title={calcTooltip ?? 'Calculated / derived metric'}
-              >calc</span>
-            )}
             {tone && <StatusPill tone={tone} />}
             {showExpand && (
               <button
@@ -159,17 +146,30 @@ export function StatCard({
         </div>
       </div>
 
-      {/* ── Below-value: trend badge (matches Image 1 "↑ 1.4% vs prev day") ── */}
+      {/* ── Below-value: decluttered metadata row (limit, calc, trend) ── */}
       <div>
-        {trend !== null && trend !== undefined && (
-          <div className="mt-1.5">
+        <div className="mt-1.5 flex items-center gap-1.5 flex-wrap">
+          {calc && (
+            <span
+              className="text-3xs uppercase tracking-wider px-1.5 py-0.5 rounded-[4px] font-mono bg-info/10 text-info border border-info/20 shrink-0"
+              title={calcTooltip ?? 'Calculated / derived metric'}
+            >
+              calc
+            </span>
+          )}
+          {threshold && (
+            <span className="text-3xs text-muted-foreground/70 shrink-0 font-mono">
+              (limit {threshold})
+            </span>
+          )}
+          {trend !== null && trend !== undefined && (
             <TrendBadge delta={trend} />
-          </div>
-        )}
+          )}
+        </div>
 
         {/* ── Subtext / Metadata footer ── */}
         {subtext && (
-          <div className="mt-1.5 text-2xs text-muted-foreground truncate font-mono">
+          <div className="mt-1 text-2xs text-muted-foreground truncate font-mono">
             {subtext}
           </div>
         )}
@@ -177,34 +177,25 @@ export function StatCard({
         {/* ── Per-train expand rows ── */}
         {showExpand && expanded && (
           <div className="mt-2 p-2 rounded-[4px] bg-muted/40 border border-border/40 space-y-0.5 max-h-24 overflow-y-auto">
-          {liveRows.map((row) => (
-            <div key={row.label} className="flex items-center justify-between text-2xs">
-              <span className="text-muted-foreground truncate">{row.label}</span>
-              <span className="text-foreground/90 tabular-nums shrink-0 ml-2 font-mono">
-                {row.value}
-                {rowUnit && <span className="text-muted-foreground ml-0.5 font-sans">{rowUnit}</span>}
-              </span>
-            </div>
-          ))}
-        </div>
-      )}
+            {liveRows.map((row) => (
+              <div key={row.label} className="flex items-center justify-between text-2xs">
+                <span className="text-muted-foreground truncate">{row.label}</span>
+                <span className="text-foreground/90 tabular-nums shrink-0 ml-2 font-mono">
+                  {row.value}
+                  {rowUnit && <span className="text-muted-foreground ml-0.5 font-sans">{rowUnit}</span>}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
-    </Card>
+    </InstrumentTile>
   );
 }
 
 // Quality-cluster card that surfaces an aggregate Raw value at the top
 // and renders a compact per-train breakdown beneath. Used for Raw TDS
 // and Raw NTU.
-//
-// Note on schema: Raw TDS / NTU are physically measured at the RO-feed
-// inlet (the manifold that BLENDS multiple well sources into a single
-// feed line), not at each individual well. So each row in the breakdown
-// represents one RO train line. The label uses the train's exact name
-// from ro_trains.name rather than the synthetic "Source N" label.
-// The breakdown is hidden by default — the user expands it via the
-// chevron toggle. When fewer than 2 trains have data the toggle is
-// suppressed entirely.
 export function PerWellSourceCard({
   icon: Icon, label, unit, aggregate, rows, field, plantCodeById,
   testId, decimals = 0, multiPlant = false,
@@ -226,14 +217,9 @@ export function PerWellSourceCard({
   const [expanded, setExpanded] = useState(false);
   const aggregateTick = useValueTick(aggregate);
 
-  // Filter out rows with no reading for this metric — they'd render as
-  // "—" and add noise to a list whose whole purpose is to show numbers.
   const liveRows     = rows.filter((r) => r[field] != null);
   const showBreakdown = liveRows.length >= 2;
 
-  // Train label: use exact train name when available, fall back to
-  // "Train N". Prefix with plant code only when multiple plants are
-  // selected so rows from different plants are unambiguous.
   const rowLabel = (r: any) => {
     const trainName = r.train_name ?? (r.train_number != null ? `Train ${r.train_number}` : '?');
     if (multiPlant) {
@@ -244,39 +230,41 @@ export function PerWellSourceCard({
   };
 
   return (
-    <Card
-      className="stat-card min-w-0 rounded-2xl hover:border-border transition-all p-3.5 bg-card"
+    <InstrumentTile
+      className="stat-card min-w-0"
       data-testid={testId}
     >
-      {/* ── Header: icon · LABEL (uppercase) · per-well badge + expand ── */}
-      <div className="flex items-center justify-between gap-1 min-w-0">
-        <div className="flex items-center gap-1.5 min-w-0 overflow-hidden">
-          <Icon className="shrink-0 h-3.5 w-3.5 text-muted-foreground/80" />
-          <span className="uppercase tracking-wide font-semibold truncate leading-none text-2xs text-muted-foreground">
-            {label}
-          </span>
+      <div>
+        {/* ── Header: icon · LABEL (uppercase) · per-well badge + expand ── */}
+        <div className="flex items-center justify-between gap-1 min-w-0">
+          <div className="flex items-center gap-1.5 min-w-0 overflow-hidden">
+            <Icon className="shrink-0 h-3.5 w-3.5 text-muted-foreground/80" />
+            <span className="uppercase tracking-wide font-semibold truncate leading-none text-2xs text-muted-foreground">
+              {label}
+            </span>
+          </div>
+          <div className="flex items-center gap-1 shrink-0">
+            {showBreakdown && (
+              <button
+                onClick={(e) => { e.stopPropagation(); setExpanded((v) => !v); }}
+                className="h-5 w-5 flex items-center justify-center rounded-[8px] text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
+                title={expanded ? 'Hide breakdown' : 'Show per-train breakdown'}
+                aria-label={expanded ? 'Collapse' : 'Expand'}
+              >
+                {expanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+              </button>
+            )}
+          </div>
         </div>
-        <div className="flex items-center gap-1 shrink-0">
-          {showBreakdown && (
-            <button
-              onClick={(e) => { e.stopPropagation(); setExpanded((v) => !v); }}
-              className="h-5 w-5 flex items-center justify-center rounded-[8px] text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
-              title={expanded ? 'Hide breakdown' : 'Show per-train breakdown'}
-              aria-label={expanded ? 'Collapse' : 'Expand'}
-            >
-              {expanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-            </button>
-          )}
-        </div>
-      </div>
 
-      {/* ── Value ── (key={aggregateTick} restarts the tick on real changes) */}
-      <div
-        key={aggregateTick}
-        className={`mt-2 text-foreground leading-none whitespace-nowrap text-2xl font-bold font-mono tabular-nums ${aggregateTick > 0 ? 'animate-value-tick' : ''}`}
-      >
-        {aggregate ?? '—'}
-        {unit && <span className="font-sans font-normal text-muted-foreground ml-1.5 text-xs">{unit}</span>}
+        {/* ── Value ── (key={aggregateTick} restarts the tick on real changes) */}
+        <div
+          key={aggregateTick}
+          className={`mt-2 text-foreground leading-none whitespace-nowrap text-2xl font-bold font-mono tabular-nums ${aggregateTick > 0 ? 'animate-value-tick' : ''}`}
+        >
+          {aggregate ?? '—'}
+          {unit && <span className="font-sans font-normal text-muted-foreground ml-1.5 text-xs">{unit}</span>}
+        </div>
       </div>
 
       {/* ── Expand rows ── */}
@@ -295,25 +283,29 @@ export function PerWellSourceCard({
           ))}
         </div>
       )}
-    </Card>
+    </InstrumentTile>
   );
 }
 
 // Section heading shared between the three clusters (Overview /
-// Quality / Production Cost). Cockpit panel section rule.
+// Quality / Production Cost). Tactical bracket framing and loosened macro-whitespace.
 export function ClusterHeader({
   icon: Icon, title, subtitle, accent,
 }: {
   icon: any; title: string; subtitle?: string; accent?: string;
 }) {
   return (
-    <div className="flex items-center gap-2 mt-4 mb-2.5 px-0.5 pb-1.5 border-b border-border/50">
+    <div className="flex items-center gap-2 mt-5 mb-3 px-1 pb-1.5 border-b border-border/40">
       <div
-        className={`h-3 w-[2px] rounded-full shrink-0 ${accent ?? 'bg-primary'}`}
+        className={`h-3.5 w-[2px] rounded-full shrink-0 ${accent ?? 'bg-primary'}`}
         style={{ background: accent?.startsWith('#') ? accent : undefined }}
       />
       <Icon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-      <h2 className="text-xs font-semibold uppercase tracking-wider text-foreground/90">{title}</h2>
+      <div className="flex items-baseline gap-1.5">
+        <span className="text-3xs font-mono text-muted-foreground/60">[</span>
+        <h2 className="text-xs font-bold uppercase tracking-wider text-foreground/90 font-mono">{title}</h2>
+        <span className="text-3xs font-mono text-muted-foreground/60">]</span>
+      </div>
       {subtitle && <span className="text-2xs text-muted-foreground/70 font-mono">({subtitle})</span>}
     </div>
   );

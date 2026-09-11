@@ -1,12 +1,12 @@
 import { useQuery } from '@tanstack/react-query';
 import { PieChart, Pie, Cell } from 'recharts';
-import { Card } from '@/components/ui/card';
 import { Activity } from 'lucide-react';
 import { loadThresholds, DEFAULT_THRESHOLDS } from '@/pages/Compliance';
 import { useAppStore } from '@/store/appStore';
 import { cn } from '@/lib/utils';
-import { TONE_BG, TONE_ICON, type StatTone } from './types';
+import { type StatTone } from './types';
 import { TrendBadge } from './StatCard';
+import { InstrumentTile } from './InstrumentTile';
 
 // Same numeral typeface as StatCard/ComplianceRadarCard/CostSunburst —
 // declared once as the `font-numeral` Tailwind token (tailwind.config.ts)
@@ -106,100 +106,100 @@ export function NRWGaugeCard({ nrw, yNrw, onClick, size = 'default', className }
     : null;
 
   return (
-    <Card
-      className={cn(
-        'stat-card min-w-0 h-full flex flex-col justify-between transition-all rounded-2xl hover:border-border',
-        isLg ? 'p-3.5 sm:p-4' : 'p-3.5',
-        tone ? TONE_BG[tone] : '',
-        onClick ? 'cursor-pointer' : 'cursor-default',
-        className,
-      )}
+    <InstrumentTile
+      tone={tone}
+      clickable={!!onClick}
       onClick={onClick}
+      className={cn('stat-card min-w-0', className)}
       aria-label={`NRW gauge: ${nrw ?? '—'}% (target < ${limitPct}%)`}
     >
-      {/* ── Header row: icon · LABEL · limit · calc pill ── */}
-      <div className="flex items-center justify-between gap-1 min-w-0">
-        <div className="flex items-center gap-1.5 min-w-0 overflow-hidden">
-          <Activity className={cn('shrink-0', isLg ? 'h-4 w-4' : 'h-3.5 w-3.5', tone === 'danger' ? 'text-rose-400' : 'text-muted-foreground/80')} />
-          <span className={cn('uppercase tracking-wide font-semibold truncate leading-none text-muted-foreground', isLg ? 'text-xs' : 'text-2xs')}>
-            NRW
-          </span>
-          <span className="text-3xs text-muted-foreground/60 shrink-0 font-mono">
-            (limit {limitPct}%)
-          </span>
+      <div>
+        {/* ── Header row: icon · LABEL (decluttered) ── */}
+        <div className="flex items-center justify-between gap-1 min-w-0">
+          <div className="flex items-center gap-1.5 min-w-0 overflow-hidden">
+            <Activity className={cn('shrink-0', isLg ? 'h-4 w-4' : 'h-3.5 w-3.5', tone === 'danger' ? 'text-rose-400' : 'text-muted-foreground/80')} />
+            <span className={cn('uppercase tracking-wide font-semibold truncate leading-none text-muted-foreground', isLg ? 'text-xs' : 'text-2xs')}>
+              NRW
+            </span>
+          </div>
         </div>
+
+        {/* ── Value & Gauge Row ── */}
+        <div className="mt-2 flex items-center justify-between gap-2">
+          <div className="min-w-0">
+            <div className={cn(
+              'font-bold font-mono tabular-nums leading-none',
+              isLg ? 'text-2xl sm:text-3xl' : 'text-2xl',
+              tone === 'danger' ? 'text-rose-200' : 'text-foreground'
+            )}>
+              {nrw == null ? '—' : nrw}
+              <span className={cn('font-sans font-normal ml-1.5', tone === 'danger' ? 'text-rose-300/80' : 'text-muted-foreground', isLg ? 'text-sm' : 'text-xs')}>%</span>
+            </div>
+          </div>
+
+          {/* Half-donut gauge */}
+          <div className="shrink-0 -mb-1" aria-hidden>
+            <PieChart width={isLg ? 88 : 76} height={isLg ? 48 : 42} margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
+              <Pie
+                data={[{ name: 'track', value: 100 }]}
+                cx={cx}
+                cy={cy}
+                startAngle={180}
+                endAngle={0}
+                innerRadius={innerRadius}
+                outerRadius={outerRadius}
+                cornerRadius={cornerRadius}
+                dataKey="value"
+                stroke="none"
+                isAnimationActive={false}
+              >
+                <Cell fill={trackColor} />
+              </Pie>
+
+              <Pie
+                data={[{ name: 'NRW', value: displayVal }]}
+                cx={cx}
+                cy={cy}
+                startAngle={180}
+                endAngle={180 - (displayVal / 100) * 180}
+                innerRadius={innerRadius}
+                outerRadius={outerRadius}
+                cornerRadius={cornerRadius}
+                dataKey="value"
+                stroke="none"
+                isAnimationActive={false}
+              >
+                <Cell fill={fillColor} />
+              </Pie>
+
+              <line
+                x1={tickInner.x} y1={tickInner.y}
+                x2={tickOuter.x} y2={tickOuter.y}
+                stroke={tone === 'danger' ? '#f43f5e' : 'hsl(var(--foreground))'}
+                strokeOpacity={tone === 'danger' ? 0.95 : 0.6}
+                strokeWidth={2}
+                strokeLinecap="round"
+              />
+            </PieChart>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Below-value: decluttered metadata row (calc, limit, trend) ── */}
+      <div className="mt-1.5 flex items-center gap-1.5 flex-wrap">
         <span
           className="text-3xs uppercase tracking-wider px-1.5 py-0.5 rounded-[4px] font-mono bg-info/10 text-info border border-info/20 shrink-0"
           title="Calculated: (Raw Water - Billed Consumption) / Raw Water"
         >
           calc
         </span>
+        <span className="text-3xs text-muted-foreground/70 shrink-0 font-mono">
+          (limit {limitPct}%)
+        </span>
+        {delta !== null && (
+          <TrendBadge delta={delta} invert />
+        )}
       </div>
-
-      {/* ── Value & Gauge Row ── */}
-      <div className="mt-2 flex items-center justify-between gap-2">
-        <div className="min-w-0">
-          <div className={cn(
-            'font-bold font-mono tabular-nums leading-none',
-            isLg ? 'text-2xl sm:text-3xl' : 'text-2xl',
-            tone === 'danger' ? 'text-rose-200' : 'text-foreground'
-          )}>
-            {nrw == null ? '—' : nrw}
-            <span className={cn('font-sans font-normal ml-1.5', tone === 'danger' ? 'text-rose-300/80' : 'text-muted-foreground', isLg ? 'text-sm' : 'text-xs')}>%</span>
-          </div>
-          {delta !== null && (
-            <div className="mt-1.5">
-              <TrendBadge delta={delta} invert />
-            </div>
-          )}
-        </div>
-
-        {/* Half-donut gauge */}
-        <div className="shrink-0 -mb-1" aria-hidden>
-          <PieChart width={isLg ? 88 : 76} height={isLg ? 48 : 42} margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
-            <Pie
-              data={[{ name: 'track', value: 100 }]}
-              cx={cx}
-              cy={cy}
-              startAngle={180}
-              endAngle={0}
-              innerRadius={innerRadius}
-              outerRadius={outerRadius}
-              cornerRadius={cornerRadius}
-              dataKey="value"
-              stroke="none"
-              isAnimationActive={false}
-            >
-              <Cell fill={trackColor} />
-            </Pie>
-
-            <Pie
-              data={[{ name: 'NRW', value: displayVal }]}
-              cx={cx}
-              cy={cy}
-              startAngle={180}
-              endAngle={180 - (displayVal / 100) * 180}
-              innerRadius={innerRadius}
-              outerRadius={outerRadius}
-              cornerRadius={cornerRadius}
-              dataKey="value"
-              stroke="none"
-              isAnimationActive={false}
-            >
-              <Cell fill={fillColor} />
-            </Pie>
-
-            <line
-              x1={tickInner.x} y1={tickInner.y}
-              x2={tickOuter.x} y2={tickOuter.y}
-              stroke={tone === 'danger' ? '#f43f5e' : 'hsl(var(--foreground))'}
-              strokeOpacity={tone === 'danger' ? 0.95 : 0.6}
-              strokeWidth={2}
-              strokeLinecap="round"
-            />
-          </PieChart>
-        </div>
-      </div>
-    </Card>
+    </InstrumentTile>
   );
 }

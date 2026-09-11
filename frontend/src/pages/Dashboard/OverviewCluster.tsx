@@ -39,14 +39,12 @@ export function OverviewCluster({
           unit="m³"
           trend={dConsumption}
           onClick={onMetricClick('production', 'Production vs Consumption')}
-          className="border-border/80 bg-card hover:border-primary/40 transition-all shadow-xs hover:shadow-sm"
         />
 
         <NRWGaugeCard
           nrw={nrw}
           yNrw={yNrw}
           onClick={onMetricClick('nrw', 'NRW Trend')}
-          className="border-border/80 bg-card hover:border-primary/40 transition-all shadow-xs hover:shadow-sm"
         />
 
         <StatCard
@@ -56,7 +54,6 @@ export function OverviewCluster({
           unit="m³"
           trend={dRawWater}
           onClick={onMetricClick('rawwater', 'Raw Water (m³)')}
-          className="border-border/80 bg-card hover:border-primary/40 transition-all shadow-xs hover:shadow-sm"
         />
 
         <StatCard
@@ -64,7 +61,6 @@ export function OverviewCluster({
           label="Blending Flow"
           value={fmtNum(blending)}
           unit="m³"
-          className="border-border/80 bg-card hover:border-border transition-all shadow-xs"
         />
       </div>
 
