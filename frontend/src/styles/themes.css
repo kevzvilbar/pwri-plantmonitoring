@@ -481,7 +481,6 @@
     --topo-customNode-lane:    215 25% 12%;
     --topo-customNode-accent:  215 45% 49%;
   }
-}
 
 /* ════════════════════════════════════════════════════════════════════════════
    COLOR THEMES  —  applied via  data-theme="<id>"  on <html>
@@ -492,7 +491,7 @@
    ════════════════════════════════════════════════════════════════════════════ */
 
 /* ── Theme: Aerial Autumn  (#07202E · #008B7B · #D59D3A · #f7f3ec) ──────────── */
-[data-theme="aerial-autumn"] {
+:root[data-theme="aerial-autumn"] {
   --primary:            174 100% 27%;   /* #008B7B teal */
   --primary-foreground: 0 0% 100%;
   --primary-soft:       174 60% 91%;
@@ -535,7 +534,7 @@
 }
 
 /* ── Theme: Fire & Ocean  (#010313 · #326DA3 · #EF7D02 · #f0f4f8) ───────────── */
-[data-theme="fire-ocean"] {
+:root[data-theme="fire-ocean"] {
   --primary:            210 52% 41%;   /* #326DA3 steel blue */
   --primary-foreground: 0 0% 100%;
   --primary-soft:       210 52% 92%;
@@ -578,7 +577,7 @@
 }
 
 /* ── Theme: Earth & Jade  (#020B0C · #0D382C · #DA9626 · #f4f6f2) ───────────── */
-[data-theme="earth-jade"] {
+:root[data-theme="earth-jade"] {
   --primary:            160 55% 18%;   /* #0D382C forest green */
   --primary-foreground: 0 0% 100%;
   --primary-soft:       160 30% 92%;
@@ -621,7 +620,7 @@
 }
 
 /* ── Theme: Inferno Sky  (#120E0E · #4571A4 · #FE960D · #f5f2ef) ────────────── */
-[data-theme="inferno-sky"] {
+:root[data-theme="inferno-sky"] {
   --primary:            213 38% 47%;   /* #4571A4 steel blue */
   --primary-foreground: 0 0% 100%;
   --primary-soft:       213 38% 92%;
@@ -664,7 +663,7 @@
 }
 
 /* ── Theme: Midnight Road  (#030816 · #0A97BE · #0BC9F8 · #f0f6f8) ──────────── */
-[data-theme="midnight-road"] {
+:root[data-theme="midnight-road"] {
   --primary:            194 85% 36%;   /* #0A97BE deep cyan */
   --primary-foreground: 0 0% 100%;
   --primary-soft:       194 70% 91%;
@@ -707,7 +706,7 @@
 }
 
 /* ── Theme: Cosmic Spark  (#0A3383 · #047CDF · #9344F4 · #f2f4fb) ───────────── */
-[data-theme="cosmic-spark"] {
+:root[data-theme="cosmic-spark"] {
   --primary:            210 96% 45%;   /* #047CDF vivid blue */
   --primary-foreground: 0 0% 100%;
   --primary-soft:       210 70% 92%;
@@ -750,7 +749,7 @@
 }
 
 /* ── Theme: Titanium & Gold  (#0B0F19 · #334155 · #F59E0B · #f8fafc) ─────────── */
-[data-theme="titanium-gold"] {
+:root[data-theme="titanium-gold"] {
   --primary:            215 25% 27%;   /* #334155 slate */
   --primary-foreground: 0 0% 100%;
   --primary-soft:       215 20% 92%;
@@ -793,7 +792,7 @@
 }
 
 /* ── Theme: Nordic Aurora  (#02141A · #059669 · #10B981 · #f0fdf4) ──────────── */
-[data-theme="nordic-aurora"] {
+:root[data-theme="nordic-aurora"] {
   --primary:            161 94% 30%;   /* #059669 emerald */
   --primary-foreground: 0 0% 100%;
   --primary-soft:       160 60% 92%;
@@ -836,7 +835,7 @@
 }
 
 /* ── Theme: Obsidian Rose  (#09090B · #E11D48 · #9333EA · #fafafa) ──────────── */
-[data-theme="obsidian-rose"] {
+:root[data-theme="obsidian-rose"] {
   --primary:            347 77% 50%;   /* #E11D48 metallic rose */
   --primary-foreground: 0 0% 100%;
   --primary-soft:       347 60% 94%;
@@ -879,7 +878,7 @@
 }
 
 /* ── Theme: Cyberpunk Amber  (#050505 · #2563EB · #EAB308 · #ffffff) ────────── */
-[data-theme="cyberpunk-amber"] {
+:root[data-theme="cyberpunk-amber"] {
   --primary:            221 83% 53%;   /* #2563EB laser cobalt */
   --primary-foreground: 0 0% 100%;
   --primary-soft:       221 70% 93%;
@@ -928,7 +927,7 @@
    and calibrated chrome.
    ════════════════════════════════════════════════════════════════════════════ */
 
-.dark[data-theme="aerial-autumn"] {
+:root.dark[data-theme="aerial-autumn"] {
   --primary:            174 75% 42%;
   --primary-foreground: 206 77% 11%;
   --primary-soft:       174 45% 16%;
@@ -968,7 +967,7 @@
   --gradient-highlight: linear-gradient(135deg, hsl(38 63% 40%) 0%, hsl(174 75% 26%) 100%);
 }
 
-.dark[data-theme="fire-ocean"] {
+:root.dark[data-theme="fire-ocean"] {
   --primary:            210 70% 55%;
   --primary-foreground: 237 96% 5%;
   --primary-soft:       210 45% 18%;
@@ -1008,7 +1007,7 @@
   --gradient-highlight: linear-gradient(135deg, hsl(30 98% 42%) 0%, hsl(210 52% 28%) 100%);
 }
 
-.dark[data-theme="earth-jade"] {
+:root.dark[data-theme="earth-jade"] {
   --primary:            160 60% 42%;
   --primary-foreground: 188 90% 4%;
   --primary-soft:       160 40% 16%;
@@ -1048,7 +1047,7 @@
   --gradient-highlight: linear-gradient(135deg, hsl(38 78% 42%) 0%, hsl(160 55% 22%) 100%);
 }
 
-.dark[data-theme="inferno-sky"] {
+:root.dark[data-theme="inferno-sky"] {
   --primary:            213 60% 58%;
   --primary-foreground: 10  14% 7%;
   --primary-soft:       213 40% 18%;
@@ -1088,7 +1087,7 @@
   --gradient-highlight: linear-gradient(135deg, hsl(35 99% 45%) 0%, hsl(213 38% 30%) 100%);
 }
 
-.dark[data-theme="midnight-road"] {
+:root.dark[data-theme="midnight-road"] {
   --primary:            191 90% 52%;
   --primary-foreground: 226 93% 6%;
   --primary-soft:       191 45% 16%;
@@ -1128,7 +1127,7 @@
   --gradient-highlight: linear-gradient(135deg, hsl(191 95% 42%) 0%, hsl(194 82% 26%) 100%);
 }
 
-.dark[data-theme="cosmic-spark"] {
+:root.dark[data-theme="cosmic-spark"] {
   --primary:            210 90% 60%;
   --primary-foreground: 224 80% 10%;
   --primary-soft:       210 50% 16%;
@@ -1168,7 +1167,7 @@
   --gradient-highlight: linear-gradient(135deg, hsl(273 89% 50%) 0%, hsl(210 96% 32%) 100%);
 }
 
-.dark[data-theme="titanium-gold"] {
+:root.dark[data-theme="titanium-gold"] {
   --primary:            38  92% 54%;
   --primary-foreground: 222 47% 8%;
   --primary-soft:       38  40% 16%;
@@ -1208,7 +1207,7 @@
   --gradient-highlight: linear-gradient(135deg, hsl(38 92% 48%) 0%, hsl(215 25% 20%) 100%);
 }
 
-.dark[data-theme="nordic-aurora"] {
+:root.dark[data-theme="nordic-aurora"] {
   --primary:            160 70% 48%;
   --primary-foreground: 198 80% 6%;
   --primary-soft:       160 40% 16%;
@@ -1248,7 +1247,7 @@
   --gradient-highlight: linear-gradient(135deg, hsl(175 70% 36%) 0%, hsl(160 60% 20%) 100%);
 }
 
-.dark[data-theme="obsidian-rose"] {
+:root.dark[data-theme="obsidian-rose"] {
   --primary:            347 85% 62%;
   --primary-foreground: 240 10% 4%;
   --primary-soft:       347 40% 16%;
@@ -1288,7 +1287,7 @@
   --gradient-highlight: linear-gradient(135deg, hsl(270 60% 40%) 0%, hsl(347 60% 24%) 100%);
 }
 
-.dark[data-theme="cyberpunk-amber"] {
+:root.dark[data-theme="cyberpunk-amber"] {
   --primary:            48  96% 53%;
   --primary-foreground: 0   0%  0%;
   --primary-soft:       48  40% 16%;
@@ -1327,3 +1326,5 @@
   --gradient-accent:    linear-gradient(135deg, hsl(217 80% 22%) 0%, hsl(45 93% 45%) 100%);
   --gradient-highlight: linear-gradient(135deg, hsl(45 93% 45%) 0%, hsl(217 80% 22%) 100%);
 }
+}
+

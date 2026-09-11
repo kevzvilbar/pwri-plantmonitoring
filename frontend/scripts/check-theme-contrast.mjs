@@ -90,14 +90,13 @@ function extractVars(blockText) {
 }
 
 function extractBlock(name) {
-  // Matches `:root {` or `[data-theme="x"] {` through its matching closing brace.
+  // Matches `:root {` or `:root[data-theme="x"] {` through its matching closing brace.
   // Not a full CSS parser (doesn't track nested braces), but every block this
   // script reads is flat (no nested rules), so a first-`}` match is correct.
-  const selector = name === ':root' ? ':root' : `[data-theme="${name}"]`;
-  const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const escaped = name === ':root' ? ':root' : `(?::root)?\\[data-theme="${name}"\\]`;
   const re = new RegExp(`${escaped}\\s*\\{([^}]*)\\}`);
   const m = css.match(re);
-  if (!m) throw new Error(`Could not find CSS block for ${selector} in ${cssPath}`);
+  if (!m) throw new Error(`Could not find CSS block for ${name} in ${cssPath}`);
   return extractVars(m[1]);
 }
 
