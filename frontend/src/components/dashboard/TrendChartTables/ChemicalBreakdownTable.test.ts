@@ -116,3 +116,4 @@ describe('ChemicalBreakdownTable data logic', () => {
     expect(row.chemCostPerM3).toBeNull();
   });
 });
+

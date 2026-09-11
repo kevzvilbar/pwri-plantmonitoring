@@ -264,3 +264,4 @@ export function ChemicalBreakdownTable({
     </div>
   );
 }
+
