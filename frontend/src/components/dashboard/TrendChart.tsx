@@ -174,7 +174,7 @@ export function TrendChart({
         <DrillBreadcrumb crumbs={drillCrumbs} />
       )}
 
-      <div className={`${chartHeight} w-full relative`} data-testid={`trend-chart-${metric}`}>
+      <div className={`${chartHeight} w-full min-w-0 overflow-hidden relative`} data-testid={`trend-chart-${metric}`}>
         <TrendChartStatusOverlay
           queryError={queryError}
           isFetching={isFetching}

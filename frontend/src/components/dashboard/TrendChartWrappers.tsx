@@ -86,15 +86,21 @@ export function TrendModal({
 }) {
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-3xl w-[95vw] sm:w-full">
-        <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
+      <DialogContent className="max-w-5xl xl:max-w-6xl w-[95vw] max-h-[92vh] overflow-y-auto overflow-x-hidden p-4 sm:p-6 flex flex-col gap-3 min-w-0">
+        <DialogHeader className="pb-2 border-b border-border/50 shrink-0">
+          <DialogTitle className="text-base sm:text-lg font-bold tracking-tight text-foreground flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-primary shrink-0" />
+            <span>{title}</span>
+          </DialogTitle>
           <DialogDescription className="sr-only">
             Pick a date range to inspect the {title.toLowerCase()} time series for the selected plants.
           </DialogDescription>
         </DialogHeader>
-        <TrendChart metric={metric} plantIds={plantIds} />
+        <div className="w-full min-w-0 flex flex-col flex-1 overflow-x-hidden">
+          <TrendChart metric={metric} plantIds={plantIds} />
+        </div>
       </DialogContent>
     </Dialog>
   );
 }
+

@@ -35,7 +35,7 @@ export function ProductionDrillControls({
   selectAllLocators, clearAllLocators, toggleLocator,
 }: ProductionDrillControlsProps) {
   return (
-    <div className="flex items-center gap-0.5 shrink-0">
+    <div className="flex flex-wrap items-center gap-1 shrink-0">
       <span className="text-3xs text-muted-foreground uppercase tracking-wide mr-0.5 hidden sm:inline">View</span>
       <GranularityControl
         value={viewGran}

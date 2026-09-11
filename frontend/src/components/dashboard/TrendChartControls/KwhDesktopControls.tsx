@@ -27,7 +27,7 @@ export function KwhDesktopControls({
   if (!hasSolarData && !hasGridData) return null;
 
   return (
-    <div className="flex items-center gap-1 shrink-0 ml-1">
+    <div className="flex flex-wrap items-center gap-1 shrink-0 ml-1">
       <GranularityControl value={viewGran} onChange={setViewGran} rangeDays={rangeDays} testIdPrefix={`drill-${metric}`} />
       {hasSolarData && hasGridData && (
         <>

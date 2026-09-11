@@ -13,7 +13,7 @@ interface PlantHealthControlsProps {
 
 export function PlantHealthControls({ phDrillMode, setPhDrillMode, setPhDayFocus, rangeDays, phDayFocus }: PlantHealthControlsProps) {
   return (
-    <div className="flex items-center gap-0.5 shrink-0" title="Plant Health granularity">
+    <div className="flex flex-wrap items-center gap-1 shrink-0" title="Plant Health granularity">
       <span className="text-3xs text-muted-foreground uppercase tracking-wide mr-0.5 hidden sm:inline">View</span>
       <button
         onClick={() => { setPhDrillMode('daily'); setPhDayFocus(null); }}

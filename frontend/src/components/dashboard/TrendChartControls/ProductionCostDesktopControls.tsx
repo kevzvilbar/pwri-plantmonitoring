@@ -26,7 +26,7 @@ export function ProductionCostDesktopControls({
   showChemCostLine, setShowChemCostLine,
 }: ProductionCostDesktopControlsProps) {
   return (
-    <div className="flex items-center gap-0.5 shrink-0 ml-1">
+    <div className="flex flex-wrap items-center gap-1 shrink-0 ml-1">
       <GranularityControl value={viewGran} onChange={setViewGran} rangeDays={rangeDays} testIdPrefix={`drill-${metric}`} />
       <span className="hidden sm:inline-block h-3 border-l border-border mx-1" aria-hidden />
       <StackToggle value={stackMode} onChange={setStackMode} testId="cost-stack-toggle" />
