@@ -1,9 +1,9 @@
 /**
  * PWRI Shift Monitoring & Handover Definitions
  * ─────────────────────────────────────────────
- * Shift A (Morning):    06:00 – 14:00
- * Shift B (Afternoon):  14:00 – 22:00
- * Shift C (Graveyard):  22:00 – 06:00
+ * Shift A (Morning):    07:00 – 15:00
+ * Shift B (Afternoon):  15:00 – 23:00
+ * Shift C (Graveyard):  23:00 – 07:00
  */
 
 export type ShiftCode = 'A' | 'B' | 'C';
@@ -23,27 +23,27 @@ export const SHIFTS: Record<ShiftCode, ShiftInfo> = {
     code: 'A',
     name: 'Shift A (Morning)',
     label: 'Shift A',
-    timeRange: '06:00 – 14:00',
-    startHour: 6,
-    endHour: 14,
+    timeRange: '07:00 – 15:00',
+    startHour: 7,
+    endHour: 15,
     tone: 'accent',
   },
   B: {
     code: 'B',
     name: 'Shift B (Afternoon)',
     label: 'Shift B',
-    timeRange: '14:00 – 22:00',
-    startHour: 14,
-    endHour: 22,
+    timeRange: '15:00 – 23:00',
+    startHour: 15,
+    endHour: 23,
     tone: 'accent',
   },
   C: {
     code: 'C',
     name: 'Shift C (Graveyard)',
     label: 'Shift C',
-    timeRange: '22:00 – 06:00',
-    startHour: 22,
-    endHour: 6,
+    timeRange: '23:00 – 07:00',
+    startHour: 23,
+    endHour: 7,
     tone: 'warn',
   },
 };
@@ -51,9 +51,9 @@ export const SHIFTS: Record<ShiftCode, ShiftInfo> = {
 /** Returns the active shift definition based on the given date/time (default: now) */
 export function getCurrentShift(date: Date = new Date()): ShiftInfo {
   const hour = date.getHours();
-  if (hour >= 6 && hour < 14) {
+  if (hour >= 7 && hour < 15) {
     return SHIFTS.A;
-  } else if (hour >= 14 && hour < 22) {
+  } else if (hour >= 15 && hour < 23) {
     return SHIFTS.B;
   } else {
     return SHIFTS.C;
@@ -62,15 +62,15 @@ export function getCurrentShift(date: Date = new Date()): ShiftInfo {
 
 /**
  * Returns a unique cycle key for the shift instance (e.g. `2026-08-30_Shift_A`).
- * For Shift C (which spans midnight), times between 00:00 and 05:59 are mapped
+ * For Shift C (which spans midnight), times between 00:00 and 06:59 are mapped
  * back to the date the night shift began.
  */
 export function getShiftCycleKey(date: Date = new Date()): string {
   const shift = getCurrentShift(date);
   const d = new Date(date);
 
-  // If we are in Shift C before 6 AM, the shift started on previous calendar day
-  if (shift.code === 'C' && d.getHours() < 6) {
+  // If we are in Shift C before 7 AM, the shift started on previous calendar day
+  if (shift.code === 'C' && d.getHours() < 7) {
     d.setDate(d.getDate() - 1);
   }
 
@@ -80,6 +80,32 @@ export function getShiftCycleKey(date: Date = new Date()): string {
   const dateKey = `${year}-${month}-${day}`;
 
   return `${dateKey}_Shift_${shift.code}`;
+}
+
+export const MAX_SHIFT_DURATION_HOURS = 8;
+
+/**
+ * Checks whether an operator's stored confirmation is expired:
+ * - Missing record
+ * - Different shift cycle (e.g. moved past 07:00, 15:00, or 23:00)
+ * - Different operator ID
+ * - More than 8 hours elapsed since last confirmation
+ */
+export function isShiftConfirmationExpired(
+  record: ShiftConfirmationRecord | null,
+  currentCycleKey: string,
+  currentOperatorId: string,
+  now: Date = new Date(),
+  maxHours: number = MAX_SHIFT_DURATION_HOURS
+): boolean {
+  if (!record) return true;
+  if (record.cycleKey !== currentCycleKey) return true;
+  if (record.operatorId !== currentOperatorId) return true;
+  if (!record.confirmedAt) return true;
+
+  const elapsedMs = now.getTime() - new Date(record.confirmedAt).getTime();
+  const elapsedHours = elapsedMs / (1000 * 60 * 60);
+  return elapsedHours >= maxHours;
 }
 
 export interface ShiftConfirmationRecord {

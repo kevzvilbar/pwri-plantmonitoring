@@ -16,6 +16,7 @@ import {
   getShiftCycleKey,
   getStoredShiftConfirmation,
   saveShiftConfirmation,
+  isShiftConfirmationExpired,
   type ShiftInfo,
 } from '@/lib/shifts';
 import { Clock, UserCheck, Users, LogOut, ArrowRight, CheckCircle2, ShieldCheck, AlertCircle } from 'lucide-react';
@@ -68,8 +69,8 @@ export function ShiftHandoverModal() {
 
     const stored = getStoredShiftConfirmation(user.id, currentOperatorId);
 
-    // If no confirmation or cycle/operator changed, trigger the prompt
-    if (!stored || stored.cycleKey !== cycleKey || stored.operatorId !== currentOperatorId) {
+    // If no confirmation, cycle/operator changed, or >8 hours elapsed, trigger the prompt
+    if (isShiftConfirmationExpired(stored, cycleKey, currentOperatorId, now)) {
       setIsOpen(true);
       setShowSwitchPicker(false);
       setSearchTerm('');
@@ -263,7 +264,7 @@ export function ShiftHandoverModal() {
           </DialogTitle>
 
           <DialogDescription className="text-xs text-muted-foreground leading-relaxed">
-            A shift transition has occurred. If multiple operators share this terminal account, please confirm who is actively on-duty so all readings and telemetry are correctly attributed.
+            A shift transition has occurred or more than 8 hours have elapsed without verification. If multiple operators share this terminal account, please confirm who is actively on-duty so all readings and telemetry are correctly attributed.
           </DialogDescription>
         </DialogHeader>
 
