@@ -376,6 +376,10 @@ export function useReadingHistoryActions(options: {
     if (error) { toast.error(friendlyError(error)); return; }
     toast.success(next ? 'Marked as meter replacement — Δ zeroed' : 'Meter replacement flag removed');
     options.qc.invalidateQueries({ queryKey: options.queryKey });
+    if (options.module === 'locator') invalidateLocatorDash(options.qc, [options.entityId]);
+    else if (options.module === 'well') invalidateWellDash(options.qc, [options.entityId]);
+    else if (options.module === 'blending') invalidateWellDash(options.qc, [options.entityId]);
+    else if (options.module === 'power') invalidatePowerDash(options.qc);
   };
 
   const handleToggleGridReplacement = async (r: any, gridIdx: number = 0) => {
@@ -396,6 +400,7 @@ export function useReadingHistoryActions(options: {
     }
     toast.success('Grid replacement flag removed');
     options.qc.invalidateQueries({ queryKey: options.queryKey });
+    invalidatePowerDash(options.qc);
   };
 
   const handleToggleSolarReplacement = async (r: any) => {
@@ -407,6 +412,7 @@ export function useReadingHistoryActions(options: {
     if (error) { toast.error(friendlyError(error)); return; }
     toast.success(next ? 'Solar replacement marked — Δ zeroed' : 'Solar replacement flag removed');
     options.qc.invalidateQueries({ queryKey: options.queryKey });
+    invalidatePowerDash(options.qc);
   };
 
   const handleSelectOne = (id: string) => {

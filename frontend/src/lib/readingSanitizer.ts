@@ -88,7 +88,7 @@ export function sanitizeReadingsForEntity<T extends SanitizableReading>(
       : r.raw_meter_reading != null ? +r.raw_meter_reading
       : null;
 
-    if (v != null && !r.is_meter_replacement) {
+    if (v != null) {
       lastVal = v;
     }
   }

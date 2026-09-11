@@ -164,4 +164,26 @@ describe('buildEntityPivot — direct-mode meters (HAMAS-style, hamas-production
       expect(fixed.get('2026-08-09')!.get('hamas-mirror')).toBe(5244);
     },
   );
+
+  it('neutralizes negative drop on replacement day and diffs against new meter baseline on subsequent day', () => {
+    // Exact scenario from Well 4 meter replacement:
+    // Aug 23: reading 5331
+    // Aug 24: new meter installed, reading 134, is_meter_replacement: true
+    // Aug 25: reading 134 (or subsequent reading), previous_reading in DB is still 5331
+    const readings = [
+      { well_id: 'w4', reading_datetime: iso('2026-08-23'), current_reading: 5331, previous_reading: 5200 },
+      { well_id: 'w4', reading_datetime: iso('2026-08-24'), current_reading: 134, previous_reading: 5331, is_meter_replacement: true },
+      { well_id: 'w4', reading_datetime: iso('2026-08-25'), current_reading: 134, previous_reading: 5331 },
+    ];
+
+    const { pivot, dateKeys } = buildEntityPivot(readings, 'well_id');
+
+    // Aug 24 must exist in pivot as 0 (not missing / dash)
+    expect(dateKeys).toContain('2026-08-24');
+    expect(pivot.get('2026-08-24')!.get('w4')).toBe(0);
+
+    // Aug 25 must diff against new meter baseline (134 - 134 = 0), NOT against old meter (134 - 5331 = -5197)
+    expect(pivot.get('2026-08-25')!.get('w4')).toBe(0);
+  });
 });
+

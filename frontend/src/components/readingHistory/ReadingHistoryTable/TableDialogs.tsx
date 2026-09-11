@@ -1,6 +1,7 @@
 import React from 'react';
 import { HistoryCascadeConfirmDialog } from '../HistoryCascadeConfirmDialog';
 import { ReplaceMeterDialog } from '@/pages/plants/locators/LocatorDialogs';
+import { invalidateLocatorDash, invalidateWellDash } from '@/pages/operations/shared';
 
 interface TableDialogsProps {
   actions: any;
@@ -29,6 +30,8 @@ export function TableDialogs({ actions, module, entityId, plantId, assetMeterSer
           onSuccess={() => {
             actions.setEditRow(prev => (prev && prev.id === actions.replaceReadingId ? { ...prev, isMeterReplacement: true } : prev));
             qc.invalidateQueries({ queryKey });
+            if (module === 'well') invalidateWellDash(qc, [entityId]);
+            else if (module === 'locator') invalidateLocatorDash(qc, [entityId]);
           }}
           onClose={() => actions.setReplaceReadingId(null)}
         />

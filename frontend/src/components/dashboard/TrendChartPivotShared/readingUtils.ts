@@ -20,21 +20,55 @@ export function buildEntityPivot(
 ): { pivot: Map<string, Map<string, number>>; dateKeys: string[] } {
   const pivot = new Map<string, Map<string, number>>();
   const lastSeen = new Map<string, number>();
+  const afterRepl = new Set<string>();
   const cleanReadings = sanitizeReadings(readings, entityField, directModeIds);
 
   cleanReadings.forEach((r) => {
-    if (r.is_meter_replacement) {
-      const entityId = r[entityField] ?? '__';
-      lastSeen.delete(entityId);
+    const dateKey  = format(new Date(r.reading_datetime), 'yyyy-MM-dd');
+    const entityId = r[entityField] ?? '__';
+
+    if (minDateKey && dateKey < minDateKey) {
+      if (r.is_meter_replacement) {
+        if (r.current_reading != null) lastSeen.set(entityId, +r.current_reading);
+        else lastSeen.delete(entityId);
+        afterRepl.add(entityId);
+      } else if (afterRepl.has(entityId)) {
+        afterRepl.delete(entityId);
+        if (r.current_reading != null) lastSeen.set(entityId, +r.current_reading);
+      } else if (r.current_reading != null) {
+        lastSeen.set(entityId, +r.current_reading);
+      }
       return;
     }
 
-    const dateKey  = format(new Date(r.reading_datetime), 'yyyy-MM-dd');
-    const entityId = r[entityField] ?? '__';
+    if (!pivot.has(dateKey)) pivot.set(dateKey, new Map());
+
+    if (r.is_meter_replacement) {
+      if (r.current_reading != null) {
+        lastSeen.set(entityId, +r.current_reading);
+      } else {
+        lastSeen.delete(entityId);
+      }
+      afterRepl.add(entityId);
+      pivot.get(dateKey)!.set(entityId, (pivot.get(dateKey)!.get(entityId) ?? 0) + 0);
+      return;
+    }
 
     let vol: number;
     if (directModeIds?.has(entityId)) {
       vol = r.current_reading != null ? Math.max(0, +r.current_reading) : 0;
+      if (r.current_reading != null) lastSeen.set(entityId, +r.current_reading);
+    } else if (afterRepl.has(entityId)) {
+      afterRepl.delete(entityId);
+      if (lastSeen.has(entityId) && r.current_reading != null) {
+        vol = Math.max(0, +r.current_reading - lastSeen.get(entityId)!);
+      } else if (r.daily_volume != null) {
+        vol = Math.max(0, +r.daily_volume);
+      } else if (r.previous_reading != null && r.current_reading != null) {
+        vol = Math.max(0, +r.current_reading - +r.previous_reading);
+      } else {
+        vol = 0;
+      }
       if (r.current_reading != null) lastSeen.set(entityId, +r.current_reading);
     } else if (lastSeen.has(entityId) && r.current_reading != null) {
       vol = +r.current_reading - lastSeen.get(entityId)!;
@@ -50,8 +84,6 @@ export function buildEntityPivot(
       vol = 0;
     }
 
-    if (minDateKey && dateKey < minDateKey) return;
-    if (!pivot.has(dateKey)) pivot.set(dateKey, new Map());
     pivot.get(dateKey)!.set(entityId, (pivot.get(dateKey)!.get(entityId) ?? 0) + vol);
   });
 

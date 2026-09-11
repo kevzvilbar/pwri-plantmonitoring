@@ -50,13 +50,25 @@ export function computePivotFromReadingsNoCache(
       const dateKey = format(new Date(r.reading_datetime), 'yyyy-MM-dd');
       if (!pivot.has(dateKey)) pivot.set(dateKey, new Map());
       if (isMR) {
-        lastReading.set(entityKey, +r.current_reading);
+        if (r.current_reading != null) lastReading.set(entityKey, +r.current_reading);
         afterRepl.add(entityKey);
+        const prev = pivot.get(dateKey)!.get(entityKey) ?? 0;
+        pivot.get(dateKey)!.set(entityKey, prev + 0);
         return;
       }
       if (afterRepl.has(entityKey)) {
-        lastReading.set(entityKey, +r.current_reading);
         afterRepl.delete(entityKey);
+        let delta = 0;
+        if (lastReading.has(entityKey) && r.current_reading != null) {
+          delta = Math.max(0, +r.current_reading - lastReading.get(entityKey)!);
+        } else if (dailyVolumeField && r[dailyVolumeField] != null) {
+          delta = Math.max(0, +r[dailyVolumeField]);
+        } else if (r.previous_reading != null && r.current_reading != null) {
+          delta = Math.max(0, +r.current_reading - +r.previous_reading);
+        }
+        if (r.current_reading != null) lastReading.set(entityKey, +r.current_reading);
+        const prev = pivot.get(dateKey)!.get(entityKey) ?? 0;
+        pivot.get(dateKey)!.set(entityKey, prev + delta);
         return;
       }
       let delta = 0;
@@ -97,7 +109,7 @@ export function computePivotFromReadingsNoCache(
  *
  * Groups readings by entityKeyField, walks them chronologically per entity:
  *   • is_meter_replacement row     → delta 0, set afterRepl flag
- *   • first row after replacement  → delta 0, clear flag
+ *   • first row after replacement  → delta against new meter baseline
  *   • normal row w/ dailyVolumeField → use that value (clamped ≥ 0)
  *   • normal row w/o dailyVolumeField → current − last (clamped ≥ 0)
  *   • no predecessor yet (first in range) → current − previous_reading (DB field)
@@ -129,13 +141,27 @@ export function computePivotFromReadings(
       const dateKey = format(new Date(r.reading_datetime), 'yyyy-MM-dd');
       if (!pivot.has(dateKey)) pivot.set(dateKey, new Map());
       if (isMR) {
-        lastReading.set(entityKey, +r.current_reading);
+        if (r.current_reading != null) lastReading.set(entityKey, +r.current_reading);
         afterRepl.add(entityKey);
+        deltaCache.set(entityKey, dateKey, 0, 'computed');
+        const prev = pivot.get(dateKey)!.get(entityKey) ?? 0;
+        pivot.get(dateKey)!.set(entityKey, prev + 0);
         return;
       }
       if (afterRepl.has(entityKey)) {
-        lastReading.set(entityKey, +r.current_reading);
         afterRepl.delete(entityKey);
+        let delta = 0;
+        if (lastReading.has(entityKey) && r.current_reading != null) {
+          delta = Math.max(0, +r.current_reading - lastReading.get(entityKey)!);
+        } else if (dailyVolumeField && r[dailyVolumeField] != null) {
+          delta = Math.max(0, +r[dailyVolumeField]);
+        } else if (r.previous_reading != null && r.current_reading != null) {
+          delta = Math.max(0, +r.current_reading - +r.previous_reading);
+        }
+        if (r.current_reading != null) lastReading.set(entityKey, +r.current_reading);
+        deltaCache.set(entityKey, dateKey, delta, 'computed');
+        const prev = pivot.get(dateKey)!.get(entityKey) ?? 0;
+        pivot.get(dateKey)!.set(entityKey, prev + delta);
         return;
       }
 
