@@ -22,6 +22,7 @@ export function OverviewTable({
     totalTrains: number;
   }>;
 }) {
+  if (chartData.length === 0) {
   if (chartData.length === 0 && metric !== 'plantHealth') {
     return <div className="flex items-center justify-center h-24 text-xs text-muted-foreground">No data in selected range.</div>;
   }

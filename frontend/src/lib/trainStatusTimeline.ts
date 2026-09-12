@@ -20,6 +20,32 @@
 export type TrainRunStatus = 'Running' | 'Offline' | 'Maintenance';
 
 /**
+ * Decides what train_status_log.reason should become when usePretreatmentActions
+ * updates an existing Offline row — either re-confirming it while still Offline,
+ * or closing it out when the operator flips back to Running.
+ *
+ * If the operator supplies a real reason, that's an informed correction and
+ * always wins, even over an existing auto-flag — they know why it was down.
+ *
+ * If they leave it blank, this preserves an existing "Auto-flagged: ..."
+ * reason instead of overwriting it with null. Before this, the ordinary
+ * "log a reading + flip back online" flow — the single most common way an
+ * auto-flag gets resolved, far more common than the dedicated "Report
+ * Running" attestation — silently erased the Auto-flagged marker the moment
+ * the operator submitted, so by the time anyone could open a closed segment
+ * and attest to it, the `reason?.startsWith('Auto-flagged')` check that
+ * TrainStatusBannerRow.canReportRunning depends on had nothing left to match.
+ */
+export function preserveAutoFlagReason(
+  existingReason: string | null | undefined,
+  operatorReason: string | null,
+): string | null {
+  if (operatorReason) return operatorReason;
+  if (existingReason?.startsWith('Auto-flagged')) return existingReason;
+  return operatorReason; // null — unchanged behavior for non-auto-flag rows
+}
+
+/**
  * Auto-offline threshold in hours — must match AUTO_OFFLINE_THRESHOLD_HOURS in
  * hooks/useTrainAutoOffline.ts. Imported here instead to avoid a lib→hooks
  * dependency, so keep the two in sync if the business rule changes.

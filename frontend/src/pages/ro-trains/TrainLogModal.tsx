@@ -101,16 +101,25 @@ export function TrainLogModal({ trainId, trainLabel, plantId, onClose, initialTa
   const handleReportRunning = (segment: any) => setUptimeReportTarget(segment);
   const submitUptimeReport = async (category: string, detail: string) => {
     if (!uptimeReportTarget) return;
+    const isOpenSegment = uptimeReportTarget.endAt === null;
     setReportingBanner(true);
     try {
       await reportRunning({
         trainId,
         plantId,
         coveredFrom: uptimeReportTarget.startAt,
+        // Closed segment: bound the exemption to when it actually closed,
+        // not "now" — see useReportTrainRunning's doc comment.
+        coveredUntil: uptimeReportTarget.endAt ?? undefined,
+        isOpenSegment,
         category: category as any,
         detail,
       });
-      toast.success('Uptime reported — flag removed, train back to Running');
+      toast.success(
+        isOpenSegment
+          ? 'Uptime reported — flag removed, train back to Running'
+          : 'Uptime reported — historical record corrected',
+      );
       setUptimeReportTarget(null);
     } catch (e: any) {
       toast.error(e?.message ?? 'Failed to report uptime');
@@ -520,7 +529,10 @@ export function TrainLogModal({ trainId, trainLabel, plantId, onClose, initialTa
           description={
             `Attest that Train ${trainLabel} was actually running the whole time and the auto-offline flag `
             + `(started ${format(new Date(uptimeReportTarget.startAt), 'MMM d, HH:mm')}) is a false positive `
-            + `because readings weren't encoded. This removes the flag and puts the train back to Running. `
+            + `because readings weren't encoded. `
+            + (uptimeReportTarget.endAt === null
+              ? 'This removes the flag and puts the train back to Running. '
+              : "This corrects the closed period in the record without changing the train's current status. ")
             + `The attestation is logged with your name.`
           }
           confirmLabel="File attestation"

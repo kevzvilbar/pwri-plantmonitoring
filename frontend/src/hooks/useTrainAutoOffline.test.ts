@@ -6,7 +6,10 @@ import {
   computeTrainGaps,
   needsUnboundedConfirmation,
   reconcileOfflineCandidate,
+  buildUptimeReportsByTrain,
+  isGapExempted,
   type RawTrainRow,
+  type UptimeReportRow,
 } from './useTrainAutoOffline';
 
 describe('useTrainAutoOffline threshold & auto-flagging guards', () => {
@@ -124,6 +127,89 @@ describe('needsUnboundedConfirmation / reconcileOfflineCandidate (the reported b
   it('passes finite-gap candidates through untouched (no confirmation needed)', () => {
     const finite = { ...staleCandidate, hours_gap: 5, last_reading_at: '2026-09-12T09:03:00Z' };
     expect(reconcileOfflineCandidate(finite, 'irrelevant', nowMs)).toBe(finite);
+  });
+});
+
+describe('buildUptimeReportsByTrain / isGapExempted ("Report Running" exemption)', () => {
+  const report = (train_id: string, covered_from: string, covered_until: string): UptimeReportRow => ({
+    train_id, covered_from, covered_until,
+  });
+
+  it('groups multiple reports for the same train under one key', () => {
+    const map = buildUptimeReportsByTrain([
+      report('train-7', '2026-09-01T00:00:00Z', '2026-09-01T04:00:00Z'),
+      report('train-7', '2026-09-05T00:00:00Z', '2026-09-05T04:00:00Z'),
+      report('train-9', '2026-09-01T00:00:00Z', '2026-09-01T04:00:00Z'),
+    ]);
+    expect(map.get('train-7')).toHaveLength(2);
+    expect(map.get('train-9')).toHaveLength(1);
+  });
+
+  it('exempts a gap whose start falls strictly inside a reported window', () => {
+    const map = buildUptimeReportsByTrain([report('train-7', '2026-09-12T10:00:00Z', '2026-09-12T14:00:00Z')]);
+    expect(isGapExempted(map, 'train-7', '2026-09-12T12:00:00Z')).toBe(true);
+  });
+
+  it('treats the window bounds as inclusive on both ends', () => {
+    const map = buildUptimeReportsByTrain([report('train-7', '2026-09-12T10:00:00Z', '2026-09-12T14:00:00Z')]);
+    expect(isGapExempted(map, 'train-7', '2026-09-12T10:00:00Z')).toBe(true); // == covered_from
+    expect(isGapExempted(map, 'train-7', '2026-09-12T14:00:00Z')).toBe(true); // == covered_until
+  });
+
+  it('does NOT exempt a gap starting before covered_from', () => {
+    const map = buildUptimeReportsByTrain([report('train-7', '2026-09-12T10:00:00Z', '2026-09-12T14:00:00Z')]);
+    expect(isGapExempted(map, 'train-7', '2026-09-12T09:59:59Z')).toBe(false);
+  });
+
+  it('does NOT exempt a gap starting after covered_until — an attestation is not a standing exemption', () => {
+    const map = buildUptimeReportsByTrain([report('train-7', '2026-09-12T10:00:00Z', '2026-09-12T14:00:00Z')]);
+    expect(isGapExempted(map, 'train-7', '2026-09-12T14:00:01Z')).toBe(false);
+  });
+
+  it('does NOT exempt when gapStart is null (Infinity-hours-gap candidate, never reconciled)', () => {
+    const map = buildUptimeReportsByTrain([report('train-7', '2026-09-12T10:00:00Z', '2026-09-12T14:00:00Z')]);
+    expect(isGapExempted(map, 'train-7', null)).toBe(false);
+  });
+
+  it('does NOT exempt a train with no filed reports at all', () => {
+    const map = buildUptimeReportsByTrain([]);
+    expect(isGapExempted(map, 'train-7', '2026-09-12T12:00:00Z')).toBe(false);
+  });
+
+  it('does NOT exempt a different train even when its report window would otherwise match', () => {
+    const map = buildUptimeReportsByTrain([report('train-9', '2026-09-12T10:00:00Z', '2026-09-12T14:00:00Z')]);
+    expect(isGapExempted(map, 'train-7', '2026-09-12T12:00:00Z')).toBe(false);
+  });
+
+  it('finds a match among several reports for the same train when only one covers the gap', () => {
+    const map = buildUptimeReportsByTrain([
+      report('train-7', '2026-09-01T00:00:00Z', '2026-09-01T04:00:00Z'), // too old
+      report('train-7', '2026-09-12T10:00:00Z', '2026-09-12T14:00:00Z'), // this one covers it
+      report('train-7', '2026-09-20T00:00:00Z', '2026-09-20T04:00:00Z'), // too new
+    ]);
+    expect(isGapExempted(map, 'train-7', '2026-09-12T12:00:00Z')).toBe(true);
+  });
+
+  it('end-to-end: an exempted candidate is filtered out of the auto-flag list, an unrelated one is not', () => {
+    // Mirrors the actual filter chain in useTrainAutoOffline's queryFn.
+    const trains: RawTrainRow[] = [
+      { id: 'train-7', train_number: 7, plant_id: 'plant-1', status: 'Running' }, // exempted gap
+      { id: 'train-9', train_number: 9, plant_id: 'plant-1', status: 'Running' }, // genuine gap
+    ];
+    const nowMs = new Date('2026-09-12T13:00:00Z').getTime();
+    const lastBy = new Map([
+      ['train-7', '2026-09-12T10:30:00Z'], // 2.5h stale, but covered by a filed report
+      ['train-9', '2026-09-12T10:30:00Z'], // 2.5h stale, no report filed
+    ]);
+    const reportsByTrain = buildUptimeReportsByTrain([
+      report('train-7', '2026-09-12T10:00:00Z', '2026-09-12T14:00:00Z'),
+    ]);
+
+    const flagged = computeTrainGaps(trains, lastBy, nowMs)
+      .filter((g) => shouldAutoFlagTrainOffline(g.hours_gap, g.current_status))
+      .filter((g) => !isGapExempted(reportsByTrain, g.train_id, g.last_reading_at));
+
+    expect(flagged.map((g) => g.train_id)).toEqual(['train-9']);
   });
 });
 

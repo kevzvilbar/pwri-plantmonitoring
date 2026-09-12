@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   buildStatusTimeline, nonRunningSegmentsInRange, mergeSegmentsForDisplay, formatSegmentDuration,
   reconcileOngoingSegmentWithReadings, flagConflictingClosedSegments, dropBogusOpenAutoFlag,
+  preserveAutoFlagReason,
 } from './trainStatusTimeline';
 
 describe('buildStatusTimeline', () => {
@@ -325,5 +326,31 @@ describe('flagConflictingClosedSegments', () => {
       { status: 'Running', confirmed_at: '2026-08-26T08:42:00Z', reason: null },
     ]);
     expect(flagConflictingClosedSegments(segments, [])).toEqual(segments);
+  });
+});
+
+describe('preserveAutoFlagReason', () => {
+  it('lets an operator-supplied reason win even over an existing Auto-flagged marker', () => {
+    expect(preserveAutoFlagReason('Auto-flagged: no reading for 2.3h', 'Pump tripped')).toBe('Pump tripped');
+  });
+
+  it('keeps an existing Auto-flagged marker when the operator leaves the reason blank', () => {
+    // This is the case that used to silently erase the marker: an operator
+    // just resumes logging without picking a manual offline reason.
+    expect(preserveAutoFlagReason('Auto-flagged: no reading for 2.3h', null)).toBe('Auto-flagged: no reading for 2.3h');
+  });
+
+  it('still writes null when there was no existing reason at all', () => {
+    expect(preserveAutoFlagReason(null, null)).toBeNull();
+    expect(preserveAutoFlagReason(undefined, null)).toBeNull();
+  });
+
+  it('does not preserve a non-Auto-flagged existing reason — unchanged behavior for manual rows', () => {
+    expect(preserveAutoFlagReason('Scheduled maintenance', null)).toBeNull();
+  });
+
+  it('an operator reason always overrides, regardless of what existed before', () => {
+    expect(preserveAutoFlagReason(null, 'Power outage')).toBe('Power outage');
+    expect(preserveAutoFlagReason('Scheduled maintenance', 'Power outage')).toBe('Power outage');
   });
 });

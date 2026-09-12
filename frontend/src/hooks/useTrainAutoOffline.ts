@@ -42,6 +42,45 @@ export function shouldAutoFlagTrainOffline(hoursGap: number, currentStatus: stri
   return hoursGap >= AUTO_OFFLINE_THRESHOLD_HOURS && currentStatus === 'Running';
 }
 
+export interface UptimeReportRow {
+  train_id: string;
+  covered_from: string;
+  covered_until: string;
+}
+
+/** Groups uptime-report rows by train for O(1) lookup in isGapExempted. */
+export function buildUptimeReportsByTrain(reports: UptimeReportRow[]): Map<string, UptimeReportRow[]> {
+  const map = new Map<string, UptimeReportRow[]>();
+  for (const r of reports) {
+    const list = map.get(r.train_id) ?? [];
+    list.push(r);
+    map.set(r.train_id, list);
+  }
+  return map;
+}
+
+/**
+ * True when a filed "Report Running — failed to encode" attestation covers
+ * this candidate's gap start — i.e. an operator has already attested the
+ * train was running through this window, so the flagger must not re-write
+ * the flag. A gap starting after every filed report's covered_until is NOT
+ * exempt: an attestation covers only the window it names, not all time
+ * after it (see ro_train_uptime_reports migration comment).
+ */
+export function isGapExempted(
+  reportsByTrain: Map<string, UptimeReportRow[]>,
+  trainId: string,
+  gapStart: string | null,
+): boolean {
+  if (!gapStart) return false;
+  const reports = reportsByTrain.get(trainId);
+  if (!reports?.length) return false;
+  const ms = new Date(gapStart).getTime();
+  return reports.some(
+    (r) => ms >= new Date(r.covered_from).getTime() && ms <= new Date(r.covered_until).getTime(),
+  );
+}
+
 /**
  * Reduces reading rows (from ro_train_readings and/or ro_pretreatment_readings)
  * down to each train's single most recent reading_datetime. Order-independent —
@@ -162,35 +201,18 @@ export function useTrainAutoOffline(plantIds: string[]) {
       // kept running through [covered_from, covered_until]. Skip any candidate
       // whose gap start falls inside such a window; gaps AFTER it flag
       // normally (an attestation is not a standing exemption).
-      let reportedFromByTrain = new Map<string, string[]>();
-      let reportedUntilByTrain = new Map<string, string[]>();
+      let uptimeReportsByTrain = new Map<string, UptimeReportRow[]>();
       try {
         const { data: reports } = await (supabase as any)
           .from('ro_train_uptime_reports')
           .select('train_id,covered_from,covered_until')
           .in('train_id', trainIds);
-        for (const r of reports ?? []) {
-          const froms = reportedFromByTrain.get(r.train_id) ?? [];
-          const untils = reportedUntilByTrain.get(r.train_id) ?? [];
-          froms.push(r.covered_from);
-          untils.push(r.covered_until);
-          reportedFromByTrain.set(r.train_id, froms);
-          reportedUntilByTrain.set(r.train_id, untils);
-        }
+        uptimeReportsByTrain = buildUptimeReportsByTrain(reports ?? []);
       } catch {
         // Table not migrated yet — no exemptions apply.
       }
-      const isExempted = (trainId: string, gapStart: string | null) => {
-        if (!gapStart) return false;
-        const froms = reportedFromByTrain.get(trainId);
-        const untils = reportedUntilByTrain.get(trainId);
-        if (!froms || !untils) return false;
-        const ms = new Date(gapStart).getTime();
-        return froms.some((f, i) => {
-          const u = untils[i];
-          return f && u && ms >= new Date(f).getTime() && ms <= new Date(u).getTime();
-        });
-      };
+      const isExempted = (trainId: string, gapStart: string | null) =>
+        isGapExempted(uptimeReportsByTrain, trainId, gapStart);
 
       // ── Preferred path: server-time RPC ──────────────────────────────────
       // The RPC returns each train's latest reading (across both reading

@@ -34,9 +34,13 @@ export function TrainStatusBannerRow({ segment, onReportRunning, reporting }: {
   const Icon = isMaintenance ? Wrench : PowerOff;
   const label = isMaintenance ? 'Maintenance' : 'Offline';
   const fmtPoint = (iso: string) => format(new Date(iso), 'MMM d, HH:mm');
+  // Open OR closed: a closed segment can still be a false positive worth
+  // correcting for the record (downtime reports count it either way) — see
+  // preserveAutoFlagReason in trainStatusTimeline.ts for why the reason
+  // marker now survives the ordinary close-out flow instead of only ever
+  // surviving on the still-open segment.
   const canReportRunning = !!onReportRunning
     && segment.status === 'Offline'
-    && segment.endAt === null
     && !!segment.reason?.startsWith('Auto-flagged');
   return (
     <tr className={cn('border-t', isMaintenance ? 'bg-warn-soft/60' : 'bg-danger-soft/60')}>
@@ -77,7 +81,11 @@ export function TrainStatusBannerRow({ segment, onReportRunning, reporting }: {
               disabled={reporting}
               onClick={() => onReportRunning?.(segment)}
               className="ml-1 inline-flex items-center gap-1 rounded border border-current/30 px-1.5 py-0.5 font-normal hover:bg-current/10 disabled:opacity-50 whitespace-nowrap"
-              title="The train was actually running the whole time — readings just weren't encoded (operator error or system outage). Files a retroactive uptime attestation, removes this flag, and puts the train back to Running."
+              title={
+                segment.endAt === null
+                  ? "The train was actually running the whole time — readings just weren't encoded (operator error or system outage). Files a retroactive uptime attestation, removes this flag, and puts the train back to Running."
+                  : "The train was actually running the whole time — readings just weren't encoded (operator error or system outage). Files a retroactive uptime attestation and corrects this closed period in the record, without changing the train's current status."
+              }
             >
               <Undo2 className="h-3 w-3" />
               {reporting ? 'reporting…' : 'was actually running? report'}

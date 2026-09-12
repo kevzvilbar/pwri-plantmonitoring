@@ -4,6 +4,7 @@ import { friendlyError } from '@/lib/supabaseErrors';
 import { getHourBucket, isOfflineRORecord } from '@/lib/hourlyReadingGuard';
 import { submitAnomalyRemark, isAnomalyRemarkValid } from '@/lib/anomalyRemarks';
 import { calc, ALERTS } from '@/lib/calculations';
+import { preserveAutoFlagReason } from '@/lib/trainStatusTimeline';
 import { STANDARD_OFFLINE_REASONS, getUnitReasonText } from '../types';
 
 export interface PretreatmentActionsOptions {
@@ -291,7 +292,7 @@ export function usePretreatmentActions(rawOpts: PretreatmentActionsOptions) {
         if (opts.data?.latestStatusLog?.status === 'Offline' && opts.data?.latestStatusLog?.id) {
           try {
             await opts.supabase.from('train_status_log').update({
-              reason: offlineReasonFinal,
+              reason: preserveAutoFlagReason(opts.data.latestStatusLog.reason, offlineReasonFinal),
               confirmed_by: opts.activeOperator?.id ?? null,
               confirmed_at: opts.offlineStart ? new Date(opts.offlineStart).toISOString() : opts.data.latestStatusLog.confirmed_at,
             }).eq('id', opts.data.latestStatusLog.id);
@@ -313,7 +314,7 @@ export function usePretreatmentActions(rawOpts: PretreatmentActionsOptions) {
         if (opts.data?.latestStatusLog?.status === 'Offline' && opts.data?.latestStatusLog?.id) {
           try {
             await opts.supabase.from('train_status_log').update({
-              reason: offlineReasonFinal,
+              reason: preserveAutoFlagReason(opts.data.latestStatusLog.reason, offlineReasonFinal),
               confirmed_by: opts.activeOperator?.id ?? null,
               confirmed_at: opts.offlineStart ? new Date(opts.offlineStart).toISOString() : opts.data.latestStatusLog.confirmed_at,
             }).eq('id', opts.data.latestStatusLog.id);
