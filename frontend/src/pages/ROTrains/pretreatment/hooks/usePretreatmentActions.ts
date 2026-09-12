@@ -77,9 +77,7 @@ export function usePretreatmentActions(rawOpts: PretreatmentActionsOptions) {
       }
       setIsSaving(true);
       try {
-        const occupied = await checkHourOccupied(opts.dt);
-        if (occupied) return;
-        await reportTrainRunningExemption(supabase, opts.qc, {
+        await reportTrainRunningExemption(opts.supabase, opts.qc, {
           trainId: opts.trainId,
           plantId: opts.plantId,
           coveredFrom: new Date(opts.offlineStart).toISOString(),

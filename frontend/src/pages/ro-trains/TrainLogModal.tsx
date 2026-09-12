@@ -37,7 +37,7 @@ import { TrainLogHeader } from './components/TrainLogHeader';
 import { TrainLogFilters } from './components/TrainLogFilters';
 import { RoLogTable } from './components/RoLogTable';
 import { PreTreatLogTable } from './components/PreTreatLogTable';
-import { UPTIME_EXEMPTION_SUBREASONS } from '../ROTrains/pretreatment/types';
+import { UPTIME_EXEMPTION_SUBREASONS } from './pretreatment/types';
 
 /**
  * Reason options for the "Report Running — failed to encode" attestation
