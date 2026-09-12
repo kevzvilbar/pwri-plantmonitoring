@@ -150,7 +150,7 @@ export function useTrainLogActions(options: TrainLogActionsOptions): TrainLogAct
     if (!gapDialogTarget) return;
     setGapDialogBusy(true);
     try {
-      const { error } = await supabase.from('ro_train_data_gaps').upsert({
+      const row = {
         train_id: trainId,
         plant_id: plantId,
         source_table: gapDialogTarget.sourceTable,
@@ -161,7 +161,24 @@ export function useTrainLogActions(options: TrainLogActionsOptions): TrainLogAct
         reason_detail: detail || null,
         logged_by: activeOperator?.id ?? null,
         logged_at: new Date().toISOString(),
-      }, { onConflict: 'train_id,source_table,gap_start_at' });
+      };
+      // Preferred: upsert on the unique gap key (migration
+      // 20260912000003_ro_train_data_gaps_unique.sql). If the constraint
+      // isn't applied yet in this environment, Postgres rejects the ON
+      // CONFLICT clause with 42P10 — fall back to a plain insert so logging
+      // still works (a duplicate row is possible if the badge is logged
+      // twice pre-migration, and the migration's dedupe cleans that up).
+      let error: { message: string; code?: string } | null = null;
+      try {
+        ({ error } = await supabase.from('ro_train_data_gaps').upsert(row, {
+          onConflict: 'train_id,source_table,gap_start_at',
+        }));
+      } catch (upsertThrew: any) {
+        error = upsertThrew;
+      }
+      if (error && (error as any).code === '42P10') {
+        ({ error } = await supabase.from('ro_train_data_gaps').insert(row));
+      }
       if (error) { toast.error(friendlyError(error)); return; }
       qc.invalidateQueries({ queryKey: ['ro-train-data-gaps', trainId] });
       toast.success('Reason logged');
