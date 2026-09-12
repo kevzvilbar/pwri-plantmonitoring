@@ -24,6 +24,11 @@ export interface ROTrain {
   num_filter_housings: number;
   num_hp_pumps: number;
   shared_power_meter_group: string | null;
+  uses_em_meter: boolean;
+  em_all_streams: boolean;
+  em_stream_feed: boolean;
+  em_stream_permeate: boolean;
+  em_stream_reject: boolean;
   status: 'Running' | 'Offline' | 'Maintenance';
   well_id: string | null;
   created_at: string;

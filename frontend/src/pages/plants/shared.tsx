@@ -154,6 +154,15 @@ export interface PlantMeterConfig {
   //   'permeate'  — RO permeate meter IS production; product meter (if any)
   //                 is EXCLUDED from the total to avoid double-counting the
   //                 same water on both meters.
+  // Per-train EM-vs-manual meter configuration (keyed by train id).
+  // If a train id is missing from this map, it defaults to all-EM (existing behavior).
+  ro_train_em_config?: Record<string, {
+    uses_em_meter: boolean;
+    em_all_streams: boolean;
+    em_stream_feed: boolean;
+    em_stream_permeate: boolean;
+    em_stream_reject: boolean;
+  }>;
   //   'both'      — plant has two genuinely independent production inputs
   //                 (e.g. a dedicated/mirrored product meter PLUS its own RO
   //                 permeate) that must be ADDED together for Total
@@ -219,6 +228,7 @@ export const DEFAULT_METER_CONFIG: PlantMeterConfig = {
   ro_production_source: 'product',
   ro_has_per_train_electricity: false,
   ro_has_per_train_water: false,
+  ro_train_em_config: {},
   wells_shared_electric_groups: [],
   wells_dedicated_electric_ids: [],
   wells_no_electric: false,

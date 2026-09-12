@@ -66,6 +66,9 @@ export function usePretreatmentCalculations(
   anomalyRemarkPerm: string,
   anomalyRemarkRej: string,
   showRejectMeter: boolean,
+  feedIsEM: boolean,
+  permIsEM: boolean,
+  rejIsEM: boolean,
 ): PretreatmentCalculations {
   return useMemo(() => {
     const num = (s: string) => s ? +s : NaN;
@@ -121,22 +124,30 @@ export function usePretreatmentCalculations(
     // EM 3-way inference
     const emFeedFlow = roValues.feed_flow ? num(roValues.feed_flow) : null;
     const emPermFlow = roValues.permeate_flow ? num(roValues.permeate_flow) : null;
+    const emFeedFlow = roValues.feed_flow ? num(roValues.feed_flow) : null;
+    const emPermFlow = roValues.permeate_flow ? num(roValues.permeate_flow) : null;
     const emRejFlow = roValues.reject_flow ? num(roValues.reject_flow) : null;
     const emEntered = [emFeedFlow, emPermFlow, emRejFlow].filter(v => v !== null).length;
 
+    // EM-vs-manual per-stream guards. A manual-only stream always uses its
+    // own manual-meter calculation � never backfilled via subtraction from
+    // the other two streams' EM values.
     const effFeedFlow: number | null = (() => {
+      if (!feedIsEM) return feedFlowMeter;
       if (emFeedFlow !== null) return emFeedFlow;
       if (emEntered === 2 && emPermFlow !== null && emRejFlow !== null)
         return +((emPermFlow + emRejFlow).toFixed(2));
       return feedFlowMeter;
     })();
     const effPermFlow: number | null = (() => {
+      if (!permIsEM) return permFlowMeter;
       if (emPermFlow !== null) return emPermFlow;
       if (emEntered === 2 && emFeedFlow !== null && emRejFlow !== null)
         return +((emFeedFlow - emRejFlow).toFixed(2));
       return permFlowMeter;
     })();
     const effRejFlow: number | null = (() => {
+      if (!rejIsEM) return rejFlowMeter;
       if (emRejFlow !== null) return emRejFlow;
       if (emEntered === 2 && emFeedFlow !== null && emPermFlow !== null)
         return +((emFeedFlow - emPermFlow).toFixed(2));
@@ -192,4 +203,5 @@ export function usePretreatmentCalculations(
       feedVol, permVol, rejVol, mDurHr,
     };
   }, [roValues, prevFeedMeter, prevPermMeter, prevRejMeter, prevPowerMeter, autoDurationMin, avgFeedFlowRate, avgPermFlowRate, avgRejFlowRate, anomalyRemarkFeed, anomalyRemarkPerm, anomalyRemarkRej, showRejectMeter]);
+  }, [roValues, prevFeedMeter, prevPermMeter, prevRejMeter, prevPowerMeter, autoDurationMin, avgFeedFlowRate, avgPermFlowRate, avgRejFlowRate, anomalyRemarkFeed, anomalyRemarkPerm, anomalyRemarkRej, showRejectMeter, feedIsEM, permIsEM, rejIsEM]);
 }

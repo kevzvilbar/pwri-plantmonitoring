@@ -23,6 +23,7 @@ import { usePretreatmentCalculations } from './hooks/usePretreatmentCalculations
 import { usePretreatmentActions } from './hooks/usePretreatmentActions';
 import { invalidateAllRoQueries } from './hooks/useRoQueryInvalidation';
 import { isWasActuallyRunningReason, WAS_ACTUALLY_RUNNING_REASON } from '@/lib/trainUptimeExemption';
+import { trainEmFlags } from '@/lib/trainEmMeter';
 
 export function PretreatmentAndROLog() {
   const qc = useQueryClient();
@@ -86,6 +87,8 @@ export function PretreatmentAndROLog() {
   const showPowerMeter = meterCfg.ro_has_per_train_electricity ?? true;
   const productionLabel = meterCfg.ro_production_source === 'permeate' ? 'Permeate / Production' : 'Permeate / Product';
 
+  // Per-stream EM-vs-manual flags from the train's configuration
+  const emFlags = trainEmFlags(train);
   const plantFilterHousingType: 'Cartridge Filter' | 'Bag Filter' =
     (plant as any)?.filter_housing_type ?? 'Cartridge Filter';
   const cartridgeHousingLabel =
@@ -111,6 +114,9 @@ export function PretreatmentAndROLog() {
   }, [train?.id, train?.hpp_target_pressure_psi]);
 
   // Auto-set offline when train is offline in DB or has no readings in past 2 hours.
+      emFlags.feedIsEM,
+      emFlags.permIsEM,
+      emFlags.rejIsEM,
   // Wait for isStatusLoading to settle before locking in a default — prevReadings/
   // prevPretreatReadings resolve independently of the trains query, so applying this
   // the instant `train` loads can lock in a default computed from a stale/missing
@@ -388,6 +394,9 @@ export function PretreatmentAndROLog() {
                   showPermeateMeter={showPermeateMeter}
                   showRejectMeter={showRejectMeter}
                   showPowerMeter={showPowerMeter}
+                  feedIsEM={emFlags.feedIsEM}
+                  permIsEM={emFlags.permIsEM}
+                  rejIsEM={emFlags.rejIsEM}
                   isSharedPowerMeter={isSharedPowerMeter}
                   sharedPowerGroup={sharedPowerGroup}
                   productionLabel={productionLabel}

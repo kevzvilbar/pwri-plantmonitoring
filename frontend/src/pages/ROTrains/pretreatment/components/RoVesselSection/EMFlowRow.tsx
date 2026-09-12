@@ -7,6 +7,9 @@ export interface EMFlowRowProps {
   showFeedMeter: boolean;
   showPermeateMeter: boolean;
   showRejectMeter: boolean;
+  feedIsEM: boolean;
+  permIsEM: boolean;
+  rejIsEM: boolean;
   f: (key: string) => { value: string; onChange: (e: any) => void };
   emEntered: number;
   emFeedInferred: boolean;
@@ -34,6 +37,9 @@ export function EMFlowRow({
   emEntered,
   emFeedInferred,
   emPermInferred,
+  feedIsEM,
+  permIsEM,
+  rejIsEM,
   emRejInferred,
   effFeedFlow,
   effPermFlow,
@@ -45,7 +51,13 @@ export function EMFlowRow({
   recWarn,
   meterCfg,
 }: EMFlowRowProps) {
-  const activeMeters = [showFeedMeter, showPermeateMeter, showRejectMeter].filter(Boolean).length;
+  // Only show EM input when both the meter exists (plant-wide flag) AND the
+  // train is configured as EM-capable for that stream. Manual-only streams
+  // render in the WaterMeterSection instead.
+  const emFeedShown = showFeedMeter && feedIsEM;
+  const emPermShown = showPermeateMeter && permIsEM;
+  const emRejShown = showRejectMeter && rejIsEM;
+  const activeMeters = [emFeedShown, emPermShown, emRejShown].filter(Boolean).length;
   const meterGridClass = activeMeters === 3 ? 'grid-cols-3' : activeMeters === 2 ? 'grid-cols-2' : 'grid-cols-1';
 
   return (
@@ -62,7 +74,7 @@ export function EMFlowRow({
         </p>
       </div>
       <div className={cn('grid gap-2', meterGridClass)}>
-        {showFeedMeter && (
+        {emFeedShown && (
           <div className="space-y-1">
             <Label htmlFor="pretreat-feed-flowrate" className={cn('text-xs', emFeedInferred ? 'text-info' : 'text-muted-foreground')}>
               Feed Flowrate{emFeedInferred ? ' (computed)' : ''}
@@ -79,7 +91,7 @@ export function EMFlowRow({
             )}
           </div>
         )}
-        {showPermeateMeter && (
+        {emPermShown && (
           <div className="space-y-1">
             <Label htmlFor="pretreat-field-3" className={cn('text-xs', emPermInferred ? 'text-info' : 'text-muted-foreground')}>
               {meterCfg.ro_production_source === 'permeate' ? 'Production Flowrate' : 'Permeate Flowrate'}{emPermInferred ? ' (computed)' : ''}
@@ -94,15 +106,17 @@ export function EMFlowRow({
                 placeholder={permFlowMeter != null ? `≈ ${Number(permFlowMeter).toFixed(2)} (meter)` : 'EM reading'}
                 className="placeholder:text-2xs placeholder:text-muted-foreground/50" id="pretreat-field-3"/>
             )}
-            <div className="mt-1">
-              <Label htmlFor="pretreat-recovery" className={cn('text-xs', recWarn ? 'text-warn' : 'text-muted-foreground')}>
-                Recovery %{recWarn ? ' ⚠' : ''}
-              </Label>
-              <ComputedInput value={recovery != null ? String(recovery) : ''} className={recWarn ? 'border-warn text-warn-foreground font-semibold' : 'text-foreground font-medium'} id="pretreat-recovery"/>
-            </div>
+            {emRejShown && recovery != null && (
+              <div className="mt-1">
+                <Label htmlFor="pretreat-recovery" className={cn('text-xs', recWarn ? 'text-warn' : 'text-muted-foreground')}>
+                  Recovery %{recWarn ? ' ⚠' : ''}
+                </Label>
+                <ComputedInput value={String(recovery)} className={recWarn ? 'border-warn text-warn-foreground font-semibold' : 'text-foreground font-medium'} id="pretreat-recovery"/>
+              </div>
+            )}
           </div>
         )}
-        {showRejectMeter && (
+        {emRejShown && (
           <div className="space-y-1">
             <Label htmlFor="pretreat-reject-flowrate" className={cn('text-xs', emRejInferred ? 'text-info' : 'text-muted-foreground')}>
               Reject Flowrate{emRejInferred ? ' (computed)' : ''}

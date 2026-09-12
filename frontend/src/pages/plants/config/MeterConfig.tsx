@@ -185,6 +185,7 @@ export function PlantMeterConfigCard({ plant }: { plant: any }) {
           <ProductMeterSection cfg={cfg} update={update} canEdit={canEdit} />
 
           <div className="border-t border-border/50" />
+          <RoTrainsMeterSection cfg={cfg} update={update} canEdit={canEdit} plantId={plant.id} />
 
           <WellsMeterSection cfg={cfg} update={update} canEdit={canEdit} wells={wells} />
 

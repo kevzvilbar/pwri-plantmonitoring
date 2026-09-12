@@ -13,6 +13,9 @@ export interface RoVesselContainerProps {
   showFeedMeter: boolean;
   showPermeateMeter: boolean;
   showRejectMeter: boolean;
+  feedIsEM: boolean;
+  permIsEM: boolean;
+  rejIsEM: boolean;
   showPowerMeter: boolean;
   isSharedPowerMeter: boolean;
   sharedPowerGroup: string | null;
@@ -34,6 +37,9 @@ export function RoVesselContainer({
   isSharedPowerMeter,
   sharedPowerGroup,
   productionLabel,
+  feedIsEM,
+  permIsEM,
+  rejIsEM,
   onFieldChange,
 }: RoVesselContainerProps) {
   const emEntered = [form.roValues.feed_flow, form.roValues.permeate_flow, form.roValues.reject_flow].filter(Boolean).length;
@@ -100,6 +106,9 @@ export function RoVesselContainer({
       phWarn={calc.phWarn}
       rejection={calc.rejection}
       saltPassage={calc.saltPassage}
+      feedIsEM={feedIsEM}
+      permIsEM={permIsEM}
+      rejIsEM={rejIsEM}
     />
   );
 }
