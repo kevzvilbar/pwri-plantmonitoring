@@ -1,3 +1,36 @@
+/**
+ * hooks/useTrainUptimeExemption.ts
+ *
+ * Shared "was actually running — failed to encode" exemption for the 2h
+ * auto-offline rule (see lib/trainUptimeExemption.ts for the constants).
+ *
+ * WHY THIS LIVES IN src/hooks/ INSTEAD OF A PAGE TREE:
+ * Both RO Train surfaces use it — the live log form under
+ * pages/ROTrains/pretreatment/ and the history modal under
+ * pages/ro-trains/. The two page folders have different casing, so a
+ * cross-folder import (ROTrains/... -> ../../../ro-trains/...) breaks the
+ * case-sensitive Linux/Vercel build. Anything both sides need belongs at the
+ * shared level (src/hooks, src/lib), never imported page-to-page.
+ *
+ * Workflow: files a retroactive attestation that the train was actually
+ * running during a gap the auto-offline flagger mis-read (operator forgot
+ * to encode, or the terminal/app was down), then:
+ *   1. inserts a ro_train_uptime_reports row covering [coveredFrom, coveredUntil],
+ *   2. deletes the bogus auto-flag row(s) from train_status_log — bounded
+ *      to the attested window, not "everything from coveredFrom onward",
+ *   3. if (and only if) this is the train's current, still-open segment,
+ *      flips ro_trains.status back to Running and logs the transition,
+ *   4. otherwise (a closed/historical segment being corrected after the
+ *      fact) leaves ro_trains.status alone — the train's current state may
+ *      reflect a separate, later, unrelated Offline/Maintenance period that
+ *      this attestation has no business touching.
+ *
+ * The report row itself (covered_from → covered_until) is what stops the
+ * flagger from re-writing the flag on the next 5-minute poll: see the
+ * exemption check in useTrainAutoOffline.ts (isGapExempted). Gaps filed
+ * AFTER covered_until are flagged normally — an attestation is not a
+ * standing exemption.
+ */
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { friendlyError } from '@/lib/supabaseErrors';
@@ -109,13 +142,8 @@ export async function reportTrainRunningExemption(
 }
 
 /**
- * "Report Running — failed to encode" exemption workflow (React hook).
- * Files the attestation via reportTrainRunningExemption() above.
- *
- * The report row itself (covered_from → covered_until) is what stops the
- * flagger from re-writing the flag on the next 5-minute poll: see the
- * exemption check in useTrainAutoOffline.ts. Gaps filed AFTER covered_until
- * are flagged normally — an attestation is not a standing exemption.
+ * React-hook wrapper around reportTrainRunningExemption() for components
+ * that own neither a supabase client nor a query client.
  */
 export function useReportTrainRunning() {
   const qc = useQueryClient();

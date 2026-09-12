@@ -22,7 +22,7 @@ import { usePretreatmentData } from './hooks/usePretreatmentData';
 import { usePretreatmentCalculations } from './hooks/usePretreatmentCalculations';
 import { usePretreatmentActions } from './hooks/usePretreatmentActions';
 import { invalidateAllRoQueries } from './hooks/useRoQueryInvalidation';
-import { isWasActuallyRunningReason, WAS_ACTUALLY_RUNNING_REASON } from './types';
+import { isWasActuallyRunningReason, WAS_ACTUALLY_RUNNING_REASON } from '@/lib/trainUptimeExemption';
 
 export function PretreatmentAndROLog() {
   const qc = useQueryClient();

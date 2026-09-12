@@ -5,8 +5,9 @@ import { getHourBucket, isOfflineRORecord } from '@/lib/hourlyReadingGuard';
 import { submitAnomalyRemark, isAnomalyRemarkValid } from '@/lib/anomalyRemarks';
 import { calc, ALERTS } from '@/lib/calculations';
 import { preserveAutoFlagReason } from '@/lib/trainStatusTimeline';
-import { STANDARD_OFFLINE_REASONS, getUnitReasonText, isWasActuallyRunningReason } from '../types';
-import { reportTrainRunningExemption } from '../../../ro-trains/hooks/useReportTrainRunning';
+import { STANDARD_OFFLINE_REASONS, getUnitReasonText } from '../types';
+import { isWasActuallyRunningReason } from '@/lib/trainUptimeExemption';
+import { reportTrainRunningExemption } from '@/hooks/useTrainUptimeExemption';
 
 export interface PretreatmentActionsOptions {
   plantId: string;

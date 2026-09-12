@@ -6,7 +6,8 @@ import { Label } from '@/components/ui/label';
 import { Card } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { DateTimePicker } from '@/components/ui/date-picker';
-import { STANDARD_OFFLINE_REASONS, WAS_ACTUALLY_RUNNING_REASON, UPTIME_EXEMPTION_SUBREASONS, isWasActuallyRunningReason } from '../types';
+import { STANDARD_OFFLINE_REASONS } from '../types';
+import { WAS_ACTUALLY_RUNNING_REASON, UPTIME_EXEMPTION_SUBREASONS, isWasActuallyRunningReason } from '@/lib/trainUptimeExemption';
 
 interface LatestStatusLog {
   status: string;
@@ -393,6 +394,9 @@ export function OfflineDetailsPanel({
         <div className="space-y-1">
           <Label htmlFor="pretreat-offline-since" className="text-xs font-medium text-foreground flex items-center gap-1">
             Offline Since <span className="text-danger font-bold">*</span>
+            {isExemption && (
+              <span className="text-3xs text-muted-foreground">(gap start — read-only)</span>
+            )}
           </Label>
           <DateTimePicker
             value={offlineStart}
@@ -401,6 +405,7 @@ export function OfflineDetailsPanel({
             size="sm"
             className="w-full bg-background border-danger/50 font-mono-num"
             id="pretreat-offline-since"
+            disabled={isExemption}
           />
         </div>
 
@@ -429,7 +434,7 @@ export function OfflineDetailsPanel({
       {isExemption && offlineStart ? (
         <div className="flex items-center gap-2 text-xs text-accent bg-accent-soft/90 border border-accent/30 rounded-md px-3 py-2">
           <CheckCircle2 className="h-4 w-4 text-accent shrink-0" />
-          <span><strong>Exemption — train kept running:</strong> Back Online At is not required. Filing removes the auto-flag and restores Running without recording downtime.</span>
+          <span><strong>Exemption — train kept running:</strong> Offline Since and Back Online At are locked (the train never stopped). Filing removes the auto-flag and restores Running without recording downtime.</span>
         </div>
       ) : (
       <>
