@@ -56,6 +56,15 @@ export const ENTITY_CONFIG: Record<string, {
   selectCols: string;
   labelFn: (row: Record<string, unknown>) => string;
   filterLabel: string;
+  /** Whether `status = 'Active'` is a valid filter on this lookup table.
+   *  wells/locators/product_meters use an Active/Inactive status column, so
+   *  filtering to Active-only entities works. ro_trains.status is instead the
+   *  `train_status` enum (Running/Offline/Maintenance) — it has no 'Active'
+   *  value, so applying that filter throws a Postgres 22P02 "invalid input
+   *  value for enum train_status" error (surfaces as a PostgREST 400). Every
+   *  train row is relevant here regardless of operational status, so skip
+   *  the filter for ro_trains rather than trying to map it onto that enum. */
+  filterActiveStatus: boolean;
 }> = {
   well_readings: {
     lookupTable: 'wells',
@@ -63,6 +72,7 @@ export const ENTITY_CONFIG: Record<string, {
     selectCols:  'id, name, plant_id, status',
     labelFn:     r => String(r.name ?? r.id),
     filterLabel: 'Well',
+    filterActiveStatus: true,
   },
   locator_readings: {
     lookupTable: 'locators',
@@ -70,6 +80,7 @@ export const ENTITY_CONFIG: Record<string, {
     selectCols:  'id, name, plant_id, status, default_input_mode, is_derived',
     labelFn:     r => String(r.name ?? r.id),
     filterLabel: 'Locator',
+    filterActiveStatus: true,
   },
   ro_train_readings: {
     lookupTable: 'ro_trains',
@@ -77,12 +88,14 @@ export const ENTITY_CONFIG: Record<string, {
     selectCols:  'id, name, train_number, plant_id, status',
     labelFn:     r => r.name ? String(r.name) : `Train ${r.train_number}`,
     filterLabel: 'RO Train',
+    filterActiveStatus: false,
   },
   product_meter_readings: {
     lookupTable: 'product_meters',
     fkColumn:    'meter_id',
     selectCols:  'id, name, plant_id',
     labelFn:     r => String(r.name ?? r.id),
+    filterActiveStatus: true,
     filterLabel: 'Meter',
   },
 };

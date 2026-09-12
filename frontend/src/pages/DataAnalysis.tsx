@@ -114,7 +114,11 @@ export default function DataAnalysis() {
         .select(entityCfgMain.selectCols)
         .order('name');
       if (plantId && plantId !== 'all') q = q.eq('plant_id', plantId);
-      q = q.eq('status', 'Active');
+      // Only wells/locators/product_meters have an Active/Inactive status
+      // column — ro_trains.status is the Running/Offline/Maintenance enum
+      // and has no 'Active' value, so filtering by it throws a Postgres
+      // 22P02 error. See ENTITY_CONFIG.filterActiveStatus in shared.ts.
+      if (entityCfgMain.filterActiveStatus) q = q.eq('status', 'Active');
       const { data, error } = await q;
       if (error) {
         let fbq = (supabase.from(entityCfgMain.lookupTable as never) as any)
