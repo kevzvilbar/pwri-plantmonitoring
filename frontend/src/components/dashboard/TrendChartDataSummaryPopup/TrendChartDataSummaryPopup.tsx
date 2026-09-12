@@ -93,6 +93,7 @@ export function DataSummaryPopup({
           overviewChartRows={data.overviewChartRows}
           overviewDates={data.overviewDates}
           roTrainEntities={data.roTrainEntities}
+          phHealthByDate={data.phHealthByDate}
           gridBreakdown={data.gridBreakdown}
           prodDates={data.prodDates}
           prodEntities={data.prodEntities}

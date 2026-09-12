@@ -8,13 +8,96 @@ export function OverviewTable({
   metric,
   chartData,
   roTrainEntities,
+  phHealthByDate,
 }: {
   metric: string;
   chartData: any[];
   roTrainEntities?: { id: string; label: string }[];
+  phHealthByDate?: Map<string, {
+    trainOnline: Record<string, boolean>;
+    trainHours: Record<string, number>;
+    onlineCount: number;
+    offlineCount: number;
+    healthPct: number | null;
+    totalTrains: number;
+  }>;
 }) {
-  if (chartData.length === 0) {
+  if (chartData.length === 0 && metric !== 'plantHealth') {
     return <div className="flex items-center justify-center h-24 text-xs text-muted-foreground">No data in selected range.</div>;
+  }
+
+  // For plantHealth, we drive the table from phHealthByDate directly
+  if (metric === 'plantHealth') {
+    if (!phHealthByDate || phHealthByDate.size === 0) {
+      return <div className="flex items-center justify-center h-24 text-xs text-muted-foreground">No RO readings in selected range.</div>;
+    }
+    const trains = roTrainEntities ?? [];
+    // Build sorted date list from the map
+    const sortedDates = Array.from(phHealthByDate.keys()).sort().reverse();
+
+    return (
+      <div className="h-full overflow-auto">
+        <table className="w-full border-collapse text-xs">
+          <thead className="bg-card">
+            <tr>
+              <th className={TH_DATE}>Date</th>
+              {trains.map((t) => (
+                <th key={t.id} className={TH}>{t.label}</th>
+              ))}
+              <th className={TH}>Online</th>
+              <th className={TH}>Health %</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sortedDates.map((dk, i) => {
+              const day = phHealthByDate.get(dk)!;
+              const label = (() => {
+                const d = new Date(dk + 'T00:00:00');
+                return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+              })();
+              return (
+                <tr key={dk} className={i % 2 === 0 ? 'bg-background hover:bg-muted/15' : 'bg-muted/10 hover:bg-muted/25'}>
+                  <td className={[
+                    'px-3 py-1.5 whitespace-nowrap font-medium text-xs text-muted-foreground sticky left-0 z-10 border-r border-border shadow-[4px_0_6px_-2px_rgba(0,0,0,0.06)]',
+                    i % 2 === 0 ? 'bg-card' : 'bg-muted',
+                  ].join(' ')}>{label}</td>
+                  {trains.map((t) => {
+                    const online = day.trainOnline[t.id] ?? false;
+                    const hours = day.trainHours[t.id] ?? 0;
+                    return (
+                      <td key={t.id} className={TD}>
+                        {online ? (
+                          <span className="inline-flex items-center gap-1">
+                            <span className="text-green-600 font-semibold">Online</span>
+                            {hours < 24 && (
+                              <span className="text-muted-foreground">({hours}h)</span>
+                            )}
+                          </span>
+                        ) : (
+                          <span className="text-destructive font-semibold">Offline</span>
+                        )}
+                      </td>
+                    );
+                  })}
+                  <td className={TD}>
+                    <span className="font-semibold">
+                      {day.onlineCount}/{day.totalTrains}
+                    </span>
+                  </td>
+                  <td className={TD}>
+                    {day.healthPct != null ? (
+                      <span className={day.healthPct < 50 ? 'text-destructive font-semibold' : day.healthPct < 100 ? 'text-amber-600 font-semibold' : 'text-green-600 font-semibold'}>
+                        {day.healthPct}%
+                      </span>
+                    ) : <span className="text-muted-foreground/40">—</span>}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    );
   }
 
   // Determine columns for this metric

@@ -40,6 +40,15 @@ export interface DataSummaryData {
   roTrainEntities: { id: string; label: string }[];
   roTrainRecoveryByDate: Map<string, Record<string, number>>;
   roTrainTdsByDate: Map<string, Record<string, number>>;
+  /** plantHealth metric — per-day per-train status map */
+  phHealthByDate: Map<string, {
+    trainOnline: Record<string, boolean>;   // trainId → online (had readings that day)
+    trainHours: Record<string, number>;     // trainId → estimated hours with readings
+    onlineCount: number;
+    offlineCount: number;
+    healthPct: number | null;
+    totalTrains: number;
+  }>;
   prodEntities: { id: string; label: string; kind: 'well' | 'meter' | 'ro_train' }[];
   prodPivotMap: Map<string, Map<string, number>>;
   prodDateKeys: string[];
@@ -315,6 +324,52 @@ export function useDataSummaryData({
 
     return { roTrainRecoveryByDate: recoveryByDate, roTrainTdsByDate: tdsByDate };
   }, [filteredRoReadings]);
+
+  /** Per-day per-train plant health data (used by OverviewTable for plantHealth metric) */
+  const phHealthByDate = useMemo(() => {
+    const result = new Map<string, {
+      trainOnline: Record<string, boolean>;
+      trainHours: Record<string, number>;
+      onlineCount: number;
+      offlineCount: number;
+      healthPct: number | null;
+      totalTrains: number;
+    }>();
+    if (metric !== 'plantHealth' || !filteredRoReadings.length) return result;
+
+    // Group readings by date → train → unique hours (to estimate run hours)
+    const dateTrainHours = new Map<string, Map<string, Set<string>>>();
+    filteredRoReadings.forEach((r: any) => {
+      if (!r.train_id || !r.reading_datetime) return;
+      const dk = format(new Date(r.reading_datetime), 'yyyy-MM-dd');
+      const hk = format(new Date(r.reading_datetime), 'yyyy-MM-dd HH');
+      if (!dateTrainHours.has(dk)) dateTrainHours.set(dk, new Map());
+      const trainMap = dateTrainHours.get(dk)!;
+      if (!trainMap.has(r.train_id)) trainMap.set(r.train_id, new Set());
+      trainMap.get(r.train_id)!.add(hk);
+    });
+
+    const allTrainIds = roTrainEntities.map((e) => e.id);
+    const totalTrains = allTrainIds.length;
+
+    dateTrainHours.forEach((trainMap, dk) => {
+      const trainOnline: Record<string, boolean> = {};
+      const trainHours: Record<string, number> = {};
+      let onlineCount = 0;
+      allTrainIds.forEach((tid) => {
+        const hours = trainMap.get(tid)?.size ?? 0;
+        const online = hours > 0;
+        trainOnline[tid] = online;
+        trainHours[tid] = hours;
+        if (online) onlineCount++;
+      });
+      const offlineCount = Math.max(0, totalTrains - onlineCount);
+      const healthPct = totalTrains > 0 ? Math.round((onlineCount / totalTrains) * 100) : null;
+      result.set(dk, { trainOnline, trainHours, onlineCount, offlineCount, healthPct, totalTrains });
+    });
+
+    return result;
+  }, [metric, filteredRoReadings, roTrainEntities]);
 
   const prodMeterReadingsForPivot = useMemo(
     () => (filteredProductReadings ?? []).filter((r: any) => !(productExcludedPlants?.has(r.plant_id))),
@@ -624,7 +679,7 @@ export function useDataSummaryData({
     gridMeterMeta, gridBreakdown,
     hasProdTab, hasConsTab, hasGridTab, hasChemBreakdownTab,
     overviewLabel, prodTabLabel,
-    roTrainEntities, roTrainRecoveryByDate, roTrainTdsByDate,
+    roTrainEntities, roTrainRecoveryByDate, roTrainTdsByDate, phHealthByDate,
     prodEntities, prodPivotMap, prodDateKeys, prodDates,
     hasProductMeterData, hasPermeateData,
     consEntities, consPivot, consDateKeys, consDates,

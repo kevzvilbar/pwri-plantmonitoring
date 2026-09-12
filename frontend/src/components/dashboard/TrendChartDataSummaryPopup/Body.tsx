@@ -9,6 +9,14 @@ interface BodyProps {
   overviewChartRows: any[];
   overviewDates: string[];
   roTrainEntities: { id: string; label: string }[];
+  phHealthByDate?: Map<string, {
+    trainOnline: Record<string, boolean>;
+    trainHours: Record<string, number>;
+    onlineCount: number;
+    offlineCount: number;
+    healthPct: number | null;
+    totalTrains: number;
+  }>;
   gridBreakdown: GridMeterBreakdown;
   prodDates: string[];
   prodEntities: { id: string; label: string; kind: string }[];
@@ -22,7 +30,7 @@ interface BodyProps {
 
 export function Body({
   activeTab, metric, hasProdTab, hasConsTab,
-  overviewChartRows, overviewDates, roTrainEntities,
+  overviewChartRows, overviewDates, roTrainEntities, phHealthByDate,
   gridBreakdown, prodDates, prodEntities, prodPivotMap, hasPermeateData,
   consDates, consEntities, consPivot, chemicalBreakdown,
 }: BodyProps) {
@@ -45,6 +53,7 @@ export function Body({
               metric={metric}
               chartData={overviewChartRows}
               roTrainEntities={roTrainEntities}
+              phHealthByDate={phHealthByDate}
             />
           )
         )}
