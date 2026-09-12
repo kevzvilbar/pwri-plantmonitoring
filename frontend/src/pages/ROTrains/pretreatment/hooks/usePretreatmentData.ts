@@ -14,6 +14,7 @@ export interface PretreatmentData {
   isPastTwoHoursMissing: boolean;
   isPastHourMissing?: boolean;
   isEffectivelyOffline: boolean;
+  isStatusLoading: boolean;
   feedCurr: number;
   permCurr: number;
   rejCurr: number;
@@ -52,7 +53,7 @@ export function usePretreatmentData(
   const siblingTrains = trains?.filter((t: any) => t.id !== trainId) ?? [];
 
   // Previous readings (feed, permeate, reject, power meters)
-  const { data: prevReadings } = useQuery({
+  const { data: prevReadings, isLoading: isPrevReadingsLoading } = useQuery({
     queryKey: ['ro-prev', trainId],
     enabled: !!trainId,
     queryFn: async () => {
@@ -68,7 +69,7 @@ export function usePretreatmentData(
     },
   });
 
-  const { data: prevPretreatReadings } = useQuery({
+  const { data: prevPretreatReadings, isLoading: isPrevPretreatLoading } = useQuery({
     queryKey: ['ro-pretreat-prev-dt', trainId],
     enabled: !!trainId,
     queryFn: async () => {
@@ -105,6 +106,10 @@ export function usePretreatmentData(
   const isEffectivelyOffline = train
     ? (train.status === 'Offline' || (train.status !== 'Maintenance' && isPastTwoHoursMissing))
     : false;
+  // True while we still don't know the train's real last-reading time. The caller should
+  // avoid locking in an Online/Offline default from isEffectivelyOffline until this settles,
+  // since prevReadings/prevPretreatReadings resolve independently of the `trains` query.
+  const isStatusLoading = !!trainId && (isPrevReadingsLoading || isPrevPretreatLoading);
   // Average flow rates (10-day rolling)
   const { data: avgFlowRates } = useQuery({
     queryKey: ['ro-spark', trainId],
@@ -206,6 +211,7 @@ export function usePretreatmentData(
     isPastTwoHoursMissing,
     isPastHourMissing: isPastTwoHoursMissing,
     isEffectivelyOffline,
+    isStatusLoading,
     feedCurr,
     permCurr,
     rejCurr,

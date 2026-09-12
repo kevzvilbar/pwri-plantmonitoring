@@ -109,10 +109,15 @@ export function PretreatmentAndROLog() {
     form.setHppTarget(train?.hpp_target_pressure_psi != null ? String(train.hpp_target_pressure_psi) : '');
   }, [train?.id, train?.hpp_target_pressure_psi]);
 
-  // Auto-set offline when train is offline in DB or has no readings in past 2 hours
+  // Auto-set offline when train is offline in DB or has no readings in past 2 hours.
+  // Wait for isStatusLoading to settle before locking in a default — prevReadings/
+  // prevPretreatReadings resolve independently of the trains query, so applying this
+  // the instant `train` loads can lock in a default computed from a stale/missing
+  // lastReadingTime (and never re-check, since it only runs once per train).
   const autoInitializedTrainId = useRef<string | null>(null);
   useEffect(() => {
     if (!train) return;
+    if (data.isStatusLoading) return;
     if (autoInitializedTrainId.current !== train.id) {
       autoInitializedTrainId.current = train.id;
       if (data.isEffectivelyOffline) {
@@ -136,7 +141,7 @@ export function PretreatmentAndROLog() {
         form.setOfflineReasonOther('');
       }
     }
-  }, [train?.id, data.isEffectivelyOffline, data.lastReadingTime, latestStatusLog?.reason, dt]);
+  }, [train?.id, data.isStatusLoading, data.isEffectivelyOffline, data.lastReadingTime, latestStatusLog?.reason, dt]);
 
   // ── Calculations hook ─────────────────────────────────────────────────────
   const calc = usePretreatmentCalculations(
@@ -249,7 +254,12 @@ export function PretreatmentAndROLog() {
         />
 
         {/* Online / Offline Status Segmented Bar */}
-        {train && (
+        {train && data.isStatusLoading && (
+          <div className="pt-2 border-t border-border/50">
+            <div className="h-[60px] rounded-lg border border-border/60 bg-muted/20 animate-pulse" />
+          </div>
+        )}
+        {train && !data.isStatusLoading && (
           <OnlineStatusToggle
             trainOnline={form.trainOnline}
             onSetOnline={() => {
