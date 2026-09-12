@@ -37,14 +37,20 @@ import { TrainLogHeader } from './components/TrainLogHeader';
 import { TrainLogFilters } from './components/TrainLogFilters';
 import { RoLogTable } from './components/RoLogTable';
 import { PreTreatLogTable } from './components/PreTreatLogTable';
-import { UPTIME_EXEMPTION_SUBREASONS } from './pretreatment/types';
 
 /**
  * Reason options for the "Report Running — failed to encode" attestation
- * dialog. Single-sourced from UPTIME_EXEMPTION_SUBREASONS (the RO Train log
- * page's exemption dropdown) so the two surfaces can't drift apart.
+ * dialog. Kept in sync with UPTIME_EXEMPTION_SUBREASONS in
+ * ROTrains/pretreatment/types.ts (the RO Train log page's exemption
+ * dropdown) — deliberately a local copy rather than an import: the two
+ * page trees live in differently-cased folders (ro-trains/ vs ROTrains/)
+ * and a cross-folder import breaks the case-sensitive Linux/Vercel build.
  */
-const UPTIME_REPORT_CATEGORIES = UPTIME_EXEMPTION_SUBREASONS;
+const UPTIME_REPORT_CATEGORIES = [
+  { value: 'operator_failed_to_encode', label: 'Operator failed to encode readings' },
+  { value: 'system_error', label: 'System / app error prevented encoding' },
+  { value: 'other', label: 'Other (explain in details)' },
+] as const;
 
 interface TrainLogModalProps {
   trainId: string;
