@@ -43,6 +43,9 @@ interface RoLogTableProps {
   queryKey: any[];
   exportCSV: () => void;
   doDeleteReading: () => Promise<void>;
+  /** "was actually running? report" handler for open auto-flagged Offline banners. */
+  onReportRunning?: (segment: any) => void;
+  reportingBanner?: boolean;
   fmtVal: (v: any, unit?: string) => React.ReactNode;
   format: (date: Date, format: string) => string;
 }
@@ -56,6 +59,7 @@ export function RoLogTable({
   canEditEntry, hasFullAccess, activeOperator, isManager,
   editingRoRow, replaceReadingId, setReplaceReadingId,
   toggleMeterReplacement, recalculateTrainDeltas, trainId, qc, queryKey, exportCSV, doDeleteReading,
+  onReportRunning, reportingBanner,
   fmtVal, format,
 }: RoLogTableProps) {
   if (logTab !== 'ro') return null;
@@ -106,7 +110,7 @@ export function RoLogTable({
       <tbody className="divide-y">
         {pageRoItems.map((item, i) => {
           if (item.kind === 'banner') {
-            return <TrainStatusBannerRow key={`banner-${item.segment.startAt}`} segment={item.segment} />;
+            return <TrainStatusBannerRow key={`banner-${item.segment.startAt}`} segment={item.segment} onReportRunning={onReportRunning} reporting={reportingBanner} />;
           }
           if (item.kind === 'gap') {
             const isHighlighted = highlightGapStartAt === item.gap.gapStartAt;

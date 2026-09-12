@@ -157,6 +157,41 @@ export function useTrainAutoOffline(plantIds: string[]) {
 
       const trainIds = trains.map((t) => t.id);
 
+      // ── Uptime-report exemptions ─────────────────────────────────────────
+      // A filed "Report Running — failed to encode" report attests the train
+      // kept running through [covered_from, covered_until]. Skip any candidate
+      // whose gap start falls inside such a window; gaps AFTER it flag
+      // normally (an attestation is not a standing exemption).
+      let reportedFromByTrain = new Map<string, string[]>();
+      let reportedUntilByTrain = new Map<string, string[]>();
+      try {
+        const { data: reports } = await (supabase as any)
+          .from('ro_train_uptime_reports')
+          .select('train_id,covered_from,covered_until')
+          .in('train_id', trainIds);
+        for (const r of reports ?? []) {
+          const froms = reportedFromByTrain.get(r.train_id) ?? [];
+          const untils = reportedUntilByTrain.get(r.train_id) ?? [];
+          froms.push(r.covered_from);
+          untils.push(r.covered_until);
+          reportedFromByTrain.set(r.train_id, froms);
+          reportedUntilByTrain.set(r.train_id, untils);
+        }
+      } catch {
+        // Table not migrated yet — no exemptions apply.
+      }
+      const isExempted = (trainId: string, gapStart: string | null) => {
+        if (!gapStart) return false;
+        const froms = reportedFromByTrain.get(trainId);
+        const untils = reportedUntilByTrain.get(trainId);
+        if (!froms || !untils) return false;
+        const ms = new Date(gapStart).getTime();
+        return froms.some((f, i) => {
+          const u = untils[i];
+          return f && u && ms >= new Date(f).getTime() && ms <= new Date(u).getTime();
+        });
+      };
+
       // ── Preferred path: server-time RPC ──────────────────────────────────
       // The RPC returns each train's latest reading (across both reading
       // tables, unbounded) AND the database's now() in one round trip, so the
@@ -176,7 +211,8 @@ export function useTrainAutoOffline(plantIds: string[]) {
             if (row.server_now) serverNowMs = new Date(row.server_now).getTime();
           }
           return computeTrainGaps(trains as RawTrainRow[], lastBy, serverNowMs)
-            .filter((g) => shouldAutoFlagTrainOffline(g.hours_gap, g.current_status));
+            .filter((g) => shouldAutoFlagTrainOffline(g.hours_gap, g.current_status))
+            .filter((g) => !isExempted(g.train_id, g.last_reading_at));
           // No unbounded-confirmation pass needed here: lastBy came from an
           // unbounded, clock-independent lookup already.
         }
@@ -213,7 +249,8 @@ export function useTrainAutoOffline(plantIds: string[]) {
 
       const now = Date.now();
       const candidates = computeTrainGaps(trains as RawTrainRow[], lastBy, now)
-        .filter((g) => shouldAutoFlagTrainOffline(g.hours_gap, g.current_status));
+        .filter((g) => shouldAutoFlagTrainOffline(g.hours_gap, g.current_status))
+        .filter((g) => !isExempted(g.train_id, g.last_reading_at));
 
       // Every candidate above came from the `since`-windowed fetch, which
       // trusts this device's own clock to build its cutoff. Before writing

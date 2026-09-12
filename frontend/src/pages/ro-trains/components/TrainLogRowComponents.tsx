@@ -9,7 +9,7 @@ import { type Ref } from 'react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { Calendar, ChevronLeft, ChevronRight, ChevronDown, PowerOff, Wrench, AlertTriangle } from 'lucide-react';
+import { Calendar, ChevronLeft, ChevronRight, ChevronDown, PowerOff, Wrench, AlertTriangle, Undo2 } from 'lucide-react';
 import {
   type StatusSegment,
   formatSegmentDuration,
@@ -24,11 +24,20 @@ import {
 } from '@/lib/downtimeRowMerger';
 import { reasonCategoryLabel } from '@/lib/reasonCodes';
 
-export function TrainStatusBannerRow({ segment }: { segment: StatusSegment }) {
+export function TrainStatusBannerRow({ segment, onReportRunning, reporting }: {
+  segment: StatusSegment;
+  /** Shown only for an OPEN auto-flagged Offline segment: files a "Report Running — failed to encode" exemption. */
+  onReportRunning?: (segment: StatusSegment) => void;
+  reporting?: boolean;
+}) {
   const isMaintenance = segment.status === 'Maintenance';
   const Icon = isMaintenance ? Wrench : PowerOff;
   const label = isMaintenance ? 'Maintenance' : 'Offline';
   const fmtPoint = (iso: string) => format(new Date(iso), 'MMM d, HH:mm');
+  const canReportRunning = !!onReportRunning
+    && segment.status === 'Offline'
+    && segment.endAt === null
+    && !!segment.reason?.startsWith('Auto-flagged');
   return (
     <tr className={cn('border-t', isMaintenance ? 'bg-warn-soft/60' : 'bg-danger-soft/60')}>
       <td colSpan={30} className="px-3 py-2">
@@ -61,6 +70,18 @@ export function TrainStatusBannerRow({ segment }: { segment: StatusSegment }) {
               <AlertTriangle className="h-3 w-3" />
               readings exist in this window — check status log
             </span>
+          )}
+          {canReportRunning && (
+            <button
+              type="button"
+              disabled={reporting}
+              onClick={() => onReportRunning?.(segment)}
+              className="ml-1 inline-flex items-center gap-1 rounded border border-current/30 px-1.5 py-0.5 font-normal hover:bg-current/10 disabled:opacity-50 whitespace-nowrap"
+              title="The train was actually running the whole time — readings just weren't encoded (operator error or system outage). Files a retroactive uptime attestation, removes this flag, and puts the train back to Running."
+            >
+              <Undo2 className="h-3 w-3" />
+              {reporting ? 'reporting…' : 'was actually running? report'}
+            </button>
           )}
         </div>
       </td>

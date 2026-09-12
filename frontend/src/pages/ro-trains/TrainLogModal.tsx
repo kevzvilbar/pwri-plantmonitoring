@@ -31,6 +31,14 @@ import { ImportROReadingsDialog } from './ImportROReadingsDialog';
 import { ImportPretreatReadingsDialog } from './ImportPretreatReadingsDialog';
 import { ReasonDialog } from '@/components/ReasonDialog';
 import { useTrainLogActions } from './hooks/useTrainLogActions';
+import { useReportTrainRunning } from './hooks/useReportTrainRunning';
+
+/** Reason options for the "Report Running — failed to encode" attestation dialog. */
+const UPTIME_REPORT_CATEGORIES = [
+  { value: 'operator_failed_to_encode', label: 'Operator failed to encode readings' },
+  { value: 'system_error', label: 'System / app error prevented encoding' },
+  { value: 'other', label: 'Other (explain in details)' },
+] as const;
 import { TrainLogHeader } from './components/TrainLogHeader';
 import { TrainLogFilters } from './components/TrainLogFilters';
 import { RoLogTable } from './components/RoLogTable';
@@ -80,6 +88,36 @@ export function TrainLogModal({ trainId, trainLabel, plantId, onClose, initialTa
     gap: any; sourceTable: 'ro_train_readings' | 'ro_pretreatment_readings';
   } | null>(null);
   const [gapDialogBusy, setGapDialogBusy] = useState(false);
+
+  // ── "Report Running — failed to encode" exemption ──────────────────────────
+  // Files a retroactive attestation that the train kept running through a gap
+  // the auto-offline flagger mis-read (operator failed to encode, or a
+  // system/app outage). Removes the open bogus flag and puts the train back
+  // to Running. The report row is the audit trail; the flagger skips future
+  // candidates whose gap start falls inside the reported window.
+  const { reportRunning } = useReportTrainRunning();
+  const [reportingBanner, setReportingBanner] = useState(false);
+  const [uptimeReportTarget, setUptimeReportTarget] = useState<any | null>(null);
+  const handleReportRunning = (segment: any) => setUptimeReportTarget(segment);
+  const submitUptimeReport = async (category: string, detail: string) => {
+    if (!uptimeReportTarget) return;
+    setReportingBanner(true);
+    try {
+      await reportRunning({
+        trainId,
+        plantId,
+        coveredFrom: uptimeReportTarget.startAt,
+        category: category as any,
+        detail,
+      });
+      toast.success('Uptime reported — flag removed, train back to Running');
+      setUptimeReportTarget(null);
+    } catch (e: any) {
+      toast.error(e?.message ?? 'Failed to report uptime');
+    } finally {
+      setReportingBanner(false);
+    }
+  };
 
   const todayStr  = format(new Date(), 'yyyy-MM-dd');
   const thirtyAgo = format(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), 'yyyy-MM-dd');
@@ -345,6 +383,8 @@ export function TrainLogModal({ trainId, trainLabel, plantId, onClose, initialTa
                 queryKey={queryKey}
                 exportCSV={actions.exportCSV}
                 doDeleteReading={actions.doDeleteReading}
+                onReportRunning={handleReportRunning}
+                reportingBanner={reportingBanner}
                 fmtVal={actions.fmtVal}
                 format={format}
               />
@@ -375,6 +415,8 @@ export function TrainLogModal({ trainId, trainLabel, plantId, onClose, initialTa
                 editingPretreatRow={editingPretreatRow}
                 fmtVal={actions.fmtVal}
                 format={format}
+                onReportRunning={handleReportRunning}
+                reportingBanner={reportingBanner}
                 trainLabel={trainLabel}
               />
             )}
@@ -468,6 +510,23 @@ export function TrainLogModal({ trainId, trainLabel, plantId, onClose, initialTa
           confirmLabel="Log reason"
           busy={gapDialogBusy}
           onConfirm={actions.submitGapReason}
+        />
+      )}
+      {uptimeReportTarget && (
+        <ReasonDialog
+          open={!!uptimeReportTarget}
+          onOpenChange={(o) => { if (!o && !reportingBanner) setUptimeReportTarget(null); }}
+          title="Report Running — readings not encoded"
+          description={
+            `Attest that Train ${trainLabel} was actually running the whole time and the auto-offline flag `
+            + `(started ${format(new Date(uptimeReportTarget.startAt), 'MMM d, HH:mm')}) is a false positive `
+            + `because readings weren't encoded. This removes the flag and puts the train back to Running. `
+            + `The attestation is logged with your name.`
+          }
+          confirmLabel="File attestation"
+          busy={reportingBanner}
+          categories={UPTIME_REPORT_CATEGORIES}
+          onConfirm={submitUptimeReport}
         />
       )}
       <AlertDialog open={!!pendingDelete} onOpenChange={(o) => !o && setPendingDelete(null)}>
