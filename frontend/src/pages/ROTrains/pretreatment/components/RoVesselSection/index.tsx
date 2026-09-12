@@ -75,6 +75,9 @@ export interface RoVesselSectionProps {
   phWarn: boolean;
   rejection: number | null;
   saltPassage: number | null;
+  feedIsEM: boolean;
+  permIsEM: boolean;
+  rejIsEM: boolean;
 }
 
 export function RoVesselSection({
@@ -138,6 +141,9 @@ export function RoVesselSection({
   phWarn,
   rejection,
   saltPassage,
+  feedIsEM,
+  permIsEM,
+  rejIsEM,
 }: RoVesselSectionProps) {
   const f = (k: string) => onFieldChange(k);
   const activeMeters = [showFeedMeter, showPermeateMeter, showRejectMeter].filter(Boolean).length;
@@ -227,6 +233,9 @@ export function RoVesselSection({
           recovery={recovery}
           recWarn={recWarn}
           meterCfg={meterCfg}
+          feedIsEM={feedIsEM}
+          permIsEM={permIsEM}
+          rejIsEM={rejIsEM}
         />
         <TDSRow f={f} rejection={rejection} saltPassage={saltPassage} />
         <PHRow f={f} phWarn={phWarn} />

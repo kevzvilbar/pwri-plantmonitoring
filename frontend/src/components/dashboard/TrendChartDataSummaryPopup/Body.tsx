@@ -30,6 +30,7 @@ interface BodyProps {
 
 export function Body({
   activeTab, metric, hasProdTab, hasConsTab,
+  overviewChartRows, overviewDates, roTrainEntities,
   overviewChartRows, overviewDates, roTrainEntities, phHealthByDate,
   gridBreakdown, prodDates, prodEntities, prodPivotMap, hasPermeateData,
   consDates, consEntities, consPivot, chemicalBreakdown,

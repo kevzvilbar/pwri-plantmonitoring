@@ -124,8 +124,6 @@ export function usePretreatmentCalculations(
     // EM 3-way inference
     const emFeedFlow = roValues.feed_flow ? num(roValues.feed_flow) : null;
     const emPermFlow = roValues.permeate_flow ? num(roValues.permeate_flow) : null;
-    const emFeedFlow = roValues.feed_flow ? num(roValues.feed_flow) : null;
-    const emPermFlow = roValues.permeate_flow ? num(roValues.permeate_flow) : null;
     const emRejFlow = roValues.reject_flow ? num(roValues.reject_flow) : null;
     const emEntered = [emFeedFlow, emPermFlow, emRejFlow].filter(v => v !== null).length;
 
@@ -202,6 +200,5 @@ export function usePretreatmentCalculations(
       anyNeedsRemark, anomalyRemarksMissing, anyMeterSpike,
       feedVol, permVol, rejVol, mDurHr,
     };
-  }, [roValues, prevFeedMeter, prevPermMeter, prevRejMeter, prevPowerMeter, autoDurationMin, avgFeedFlowRate, avgPermFlowRate, avgRejFlowRate, anomalyRemarkFeed, anomalyRemarkPerm, anomalyRemarkRej, showRejectMeter]);
   }, [roValues, prevFeedMeter, prevPermMeter, prevRejMeter, prevPowerMeter, autoDurationMin, avgFeedFlowRate, avgPermFlowRate, avgRejFlowRate, anomalyRemarkFeed, anomalyRemarkPerm, anomalyRemarkRej, showRejectMeter, feedIsEM, permIsEM, rejIsEM]);
 }

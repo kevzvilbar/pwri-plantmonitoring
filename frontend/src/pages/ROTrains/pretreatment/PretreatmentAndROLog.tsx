@@ -114,9 +114,6 @@ export function PretreatmentAndROLog() {
   }, [train?.id, train?.hpp_target_pressure_psi]);
 
   // Auto-set offline when train is offline in DB or has no readings in past 2 hours.
-      emFlags.feedIsEM,
-      emFlags.permIsEM,
-      emFlags.rejIsEM,
   // Wait for isStatusLoading to settle before locking in a default — prevReadings/
   // prevPretreatReadings resolve independently of the trains query, so applying this
   // the instant `train` loads can lock in a default computed from a stale/missing
@@ -146,7 +143,9 @@ export function PretreatmentAndROLog() {
         form.setOfflineEnd('');
         form.setOfflineReason('');
         form.setOfflineReasonOther('');
-        form.setExemptionSubreason('');
+        // Pre-select a default sub-reason so the one-click shortcut is
+        // immediately submittable — the operator can still change it before saving.
+        form.setExemptionSubreason('operator_failed_to_encode');
         form.setExemptionDetail('');
       }
     }
@@ -167,6 +166,9 @@ export function PretreatmentAndROLog() {
     form.anomalyRemarkPerm,
     form.anomalyRemarkRej,
     showRejectMeter,
+    emFlags.feedIsEM,
+    emFlags.permIsEM,
+    emFlags.rejIsEM,
   );
 
   const wasOffline = Boolean(train && (train.status === 'Offline' || data.isEffectivelyOffline));

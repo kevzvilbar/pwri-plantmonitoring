@@ -1,1 +1,62 @@
-/**`r * frontend/src/lib/trainEmMeter.ts`r *`r * Per-stream EM-vs-manual meter helper for RO trains.`r *`r * A train feed/permeate/reject streams can independently be configured as`r * electromagnetic-flowmeter-capable or manual-totalizer-only. This module`r * centralizes the precedence so the reading form, the calculation hook, and`r * the config UI all agree.`r *`r * WHY THIS LIVES IN src/lib/ INSTEAD OF A PAGE TREE:`r * Both the RO Train log form (pages/ROTrains/pretreatment/) and the Plant`r * Configuration settings (pages/plants/config/) need it. The two page folders`r * have different casing (ROTrains vs ro-trains-style paths), so a cross-folder`r * import breaks the case-sensitive Linux/Vercel build. Anything both sides`r * need belongs at the shared level (src/lib), never imported page-to-page.`r */`r`rexport interface TrainEmMeterConfig {`r  uses_em_meter: boolean;`r  em_all_streams: boolean;`r  em_stream_feed: boolean;`r  em_stream_permeate: boolean;`r  em_stream_reject: boolean;`r}`r`rexport type EmStream = 'feed' | 'permeate' | 'reject';`r`r/**`r * Returns true when the given stream on the given train should accept an`r * electromagnetic flowmeter reading. Precedence:`r *   1. Train has no EM meter at all ? manual for every stream.`r *   2. Train's "all streams EM" flag is on ? EM for every stream.`r *   3. Otherwise ? the per-stream flag decides.`r *`r * A manual-only stream never falls back to an EM-derived estimate — it always`r * uses its own manual-meter calculation (meter delta ÷ duration), even on a`r * day that reading is missing.`r */`rexport function trainUsesEmForStream(`r  train: TrainEmMeterConfig | null | undefined,`r  stream: EmStream,`r): boolean {`r  if (!train) return true; // no train row ? default EM (existing behavior)`r  if (!train.uses_em_meter) return false;`r  if (train.em_all_streams) return true;`r  return train[`em_stream_${stream}`] ?? true;`r}`r`r/**`r * Convenience: returns the EM flag for all three streams at once. Useful for`r * passing into the calculation hook and the reading form.`r */`rexport function trainEmFlags(`r  train: TrainEmMeterConfig | null | undefined,`r): { feedIsEM: boolean; permIsEM: boolean; rejIsEM: boolean } {`r  return {`r    feedIsEM: trainUsesEmForStream(train, 'feed'),`r    permIsEM: trainUsesEmForStream(train, 'permeate'),`r    rejIsEM: trainUsesEmForStream(train, 'reject'),`r  };`r}`r
+/**
+ * frontend/src/lib/trainEmMeter.ts
+ *
+ * Per-stream EM-vs-manual meter helper for RO trains.
+ *
+ * A train feed/permeate/reject streams can independently be configured as
+ * electromagnetic-flowmeter-capable or manual-totalizer-only. This module
+ * centralizes the precedence so the reading form, the calculation hook, and
+ * the config UI all agree.
+ *
+ * WHY THIS LIVES IN src/lib/ INSTEAD OF A PAGE TREE:
+ * Both the RO Train log form (pages/ROTrains/pretreatment/) and the Plant
+ * Configuration settings (pages/plants/config/) need it. The two page folders
+ * have different casing (ROTrains vs ro-trains-style paths), so a cross-folder
+ * import breaks the case-sensitive Linux/Vercel build. Anything both sides
+ * need belongs at the shared level (src/lib), never imported page-to-page.
+ */
+
+export interface TrainEmMeterConfig {
+  uses_em_meter: boolean | null;
+  em_all_streams: boolean | null;
+  em_stream_feed: boolean | null;
+  em_stream_permeate: boolean | null;
+  em_stream_reject: boolean | null;
+}
+
+export type EmStream = 'feed' | 'permeate' | 'reject';
+
+/**
+ * Returns true when the given stream on the given train should accept an
+ * electromagnetic flowmeter reading. Precedence:
+ *   1. Train has no EM meter at all ? manual for every stream.
+ *   2. Train's "all streams EM" flag is on ? EM for every stream.
+ *   3. Otherwise ? the per-stream flag decides (default false = manual).
+ *
+ * A manual-only stream never falls back to an EM-derived estimate — it always
+ * uses its own manual-meter calculation (meter delta ÷ duration), even on a
+ * day that reading is missing.
+ */
+export function trainUsesEmForStream(
+  train: TrainEmMeterConfig | null | undefined,
+  stream: EmStream,
+): boolean {
+  if (!train) return true; // no train row ? default EM (existing behavior)
+  if (!train.uses_em_meter) return false;
+  if (train.em_all_streams) return true;
+  return train[`em_stream_${stream}`] ?? false; // default false = manual
+}
+
+/**
+ * Convenience: returns the EM flag for all three streams at once. Useful for
+ * passing into the calculation hook and the reading form.
+ */
+export function trainEmFlags(
+  train: TrainEmMeterConfig | null | undefined,
+): { feedIsEM: boolean; permIsEM: boolean; rejIsEM: boolean } {
+  return {
+    feedIsEM: trainUsesEmForStream(train, 'feed'),
+    permIsEM: trainUsesEmForStream(train, 'permeate'),
+    rejIsEM: trainUsesEmForStream(train, 'reject'),
+  };
+}
