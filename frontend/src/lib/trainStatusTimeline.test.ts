@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   buildStatusTimeline, nonRunningSegmentsInRange, mergeSegmentsForDisplay, formatSegmentDuration,
-  reconcileOngoingSegmentWithReadings, flagConflictingClosedSegments,
+  reconcileOngoingSegmentWithReadings, flagConflictingClosedSegments, dropBogusOpenAutoFlag,
 } from './trainStatusTimeline';
 
 describe('buildStatusTimeline', () => {
@@ -200,6 +200,73 @@ describe('reconcileOngoingSegmentWithReadings', () => {
 
   it('is a no-op on an empty timeline', () => {
     expect(reconcileOngoingSegmentWithReadings([], '2026-08-28T02:50:00Z')).toEqual([]);
+  });
+});
+
+describe('dropBogusOpenAutoFlag', () => {
+  // Regression for Train 7 / RO7, 2026-09-12: a device with a drifted clock
+  // wrote "Auto-flagged: no reading for >24h" at 14:03, only 59 minutes after
+  // the 13:04 production reading. reconcileOngoingSegmentWithReadings can't
+  // touch this (the reading is BEFORE the flag start, not after), so the
+  // bogus "Offline — ongoing" banner sat at the top of the Operator Log.
+  it('drops an open Auto-flagged Offline flag when a production reading existed within the 2h threshold before its start', () => {
+    const segments = buildStatusTimeline([
+      { status: 'Offline', confirmed_at: '2026-09-12T14:03:00Z', reason: 'Auto-flagged: no reading for >24h' },
+    ]);
+    // Newest production reading is 59 min before the flag start — well inside
+    // the 2h auto-offline threshold, so the flag violated its own rule.
+    const result = dropBogusOpenAutoFlag(segments, ['2026-09-12T13:04:00Z']);
+    expect(result).toEqual([]);
+  });
+
+  it('keeps an open Auto-flagged Offline flag when the last production reading is older than the threshold', () => {
+    const segments = buildStatusTimeline([
+      { status: 'Offline', confirmed_at: '2026-09-12T14:03:00Z', reason: 'Auto-flagged: no reading for 2.3h' },
+    ]);
+    // Last reading 3h before the flag start → the flag is legitimate.
+    const result = dropBogusOpenAutoFlag(segments, ['2026-09-12T11:03:00Z']);
+    expect(result).toEqual(segments);
+  });
+
+  it('never touches a closed segment, even a bogus-looking auto-flag', () => {
+    const segments = buildStatusTimeline([
+      { status: 'Offline', confirmed_at: '2026-09-12T14:03:00Z', reason: 'Auto-flagged: no reading for >24h' },
+      { status: 'Running', confirmed_at: '2026-09-12T15:00:00Z', reason: null },
+    ]);
+    const result = dropBogusOpenAutoFlag(segments, ['2026-09-12T13:04:00Z']);
+    expect(result).toEqual(segments); // closed segments are annotation-only territory
+  });
+
+  it('never touches an operator/manual Offline flag (reason not Auto-flagged)', () => {
+    const segments = buildStatusTimeline([
+      { status: 'Offline', confirmed_at: '2026-09-12T14:03:00Z', reason: 'Operator Shutdown' },
+    ]);
+    const result = dropBogusOpenAutoFlag(segments, ['2026-09-12T13:58:00Z']);
+    expect(result).toEqual(segments);
+  });
+
+  it('keeps the flag when there are no production readings at all', () => {
+    const segments = buildStatusTimeline([
+      { status: 'Offline', confirmed_at: '2026-09-12T14:03:00Z', reason: 'Auto-flagged: no reading for >24h' },
+    ]);
+    expect(dropBogusOpenAutoFlag(segments, [])).toEqual(segments);
+    expect(dropBogusOpenAutoFlag(segments, [null, undefined])).toEqual(segments);
+  });
+
+  it('ignores production readings that fall AFTER the flag start (reconcile handles those)', () => {
+    const segments = buildStatusTimeline([
+      { status: 'Offline', confirmed_at: '2026-09-12T14:03:00Z', reason: 'Auto-flagged: no reading for >24h' },
+    ]);
+    const result = dropBogusOpenAutoFlag(segments, ['2026-09-12T14:30:00Z']);
+    expect(result).toEqual(segments);
+  });
+
+  it('never touches an open Running segment', () => {
+    const segments = buildStatusTimeline([
+      { status: 'Running', confirmed_at: '2026-09-12T14:03:00Z', reason: null },
+    ]);
+    const result = dropBogusOpenAutoFlag(segments, ['2026-09-12T13:04:00Z']);
+    expect(result).toEqual(segments);
   });
 });
 

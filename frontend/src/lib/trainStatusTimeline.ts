@@ -19,6 +19,13 @@
 
 export type TrainRunStatus = 'Running' | 'Offline' | 'Maintenance';
 
+/**
+ * Auto-offline threshold in hours — must match AUTO_OFFLINE_THRESHOLD_HOURS in
+ * hooks/useTrainAutoOffline.ts. Imported here instead to avoid a lib→hooks
+ * dependency, so keep the two in sync if the business rule changes.
+ */
+export const AUTO_OFFLINE_THRESHOLD_HOURS = 2;
+
 export interface TrainStatusRow {
   status: string;
   confirmed_at: string;
@@ -125,6 +132,57 @@ export function reconcileOngoingSegmentWithReadings(
     ...segments.slice(0, -1),
     { ...last, endAt: latestReadingAt, inferredEnd: true },
   ];
+}
+
+/**
+ * Drops a still-open (endAt=null) non-Running segment that was written by the
+ * auto-offline hook when a production reading existed within the auto-offline
+ * threshold BEFORE the flag's start.
+ *
+ * reconcileOngoingSegmentWithReadings above can only help when a reading lands
+ * AFTER the flag started. It cannot help against the failure mode seen on
+ * Train 7 / RO7 on 2026-09-12: a device with a drifted clock wrote
+ * "Auto-flagged: no reading for >24h" only 59 minutes after a real production
+ * reading — so the flag's start (14:03) sits after the last reading (13:04),
+ * reconcile's "reading after start" precondition never fires, and the bogus
+ * banner sits at the top of the Operator Log forever (no close row ever gets
+ * written while readings keep flowing, because the patched hook no longer
+ * re-flags).
+ *
+ * Rule applied: an auto-flag is only legitimate if the train genuinely had no
+ * production reading for the full AUTO_OFFLINE_THRESHOLD_HOURS leading up to
+ * it. If the newest production reading before the flag start is more recent
+ * than that threshold, the flag contradicts its own rule — drop it from the
+ * display. (The DB row itself is cleaned up by migration
+ * 20260912000001_train_last_readings_rpc.sql; this is the display-side
+ * defense-in-depth so the UI is correct even before that migration runs.)
+ *
+ * Only ever drops the *last* segment when it is open — closed segments are
+ * flagConflictingClosedSegments' territory and are left alone.
+ */
+export function dropBogusOpenAutoFlag(
+  segments: StatusSegment[],
+  readingTimestamps: (string | null | undefined)[],
+  thresholdHours = AUTO_OFFLINE_THRESHOLD_HOURS,
+): StatusSegment[] {
+  if (!segments.length) return segments;
+  const last = segments[segments.length - 1];
+  if (last.endAt !== null || last.status === 'Running') return segments;
+  if (!last.reason?.startsWith('Auto-flagged')) return segments;
+
+  const startMs = new Date(last.startAt).getTime();
+  const thresholdMs = thresholdHours * 3_600_000;
+  const newestProductionBeforeStart = readingTimestamps
+    .filter((t): t is string => !!t)
+    .map((t) => new Date(t).getTime())
+    .filter((ms) => !Number.isNaN(ms) && ms <= startMs)
+    .sort((a, b) => b - a)[0];
+
+  if (newestProductionBeforeStart === undefined) return segments;
+  if (startMs - newestProductionBeforeStart < thresholdMs) {
+    return segments.slice(0, -1); // flag violated its own 2h rule → bogus
+  }
+  return segments;
 }
 
 /**

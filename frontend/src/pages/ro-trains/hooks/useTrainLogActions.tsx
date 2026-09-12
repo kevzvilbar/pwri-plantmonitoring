@@ -18,6 +18,7 @@ import {
   mergeSegmentsForDisplay,
   formatSegmentDuration,
   reconcileOngoingSegmentWithReadings,
+  dropBogusOpenAutoFlag,
   flagConflictingClosedSegments,
   type StatusSegment,
 } from '@/lib/trainStatusTimeline';
@@ -260,7 +261,8 @@ export function useTrainLogActions(options: TrainLogActionsOptions): TrainLogAct
       return new Date(at).getTime() > new Date(latest).getTime() ? at : latest;
     }, null);
     const reconciled = reconcileOngoingSegmentWithReadings(inRange, latestReadingAt);
-    return flagConflictingClosedSegments(reconciled, productionReadingTimestamps);
+    const withoutBogusFlag = dropBogusOpenAutoFlag(reconciled, productionReadingTimestamps);
+    return flagConflictingClosedSegments(withoutBogusFlag, productionReadingTimestamps);
   }, [statusTimeline, dateFrom, untilNextDay, logs, preLogs]);
 
   const gapReasonsBySourceTable = useMemo(() => {
