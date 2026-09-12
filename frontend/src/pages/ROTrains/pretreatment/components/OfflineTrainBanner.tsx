@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Card } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { DateTimePicker } from '@/components/ui/date-picker';
-import { STANDARD_OFFLINE_REASONS } from '../types';
+import { STANDARD_OFFLINE_REASONS, WAS_ACTUALLY_RUNNING_REASON, UPTIME_EXEMPTION_SUBREASONS, isWasActuallyRunningReason } from '../types';
 
 interface LatestStatusLog {
   status: string;
@@ -244,18 +244,35 @@ export function OfflineWarningNotice({
 export function OfflineDetailsPanel({
   offlineReason,
   offlineReasonOther,
+  exemptionSubreason,
+  exemptionDetail,
   offlineStart,
   offlineEnd,
   latestStatusLog,
   onOfflineReasonChange,
   onOfflineReasonOtherChange,
+  onExemptionSubreasonChange,
+  onExemptionDetailChange,
   onOfflineStartChange,
   onOfflineEndChange,
+  onReportRunningInstead,
 }: Pick<OfflineTrainBannerProps,
   'offlineReason' | 'offlineReasonOther' | 'offlineStart' | 'offlineEnd' |
   'latestStatusLog' | 'onOfflineReasonChange' | 'onOfflineReasonOtherChange' |
   'onOfflineStartChange' | 'onOfflineEndChange'
->) {
+> & {
+  /** "Was actually running" exemption sub-reason (operator_failed_to_encode | system_error | other). */
+  exemptionSubreason: string;
+  /** Free-text detail for the exemption (required when sub-reason is "other"). */
+  exemptionDetail: string;
+  onExemptionSubreasonChange: (val: string) => void;
+  onExemptionDetailChange: (val: string) => void;
+  /** Banner-level shortcut: pre-selects the exemption instead of downtime. Only shown for auto-flagged trains. */
+  onReportRunningInstead?: () => void;
+}) {
+  const isExemption = isWasActuallyRunningReason(offlineReason);
+  const showAutoFlagShortcut = !!onReportRunningInstead && !isExemption
+    && !!latestStatusLog?.reason?.startsWith('Auto-flagged');
   return (
     <div className="space-y-3 rounded-lg border border-danger/40 bg-danger-soft/40 p-3.5 shadow-xs backdrop-blur-2xs">
       <div className="flex items-center justify-between border-b border-danger/20 pb-2">
@@ -302,9 +319,58 @@ export function OfflineDetailsPanel({
               <SelectItem key={r} value={r}>{r}</SelectItem>
             ))}
             <SelectItem value="Other">Other (specify below)</SelectItem>
+            <SelectItem value={WAS_ACTUALLY_RUNNING_REASON}>↩ Was actually running — failed to encode</SelectItem>
           </SelectContent>
         </Select>
+        {showAutoFlagShortcut && (
+          <button
+            type="button"
+            onClick={onReportRunningInstead}
+            className="text-2xs font-semibold text-accent hover:underline pt-0.5"
+          >
+            ↩ Was actually running? Report instead of logging downtime
+          </button>
+        )}
       </div>
+
+      {/* Exemption sub-reason: the train never stopped, only the encoding did */}
+      {isExemption && (
+        <div className="space-y-2 rounded-md border border-accent/40 bg-accent-soft/40 p-2.5">
+          <div className="space-y-1">
+            <Label htmlFor="pretreat-exemption-subreason" className="text-xs font-medium text-foreground">
+              Why is there a reading gap? <span className="text-danger font-bold">*</span>
+            </Label>
+            <Select value={exemptionSubreason} onValueChange={onExemptionSubreasonChange}>
+              <SelectTrigger className="h-9 bg-background border-accent/50 focus:ring-accent" id="pretreat-exemption-subreason">
+                <SelectValue placeholder="Select why readings were not encoded…" />
+              </SelectTrigger>
+              <SelectContent>
+                {UPTIME_EXEMPTION_SUBREASONS.map((s) => (
+                  <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          {(exemptionSubreason === 'other' || exemptionSubreason === 'system_error') && (
+            <div className="space-y-1">
+              <Label htmlFor="pretreat-exemption-detail" className="text-xs font-medium text-foreground">
+                Details {exemptionSubreason === 'other' && <span className="text-danger font-bold">*</span>}
+              </Label>
+              <Input
+                value={exemptionDetail}
+                onChange={(e) => onExemptionDetailChange(e.target.value)}
+                placeholder={exemptionSubreason === 'other' ? 'Explain what happened…' : 'Optional: which system, what error…'}
+                className="bg-background border-accent/50"
+                id="pretreat-exemption-detail"
+              />
+            </div>
+          )}
+          <p className="text-2xs text-muted-foreground leading-relaxed">
+            This files an attestation that the train kept running — the auto-flag is removed, no downtime is
+            recorded, and Back Online At is not applicable.
+          </p>
+        </div>
+      )}
 
       {/* Free-text for Other */}
       {offlineReason === 'Other' && (
@@ -343,20 +409,30 @@ export function OfflineDetailsPanel({
             <Label htmlFor="pretreat-back-online-at" className="text-xs font-medium text-foreground">
               Back Online At
             </Label>
-            <span className="text-3xs text-muted-foreground">(optional)</span>
+            {isExemption
+              ? <span className="text-3xs text-muted-foreground">(not applicable — train never stopped)</span>
+              : <span className="text-3xs text-muted-foreground">(optional)</span>}
           </div>
           <DateTimePicker
             value={offlineEnd}
             onChange={(val) => onOfflineEndChange(val)}
-            placeholder="Leave blank if still offline..."
+            placeholder={isExemption ? 'Not applicable when train kept running…' : 'Leave blank if still offline...'}
             size="sm"
             className="w-full bg-background border-danger/50 font-mono-num"
             id="pretreat-back-online-at"
+            disabled={isExemption}
           />
         </div>
       </div>
 
       {/* Status Live Notification */}
+      {isExemption && offlineStart ? (
+        <div className="flex items-center gap-2 text-xs text-accent bg-accent-soft/90 border border-accent/30 rounded-md px-3 py-2">
+          <CheckCircle2 className="h-4 w-4 text-accent shrink-0" />
+          <span><strong>Exemption — train kept running:</strong> Back Online At is not required. Filing removes the auto-flag and restores Running without recording downtime.</span>
+        </div>
+      ) : (
+      <>
       {!offlineEnd && offlineStart && (
         <div className="flex items-center gap-2 text-xs text-danger bg-danger-soft/90 border border-danger/30 rounded-md px-3 py-2">
           <span className="inline-block h-2 w-2 rounded-full bg-danger animate-pulse shrink-0" />
@@ -369,6 +445,8 @@ export function OfflineDetailsPanel({
           <span><strong>Offline duration logged:</strong> You may now log RO parameters for the resumed operational period.</span>
         </div>
       )}
+      </>
+      )}
     </div>
   );
 }
@@ -378,8 +456,14 @@ export function OfflineLockedCard({
   offlineStart,
   latestStatusLog,
   trainOnline = false,
-}: Pick<OfflineTrainBannerProps, 'offlineReasonFinal' | 'offlineStart' | 'latestStatusLog'> & { trainOnline?: boolean }) {
+  onReportRunningInstead,
+}: Pick<OfflineTrainBannerProps, 'offlineReasonFinal' | 'offlineStart' | 'latestStatusLog'> & {
+  trainOnline?: boolean;
+  /** Banner-level shortcut into the exemption (only offered for auto-flagged trains). */
+  onReportRunningInstead?: () => void;
+}) {
   const isPendingDowntimeResolution = trainOnline;
+  const isAutoFlagged = !!latestStatusLog?.reason?.startsWith('Auto-flagged');
 
   return (
     <Card className="p-4 border-danger/70 bg-danger-soft/80 shadow-xs">
@@ -406,6 +490,17 @@ export function OfflineLockedCard({
               ? 'Telemetry inputs cannot be entered until the downtime reason and back-online timestamp are specified in the Downtime Resolution section above.'
               : <>Telemetry inputs are locked while the train is down. To record this offline session, click <strong>Save Offline Record</strong> below. If the train has resumed operation, toggle to <em>Operational / Running</em> and resolve the downtime.</>}
           </p>
+          {onReportRunningInstead && isAutoFlagged && !isPendingDowntimeResolution && (
+            <div className="pt-1">
+              <button
+                type="button"
+                onClick={onReportRunningInstead}
+                className="text-2xs font-semibold text-accent hover:underline"
+              >
+                ↩ Was actually running? Report instead — no downtime, no Back Online At
+              </button>
+            </div>
+          )}
           {(offlineReasonFinal || latestStatusLog?.reason) && (
             <div className="pt-1.5 text-2xs text-danger/80 border-t border-danger/20 flex items-center gap-1.5 flex-wrap">
               <span className="font-semibold">Reason for Offline:</span>

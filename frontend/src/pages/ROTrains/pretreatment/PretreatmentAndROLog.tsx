@@ -22,6 +22,7 @@ import { usePretreatmentData } from './hooks/usePretreatmentData';
 import { usePretreatmentCalculations } from './hooks/usePretreatmentCalculations';
 import { usePretreatmentActions } from './hooks/usePretreatmentActions';
 import { invalidateAllRoQueries } from './hooks/useRoQueryInvalidation';
+import { isWasActuallyRunningReason, WAS_ACTUALLY_RUNNING_REASON } from './types';
 
 export function PretreatmentAndROLog() {
   const qc = useQueryClient();
@@ -139,6 +140,8 @@ export function PretreatmentAndROLog() {
         form.setOfflineEnd('');
         form.setOfflineReason('');
         form.setOfflineReasonOther('');
+        form.setExemptionSubreason('');
+        form.setExemptionDetail('');
       }
     }
   }, [train?.id, data.isStatusLoading, data.isEffectivelyOffline, data.lastReadingTime, latestStatusLog?.reason, dt]);
@@ -161,7 +164,13 @@ export function PretreatmentAndROLog() {
   );
 
   const wasOffline = Boolean(train && (train.status === 'Offline' || data.isEffectivelyOffline));
-  const isDowntimeResolved = wasOffline
+  // "Was actually running" exemption: the train never stopped, only the
+  // encoding did — so Back Online At is not applicable and the downtime
+  // resolution rules that require it must not apply.
+  const isExemption = isWasActuallyRunningReason(form.offlineReason);
+  const isDowntimeResolved = isExemption
+    ? Boolean(form.offlineReason && form.offlineStart && form.exemptionSubreason)
+    : wasOffline
     ? Boolean(
         form.offlineReason &&
         (form.offlineReason !== 'Other' || form.offlineReasonOther.trim()) &&
@@ -172,8 +181,19 @@ export function PretreatmentAndROLog() {
       )
     : true;
 
-  const isOfflineBlocked = !form.trainOnline || !isDowntimeResolved;
+  // Blocked only for real downtime without an end time — under the exemption
+  // the telemetry inputs unlock as soon as the exemption is fully specified,
+  // so the operator can enter readings in the same save.
+  const isOfflineBlocked = isExemption ? !isDowntimeResolved : (!form.trainOnline || !isDowntimeResolved);
   const offlineReasonFinal = form.offlineReason === 'Other' ? form.offlineReasonOther : form.offlineReason;
+
+  // Shortcut shared by the details panel + locked card: pre-select the
+  // exemption for an auto-flagged train instead of logging downtime.
+  const reportRunningInstead = () => {
+    form.setTrainOnline(false);
+    form.setOfflineReason(WAS_ACTUALLY_RUNNING_REASON);
+    form.setOfflineEnd('');
+  };
 
   const f = (k: string) => ({
     value: form.roValues[k] ?? '',
@@ -264,6 +284,10 @@ export function PretreatmentAndROLog() {
             trainOnline={form.trainOnline}
             onSetOnline={() => {
               form.setTrainOnline(true);
+              // Exemption already chosen while still offline: "Online" here
+              // means "file the attestation and restore Running" — the train
+              // never went down, so the downtime-resolve card stays hidden
+              // (see its !isExemption guard below).
               if (wasOffline && !form.offlineStart && data.lastReadingTime) {
                 form.setOfflineStart(format(new Date(data.lastReadingTime), "yyyy-MM-dd'T'HH:mm"));
               }
@@ -277,8 +301,11 @@ export function PretreatmentAndROLog() {
           />
         )}
 
-        {/* Downtime Resolution Card: when train was offline but operator toggled to online */}
-        {train && wasOffline && form.trainOnline && (
+        {/* Downtime Resolution Card: when train was offline but operator toggled to online.
+            Hidden under the exemption — "Online" there means "file the
+            attestation", not "the train came back", so no back-online
+            confirmation is demanded. */}
+        {train && wasOffline && form.trainOnline && !isExemption && (
           <DowntimeResolutionCard
             train={train}
             offlineReason={form.offlineReason}
@@ -298,13 +325,18 @@ export function PretreatmentAndROLog() {
           <OfflineDetailsPanel
             offlineReason={form.offlineReason}
             offlineReasonOther={form.offlineReasonOther}
+            exemptionSubreason={form.exemptionSubreason}
+            exemptionDetail={form.exemptionDetail}
             offlineStart={form.offlineStart}
             offlineEnd={form.offlineEnd}
             latestStatusLog={latestStatusLog}
             onOfflineReasonChange={form.setOfflineReason}
             onOfflineReasonOtherChange={form.setOfflineReasonOther}
+            onExemptionSubreasonChange={form.setExemptionSubreason}
+            onExemptionDetailChange={form.setExemptionDetail}
             onOfflineStartChange={form.setOfflineStart}
             onOfflineEndChange={form.setOfflineEnd}
+            onReportRunningInstead={reportRunningInstead}
           />
         )}
 
@@ -327,6 +359,7 @@ export function PretreatmentAndROLog() {
               offlineReasonFinal={offlineReasonFinal}
               offlineStart={form.offlineStart}
               latestStatusLog={latestStatusLog}
+              onReportRunningInstead={reportRunningInstead}
             />
           )}
 
@@ -367,6 +400,8 @@ export function PretreatmentAndROLog() {
               {hookIsSaving && <Loader2 className="h-4 w-4 animate-spin" />}
               {hookIsSaving
                 ? 'Saving…'
+                : !form.trainOnline && isExemption
+                ? 'Save & Mark Running (Was Not Offline)'
                 : !form.trainOnline
                 ? 'Save Offline Record'
                 : wasOffline

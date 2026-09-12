@@ -5,7 +5,8 @@ import { getHourBucket, isOfflineRORecord } from '@/lib/hourlyReadingGuard';
 import { submitAnomalyRemark, isAnomalyRemarkValid } from '@/lib/anomalyRemarks';
 import { calc, ALERTS } from '@/lib/calculations';
 import { preserveAutoFlagReason } from '@/lib/trainStatusTimeline';
-import { STANDARD_OFFLINE_REASONS, getUnitReasonText } from '../types';
+import { STANDARD_OFFLINE_REASONS, getUnitReasonText, isWasActuallyRunningReason } from '../types';
+import { reportTrainRunningExemption } from '../../../ro-trains/hooks/useReportTrainRunning';
 
 export interface PretreatmentActionsOptions {
   plantId: string;
@@ -43,7 +44,75 @@ export function usePretreatmentActions(rawOpts: PretreatmentActionsOptions) {
     if (isSaving) return;
     if (!opts.plantId || !opts.trainId) { toast.error('Select plant and train'); return; }
     const wasOffline = Boolean(opts.train && (opts.train.status === 'Offline' || opts.data?.isEffectivelyOffline));
-    if (opts.trainOnline && wasOffline) {
+    // ── "Was actually running" exemption ─────────────────────────────────────
+    // The auto-offline flag measures data staleness, not pump state. When the
+    // operator picks the exemption reason, this files a retroactive
+    // attestation (ro_train_uptime_reports) instead of downtime: the open
+    // Auto-flagged row is removed, the train flips back to Running, history
+    // keeps the attestation text, and flowrate calc bridges the gap from the
+    // last real meter values. Back Online At is NOT applicable — the train
+    // never stopped — so it is ignored even if somehow set.
+    //
+    // NOTE: the exemption applies while the form is still on Offline
+    // (!trainOnline) — the operator files it from the locked offline screen
+    // in the SAME save that restores Running. The normal offline→online
+    // downtime-resolution branch below deliberately does NOT run here.
+    const isExemption = !opts.trainOnline && isWasActuallyRunningReason(opts.offlineReason);
+    if (wasOffline && isExemption) {
+      if (!opts.offlineStart) {
+        toast.error('Please enter when the reading gap started ("Offline Since" holds the last reading time).');
+        return;
+      }
+      if (!opts.exemptionSubreason) {
+        toast.error('Please select why readings were not encoded.');
+        return;
+      }
+      if (opts.exemptionSubreason === 'other' && !opts.exemptionDetail?.trim()) {
+        toast.error('Please explain what happened.');
+        return;
+      }
+      if (opts.anomalyRemarksMissing) {
+        toast.error('One or more meters are outside the normal range — add a remark for each before saving.');
+        return;
+      }
+      setIsSaving(true);
+      try {
+        const occupied = await checkHourOccupied(opts.dt);
+        if (occupied) return;
+        await reportTrainRunningExemption(supabase, opts.qc, {
+          trainId: opts.trainId,
+          plantId: opts.plantId,
+          coveredFrom: new Date(opts.offlineStart).toISOString(),
+          // Bound the exemption to this save: the gap being attested ends at
+          // the current reading timestamp, not "now".
+          coveredUntil: new Date(opts.dt).toISOString(),
+          isOpenSegment: true,
+          category: opts.exemptionSubreason as any,
+          detail: opts.exemptionDetail?.trim() || undefined,
+        });
+        // Attestation filed — mark the form Running so the same save
+        // continues into the normal online-reading flow below (telemetry
+        // already entered lands as the first Running reading). opts is a
+        // snapshot taken at submit start, so mirror the flip locally too —
+        // otherwise the `if (opts.trainOnline)` save below still sees the
+        // stale offline value and writes another offline placeholder row.
+        opts.trainOnline = true;
+        opts.setTrainOnline(true);
+        opts.setOfflineEnd('');
+        toast.success(`${opts.train.name}: uptime reported — auto-flag removed, no downtime recorded`);
+      } catch (e: any) {
+        toast.error(e?.message ?? 'Failed to report uptime');
+        return;
+      } finally {
+        setIsSaving(false);
+      }
+      // NOTE: no return here — flow continues so entered telemetry (if any)
+      // is saved as the first Running reading after the attestation.
+    }
+    // Real downtime close-out (NOT the exemption — that branch ran above and
+    // already flipped the form to trainOnline; isExemption is now stale-false
+    // here by construction, and the extra guard below makes that explicit).
+    if (opts.trainOnline && wasOffline && !isWasActuallyRunningReason(opts.offlineReason)) {
       if (!opts.offlineReason) {
         toast.error('Please select the reason the train was offline.');
         return;
@@ -218,7 +287,10 @@ export function usePretreatmentActions(rawOpts: PretreatmentActionsOptions) {
         shared_power_meter_group: opts.sharedPowerGroup ?? null,
         ...(opts.roValues.chlorine_residual_mg_l !== '' ? { chlorine_residual_mg_l: +opts.roValues.chlorine_residual_mg_l } : {}),
         ...(opts.roIncompleteReason.trim() ? { incomplete_reason: opts.roIncompleteReason.trim() }
-          : !opts.trainOnline ? { incomplete_reason: `Offline${opts.offlineReason ? `: ${opts.offlineReason}` : ''}` }
+          // After the exemption the row is a normal Running reading — never
+          // tag it "Offline: Was actually running…", or downtimeRowMerger
+          // would merge it into an offline span in the Operator Log.
+          : !opts.trainOnline && !isWasActuallyRunningReason(opts.offlineReason) ? { incomplete_reason: `Offline${opts.offlineReason ? `: ${opts.offlineReason}` : ''}` }
           : {}),
         ...(opts.anyMeterSpike ? { norm_status: 'pending_review' } : {}),
         recorded_by: opts.activeOperator?.id,
@@ -309,6 +381,13 @@ export function usePretreatmentActions(rawOpts: PretreatmentActionsOptions) {
         }
         await opts.supabase.from('ro_trains').update({ status: 'Offline' }).eq('id', opts.trainId);
       } else if (wasOffline) {
+        // Under the exemption the attestation branch above already removed
+        // the Auto-flagged row, flipped ro_trains to Running, and wrote the
+        // "Uptime reported: …" Running row — writing another Offline/Running
+        // pair here would resurrect downtime that never happened. Skip all
+        // status writes; the flowrate/history continuity comes from the
+        // attestation + this save's normal Running reading row.
+        if (!isWasActuallyRunningReason(opts.offlineReason)) {
         // Operator resolved downtime and brought the train back online
         // 1. Ensure the offline record reflects the confirmed operator reason and start time
         if (opts.data?.latestStatusLog?.status === 'Offline' && opts.data?.latestStatusLog?.id) {
@@ -339,6 +418,7 @@ export function usePretreatmentActions(rawOpts: PretreatmentActionsOptions) {
           });
         } catch { /* best-effort */ }
         await opts.supabase.from('ro_trains').update({ status: 'Running' }).eq('id', opts.trainId);
+        } // end exemption guard — real-downtime close-out only
       }
 
       const rowsArr = Object.values(opts.afmmf) as any[];
@@ -486,6 +566,8 @@ export function usePretreatmentActions(rawOpts: PretreatmentActionsOptions) {
       if (opts.offlineEnd || wasOffline) {
         opts.setTrainOnline(true); opts.setOfflineStart(''); opts.setOfflineEnd('');
         opts.setOfflineReason(''); opts.setOfflineReasonOther('');
+        if (typeof (opts as any).setExemptionSubreason === 'function') (opts as any).setExemptionSubreason('');
+        if (typeof (opts as any).setExemptionDetail === 'function') (opts as any).setExemptionDetail('');
       }
       opts.setConfirmBackOnline(false);
       opts.setRoValues({

@@ -33,16 +33,18 @@ import { ReasonDialog } from '@/components/ReasonDialog';
 import { useTrainLogActions } from './hooks/useTrainLogActions';
 import { useReportTrainRunning } from './hooks/useReportTrainRunning';
 
-/** Reason options for the "Report Running — failed to encode" attestation dialog. */
-const UPTIME_REPORT_CATEGORIES = [
-  { value: 'operator_failed_to_encode', label: 'Operator failed to encode readings' },
-  { value: 'system_error', label: 'System / app error prevented encoding' },
-  { value: 'other', label: 'Other (explain in details)' },
-] as const;
 import { TrainLogHeader } from './components/TrainLogHeader';
 import { TrainLogFilters } from './components/TrainLogFilters';
 import { RoLogTable } from './components/RoLogTable';
 import { PreTreatLogTable } from './components/PreTreatLogTable';
+import { UPTIME_EXEMPTION_SUBREASONS } from '../ROTrains/pretreatment/types';
+
+/**
+ * Reason options for the "Report Running — failed to encode" attestation
+ * dialog. Single-sourced from UPTIME_EXEMPTION_SUBREASONS (the RO Train log
+ * page's exemption dropdown) so the two surfaces can't drift apart.
+ */
+const UPTIME_REPORT_CATEGORIES = UPTIME_EXEMPTION_SUBREASONS;
 
 interface TrainLogModalProps {
   trainId: string;

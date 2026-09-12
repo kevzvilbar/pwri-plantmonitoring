@@ -34,6 +34,12 @@ export interface PretreatmentFormState {
   setOfflineReason: (v: string) => void;
   offlineReasonOther: string;
   setOfflineReasonOther: (v: string) => void;
+  /** "Was actually running" exemption sub-reason (operator_failed_to_encode | system_error | other). */
+  exemptionSubreason: string;
+  setExemptionSubreason: (v: string) => void;
+  /** Free-text detail for the exemption (required when sub-reason is "other"). */
+  exemptionDetail: string;
+  setExemptionDetail: (v: string) => void;
   confirmBackOnline: boolean;
   setConfirmBackOnline: (v: boolean) => void;
   roValues: Record<string, string>;
@@ -108,6 +114,8 @@ export function usePretreatmentFormState(_trainId: string, _train: any): Pretrea
   const [offlineEnd, setOfflineEnd] = useState('');
   const [offlineReason, setOfflineReason] = useState('');
   const [offlineReasonOther, setOfflineReasonOther] = useState('');
+  const [exemptionSubreason, setExemptionSubreason] = useState('');
+  const [exemptionDetail, setExemptionDetail] = useState('');
   const [confirmBackOnline, setConfirmBackOnline] = useState(false);
   const [roValues, setRoValues] = useState<Record<string, string>>(EMPTY_RO_VALUES);
   const [afmSectionStarted, setAfmSectionStarted] = useState(false);
@@ -160,6 +168,8 @@ export function usePretreatmentFormState(_trainId: string, _train: any): Pretrea
     offlineEnd, setOfflineEnd,
     offlineReason, setOfflineReason,
     offlineReasonOther, setOfflineReasonOther,
+    exemptionSubreason, setExemptionSubreason,
+    exemptionDetail, setExemptionDetail,
     confirmBackOnline, setConfirmBackOnline,
     roValues, setRoValues,
     afmSectionStarted, setAfmSectionStarted,
