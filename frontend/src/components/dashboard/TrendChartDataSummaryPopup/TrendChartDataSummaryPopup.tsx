@@ -77,6 +77,7 @@ export function DataSummaryPopup({
             prodTabLabel={data.prodTabLabel}
             setTab={data.setTab}
             summaryStats={data.summaryStats}
+            plantHealthStats={data.plantHealthStats}
             prodEntities={data.prodEntities}
           />
 

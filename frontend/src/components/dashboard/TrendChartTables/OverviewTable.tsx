@@ -35,17 +35,28 @@ export function OverviewTable({
     // Build sorted date list from the map
     const sortedDates = Array.from(phHealthByDate.keys()).sort().reverse();
 
+    // RO1..RO7 hold status text of very different lengths ("Offline" vs.
+    // "Online (19h)"). Right-aligning that like a numeric column made every
+    // column a different auto-width and made the text start position jump
+    // from row to row. These columns are categorical, not magnitudes, so
+    // give every train column the same fixed width and center the content
+    // instead — that's what actually lines the grid up.
+    const TH_STATUS = 'px-2 py-2 text-center text-2xs font-bold text-muted-foreground uppercase tracking-wider border-b border-border/80 align-bottom sticky top-0 z-20 bg-card w-[108px] min-w-[108px]';
+    const TD_STATUS = 'px-2 py-2 text-center text-xs text-foreground/90 w-[108px] min-w-[108px]';
+    const TH_SUMMARY = 'px-3 py-2 text-center text-2xs font-bold text-muted-foreground uppercase tracking-wider border-b border-border/80 align-bottom sticky top-0 z-20 bg-card w-[90px] min-w-[90px]';
+    const TD_SUMMARY = 'px-3 py-2 text-center font-mono tabular-nums text-xs text-foreground/90 w-[90px] min-w-[90px]';
+
     return (
       <div className="h-full overflow-auto">
-        <table className="w-full border-collapse text-xs">
+        <table className="w-full border-collapse text-xs table-fixed">
           <thead className="bg-card">
             <tr>
               <th className={TH_DATE}>Date</th>
               {trains.map((t) => (
-                <th key={t.id} className={TH}>{t.label}</th>
+                <th key={t.id} className={TH_STATUS}>{t.label}</th>
               ))}
-              <th className={TH}>Online</th>
-              <th className={TH}>Health %</th>
+              <th className={TH_SUMMARY}>Online</th>
+              <th className={TH_SUMMARY}>Health %</th>
             </tr>
           </thead>
           <tbody>
@@ -65,12 +76,16 @@ export function OverviewTable({
                     const online = day.trainOnline[t.id] ?? false;
                     const hours = day.trainHours[t.id] ?? 0;
                     return (
-                      <td key={t.id} className={TD}>
+                      <td key={t.id} className={TD_STATUS}>
                         {online ? (
-                          <span className="inline-flex items-center gap-1">
+                          <span className="inline-flex items-center justify-center gap-1 w-full">
                             <span className="text-green-600 font-semibold">Online</span>
                             {hours < 24 && (
-                              <span className="text-muted-foreground">({hours}h)</span>
+                              // Zero-padded so every value is 2 digits (00–23h) —
+                              // keeps the "(Xh)" suffix a constant width down the column.
+                              <span className="text-muted-foreground font-mono tabular-nums">
+                                ({String(hours).padStart(2, '0')}h)
+                              </span>
                             )}
                           </span>
                         ) : (
@@ -79,12 +94,12 @@ export function OverviewTable({
                       </td>
                     );
                   })}
-                  <td className={TD}>
+                  <td className={TD_SUMMARY}>
                     <span className="font-semibold">
                       {day.onlineCount}/{day.totalTrains}
                     </span>
                   </td>
-                  <td className={TD}>
+                  <td className={TD_SUMMARY}>
                     {day.healthPct != null ? (
                       <span className={day.healthPct < 50 ? 'text-destructive font-semibold' : day.healthPct < 100 ? 'text-amber-600 font-semibold' : 'text-green-600 font-semibold'}>
                         {day.healthPct}%

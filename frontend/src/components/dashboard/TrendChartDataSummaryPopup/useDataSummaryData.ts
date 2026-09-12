@@ -9,7 +9,7 @@ import {
   GRID_METER_OTHER_KEY,
 } from '../TrendChartPivotShared';
 import type { ChemicalDayBreakdown } from '../TrendChartTables';
-import { calculateDataSummaryStats } from './summaryStatsCalculator';
+import { calculateDataSummaryStats, calculatePlantHealthStats, type PlantHealthStatsResult } from './summaryStatsCalculator';
 
 export interface DataSummaryData {
   tab: DSMTab;
@@ -92,6 +92,8 @@ export interface DataSummaryData {
     maxTds: number | null;
     tdsDays: number;
   };
+  /** plantHealth metric — period rollups for the Overview snapshot cards */
+  plantHealthStats: PlantHealthStatsResult;
 }
 
 export interface DataSummaryDataProps {
@@ -670,6 +672,10 @@ export function useDataSummaryData({
     return calculateDataSummaryStats(overviewChartRows, tabDates);
   }, [overviewChartRows, tabDates]);
 
+  const plantHealthStats = useMemo(() => {
+    return calculatePlantHealthStats(phHealthByDate, roTrainEntities);
+  }, [phHealthByDate, roTrainEntities]);
+
   return {
     tab, setTab, activeTab,
     filterFrom, filterTo, setFilterFrom, setFilterTo,
@@ -686,5 +692,6 @@ export function useDataSummaryData({
     overviewDates, overviewChartRows, tabDates,
     chemicalBreakdown,
     summaryStats,
+    plantHealthStats,
   };
 }

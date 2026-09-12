@@ -1,6 +1,7 @@
 import { Download, Droplet, Receipt, Gauge, TableProperties, Percent, Zap, Sun,
-  Coins, Activity, TrendingUp, FlaskConical, Calendar,
+  Coins, Activity, TrendingUp, TrendingDown, FlaskConical, Calendar,
 } from 'lucide-react';
+import type { PlantHealthStatsResult } from './summaryStatsCalculator';
 
 interface StatCardProps {
   icon: React.ReactNode;
@@ -57,10 +58,31 @@ interface SnapshotCardsProps {
     maxTds: number | null;
     tdsDays: number;
   };
+  plantHealthStats?: PlantHealthStatsResult;
   prodEntities: { id: string; label: string; kind: string }[];
 }
 
-export function SnapshotCards({ metric, stats, prodEntities }: SnapshotCardsProps) {
+export function SnapshotCards({ metric, stats, plantHealthStats, prodEntities }: SnapshotCardsProps) {
+  if (metric === 'plantHealth' && plantHealthStats) {
+    const {
+      avgHealthPct, avgOnlineCount, totalTrains, mostReliableTrain, leastReliableTrain,
+    } = plantHealthStats;
+    return (
+      <>
+        <StatCard icon={<Activity />} iconColor="text-primary" label="Avg Health %"
+          value={avgHealthPct != null ? `${avgHealthPct.toFixed(1)}%` : '—'} />
+        <StatCard icon={<Gauge className="text-sky-500" />} iconColor="" label="Avg Trains Online"
+          value={avgOnlineCount != null ? `${avgOnlineCount.toFixed(1)}/${totalTrains}` : '—'} />
+        <StatCard icon={<TrendingUp className="text-emerald-500" />} iconColor="" label="Most Reliable RO"
+          value={mostReliableTrain ? mostReliableTrain.label : '—'}
+          unit={mostReliableTrain ? `· ${mostReliableTrain.uptimePct.toFixed(0)}% uptime` : undefined} />
+        <StatCard icon={<TrendingDown className="text-destructive" />} iconColor="" label="Least Reliable RO"
+          value={leastReliableTrain ? leastReliableTrain.label : '—'}
+          unit={leastReliableTrain ? `· ${leastReliableTrain.uptimePct.toFixed(0)}% uptime` : undefined} />
+      </>
+    );
+  }
+
   if (metric === 'kwh') {
     return (
       <>

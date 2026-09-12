@@ -4,6 +4,7 @@ import { Download, Droplet, Receipt, Gauge, TableProperties, Percent, Zap, Sun,
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { SnapshotCards } from './SnapshotCards';
+import type { PlantHealthStatsResult } from './summaryStatsCalculator';
 
 interface HeaderProps {
   title?: string;
@@ -53,6 +54,7 @@ interface HeaderProps {
     maxTds: number | null;
     tdsDays: number;
   };
+  plantHealthStats: PlantHealthStatsResult;
   prodEntities: { id: string; label: string; kind: string }[];
 }
 
@@ -61,7 +63,7 @@ export function Header({
   filterFrom, filterTo, setFilterFrom, setFilterTo, defaultFrom, defaultTo,
   activeTab, hasProdTab, hasConsTab, hasGridTab, hasChemBreakdownTab,
   overviewLabel, prodTabLabel, setTab,
-  summaryStats, prodEntities,
+  summaryStats, plantHealthStats, prodEntities,
 }: HeaderProps) {
   return (
     <>
@@ -95,7 +97,12 @@ export function Header({
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pb-3">
-        <SnapshotCards metric={metric} stats={summaryStats} prodEntities={prodEntities} />
+        <SnapshotCards
+          metric={metric}
+          stats={summaryStats}
+          plantHealthStats={plantHealthStats}
+          prodEntities={prodEntities}
+        />
       </div>
 
       <div className="flex items-center gap-2 pb-2 flex-wrap border-t pt-2 border-border/40">

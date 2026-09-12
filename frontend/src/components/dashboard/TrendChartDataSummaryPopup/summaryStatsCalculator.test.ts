@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import {
   calculateDataSummaryStats,
+  calculatePlantHealthStats,
   type OverviewChartRowForStats,
+  type PlantHealthDayEntry,
 } from './summaryStatsCalculator';
 
 describe('calculateDataSummaryStats', () => {
@@ -109,5 +111,66 @@ describe('calculateDataSummaryStats', () => {
     expect(stats.minTds).toBe(120);
     expect(stats.maxTds).toBe(130);
     expect(stats.tdsDays).toBe(2);
+  });
+});
+
+describe('calculatePlantHealthStats', () => {
+  const trains = [
+    { id: 'ro1', label: 'RO1' },
+    { id: 'ro2', label: 'RO2' },
+  ];
+
+  it('handles an empty map gracefully', () => {
+    const stats = calculatePlantHealthStats(new Map(), trains);
+    expect(stats.avgHealthPct).toBeNull();
+    expect(stats.avgOnlineCount).toBeNull();
+    expect(stats.totalTrains).toBe(2);
+    expect(stats.totalDays).toBe(0);
+    expect(stats.fullyOnlineDays).toBe(0);
+    expect(stats.mostReliableTrain).toBeNull();
+    expect(stats.leastReliableTrain).toBeNull();
+  });
+
+  it('handles no train entities gracefully', () => {
+    const byDate = new Map<string, PlantHealthDayEntry>([
+      ['2026-09-01', {
+        trainOnline: {}, trainHours: {}, onlineCount: 0, offlineCount: 0, healthPct: null, totalTrains: 0,
+      }],
+    ]);
+    const stats = calculatePlantHealthStats(byDate, []);
+    expect(stats.totalTrains).toBe(0);
+    expect(stats.mostReliableTrain).toBeNull();
+    expect(stats.leastReliableTrain).toBeNull();
+  });
+
+  it('averages health %, online count, and ranks train reliability by uptime', () => {
+    const byDate = new Map<string, PlantHealthDayEntry>([
+      ['2026-09-01', {
+        trainOnline: { ro1: false, ro2: true },
+        trainHours: { ro1: 0, ro2: 24 },
+        onlineCount: 1,
+        offlineCount: 1,
+        healthPct: 50,
+        totalTrains: 2,
+      }],
+      ['2026-09-02', {
+        trainOnline: { ro1: true, ro2: true },
+        trainHours: { ro1: 12, ro2: 24 },
+        onlineCount: 2,
+        offlineCount: 0,
+        healthPct: 100,
+        totalTrains: 2,
+      }],
+    ]);
+    const stats = calculatePlantHealthStats(byDate, trains);
+
+    expect(stats.totalDays).toBe(2);
+    expect(stats.avgHealthPct).toBe(75); // (50 + 100) / 2
+    expect(stats.avgOnlineCount).toBe(1.5); // (1 + 2) / 2
+    expect(stats.fullyOnlineDays).toBe(1); // only Sep 2 had onlineCount === totalTrains
+
+    // ro1: 12 / 48 hours = 25% uptime, ro2: 48 / 48 hours = 100% uptime
+    expect(stats.leastReliableTrain).toEqual({ id: 'ro1', label: 'RO1', uptimePct: 25 });
+    expect(stats.mostReliableTrain).toEqual({ id: 'ro2', label: 'RO2', uptimePct: 100 });
   });
 });
