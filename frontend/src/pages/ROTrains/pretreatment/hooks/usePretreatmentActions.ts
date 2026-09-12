@@ -78,10 +78,15 @@ export function usePretreatmentActions(rawOpts: PretreatmentActionsOptions) {
       }
       setIsSaving(true);
       try {
+        // FIRST save = the exemption record ONLY. The form is still locked
+        // (no telemetry yet) per product rule: "save it as offline first,
+        // then touch the form". No placeholder reading row is inserted here;
+        // readings come in the next save, once the form unlocks.
+        const gapStart = opts.offlineStart || opts.data?.lastReadingTime || opts.dt;
         await reportTrainRunningExemption(opts.supabase, opts.qc, {
           trainId: opts.trainId,
           plantId: opts.plantId,
-          coveredFrom: new Date(opts.offlineStart).toISOString(),
+          coveredFrom: new Date(gapStart).toISOString(),
           // Bound the exemption to this save: the gap being attested ends at
           // the current reading timestamp, not "now".
           coveredUntil: new Date(opts.dt).toISOString(),
@@ -89,24 +94,25 @@ export function usePretreatmentActions(rawOpts: PretreatmentActionsOptions) {
           category: opts.exemptionSubreason as any,
           detail: opts.exemptionDetail?.trim() || undefined,
         });
-        // Attestation filed — mark the form Running so the same save
-        // continues into the normal online-reading flow below (telemetry
-        // already entered lands as the first Running reading). opts is a
-        // snapshot taken at submit start, so mirror the flip locally too —
-        // otherwise the `if (opts.trainOnline)` save below still sees the
-        // stale offline value and writes another offline placeholder row.
-        opts.trainOnline = true;
+        // Attestation filed — reset the form to Online. The train now reads
+        // Running, so the sync effect in PretreatmentAndROLog keeps it that
+        // way, the locked card disappears, and telemetry unlocks for the
+        // next (normal online reading) save.
         opts.setTrainOnline(true);
+        opts.setOfflineStart('');
         opts.setOfflineEnd('');
-        toast.success(`${opts.train.name}: uptime reported — auto-flag removed, no downtime recorded`);
+        opts.setOfflineReason('');
+        opts.setOfflineReasonOther('');
+        if (typeof (opts as any).setExemptionSubreason === 'function') (opts as any).setExemptionSubreason('');
+        if (typeof (opts as any).setExemptionDetail === 'function') (opts as any).setExemptionDetail('');
+        toast.success(`${opts.train.name}: uptime reported — auto-flag removed, no downtime recorded. Form unlocked — enter readings and save normally.`);
       } catch (e: any) {
         toast.error(e?.message ?? 'Failed to report uptime');
         return;
       } finally {
         setIsSaving(false);
       }
-      // NOTE: no return here — flow continues so entered telemetry (if any)
-      // is saved as the first Running reading after the attestation.
+      return; // first save is the exemption only — readings come in the next save
     }
     // Real downtime close-out (NOT the exemption — that branch ran above and
     // already flipped the form to trainOnline; isExemption is now stale-false

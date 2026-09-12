@@ -181,10 +181,12 @@ export function PretreatmentAndROLog() {
       )
     : true;
 
-  // Blocked only for real downtime without an end time — under the exemption
-  // the telemetry inputs unlock as soon as the exemption is fully specified,
-  // so the operator can enter readings in the same save.
-  const isOfflineBlocked = isExemption ? !isDowntimeResolved : (!form.trainOnline || !isDowntimeResolved);
+  // Stay fully locked while the form is in the offline state — for BOTH real
+  // downtime and the "was actually running" exemption. The operator's FIRST
+  // save must be the offline/exemption record (which flips the train back to
+  // Running); only after that save do the telemetry inputs unlock for a
+  // normal online reading save.
+  const isOfflineBlocked = !form.trainOnline || !isDowntimeResolved;
   const offlineReasonFinal = form.offlineReason === 'Other' ? form.offlineReasonOther : form.offlineReason;
 
   // Shortcut shared by the details panel + locked card: pre-select the
@@ -396,7 +398,7 @@ export function PretreatmentAndROLog() {
           )}
 
           {train && (!form.trainOnline || (isDowntimeResolved && form.cartridgeSectionStarted)) && (
-            <Button onClick={submit} disabled={hookIsSaving || calc.anomalyRemarksMissing} className="w-full h-12 text-base font-semibold gap-2">
+            <Button onClick={submit} disabled={hookIsSaving || (!isExemption && calc.anomalyRemarksMissing)} className="w-full h-12 text-base font-semibold gap-2">
               {hookIsSaving && <Loader2 className="h-4 w-4 animate-spin" />}
               {hookIsSaving
                 ? 'Saving…'

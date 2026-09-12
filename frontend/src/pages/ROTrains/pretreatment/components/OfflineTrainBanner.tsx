@@ -434,7 +434,7 @@ export function OfflineDetailsPanel({
       {isExemption && offlineStart ? (
         <div className="flex items-center gap-2 text-xs text-accent bg-accent-soft/90 border border-accent/30 rounded-md px-3 py-2">
           <CheckCircle2 className="h-4 w-4 text-accent shrink-0" />
-          <span><strong>Exemption — train kept running:</strong> Offline Since and Back Online At are locked (the train never stopped). Filing removes the auto-flag and restores Running without recording downtime.</span>
+          <span><strong>Exemption — train kept running:</strong> Offline Since and Back Online At are locked (the train never stopped). Save this record first — the auto-flag is removed, the train returns to Running, and only then does the telemetry form unlock for entering readings.</span>
         </div>
       ) : (
       <>
@@ -495,6 +495,13 @@ export function OfflineLockedCard({
               ? 'Telemetry inputs cannot be entered until the downtime reason and back-online timestamp are specified in the Downtime Resolution section above.'
               : <>Telemetry inputs are locked while the train is down. To record this offline session, click <strong>Save Offline Record</strong> below. If the train has resumed operation, toggle to <em>Operational / Running</em> and resolve the downtime.</>}
           </p>
+          {isAutoFlagged && !isPendingDowntimeResolution && (
+            <p className="text-2xs text-danger/70 leading-relaxed pt-1">
+              If the train was actually running and only the <em>encoding</em> failed (operator forgot,
+              or a system error), choose <strong>“Was actually running — failed to encode”</strong> in
+              Reason for Offline and save — the form unlocks after that first save.
+            </p>
+          )}
           {onReportRunningInstead && isAutoFlagged && !isPendingDowntimeResolution && (
             <div className="pt-1">
               <button
