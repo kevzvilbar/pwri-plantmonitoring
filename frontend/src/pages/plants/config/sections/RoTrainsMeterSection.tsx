@@ -1,6 +1,6 @@
 import { MeterToggleTile } from '../MeterConfig';
 import { ROTrainIcon } from '@/components/icons/water-icons';
-import { Droplet, Gauge } from 'lucide-react';
+import { Droplet, Gauge, Zap } from 'lucide-react';
 import { useROTrainsForPlant, type ROTrain } from '@/hooks/useROTrains';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
@@ -270,7 +270,7 @@ function ToggleChip({ checked, onToggle, disabled, id, ariaLabel }: {
   );
 }
 
-function TooltipLabel({ label, children }: { label: string; children: ReactElement }) {
+function TooltipLabel({ label, children }: { label: string; children: ReactElement<{ id?: string; ariaLabel?: string }> }) {
   const id = useId();
   return (
     <div className="min-w-0">

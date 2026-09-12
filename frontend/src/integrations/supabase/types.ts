@@ -4253,6 +4253,10 @@ export type Database = {
         Row: {
           booster_pump_targets: Json | null
           created_at: string
+          em_all_streams: boolean
+          em_stream_feed: boolean
+          em_stream_permeate: boolean
+          em_stream_reject: boolean
           feed_meter_brand: string | null
           feed_meter_installed_date: string | null
           feed_meter_serial: string | null
@@ -4285,11 +4289,16 @@ export type Database = {
           train_number: number
           unit_type: string
           updated_at: string
+          uses_em_meter: boolean
           well_id: string | null
         }
         Insert: {
           booster_pump_targets?: Json | null
           created_at?: string
+          em_all_streams?: boolean
+          em_stream_feed?: boolean
+          em_stream_permeate?: boolean
+          em_stream_reject?: boolean
           feed_meter_brand?: string | null
           feed_meter_installed_date?: string | null
           feed_meter_serial?: string | null
@@ -4322,11 +4331,16 @@ export type Database = {
           train_number: number
           unit_type?: string
           updated_at?: string
+          uses_em_meter?: boolean
           well_id?: string | null
         }
         Update: {
           booster_pump_targets?: Json | null
           created_at?: string
+          em_all_streams?: boolean
+          em_stream_feed?: boolean
+          em_stream_permeate?: boolean
+          em_stream_reject?: boolean
           feed_meter_brand?: string | null
           feed_meter_installed_date?: string | null
           feed_meter_serial?: string | null
@@ -4359,6 +4373,7 @@ export type Database = {
           train_number?: number
           unit_type?: string
           updated_at?: string
+          uses_em_meter?: boolean
           well_id?: string | null
         }
         Relationships: [

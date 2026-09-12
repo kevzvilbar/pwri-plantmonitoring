@@ -106,7 +106,7 @@ export function EMFlowRow({
                 placeholder={permFlowMeter != null ? `≈ ${Number(permFlowMeter).toFixed(2)} (meter)` : 'EM reading'}
                 className="placeholder:text-2xs placeholder:text-muted-foreground/50" id="pretreat-field-3"/>
             )}
-            {emRejShown && recovery != null && (
+            {recovery != null && (
               <div className="mt-1">
                 <Label htmlFor="pretreat-recovery" className={cn('text-xs', recWarn ? 'text-warn' : 'text-muted-foreground')}>
                   Recovery %{recWarn ? ' ⚠' : ''}
