@@ -9,6 +9,14 @@ import { supabase } from '@/integrations/supabase/client';
  */
 export const AUTO_OFFLINE_THRESHOLD_HOURS = 2;
 
+/**
+ * Train IDs with an auto-flag write currently in flight. Guards against the
+ * double-mount of useTrainAutoOffline on the Dashboard (useDashboardAggregates
+ * + useDashboardAlerts both call it) writing duplicate Offline status-log rows
+ * for the same train in the same tick.
+ */
+const flagInFlight = new Set<string>();
+
 export interface TrainGap {
   train_id: string;
   train_number: number;
@@ -147,8 +155,39 @@ export function useTrainAutoOffline(plantIds: string[]) {
       if (trainsErr) throw trainsErr;
       if (!trains?.length) return [];
 
-      const since = new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString();
       const trainIds = trains.map((t) => t.id);
+
+      // ── Preferred path: server-time RPC ──────────────────────────────────
+      // The RPC returns each train's latest reading (across both reading
+      // tables, unbounded) AND the database's now() in one round trip, so the
+      // staleness decision never involves this device's clock. A drifted /
+      // ahead-of-time plant terminal previously produced both the ">24h
+      // moments after a real reading" false flag (windowed `since` cutoff
+      // landed after real now) and finite-gap false flags (~1h clock skew
+      // turning a 1h-old reading into a 2h+ gap).
+      try {
+        const { data: rpcRows, error: rpcErr } = await (supabase as any)
+          .rpc('get_train_last_readings', { train_ids: trainIds });
+        if (!rpcErr && rpcRows) {
+          const lastBy = new Map<string, string>();
+          let serverNowMs = Date.now();
+          for (const row of rpcRows as Array<{ train_id: string; last_reading_at: string | null; server_now: string }>) {
+            if (row.last_reading_at) lastBy.set(row.train_id, row.last_reading_at);
+            if (row.server_now) serverNowMs = new Date(row.server_now).getTime();
+          }
+          return computeTrainGaps(trains as RawTrainRow[], lastBy, serverNowMs)
+            .filter((g) => shouldAutoFlagTrainOffline(g.hours_gap, g.current_status));
+          // No unbounded-confirmation pass needed here: lastBy came from an
+          // unbounded, clock-independent lookup already.
+        }
+        if (rpcErr) throw rpcErr;
+      } catch {
+        // RPC not deployed yet (migration pending) — fall through to the
+        // legacy client-side path below so the flagger keeps working.
+      }
+
+      // ── Legacy fallback (pre-RPC behavior, kept for migration lag) ───────
+      const since = new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString();
 
       const [roRecentRes, preRecentRes] = await Promise.all([
         supabase
@@ -213,19 +252,41 @@ export function useTrainAutoOffline(plantIds: string[]) {
     (async () => {
       let flaggedAny = false;
       for (const g of gaps) {
-        const { error } = await supabase.from('ro_trains').update({ status: 'Offline' }).eq('id', g.train_id);
-        if (error) {
-          console.warn('[useTrainAutoOffline] Failed to auto-flag train offline', g.train_id, error);
-          continue;
+        // ── Single-writer guard ────────────────────────────────────────────
+        // useTrainAutoOffline is mounted twice on the Dashboard (via
+        // useDashboardAggregates AND useDashboardAlerts), so both instances
+        // can receive the same gaps array and both run this effect. Without
+        // this guard each bogus write went in twice. Skip if a write for
+        // this train is already in flight on this page instance...
+        if (flagInFlight.has(g.train_id)) continue;
+        flagInFlight.add(g.train_id);
+        try {
+          // ...and re-check the train is STILL Running right before writing:
+          // the other mount (or the 5-min refetch on a sibling tab) may have
+          // already flipped it, and status-log rows shouldn't be duplicated.
+          const { data: cur, error: curErr } = await supabase
+            .from('ro_trains')
+            .select('status')
+            .eq('id', g.train_id)
+            .maybeSingle();
+          if (curErr || (cur as any)?.status !== 'Running') continue;
+
+          const { error } = await supabase.from('ro_trains').update({ status: 'Offline' }).eq('id', g.train_id);
+          if (error) {
+            console.warn('[useTrainAutoOffline] Failed to auto-flag train offline', g.train_id, error);
+            continue;
+          }
+          await supabase.from('train_status_log').insert({
+            train_id: g.train_id,
+            plant_id: g.plant_id,
+            status: 'Offline',
+            reason: `Auto-flagged: no reading for ${g.hours_gap === Infinity ? '>24' : g.hours_gap.toFixed(1)}h`,
+            confirmed_at: g.last_reading_at ? new Date(g.last_reading_at).toISOString() : new Date().toISOString(),
+          });
+          flaggedAny = true;
+        } finally {
+          flagInFlight.delete(g.train_id);
         }
-        await supabase.from('train_status_log').insert({
-          train_id: g.train_id,
-          plant_id: g.plant_id,
-          status: 'Offline',
-          reason: `Auto-flagged: no reading for ${g.hours_gap === Infinity ? '>24' : g.hours_gap.toFixed(1)}h`,
-          confirmed_at: g.last_reading_at ? new Date(g.last_reading_at).toISOString() : new Date().toISOString(),
-        });
-        flaggedAny = true;
       }
       if (flaggedAny) {
         qc.invalidateQueries({ queryKey: ['trains'] });

@@ -107,12 +107,18 @@ export function TelemetryGauge({
 //   1. Operator manually tagged 'Maintenance' → always Maintenance (hard lock)
 //   2. Operator manually tagged 'Offline'     → always Offline     (hard lock)
 //      Cleared only when operator submits a reading with trainOnline=true.
-//   3. A reading exists within the last 1 hour → Running
-//   4. Otherwise → Offline (no recent data in past hour)
+//   3. A reading exists within the last 2 hours → Running
+//   4. Otherwise → Offline (no recent data in past 2 hours)
+//
+// 2026-09-12 fix: this used to be a 1-hour window while the actual
+// auto-offline flagger (useTrainAutoOffline, AUTO_OFFLINE_THRESHOLD_HOURS)
+// and the business rule are 2 hours — train cards showed "Offline" an hour
+// after a reading even when the DB status was still Running. Both now agree
+// on 2 hours.
 
 export const ONE_HOUR_MS = 60 * 60 * 1000;
-/** @deprecated Use ONE_HOUR_MS */
-export const TWO_HOURS_MS = ONE_HOUR_MS;
+/** Matches AUTO_OFFLINE_THRESHOLD_HOURS in useTrainAutoOffline. */
+export const TWO_HOURS_MS = 2 * ONE_HOUR_MS;
 
 export function deriveTrainStatus(
   train: any,
@@ -123,7 +129,7 @@ export function deriveTrainStatus(
   if (train.status === 'Offline') return 'Offline';
   if (lastReading?.reading_datetime) {
     const age = Date.now() - new Date(lastReading.reading_datetime).getTime();
-    if (age <= ONE_HOUR_MS) return 'Running';
+    if (age <= TWO_HOURS_MS) return 'Running';
   }
   return 'Offline';
 }

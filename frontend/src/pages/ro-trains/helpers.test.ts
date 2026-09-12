@@ -78,22 +78,30 @@ describe('deriveTrainStatus', () => {
     expect(deriveTrainStatus(train, recent)).toBe('Offline');
   });
 
-  it('marks train as Running if last reading is within 1 hour', () => {
+  it('marks train as Running if last reading is within 2 hours', () => {
     const train = { status: 'Running' };
     const reading30m = { reading_datetime: new Date(Date.now() - 30 * 60 * 1000).toISOString() };
     expect(deriveTrainStatus(train, reading30m)).toBe('Running');
 
     const reading59m = { reading_datetime: new Date(Date.now() - 59 * 60 * 1000).toISOString() };
     expect(deriveTrainStatus(train, reading59m)).toBe('Running');
+
+    // Regression (2026-09-12): threshold used to be 1 hour while the
+    // auto-offline flagger and the business rule are 2 hours.
+    const reading90m = { reading_datetime: new Date(Date.now() - 90 * 60 * 1000).toISOString() };
+    expect(deriveTrainStatus(train, reading90m)).toBe('Running');
+
+    const reading1h59m = { reading_datetime: new Date(Date.now() - 119 * 60 * 1000).toISOString() };
+    expect(deriveTrainStatus(train, reading1h59m)).toBe('Running');
   });
 
-  it('auto-flags train as Offline if last reading is older than 1 hour', () => {
+  it('auto-flags train as Offline if last reading is older than 2 hours', () => {
     const train = { status: 'Running' };
-    const reading61m = { reading_datetime: new Date(Date.now() - 61 * 60 * 1000).toISOString() };
-    expect(deriveTrainStatus(train, reading61m)).toBe('Offline');
+    const reading2h01m = { reading_datetime: new Date(Date.now() - 121 * 60 * 1000).toISOString() };
+    expect(deriveTrainStatus(train, reading2h01m)).toBe('Offline');
 
-    const reading2h = { reading_datetime: new Date(Date.now() - 2 * 3600 * 1000).toISOString() };
-    expect(deriveTrainStatus(train, reading2h)).toBe('Offline');
+    const reading3h = { reading_datetime: new Date(Date.now() - 3 * 3600 * 1000).toISOString() };
+    expect(deriveTrainStatus(train, reading3h)).toBe('Offline');
   });
 
   it('auto-flags train as Offline if no readings exist at all', () => {
