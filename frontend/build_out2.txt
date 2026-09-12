@@ -1,0 +1,57 @@
+
+> vite_react_shadcn_ts@1.0.0 build
+> vite build
+
+[sentry-vite-plugin] Warning: No auth token provided. Will not create release. Please set the `authToken` option. You can find information on how to generate a Sentry auth token here: https://docs.sentry.io/api/auth/
+[sentry-vite-plugin] Warning: No auth token provided. Will not upload source maps. Please set the `authToken` option. You can find information on how to generate a Sentry auth token here: https://docs.sentry.io/api/auth/
+[36mvite v5.4.21 [32mbuilding for production...[36m[39m
+[sentry-vite-plugin] Info: Sending telemetry data on issues and performance to Sentry. To disable telemetry, set `options.telemetry` to `false`.
+transforming...
+[1m[33m[plugin:vite:esbuild][39m[22m [33m[plugin vite:esbuild] src/components/dashboard/TrendChartDataSummaryPopup/useDataSummaryData.ts: [33mDuplicate key "roTrainEntities" in object literal[33m
+688|      overviewLabel, prodTabLabel,
+689|      roTrainEntities, roTrainRecoveryByDate, roTrainTdsByDate,
+690|      roTrainEntities, roTrainRecoveryByDate, roTrainTdsByDate, phHealthByDate,
+   |      ^
+691|      prodEntities, prodPivotMap, prodDateKeys, prodDates,
+692|      hasProductMeterData, hasPermeateData,
+[39m
+[1m[33m[plugin:vite:esbuild][39m[22m [33m[plugin vite:esbuild] src/components/dashboard/TrendChartDataSummaryPopup/useDataSummaryData.ts: [33mDuplicate key "roTrainRecoveryByDate" in object literal[33m
+688|      overviewLabel, prodTabLabel,
+689|      roTrainEntities, roTrainRecoveryByDate, roTrainTdsByDate,
+690|      roTrainEntities, roTrainRecoveryByDate, roTrainTdsByDate, phHealthByDate,
+   |                       ^
+691|      prodEntities, prodPivotMap, prodDateKeys, prodDates,
+692|      hasProductMeterData, hasPermeateData,
+[39m
+[1m[33m[plugin:vite:esbuild][39m[22m [33m[plugin vite:esbuild] src/components/dashboard/TrendChartDataSummaryPopup/useDataSummaryData.ts: [33mDuplicate key "roTrainTdsByDate" in object literal[33m
+688|      overviewLabel, prodTabLabel,
+689|      roTrainEntities, roTrainRecoveryByDate, roTrainTdsByDate,
+690|      roTrainEntities, roTrainRecoveryByDate, roTrainTdsByDate, phHealthByDate,
+   |                                              ^
+691|      prodEntities, prodPivotMap, prodDateKeys, prodDates,
+692|      hasProductMeterData, hasPermeateData,
+[39m
+[32m✓[39m 4417 modules transformed.
+[31mx[39m Build failed in 9.54s
+[31merror during build:
+[31m[vite-plugin-pwa:build] [plugin vite-plugin-pwa:build] src/components/dashboard/TrendChartTables/OverviewTable.tsx (264:0): There was an error during the build:
+  Transform failed with 1 error:
+C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/src/components/dashboard/TrendChartTables/OverviewTable.tsx:264:0: ERROR: Unexpected end of file
+Additionally, handling the error in the 'buildEnd' hook caused the following error:
+  Transform failed with 1 error:
+C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/src/components/dashboard/TrendChartTables/OverviewTable.tsx:264:0: ERROR: Unexpected end of file[31m
+file: [36mC:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/src/components/dashboard/TrendChartTables/OverviewTable.tsx:264:0[31m
+[33m
+[33mUnexpected end of file[33m
+262|    );
+263|  }
+264|  
+   |  ^
+[31m
+    at getRollupError (file:///C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/node_modules/rollup/dist/es/shared/parseAst.js:317:41)
+    at file:///C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/node_modules/rollup/dist/es/shared/node-entry.js:23685:39
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async catchUnfinishedHookActions (file:///C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/node_modules/rollup/dist/es/shared/node-entry.js:23141:16)
+    at async rollupInternal (file:///C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/node_modules/rollup/dist/es/shared/node-entry.js:23668:5)
+    at async build (file:///C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:65709:14)
+    at async CAC.<anonymous> (file:///C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/node_modules/vite/dist/node/cli.js:829:5)[39m
