@@ -18,8 +18,120 @@ export interface TrainGap {
   current_status: string;
 }
 
+export interface RawReadingRow {
+  train_id: string;
+  reading_datetime: string | null;
+}
+
+export interface RawTrainRow {
+  id: string;
+  train_number: number;
+  plant_id: string;
+  status: string;
+}
+
 export function shouldAutoFlagTrainOffline(hoursGap: number, currentStatus: string): boolean {
   return hoursGap >= AUTO_OFFLINE_THRESHOLD_HOURS && currentStatus === 'Running';
+}
+
+/**
+ * Reduces reading rows (from ro_train_readings and/or ro_pretreatment_readings)
+ * down to each train's single most recent reading_datetime. Order-independent —
+ * safe to feed both tables' rows in without pre-sorting.
+ */
+export function latestReadingByTrain(rows: RawReadingRow[]): Map<string, string> {
+  const lastBy = new Map<string, string>();
+  for (const r of rows) {
+    if (!r.reading_datetime) continue;
+    const curr = lastBy.get(r.train_id);
+    if (!curr || new Date(r.reading_datetime).getTime() > new Date(curr).getTime()) {
+      lastBy.set(r.train_id, r.reading_datetime);
+    }
+  }
+  return lastBy;
+}
+
+export function computeTrainGaps(
+  trains: RawTrainRow[],
+  lastBy: Map<string, string>,
+  nowMs: number,
+): TrainGap[] {
+  return trains.map((t) => {
+    const last = lastBy.get(t.id) ?? null;
+    const hours = last ? (nowMs - new Date(last).getTime()) / 1000 / 60 / 60 : Infinity;
+    return {
+      train_id: t.id, train_number: t.train_number, plant_id: t.plant_id,
+      last_reading_at: last, hours_gap: hours, current_status: t.status,
+    };
+  });
+}
+
+/**
+ * A candidate only ever lands on hours_gap === Infinity when the windowed
+ * "recent readings" fetch in the queryFn below (bounded by a `since` cutoff
+ * computed from the requesting device's own clock) found NO row at all for
+ * that train. That's supposed to mean "no reading in the last ~24h" — but if
+ * the requesting device's clock is wrong (drifted, unsynced, wrong timezone —
+ * genuinely possible for a plant-floor operator terminal), the computed
+ * `since` cutoff can itself land after the real "now", silently excluding a
+ * train's genuinely-recent reading from the fetch and reporting Infinity for
+ * a train that was never actually stale. That's precisely how a train got
+ * auto-flagged Offline with an ">24h" reason moments after a real reading had
+ * just been logged for it.
+ *
+ * Any other finite hours_gap came from a reading the windowed fetch DID find,
+ * so it isn't at risk of this specific failure mode.
+ */
+export function needsUnboundedConfirmation(gap: TrainGap): boolean {
+  return gap.hours_gap === Infinity;
+}
+
+/**
+ * Given a candidate that hit hours_gap===Infinity, and the result of a
+ * follow-up *unbounded* (no since-filter) lookup for that train's true latest
+ * reading, decide whether the candidate should actually be flagged Offline.
+ *
+ * Returns null when the unbounded check finds a reading recent enough that
+ * the train should NOT be flagged — i.e. the windowed fetch's `since` cutoff
+ * was the problem, not a real gap. Returns the (possibly corrected) candidate
+ * otherwise.
+ */
+export function reconcileOfflineCandidate(
+  candidate: TrainGap,
+  confirmedLastReadingAt: string | null,
+  nowMs: number,
+): TrainGap | null {
+  if (!needsUnboundedConfirmation(candidate)) return candidate;
+  const hours = confirmedLastReadingAt
+    ? (nowMs - new Date(confirmedLastReadingAt).getTime()) / 1000 / 60 / 60
+    : Infinity;
+  if (!shouldAutoFlagTrainOffline(hours, candidate.current_status)) return null;
+  return { ...candidate, last_reading_at: confirmedLastReadingAt, hours_gap: hours };
+}
+
+/** Single most recent reading for one train, with no time-window filter to get wrong. */
+async function fetchLatestReadingUnbounded(trainId: string): Promise<string | null> {
+  const [roRes, preRes] = await Promise.all([
+    supabase
+      .from('ro_train_readings')
+      .select('reading_datetime')
+      .eq('train_id', trainId)
+      .order('reading_datetime', { ascending: false })
+      .limit(1),
+    supabase
+      .from('ro_pretreatment_readings')
+      .select('reading_datetime')
+      .eq('train_id', trainId)
+      .order('reading_datetime', { ascending: false })
+      .limit(1),
+  ]);
+  if (roRes.error) throw roRes.error;
+  if (preRes.error) throw preRes.error;
+
+  const candidates = [roRes.data?.[0]?.reading_datetime, preRes.data?.[0]?.reading_datetime]
+    .filter((v): v is string => !!v);
+  if (!candidates.length) return null;
+  return candidates.reduce((a, b) => (new Date(a).getTime() > new Date(b).getTime() ? a : b));
 }
 
 export function useTrainAutoOffline(plantIds: string[]) {
@@ -55,26 +167,40 @@ export function useTrainAutoOffline(plantIds: string[]) {
       if (roRecentRes.error) throw roRecentRes.error;
       if (preRecentRes.error) throw preRecentRes.error;
 
-      const lastBy = new Map<string, string>();
-      const updateLatest = (r: { train_id: string; reading_datetime: string | null }) => {
-        if (!r.reading_datetime) return;
-        const curr = lastBy.get(r.train_id);
-        if (!curr || new Date(r.reading_datetime).getTime() > new Date(curr).getTime()) {
-          lastBy.set(r.train_id, r.reading_datetime);
-        }
-      };
-      (roRecentRes.data ?? []).forEach(updateLatest);
-      (preRecentRes.data ?? []).forEach(updateLatest);
+      const lastBy = latestReadingByTrain([
+        ...(roRecentRes.data ?? []),
+        ...(preRecentRes.data ?? []),
+      ]);
 
       const now = Date.now();
-      return trains.map((t: any) => {
-        const last = lastBy.get(t.id) ?? null;
-        const hours = last ? (now - new Date(last).getTime()) / 1000 / 60 / 60 : Infinity;
-        return {
-          train_id: t.id, train_number: t.train_number, plant_id: t.plant_id,
-          last_reading_at: last, hours_gap: hours, current_status: t.status,
-        };
-      }).filter((g) => shouldAutoFlagTrainOffline(g.hours_gap, g.current_status));
+      const candidates = computeTrainGaps(trains as RawTrainRow[], lastBy, now)
+        .filter((g) => shouldAutoFlagTrainOffline(g.hours_gap, g.current_status));
+
+      // Every candidate above came from the `since`-windowed fetch, which
+      // trusts this device's own clock to build its cutoff. Before writing
+      // Offline for anyone who only qualified via hours_gap===Infinity
+      // ("no reading found at all"), double-check with an unbounded,
+      // clock-independent lookup — see needsUnboundedConfirmation's doc
+      // comment for why that specific case needs re-verifying and others
+      // don't. This only ever runs for the handful of trains about to be
+      // flagged, not for every train on every poll.
+      const confirmed: TrainGap[] = [];
+      for (const g of candidates) {
+        if (!needsUnboundedConfirmation(g)) {
+          confirmed.push(g);
+          continue;
+        }
+        try {
+          const trueLast = await fetchLatestReadingUnbounded(g.train_id);
+          const reconciled = reconcileOfflineCandidate(g, trueLast, now);
+          if (reconciled) confirmed.push(reconciled);
+        } catch (e) {
+          // Can't confirm either way this cycle — fail safe by leaving the
+          // train un-flagged rather than acting on an unverified signal.
+          console.warn('[useTrainAutoOffline] Could not confirm offline candidate, skipping this cycle', g.train_id, e);
+        }
+      }
+      return confirmed;
     },
     enabled: plantIds.length > 0,
     staleTime: 5 * 60_000,
