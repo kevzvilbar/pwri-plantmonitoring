@@ -9,7 +9,6 @@ import {
   GRID_METER_OTHER_KEY,
 } from '../TrendChartPivotShared';
 import type { ChemicalDayBreakdown } from '../TrendChartTables';
-import { calculateDataSummaryStats } from './summaryStatsCalculator';
 import { calculateDataSummaryStats, calculatePlantHealthStats, type PlantHealthStatsResult } from './summaryStatsCalculator';
 
 export interface DataSummaryData {
@@ -686,7 +685,6 @@ export function useDataSummaryData({
     gridMeterMeta, gridBreakdown,
     hasProdTab, hasConsTab, hasGridTab, hasChemBreakdownTab,
     overviewLabel, prodTabLabel,
-    roTrainEntities, roTrainRecoveryByDate, roTrainTdsByDate,
     roTrainEntities, roTrainRecoveryByDate, roTrainTdsByDate, phHealthByDate,
     prodEntities, prodPivotMap, prodDateKeys, prodDates,
     hasProductMeterData, hasPermeateData,
