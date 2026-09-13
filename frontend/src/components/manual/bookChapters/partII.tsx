@@ -82,11 +82,11 @@ export const partII : BookPart =   {
               it&rsquo;s <span className="font-mono text-[0.85em]">feed &minus; permeate</span>. Each
               tile&rsquo;s subtitle states exactly which equation is in effect, so you never have to guess.
               Below the tiles sits the per-train meter instrumentation list, every train gets a
-              three-way control: <strong className="font-sans font-semibold not-italic">Manual</strong>{' '}
+              three-way control: <strong className="font-sans font-semibold not-italic">Turbine (Common)</strong>{' '}
               (operator-entered flows),{' '}
-              <strong className="font-sans font-semibold not-italic">All EM</strong> (an electromagnetic
+              <strong className="font-sans font-semibold not-italic">All Electromagnetic (EMF)</strong> (an electromagnetic
               flow meter on every stream), or{' '}
-              <strong className="font-sans font-semibold not-italic">Mixed</strong> (EM on selected streams
+              <strong className="font-sans font-semibold not-italic">Mixed</strong> (Electromagnetic (EMF) on selected streams
               only, picking it reveals per-stream toggles). The{' '}
               <strong className="font-sans font-semibold not-italic">Set all to</strong> control in the
               header applies one choice to every train as a single confirmed batch. On desktop the train
@@ -95,7 +95,7 @@ export const partII : BookPart =   {
             </P>
             <ManualFigure
               title="Plant Configuration: RO Trains section"
-              caption="The three flow-meter tiles share one row, and the per-train instrumentation list sits two-up on desktop with each Manual / All EM / Mixed control stretched across its row. Set all to (header, right) batch-applies one mode to every train; here the feed meter is off, so feed volume is derived as permeate + reject."
+              caption="The three flow-meter tiles share one row, and the per-train instrumentation list sits two-up on desktop with each Turbine (Common) / All Electromagnetic (EMF) / Mixed control stretched across its row. Set all to (header, right) batch-applies one mode to every train; here the feed meter is off, so feed volume is derived as permeate + reject."
             >
               <div className="min-w-[560px] rounded-lg border bg-background p-3 font-sans text-xs">
                 <div className="mb-3 grid grid-cols-3 gap-2">
@@ -118,8 +118,8 @@ export const partII : BookPart =   {
                     <span className="flex items-center gap-1.5">
                       <span className="text-muted-foreground">Set all to</span>
                       <span className="inline-flex gap-0.5 rounded-lg bg-muted p-0.5">
-                        <span className="rounded-md px-2 py-1 text-muted-foreground">Manual</span>
-                        <span className="rounded-md bg-primary px-2 py-1 font-medium text-primary-foreground shadow-sm">All EM</span>
+                        <span className="rounded-md px-2 py-1 text-muted-foreground">Turbine (Common)</span>
+                        <span className="rounded-md bg-primary px-2 py-1 font-medium text-primary-foreground shadow-sm">All Electromagnetic (EMF)</span>
                         <span className="rounded-md px-2 py-1 text-muted-foreground">Mixed</span>
                       </span>
                     </span>
@@ -139,7 +139,7 @@ export const partII : BookPart =   {
                               key={opt}
                               className={'flex-1 rounded-md px-2 py-1 text-center ' + (row.m === opt ? 'bg-primary font-medium text-primary-foreground shadow-sm' : 'text-muted-foreground')}
                             >
-                              {opt === 'all' ? 'All EM' : opt === 'manual' ? 'Manual' : 'Mixed'}
+                              {opt === 'all' ? 'All Electromagnetic (EMF)' : opt === 'manual' ? 'Turbine (Common)' : 'Mixed'}
                             </span>
                           ))}
                         </span>
@@ -148,7 +148,7 @@ export const partII : BookPart =   {
                     <div className="hidden border-b border-border sm:block" aria-hidden="true" />
                   </div>
                 </div>
-                <div className="mt-2 text-3xs text-muted-foreground">RO2 is set to Mixed, in the live app its row expands with per-stream toggles (Feed / Permeate / Reject) choosing which streams carry EM meters. Trains RO5&ndash;RO7 continue below; on phones everything stacks one row per train.</div>
+                <div className="mt-2 text-3xs text-muted-foreground">RO2 is set to Mixed, in the live app its row expands with per-stream toggles (Feed / Permeate / Reject) choosing which streams carry Electromagnetic (EMF) meters. Trains RO5&ndash;RO7 continue below; on phones everything stacks one row per train.</div>
               </div>
             </ManualFigure>
             <P>

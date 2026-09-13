@@ -71,7 +71,7 @@ export function RoTrainsMeterSection({ cfg, update, canEdit, plantId }: RoTrains
             <span>No feed meter — feed flow auto-inferred as permeate + reject.</span>
           </div>
         )}
-        {/* ── Per-train EM meter configuration ── */}
+        {/* ── Per-train Electromagnetic (EMF) meter configuration ── */}
         {plantId && (
           <TrainEmConfigSection plantId={plantId} canEdit={canEdit} cfg={cfg} />
         )}
@@ -128,7 +128,7 @@ export function RoTrainsMeterSection({ cfg, update, canEdit, plantId }: RoTrains
 }
 
 /* ───────────────────────────────────────────────────────────────────────────
-   Per-train EM meter configuration section
+   Per-train Electromagnetic (EMF) meter configuration section
    ─────────────────────────────────────────────────────────────────────────── */
 
 function TrainEmConfigSection({ plantId, canEdit, cfg: plantCfg }: {
@@ -159,7 +159,7 @@ function TrainEmConfigSection({ plantId, canEdit, cfg: plantCfg }: {
       // Invalidate trains query to refresh UI with fresh data
       await queryClient.invalidateQueries({ queryKey: ['ro_trains', [plantId]] });
     } catch (err: any) {
-      toast.error('Failed to update EM config', { description: err.message });
+      toast.error('Failed to update Electromagnetic (EMF) config', { description: err.message });
     }
   };
 
@@ -191,7 +191,7 @@ function TrainEmConfigSection({ plantId, canEdit, cfg: plantCfg }: {
         <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Per-train meter instrumentation</span>
         <span className="text-xs font-medium text-primary bg-primary-soft rounded-full px-2 py-0.5">Saves instantly</span>
       </div>
-      {/* One table, one row per train — the column headers (Train / EM mode /
+      {/* One table, one row per train — the column headers (Train / Electromagnetic (EMF) mode /
           Streams) are written once instead of being repeated on every row. */}
       <div className="rounded-lg border border-border overflow-hidden">
         <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 bg-muted/40 border-b border-border">
@@ -214,7 +214,7 @@ function TrainEmConfigSection({ plantId, canEdit, cfg: plantCfg }: {
           <TableHeader>
             <TableRow className="hover:bg-transparent">
               <TableHead>Train</TableHead>
-              <TableHead>EM mode</TableHead>
+              <TableHead>Electromagnetic (EMF) mode</TableHead>
               <TableHead>Streams</TableHead>
             </TableRow>
           </TableHeader>
@@ -239,7 +239,7 @@ function TrainEmConfigSection({ plantId, canEdit, cfg: plantCfg }: {
   );
 }
 
-// Type for EM config patches — known columns on ro_trains
+// Type for Electromagnetic (EMF) config patches — known columns on ro_trains
 type EmConfigPatch = Partial<{
   uses_em_meter: boolean;
   em_all_streams: boolean;
@@ -276,12 +276,12 @@ function updateTrainEmCfg(trainId: string, patch: EmConfigPatch): Promise<{ succ
    ─────────────────────────────────────────────────────────────────────────── */
 
 type EmMode = 'manual' | 'all' | 'mixed';
-const MODE_LABEL: Record<EmMode, string> = { manual: 'Manual', all: 'All EM', mixed: 'Mixed' };
-// Display order in the toggle: the common "everything has EM meters" first.
+const MODE_LABEL: Record<EmMode, string> = { manual: 'Turbine (Common)', all: 'All Electromagnetic (EMF)', mixed: 'Mixed' };
+// Display order in the toggle: the common "everything has Electromagnetic (EMF) meters" first.
 const EM_MODES: EmMode[] = ['all', 'mixed', 'manual'];
 
-// Per-mode active styling — All EM (instrumented everywhere) reads as info
-// blue, Mixed (some streams EM) as warn amber, Manual as neutral muted.
+// Per-mode active styling — All Electromagnetic (EMF) (instrumented everywhere) reads as info
+// blue, Mixed (some streams Electromagnetic (EMF)) as warn amber, Turbine (Common) as neutral muted.
 const MODE_META: Record<EmMode, { activeClass: string }> = {
   all: { activeClass: 'data-[state=on]:bg-info-soft data-[state=on]:text-info data-[state=on]:border-info/40' },
   mixed: { activeClass: 'data-[state=on]:bg-warn-soft data-[state=on]:text-warn data-[state=on]:border-warn/40' },
@@ -298,8 +298,8 @@ type TrainEmCfg = {
 
 function modeOf(cfg: TrainEmCfg): EmMode {
   if (!(cfg.uses_em_meter ?? false)) return 'manual';
-  // Legacy/unset rows default to all-EM — matches the shared.tsx precedence
-  // ("missing from the map defaults to all-EM").
+  // Legacy/unset rows default to all-Electromagnetic (EMF) — matches the shared.tsx precedence
+  // ("missing from the map defaults to all-Electromagnetic (EMF)").
   return (cfg.em_all_streams ?? true) ? 'all' : 'mixed';
 }
 
@@ -350,11 +350,12 @@ function EmModeToggle({ mode, onSelect, disabled, ariaPrefix }: {
 }
 
 /* ───────────────────────────────────────────────────────────────────────────
-   TrainEmConfigRow — one table row per train: identity, EM mode, streams.
-   "EM mode" replaces the old raw uses_em_meter / em_all_streams double-toggle
-   with a single 3-way choice; "Streams" only becomes interactive (checkboxes
-   with visible labels) in Mixed mode — in All EM / Manual the per-stream flags
-   are implied, so there is nothing to toggle that would silently be moot.
+   TrainEmConfigRow — one table row per train: identity, Electromagnetic (EMF)
+   mode, streams. "Electromagnetic (EMF) mode" replaces the old raw
+   uses_em_meter / em_all_streams double-toggle with a single 3-way choice;
+   "Streams" only becomes interactive (checkboxes with visible labels) in
+   Mixed mode — in All Electromagnetic (EMF) / Turbine (Common) the per-stream
+   flags are implied, so there is nothing to toggle that would silently be moot.
    ─────────────────────────────────────────────────────────────────────────── */
 
 function TrainEmConfigRow({ trainLabel, cfg, plantCfg, onUpdate, canEdit }: {
