@@ -35,8 +35,8 @@ BEGIN
 
   -- Check if user is admin (bypass plant check)
   SELECT EXISTS (
-    SELECT 1 FROM public.profiles
-    WHERE id = v_user_id AND role = 'admin'
+    SELECT 1 FROM public.user_roles
+    WHERE user_id = v_user_id AND role = 'admin'
   ) INTO v_is_admin;
 
   IF NOT v_is_admin THEN

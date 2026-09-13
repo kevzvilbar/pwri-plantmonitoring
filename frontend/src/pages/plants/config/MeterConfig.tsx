@@ -132,18 +132,14 @@ export function PlantMeterConfigCard({ plant }: { plant: any }) {
   ].filter(Boolean).join(' · ') || 'None';
 
   return (
-    <Card className="p-0 overflow-hidden" data-testid="plant-meter-config-card">
-      <button
-        type="button"
-        onClick={() => setOpen(o => !o)}
-        className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left hover:bg-muted/30 transition-colors"
-      >
+    <Card className="overflow-hidden" data-testid="plant-meter-config-card">
+      <CardHeader className="flex flex-row items-center justify-between px-4 py-3 hover:bg-muted/30 cursor-pointer" onClick={() => setOpen(o => !o)}>
         <div className="flex items-center gap-2.5">
           <Gauge className="h-4 w-4 text-primary shrink-0" />
           <div>
-            <div className="text-sm font-semibold">Plant Configuration Settings</div>
+            <CardTitle className="text-sm font-semibold">Plant Configuration Settings</CardTitle>
             {!open && (
-              <div className="text-xs text-muted-foreground mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5">
+              <CardDescription className="flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5 text-xs text-muted-foreground">
                 <span>RO: {roFlags}</span>
                 <span>Prod: {cfg.ro_production_source === 'both'
                   ? `Product meter + Permeate${cfg.permeate_is_production ? '' : ' (⚠ permeate switch off)'}`
@@ -152,10 +148,10 @@ export function PlantMeterConfigCard({ plant }: { plant: any }) {
                         ? ` (${cfg.permeate_cutoff_enabled ? `cut-off ${cfg.permeate_cutoff_time || '00:20'}` : 'no cut-off'})`
                         : ''}`
                     : 'Product meter'}</span>
-                {cfg.ro_has_per_train_electricity && <span>⚡ Per-train kWh</span>}
+                {cfg.ro_has_per_train_electricity && <span>⚡ Per‑train kWh</span>}
                 <span>{cfg.has_solar && cfg.has_grid ? 'Solar + Grid' : cfg.has_solar ? 'Solar' : 'Grid'}</span>
                 <span>Loc: {cfg.locator_readings_per_day ?? 3}×/day</span>
-              </div>
+              </CardDescription>
             )}
           </div>
         </div>
@@ -163,7 +159,7 @@ export function PlantMeterConfigCard({ plant }: { plant: any }) {
           {!canEdit && <span className="text-2xs bg-muted px-2 py-0.5 rounded font-medium text-muted-foreground">View only</span>}
           <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
         </div>
-      </button>
+      </CardHeader>
 
       {open && (
         <div className="px-4 pb-4 space-y-5 border-t border-border/50">
