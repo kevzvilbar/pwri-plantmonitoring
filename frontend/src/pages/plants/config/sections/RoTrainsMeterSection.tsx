@@ -153,9 +153,21 @@ function TrainMeterPresenceSection({ plantId, canEdit }: {
           <TableHeader>
             <TableRow className="hover:bg-transparent">
               <TableHead>Train</TableHead>
-              <TableHead>Feed Meter</TableHead>
-              <TableHead>Permeate Meter</TableHead>
-              <TableHead>Reject Meter</TableHead>
+              <TableHead className="text-center">
+                <span className="inline-flex items-center justify-center gap-1.5">
+                  <RawWaterIcon className="h-3.5 w-3.5" /> Feed
+                </span>
+              </TableHead>
+              <TableHead className="text-center">
+                <span className="inline-flex items-center justify-center gap-1.5">
+                  <PermeateIcon className="h-3.5 w-3.5" /> Permeate
+                </span>
+              </TableHead>
+              <TableHead className="text-center">
+                <span className="inline-flex items-center justify-center gap-1.5">
+                  <RejectIcon className="h-3.5 w-3.5" /> Reject
+                </span>
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -163,24 +175,27 @@ function TrainMeterPresenceSection({ plantId, canEdit }: {
               const trainLabel = t.name ?? `Train ${t.train_number}`;
               return (
                 <TableRow key={t.id}>
-                  <TableCell className="font-semibold text-foreground whitespace-nowrap align-top py-3">{trainLabel}</TableCell>
+                  <TableCell className="font-semibold text-foreground whitespace-nowrap align-middle py-3">{trainLabel}</TableCell>
                   <MeterPresenceCell
                     checked={t.has_feed_meter}
                     onChange={v => handleUpdate(t.id, trainLabel, { has_feed_meter: v })}
                     canEdit={canEdit}
                     label="Feed"
+                    trainLabel={trainLabel}
                   />
                   <MeterPresenceCell
                     checked={t.has_permeate_meter}
                     onChange={v => handleUpdate(t.id, trainLabel, { has_permeate_meter: v })}
                     canEdit={canEdit}
                     label="Permeate"
+                    trainLabel={trainLabel}
                   />
                   <MeterPresenceCell
                     checked={t.has_reject_meter}
                     onChange={v => handleUpdate(t.id, trainLabel, { has_reject_meter: v })}
                     canEdit={canEdit}
                     label="Reject"
+                    trainLabel={trainLabel}
                   />
                 </TableRow>
               );
@@ -192,25 +207,26 @@ function TrainMeterPresenceSection({ plantId, canEdit }: {
   );
 }
 
-function MeterPresenceCell({ checked, onChange, canEdit, label }: {
+function MeterPresenceCell({ checked, onChange, canEdit, label, trainLabel }: {
   checked: boolean;
   onChange: (v: boolean) => void;
   canEdit: boolean;
   label: string;
+  trainLabel: string;
 }) {
-  const rowId = useId();
-  const id = `${rowId}-${label.toLowerCase()}`;
+  // The column header already names the stream (with an icon), so the cell
+  // itself doesn't repeat a text label — just a centered checkbox, with the
+  // full context preserved for screen readers via aria-label. A soft tint on
+  // checked cells turns the row into a scannable pattern (which trains are
+  // missing a meter) instead of requiring each box to be read individually.
   return (
-    <TableCell className="align-top py-3">
-      <div className="flex items-center gap-1.5">
-        <Checkbox
-          id={id}
-          checked={checked}
-          onCheckedChange={v => onChange(v === true)}
-          disabled={!canEdit}
-        />
-        <Label htmlFor={id} className="text-2xs font-normal text-muted-foreground cursor-pointer">{label}</Label>
-      </div>
+    <TableCell className={cn('text-center transition-colors', checked && 'bg-primary-soft/30')}>
+      <Checkbox
+        checked={checked}
+        onCheckedChange={v => onChange(v === true)}
+        disabled={!canEdit}
+        aria-label={`${trainLabel} ${label.toLowerCase()} meter`}
+      />
     </TableCell>
   );
 }
@@ -356,8 +372,11 @@ function TrainEmConfigSection({ plantId, canEdit }: {
         <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Per-train meter instrumentation</span>
         <span className="text-xs font-medium text-primary bg-primary-soft rounded-full px-2 py-0.5">Saves instantly</span>
       </div>
-      {/* One table, one row per train — the column headers (Train / Electromagnetic (EMF) mode /
-          Streams) are written once instead of being repeated on every row. */}
+      {/* One table, one row per train — the column headers (Train / Instrumentation)
+          are written once instead of being repeated on every row. Per-stream
+          Electromagnetic (EMF) checkboxes fold into the Instrumentation cell
+          itself (only shown for Mixed mode) instead of a separate Streams
+          column that would sit empty for every All-EMF / Turbine-Common row. */}
       <div className="rounded-lg border border-border overflow-hidden">
         <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 bg-muted/40 border-b border-border">
           <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
@@ -379,8 +398,7 @@ function TrainEmConfigSection({ plantId, canEdit }: {
           <TableHeader>
             <TableRow className="hover:bg-transparent">
               <TableHead>Train</TableHead>
-              <TableHead>Electromagnetic (EMF) mode</TableHead>
-              <TableHead>Streams</TableHead>
+              <TableHead>Instrumentation</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -517,12 +535,14 @@ function EmModeToggle({ mode, onSelect, disabled, ariaPrefix }: {
 }
 
 /* ───────────────────────────────────────────────────────────────────────────
-   TrainEmConfigRow — one table row per train: identity, Electromagnetic (EMF)
-   mode, streams. "Electromagnetic (EMF) mode" replaces the old raw
-   uses_em_meter / em_all_streams double-toggle with a single 3-way choice;
-   "Streams" only becomes interactive (checkboxes with visible labels) in
-   Mixed mode — in All Electromagnetic (EMF) / Turbine (Common) the per-stream
-   flags are implied, so there is nothing to toggle that would silently be moot.
+   TrainEmConfigRow — one table row per train: identity + instrumentation.
+   "Electromagnetic (EMF) mode" replaces the old raw uses_em_meter /
+   em_all_streams double-toggle with a single 3-way choice. The per-stream
+   checkboxes fold into the same cell, directly under the mode toggle, and
+   only render in Mixed mode — in All Electromagnetic (EMF) / Turbine
+   (Common) every present stream's setting is already fully implied by the
+   mode itself, so a separate always-visible "Streams" column would just sit
+   empty for the two most common configurations.
    ─────────────────────────────────────────────────────────────────────────── */
 
 function TrainEmConfigRow({ trainLabel, cfg, hasFeedMeter, hasPermeateMeter, hasRejectMeter, onUpdate, canEdit }: {
@@ -546,37 +566,34 @@ function TrainEmConfigRow({ trainLabel, cfg, hasFeedMeter, hasPermeateMeter, has
     <TableRow>
       <TableCell className="font-semibold text-foreground whitespace-nowrap align-top py-3">{trainLabel}</TableCell>
       <TableCell className="align-top py-3">
-        <EmModeToggle
-          mode={mode}
-          onSelect={next => onUpdate(modeToPatch(next))}
-          disabled={!canEdit}
-          ariaPrefix={`${trainLabel} instrumentation`}
-        />
-      </TableCell>
-      <TableCell className="align-top py-3">
-        {mode === 'manual' && <span className="text-2xs text-muted-foreground">—</span>}
-        {mode === 'all' && (
-          <span className="text-2xs text-muted-foreground">{streams.map(s => s.label).join(' · ') || '—'}</span>
-        )}
-        {mode === 'mixed' && (
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
-            {streams.length === 0 && <span className="text-2xs text-muted-foreground">—</span>}
-            {streams.map(s => {
-              const id = `${rowId}-${s.field}`;
-              return (
-                <div key={s.field} className="flex items-center gap-1.5">
-                  <Checkbox
-                    id={id}
-                    checked={s.checked ?? false}
-                    onCheckedChange={v => onUpdate({ [s.field]: v === true } as EmConfigPatch)}
-                    disabled={!canEdit}
-                  />
-                  <Label htmlFor={id} className="text-2xs font-normal text-muted-foreground cursor-pointer">{s.label}</Label>
-                </div>
-              );
-            })}
-          </div>
-        )}
+        <div className="space-y-2">
+          <EmModeToggle
+            mode={mode}
+            onSelect={next => onUpdate(modeToPatch(next))}
+            disabled={!canEdit}
+            ariaPrefix={`${trainLabel} instrumentation`}
+          />
+          {mode === 'mixed' && streams.length > 0 && (
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 pl-0.5">
+              {streams.map(s => {
+                const id = `${rowId}-${s.field}`;
+                return (
+                  <div key={s.field} className="flex items-center gap-1.5">
+                    <Checkbox
+                      id={id}
+                      checked={s.checked ?? false}
+                      onCheckedChange={v => onUpdate({ [s.field]: v === true } as EmConfigPatch)}
+                      disabled={!canEdit}
+                    />
+                    <Label htmlFor={id} className="text-2xs font-normal text-muted-foreground cursor-pointer">
+                      {s.label} is EMF
+                    </Label>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </TableCell>
     </TableRow>
   );
