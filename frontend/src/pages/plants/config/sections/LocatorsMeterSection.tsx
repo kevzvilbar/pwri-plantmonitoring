@@ -1,5 +1,5 @@
 import { MeterToggleTile, MeterGroupChips, LocatorGroupRealitySync } from '../MeterConfig';
-import { MapPin, Gauge, Calendar, Plus, X } from 'lucide-react';
+import { Gauge, Calendar, Plus, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
@@ -15,11 +15,6 @@ interface LocatorsMeterSectionProps {
 export function LocatorsMeterSection({ cfg, update, canEdit, locators, configProductMeters }: LocatorsMeterSectionProps) {
   return (
     <div>
-      <div className="flex items-center gap-2 mb-3">
-        <MapPin className="h-3.5 w-3.5 text-muted-foreground" />
-        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Locators / distribution</span>
-        <span className="text-2xs text-muted-foreground ml-1">(each locator always has its own water meter)</span>
-      </div>
       <p className="text-xs font-medium text-muted-foreground mb-2">Bulk / product metering</p>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3">
         <MeterToggleTile

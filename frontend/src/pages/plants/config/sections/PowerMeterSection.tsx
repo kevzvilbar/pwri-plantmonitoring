@@ -1,7 +1,6 @@
 import { MeterToggleTile } from '../MeterConfig';
 import { Sun } from 'lucide-react';
 import { GridPylonIcon } from '@/components/icons/water-icons';
-import { Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -15,13 +14,6 @@ interface PowerMeterSectionProps {
 export function PowerMeterSection({ cfg, update, canEdit }: PowerMeterSectionProps) {
   return (
     <div>
-      <div className="flex items-center gap-2 mb-3">
-        <Zap className="h-3.5 w-3.5 text-muted-foreground" />
-        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Energy sources</span>
-        <span className="text-2xs bg-muted text-muted-foreground px-1.5 py-0.5 rounded ml-1">
-          {cfg.has_solar && cfg.has_grid ? 'Solar + Grid' : cfg.has_solar ? 'Solar only' : 'Grid only'}
-        </span>
-      </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
         <MeterToggleTile
           icon={<Sun className="h-4 w-4 text-warn" />}

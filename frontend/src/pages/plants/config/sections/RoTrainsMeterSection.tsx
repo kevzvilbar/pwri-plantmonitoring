@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { MeterToggleTile } from '../MeterConfig';
-import { ROTrainIcon, RawWaterIcon, PermeateIcon, RejectIcon } from '@/components/icons/water-icons';
+import { RawWaterIcon, PermeateIcon, RejectIcon } from '@/components/icons/water-icons';
 import { Gauge, Zap } from 'lucide-react';
 import { useROTrainsForPlant, type ROTrain } from '@/hooks/useROTrains';
 import { supabase } from '@/integrations/supabase/client';
@@ -20,11 +20,7 @@ export function RoTrainsMeterSection({ cfg, update, canEdit, plantId }: RoTrains
   return (
     <>
       {/* ══ SECTION: RO Trains ══ */}
-      <div className="pt-4">
-        <div className="flex items-center gap-2 mb-3">
-          <ROTrainIcon className="h-3.5 w-3.5 text-muted-foreground" />
-          <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">RO Trains — Flow meters</span>
-        </div>
+      <div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           <MeterToggleTile
             icon={<RawWaterIcon className="h-4 w-4 text-info" />}

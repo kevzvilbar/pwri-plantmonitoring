@@ -1,5 +1,5 @@
 import { MeterToggleTile, MeterGroupChips } from '../MeterConfig';
-import { Droplet, Zap, Plus, X } from 'lucide-react';
+import { Zap, Plus, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
@@ -13,11 +13,6 @@ interface WellsMeterSectionProps {
 export function WellsMeterSection({ cfg, update, canEdit, wells }: WellsMeterSectionProps) {
   return (
     <div>
-      <div className="flex items-center gap-2 mb-3">
-        <Droplet className="h-3.5 w-3.5 text-muted-foreground" />
-        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Raw water — wells</span>
-        <span className="text-2xs text-muted-foreground ml-1">(each well always has its own water meter)</span>
-      </div>
       <p className="text-xs font-medium text-muted-foreground mb-2">Electricity metering</p>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3">
         <MeterToggleTile

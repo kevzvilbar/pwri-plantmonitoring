@@ -19,9 +19,10 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '@/components/ui/accordion';
 import { StatusPill } from '@/components/StatusPill';
 import { DeleteEntityMenu } from '@/components/DeleteEntityMenu';
-import { ChevronLeft, ChevronDown, Plus, MapPin, Gauge, Wrench, Sun, Zap, Trash2, Loader2, Pencil, Upload, FileDown, X, TrendingUp, Download, BarChart2, Calendar, Droplet, RefreshCw } from 'lucide-react';
+import { ChevronLeft, ChevronDown, Plus, MapPin, Gauge, Wrench, Sun, Zap, Trash2, Loader2, Pencil, Upload, FileDown, X, TrendingUp, Download, BarChart2, Calendar, Droplet, RefreshCw, FlaskConical } from 'lucide-react';
 import { ROTrainIcon } from '@/components/icons/water-icons';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, ComposedChart, Area } from 'recharts';
 import { fmtNum } from '@/lib/calculations';
@@ -47,6 +48,41 @@ import { ChemicalsSection } from './components/ChemicalsSection';
 import { PlantComponentTypeCard } from './components/PlantComponentTypeCard';
 
 export { MeterToggleTile, MeterGroupChips, LocatorGroupRealitySync, CIPChemicalsSection };
+
+// ── Config tab accordion ─────────────────────────────────────────────────────
+// Each section is an independently collapsible accordion item (type="multiple").
+// Defaults to every section open so the first-load experience matches the old
+// always-open flat stack.
+const ALL_CONFIG_SECTIONS = [
+  'ro-trains',
+  'product-meters',
+  'wells',
+  'locators',
+  'power',
+  'component-types',
+  'chemicals',
+];
+
+const CONFIG_SECTION_BADGE =
+  'shrink-0 text-2xs font-medium bg-muted text-muted-foreground px-1.5 py-0.5 rounded whitespace-nowrap';
+
+function ConfigSectionTitle({ icon, hint, children }: {
+  icon: ReactNode;
+  hint?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <span className="flex min-w-0 flex-1 items-center gap-2 text-left">
+      {icon}
+      <span className="text-xs font-semibold uppercase tracking-wide text-foreground truncate">{children}</span>
+      {hint && (
+        <span className="hidden sm:inline text-2xs font-normal normal-case tracking-normal text-muted-foreground truncate">
+          {hint}
+        </span>
+      )}
+    </span>
+  );
+}
 
 export function PlantMeterConfigCard({ plant }: { plant: any }) {
   const { isManager, isAdmin } = useAuth();
@@ -162,7 +198,7 @@ export function PlantMeterConfigCard({ plant }: { plant: any }) {
       </CardHeader>
 
       {open && (
-        <div className="px-4 pb-4 space-y-5 border-t border-border/50">
+        <div className="px-4 pb-4 border-t border-border/50">
           {isLocalOnly && (
             <div className="mt-4 flex items-start gap-2 text-xs text-warn bg-warn-soft border border-warn rounded-md px-3 py-2">
               <span className="mt-0.5">⚠</span>
@@ -174,51 +210,114 @@ export function PlantMeterConfigCard({ plant }: { plant: any }) {
               </span>
             </div>
           )}
-          <RoTrainsMeterSection cfg={cfg} update={update} canEdit={canEdit} plantId={plant.id} />
+          <Accordion type="multiple" defaultValue={ALL_CONFIG_SECTIONS}>
+            <AccordionItem value="ro-trains" className="border-border/50">
+              <AccordionTrigger className="py-3 hover:no-underline">
+                <ConfigSectionTitle icon={<ROTrainIcon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />}>
+                  RO Trains
+                </ConfigSectionTitle>
+                <span className={CONFIG_SECTION_BADGE}>{roFlags}</span>
+              </AccordionTrigger>
+              <AccordionContent>
+                <RoTrainsMeterSection cfg={cfg} update={update} canEdit={canEdit} plantId={plant.id} />
+              </AccordionContent>
+            </AccordionItem>
 
-          <div className="border-t border-border/50" />
+            <AccordionItem value="product-meters" className="border-border/50">
+              <AccordionTrigger className="py-3 hover:no-underline">
+                <ConfigSectionTitle icon={<Gauge className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />}>
+                  Product Meters
+                </ConfigSectionTitle>
+                <span className={CONFIG_SECTION_BADGE}>
+                  {cfg.ro_production_source === 'both'
+                    ? 'Product meter + Permeate'
+                    : cfg.ro_production_source === 'permeate'
+                      ? 'Permeate'
+                      : 'Product meter'}
+                </span>
+              </AccordionTrigger>
+              <AccordionContent>
+                <ProductMeterSection cfg={cfg} update={update} canEdit={canEdit} />
+              </AccordionContent>
+            </AccordionItem>
 
-          <ProductMeterSection cfg={cfg} update={update} canEdit={canEdit} />
+            <AccordionItem value="wells" className="border-border/50">
+              <AccordionTrigger className="py-3 hover:no-underline">
+                <ConfigSectionTitle
+                  icon={<Droplet className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />}
+                  hint="(each well always has its own water meter)"
+                >
+                  Wells
+                </ConfigSectionTitle>
+              </AccordionTrigger>
+              <AccordionContent>
+                <WellsMeterSection cfg={cfg} update={update} canEdit={canEdit} wells={wells} />
+              </AccordionContent>
+            </AccordionItem>
 
-          <div className="border-t border-border/50" />
+            <AccordionItem value="locators" className="border-border/50">
+              <AccordionTrigger className="py-3 hover:no-underline">
+                <ConfigSectionTitle
+                  icon={<MapPin className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />}
+                  hint="(each locator always has its own water meter)"
+                >
+                  Locators
+                </ConfigSectionTitle>
+              </AccordionTrigger>
+              <AccordionContent>
+                <LocatorsMeterSection cfg={cfg} update={update} canEdit={canEdit} locators={locators} configProductMeters={configProductMeters} />
+              </AccordionContent>
+            </AccordionItem>
 
-          <WellsMeterSection cfg={cfg} update={update} canEdit={canEdit} wells={wells} />
+            <AccordionItem value="power" className="border-border/50">
+              <AccordionTrigger className="py-3 hover:no-underline">
+                <ConfigSectionTitle icon={<Zap className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />}>
+                  Power
+                </ConfigSectionTitle>
+                <span className={CONFIG_SECTION_BADGE}>
+                  {cfg.has_solar && cfg.has_grid ? 'Solar + Grid' : cfg.has_solar ? 'Solar' : 'Grid'}
+                </span>
+              </AccordionTrigger>
+              <AccordionContent>
+                <PowerMeterSection cfg={cfg} update={update} canEdit={canEdit} />
+              </AccordionContent>
+            </AccordionItem>
 
-          <div className="border-t border-border/50" />
+            <AccordionItem value="component-types" className="border-border/50">
+              <AccordionTrigger className="py-3 hover:no-underline">
+                <ConfigSectionTitle icon={<Wrench className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />}>
+                  Component Types & Backwash
+                </ConfigSectionTitle>
+              </AccordionTrigger>
+              <AccordionContent>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <PlantComponentTypeCard plant={plant} embedded />
+                  <BackwashModeCard plant={plant} />
+                </div>
+              </AccordionContent>
+            </AccordionItem>
 
-          <LocatorsMeterSection cfg={cfg} update={update} canEdit={canEdit} locators={locators} configProductMeters={configProductMeters} />
-
-          <div className="border-t border-border/50" />
-
-          <PowerMeterSection cfg={cfg} update={update} canEdit={canEdit} />
-
-          <div className="border-t border-border/50" />
-
-          <div>
-            <div className="flex items-center gap-2 mb-3">
-              <Wrench className="h-3.5 w-3.5 text-muted-foreground" />
-              <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Component Types & Backwash</span>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              <PlantComponentTypeCard plant={plant} embedded />
-              <BackwashModeCard plant={plant} />
-            </div>
-          </div>
-
-          <div className="border-t border-border/50" />
-
-          <ChemicalsSection cfg={cfg} update={update} canEdit={canEdit} />
-
-          <CIPChemicalsSection cfg={cfg} update={update} canEdit={canEdit} />
+            <AccordionItem value="chemicals" className="border-border/50">
+              <AccordionTrigger className="py-3 hover:no-underline">
+                <ConfigSectionTitle icon={<FlaskConical className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />}>
+                  Chemicals
+                </ConfigSectionTitle>
+              </AccordionTrigger>
+              <AccordionContent className="space-y-5">
+                <ChemicalsSection cfg={cfg} update={update} canEdit={canEdit} />
+                <CIPChemicalsSection cfg={cfg} update={update} canEdit={canEdit} />
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
 
           {canEdit && (
-            <Button onClick={doSave} disabled={saving} className="w-full h-10 bg-primary text-primary-foreground hover:bg-primary/90 text-sm" data-testid="save-meter-config-btn">
+            <Button onClick={doSave} disabled={saving} className="mt-4 w-full h-10 bg-primary text-primary-foreground hover:bg-primary/90 text-sm" data-testid="save-meter-config-btn">
               {saving && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
               Save meter configuration
             </Button>
           )}
           {!canEdit && (
-            <p className="text-xs text-muted-foreground text-center">Only managers and admins can edit meter configuration.</p>
+            <p className="mt-4 text-xs text-muted-foreground text-center">Only managers and admins can edit meter configuration.</p>
           )}
         </div>
       )}
