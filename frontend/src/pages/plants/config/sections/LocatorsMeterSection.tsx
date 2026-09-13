@@ -16,7 +16,7 @@ export function LocatorsMeterSection({ cfg, update, canEdit, locators, configPro
   return (
     <div>
       <p className="text-xs font-medium text-muted-foreground mb-2">Bulk / product metering</p>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 mb-3">
         <MeterToggleTile
           icon={<Gauge className="h-4 w-4 text-primary" />}
           title="Dedicated bulk meter"

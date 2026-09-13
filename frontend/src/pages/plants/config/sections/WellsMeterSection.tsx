@@ -14,7 +14,7 @@ export function WellsMeterSection({ cfg, update, canEdit, wells }: WellsMeterSec
   return (
     <div>
       <p className="text-xs font-medium text-muted-foreground mb-2">Electricity metering</p>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 mb-3">
         <MeterToggleTile
           icon={<Zap className="h-4 w-4 text-warn" />}
           title="Shared electric meter"

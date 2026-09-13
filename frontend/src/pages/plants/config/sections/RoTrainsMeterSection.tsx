@@ -21,7 +21,7 @@ export function RoTrainsMeterSection({ cfg, update, canEdit, plantId }: RoTrains
     <>
       {/* ══ SECTION: RO Trains ══ */}
       <div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
           <MeterToggleTile
             icon={<RawWaterIcon className="h-4 w-4 text-info" />}
             title="Feed meter"
@@ -172,7 +172,9 @@ function TrainEmConfigSection({ plantId, canEdit, cfg: plantCfg }: {
         <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Per-train meter instrumentation</span>
         <span className="text-xs font-medium text-primary bg-primary-soft rounded-full px-2 py-0.5">Saves instantly</span>
       </div>
-      <div className="rounded-lg border border-border overflow-hidden">
+      {/* border-b-0: the row cells draw their own bottom line (incl. the odd-count
+          filler cell), so the container must not add a second one underneath. */}
+      <div className="rounded-lg border border-border border-b-0 overflow-hidden">
         <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 bg-muted/40 border-b border-border">
           <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
             {trains.length} train{trains.length === 1 ? '' : 's'}
@@ -189,20 +191,25 @@ function TrainEmConfigSection({ plantId, canEdit, cfg: plantCfg }: {
             </div>
           )}
         </div>
-        <div className="divide-y divide-border">
+        {/* 2-up on sm+ so the 7 train rows use the horizontal space instead of
+            leaving ~900px of blank right-hand side per row; odd counts get a
+            filler cell so the bottom border stays closed. */}
+        <div className="grid grid-cols-1 sm:grid-cols-2">
           {trains.map(t => {
             const trainLabel = t.name ?? `Train ${t.train_number}`;
             return (
-              <TrainEmConfigRow
-                key={t.id}
-                trainLabel={trainLabel}
-                cfg={getTrainEmConfig(t)}
-                plantCfg={plantCfg}
-                onUpdate={patch => handleUpdate(t.id, trainLabel, patch)}
-                canEdit={canEdit}
-              />
+              <div key={t.id} className="border-b border-border min-w-0 sm:odd:border-r">
+                <TrainEmConfigRow
+                  trainLabel={trainLabel}
+                  cfg={getTrainEmConfig(t)}
+                  plantCfg={plantCfg}
+                  onUpdate={patch => handleUpdate(t.id, trainLabel, patch)}
+                  canEdit={canEdit}
+                />
+              </div>
             );
           })}
+          {trains.length % 2 === 1 && <div aria-hidden="true" className="hidden sm:block border-b border-border" />}
         </div>
       </div>
     </div>
@@ -261,14 +268,24 @@ function modeToPatch(mode: EmMode): EmConfigPatch {
   return { uses_em_meter: true, em_all_streams: false };
 }
 
-function ModeButtonGroup({ mode, onSelect, disabled, ariaPrefix }: {
+function ModeButtonGroup({ mode, onSelect, disabled, ariaPrefix, stretch }: {
   mode?: EmMode;
   onSelect: (m: EmMode) => void;
   disabled?: boolean;
   ariaPrefix: string;
+  // stretch: the per-train rows stretch the control across the available row
+  // width (buttons flex-1) so wide screens don't leave ~900px of dead space to
+  // the right of each train's instrumentation control. The bulk "Set all to"
+  // header control stays compact.
+  stretch?: boolean;
 }) {
   return (
-    <div className="inline-flex items-center gap-0.5 bg-muted p-0.5 rounded-lg shrink-0">
+    <div
+      className={cn(
+        'inline-flex items-center gap-0.5 bg-muted p-0.5 rounded-lg',
+        stretch ? 'flex-1 min-w-0' : 'shrink-0',
+      )}
+    >
       {MODE_ORDER.map(opt => {
         const active = mode === opt;
         return (
@@ -284,6 +301,7 @@ function ModeButtonGroup({ mode, onSelect, disabled, ariaPrefix }: {
               // ~24px-tall hit target were hard to read/tap at a glance across
               // 7 rows; this stays compact but crosses a legible/tappable floor.
               'px-2.5 py-1.5 rounded-md text-xs font-medium transition-all duration-150',
+              stretch && 'flex-1',
               active ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
               disabled ? 'cursor-default opacity-70' : 'cursor-pointer',
             )}
@@ -319,6 +337,7 @@ function TrainEmConfigRow({ trainLabel, cfg, plantCfg, onUpdate, canEdit }: {
       <span className="w-16 shrink-0 text-sm font-medium">{trainLabel}</span>
 
       <ModeButtonGroup
+        stretch
         mode={mode}
         onSelect={next => onUpdate(modeToPatch(next))}
         disabled={!canEdit}
