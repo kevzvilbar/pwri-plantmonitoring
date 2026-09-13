@@ -1,0 +1,6 @@
+DONE exit=2 ms=26908
+src/components/operations/WellRow/useWellRowActions.ts(285,9): error TS2322: Type 'string | null' is not assignable to type 'string'.
+src/pages/Dashboard/hooks/useProductionStats.ts(57,50): error TS2345: Argument of type '"get_dashboard_aggregates"' is not assignable to parameter of type '"admin_set_user_password" | "approve_user" | "backfill_well_deltas" | "complete_onboarding" | "fn_backfill_missing_readings" | "fn_blending_upsert_reading" | "fn_cascade_reading_correction" | ... 30 more ... | "user_has_ro_write_access"'.
+src/pages/dataCorrections/components/EditValueModal.tsx(47,9): error TS2322: Type 'string | null' is not assignable to type 'string'.
+src/pages/dataCorrections/components/MarkRolloverModal.tsx(40,20): error TS2339: Property 'meter_rollover_max' does not exist on type 'SelectQueryError<"column 'meter_rollover_max' does not exist on 'wells'.">'.
+src/pages/plants/wells/WellDialogs.tsx(61,7): error TS2353: Object literal may only specify known properties, and 'meter_rollover_max' does not exist in type '{ created_at?: string | undefined; diameter?: string | null | undefined; drilling_depth_m?: number | null | undefined; electric_meter_brand?: string | null | undefined; electric_meter_installed_date?: string | ... 1 more ... | undefined; ... 15 more ...; updated_at?: string | undefined; } & { ...; }'.

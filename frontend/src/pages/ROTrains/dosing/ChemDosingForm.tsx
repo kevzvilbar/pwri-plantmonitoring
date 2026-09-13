@@ -14,7 +14,7 @@ import { DateTimePicker } from '@/components/ui/date-picker';
 import { toast } from 'sonner';
 import { friendlyError } from '@/lib/supabaseErrors';
 import { format } from 'date-fns';
-import { Upload } from 'lucide-react';
+import { Upload, Building2, Droplets, FlaskConical } from 'lucide-react';
 import { KNOWN_CHEMICALS, DOSING_KEYS } from '../../ro-trains';
 
 import { ChemCard } from './ChemCard';
@@ -145,7 +145,7 @@ export function ChemDosingForm() {
             <div className="flex items-center justify-between gap-2">
               {plantName && (
                 <div className="flex items-center gap-2">
-                  <span className="text-base">🏭</span>
+                  <Building2 className="h-4 w-4 text-muted-foreground" />
                   <h3 className="text-sm font-bold uppercase tracking-wide">{plantName} — RO Operations Plant</h3>
                 </div>
               )}
@@ -221,14 +221,14 @@ export function ChemDosingForm() {
               {isChemEnabled('Anti Scalant') && (
                 <ChemCard
                   name="Anti Scalant (L)"
-                  icon={<span className="text-base leading-none">🚛</span>}
+                  icon={<span className="inline-flex items-center justify-center w-6 h-6 bg-muted rounded text-muted-foreground"><Droplets className="h-3.5 w-3.5" /></span>}
                   value={v.anti_scalant_l} onChange={val => setV({ ...v, anti_scalant_l: val })}
                   unit="L" accent="olive"
                 />
               )}
               <ChemCard
                 name="Free Cl Reagent (pcs)"
-                icon={<span className="text-base leading-none">🧪</span>}
+                icon={<span className="inline-flex items-center justify-center w-6 h-6 bg-muted rounded text-muted-foreground"><FlaskConical className="h-3.5 w-3.5" /></span>}
                 value={v.free_chlorine_reagent_pcs}
                 onChange={val => setV({ ...v, free_chlorine_reagent_pcs: val })}
                 unit="pcs" accent="default"
