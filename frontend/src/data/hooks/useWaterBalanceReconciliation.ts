@@ -54,7 +54,11 @@ export function useWaterBalanceReconciliation({
         .eq('plant_id', plantId)
         .maybeSingle();
       const permeateOn = data?.permeate_is_production === true || data?.config?.permeate_is_production === true;
-      return { permeateIsProduction: permeateOn };
+      // 'both' = dedicated product meter + RO permeate are independent sources
+      // (e.g. bulk water purchased from an outside supplier, plus this plant's
+      // own RO output) whose totals should be ADDED, not picked between.
+      const bothSourcesAdded = data?.config?.ro_production_source === 'both';
+      return { permeateIsProduction: permeateOn, bothSourcesAdded };
     },
     enabled,
     staleTime: 5 * 60_000,
@@ -311,6 +315,7 @@ export function useWaterBalanceReconciliation({
       locatorVolumes,
       blendingVolume,
       permeateIsProduction: meterConfig?.permeateIsProduction ?? false,
+      bothSourcesAdded: meterConfig?.bothSourcesAdded ?? false,
     });
   }, [
     plantId,

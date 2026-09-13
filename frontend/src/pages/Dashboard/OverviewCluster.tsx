@@ -66,9 +66,17 @@ export function OverviewCluster({
       </div>
 
       <ClusterCharts metrics={OVERVIEW_CHART_METRICS} viewMode={viewMode} expandedMetric={expandedMetric} plantIds={plantIds} clusterId="overview" />
-      <div className="grid gap-2.5 sm:gap-3 grid-cols-1 lg:grid-cols-2 items-stretch">
-        <WaterBalanceBridgeCard plantIds={plantIds} />
-        <ReconciliationHealthCard plantIds={plantIds} />
+      {/* Reconciliation card only ever needs to show a handful of plant rows,
+          so at desktop widths it gets a quarter of the row (half of its old
+          50/50 share) and the Water balance waterfall gets the rest. Both
+          still stack full-width below `lg`. */}
+      <div className="grid gap-2.5 sm:gap-3 grid-cols-1 lg:grid-cols-4 items-stretch">
+        <div className="lg:col-span-3">
+          <WaterBalanceBridgeCard plantIds={plantIds} />
+        </div>
+        <div className="lg:col-span-1">
+          <ReconciliationHealthCard plantIds={plantIds} />
+        </div>
       </div>
     </section>
   );

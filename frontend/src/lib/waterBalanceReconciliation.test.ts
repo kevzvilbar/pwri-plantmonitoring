@@ -108,4 +108,36 @@ describe('computePlantWaterBalanceSummary', () => {
     expect(summary.nodeVolumes['loc1']).toBe(4000);
     expect(summary.nodeVolumes['loc2']).toBe(2800);
   });
+
+  it('adds permeate + product together when bothSourcesAdded (independent sources, e.g. purchased bulk water)', () => {
+    const summary = computePlantWaterBalanceSummary({
+      wellVolumes: [],
+      trainPermeateDetails: [{ trainId: 't1', trainNumber: 1, volume: 52594.5 }],
+      productMeterDetails: [{ meterId: 'm1', name: 'HAMAS (SRP bulk purchase)', volume: 137685 }],
+      locatorVolumes: [{ locatorId: 'loc1', volume: 152327 }],
+      blendingVolume: 0,
+      // The config page also flips permeate_is_production true for 'both'
+      // (it only gates the unrelated cut-off-time panel); bothSourcesAdded
+      // must win over it, not be overridden by it.
+      permeateIsProduction: true,
+      bothSourcesAdded: true,
+    });
+
+    // 52,594.5 + 137,685 — NOT just one side of the pair.
+    expect(summary.reconciledProduction).toBe(190279.5);
+    expect(summary.distributionInput).toBe(190279.5);
+    expect(summary.nrwVolume).toBeCloseTo(37952.5, 5);
+  });
+
+  it('falls back to permeateIsProduction / productMetered pick-one when bothSourcesAdded is not set', () => {
+    const base = {
+      wellVolumes: [],
+      trainPermeateDetails: [{ trainId: 't1', trainNumber: 1, volume: 1000 }],
+      productMeterDetails: [{ meterId: 'm1', name: 'Product', volume: 900 }],
+      locatorVolumes: [],
+      blendingVolume: 0,
+    };
+    expect(computePlantWaterBalanceSummary({ ...base, permeateIsProduction: true }).reconciledProduction).toBe(1000);
+    expect(computePlantWaterBalanceSummary({ ...base, permeateIsProduction: false }).reconciledProduction).toBe(900);
+  });
 });

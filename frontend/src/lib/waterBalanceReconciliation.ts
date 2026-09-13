@@ -7,6 +7,8 @@
  *   - RO Permeate = Sum of RO Train Permeate deltas
  *   - Product Metered = Sum of bulk product meter deltas
  *   - Reconciliation Variance = RO Permeate - Product Metered
+ *   - Reconciled Production = RO Permeate, OR Product Metered, OR (in 'both'
+ *     mode, where the two meters read genuinely different water) their SUM
  *   - Distribution Input = Reconciled Production + Blending
  *   - Non-Revenue Water (NRW) = Distribution Input - Locator Consumption
  */
@@ -114,6 +116,7 @@ export function computePlantWaterBalanceSummary({
   locatorVolumes,
   blendingVolume,
   permeateIsProduction,
+  bothSourcesAdded = false,
 }: {
   wellVolumes: { wellId: string; volume: number }[];
   trainPermeateDetails: TrainPermeateDetail[];
@@ -121,6 +124,19 @@ export function computePlantWaterBalanceSummary({
   locatorVolumes: { locatorId: string; volume: number }[];
   blendingVolume: number;
   permeateIsProduction: boolean;
+  /**
+   * True when the plant's "Production volume source" is configured as
+   * 'both' (product meter + permeate) — a DEDICATED product meter and the
+   * RO permeate are two genuinely independent water sources (e.g. this
+   * plant's own RO output plus bulk water purchased from an outside
+   * supplier, metered on arrival). Reconciled production is then the SUM
+   * of both streams rather than a pick-one, matching the "Two independent
+   * sources — totals are added together" promise on the Plant Config page.
+   * Takes precedence over `permeateIsProduction` (which the config page
+   * also sets true for 'both', purely so the permeate cut-off-time panel
+   * — irrelevant here — shows for both 'permeate' and 'both' modes).
+   */
+  bothSourcesAdded?: boolean;
 }): PlantWaterBalanceSummary {
   const nodeVolumes: Record<string, number> = {};
 
@@ -146,10 +162,15 @@ export function computePlantWaterBalanceSummary({
   });
 
   // 3. Reconciled Production
-  // If permeate_is_production is enabled, production is taken from RO trains; otherwise bulk product meters.
+  // 'both' mode: product meter and permeate are independent sources — ADD them.
+  // Otherwise: permeate_is_production enabled -> take RO trains; disabled -> bulk product meters.
   const roPermeate = reconciliation.totalTrainPermeate;
   const productMetered = reconciliation.totalProductMeter;
-  const reconciledProduction = permeateIsProduction ? roPermeate : productMetered;
+  const reconciledProduction = bothSourcesAdded
+    ? roPermeate + productMetered
+    : permeateIsProduction
+    ? roPermeate
+    : productMetered;
 
   // 4. Distribution & Consumption
   const blending = Math.max(0, blendingVolume || 0);
