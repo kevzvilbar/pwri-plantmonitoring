@@ -4,7 +4,7 @@ import { Droplet, Gauge, Zap } from 'lucide-react';
 import { useROTrainsForPlant, type ROTrain } from '@/hooks/useROTrains';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
-import { useId, isValidElement, cloneElement, type ReactElement } from 'react';
+import { Switch } from '@/components/ui/switch';
 import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
 
@@ -139,17 +139,10 @@ function TrainEmConfigSection({ plantId, canEdit, cfg: plantCfg }: {
     em_stream_reject: t.em_stream_reject,
   });
 
-  const modeOf = (cfg: ReturnType<typeof getTrainEmConfig>) =>
-    cfg.uses_em_meter === null ? 'unset' :
-    cfg.em_all_streams === true ? 'all' :
-    cfg.em_all_streams === false ?
-      (cfg.em_stream_feed === true || cfg.em_stream_permeate === true || cfg.em_stream_reject === true ? 'mixed' : 'off') :
-      'mixed';
-
-  const handleUpdate = async (trainId: string, patch: Record<string, boolean>) => {
+  const handleUpdate = async (trainId: string, trainLabel: string, patch: Record<string, boolean>) => {
     try {
       await updateTrainEmCfg(trainId, patch);
-      toast.success('EM config updated');
+      toast.success(`${trainLabel} instrumentation updated`);
       // Invalidate trains query to refresh UI with fresh data
       await queryClient.invalidateQueries({ queryKey: ['ro_trains', [plantId]] });
     } catch (err: any) {
@@ -159,25 +152,33 @@ function TrainEmConfigSection({ plantId, canEdit, cfg: plantCfg }: {
 
   return (
     <div className="pt-4">
-      <div className="flex items-center gap-2 mb-3">
+      <div className="flex items-center gap-2 mb-1">
         <Gauge className="h-3.5 w-3.5 text-muted-foreground" />
-        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Per-train EM meter configuration</span>
+        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Per-train meter instrumentation</span>
       </div>
-      <div className="space-y-2">
-        {trains.map(t => {
-          const trainCfg = getTrainEmConfig(t);
-          return (
-            <TrainEmConfigCard
-              key={t.id}
-              trainLabel={t.name ?? `Train ${t.train_number}`}
-              cfg={trainCfg}
-              plantCfg={plantCfg}
-              onUpdate={patch => handleUpdate(t.id, patch)}
-              canEdit={canEdit}
-              mode={modeOf(trainCfg)}
-            />
-          );
-        })}
+      <p className="text-2xs text-muted-foreground mb-2.5">
+        Each toggle saves immediately — no need to press "Save meter configuration" below for this section.
+      </p>
+      <div className="rounded-lg border border-border overflow-hidden">
+        <div className="hidden sm:flex items-center gap-3 px-3 py-1.5 bg-muted/40 border-b border-border">
+          <span className="w-16 shrink-0 text-2xs font-medium uppercase tracking-wide text-muted-foreground">Train</span>
+          <span className="text-2xs font-medium uppercase tracking-wide text-muted-foreground">Instrumentation</span>
+        </div>
+        <div className="divide-y divide-border">
+          {trains.map(t => {
+            const trainLabel = t.name ?? `Train ${t.train_number}`;
+            return (
+              <TrainEmConfigRow
+                key={t.id}
+                trainLabel={trainLabel}
+                cfg={getTrainEmConfig(t)}
+                plantCfg={plantCfg}
+                onUpdate={patch => handleUpdate(t.id, trainLabel, patch)}
+                canEdit={canEdit}
+              />
+            );
+          })}
+        </div>
       </div>
     </div>
   );
@@ -215,120 +216,83 @@ function updateTrainEmCfg(trainId: string, patch: EmConfigPatch): Promise<{ succ
 }
 
 /* ───────────────────────────────────────────────────────────────────────────
-   TrainEmConfigCard — per-train EM toggle card
+   TrainEmConfigRow — one train's instrumentation, one line in the common case
    ─────────────────────────────────────────────────────────────────────────── */
 
-const EM_MODE_LABEL: Record<string, string> = {
-  all: 'All EM',
-  mixed: 'Mixed',
-  off: 'Manual',
-  unset: 'Unset',
-};
+type EmMode = 'manual' | 'all' | 'mixed';
+const MODE_LABEL: Record<EmMode, string> = { manual: 'Manual', all: 'All EM', mixed: 'Mixed' };
 
-function TrainEmConfigCard({ trainLabel, cfg, plantCfg, onUpdate, canEdit, mode }: {
+const STREAM_FIELDS = [
+  { key: 'feed', field: 'em_stream_feed' as const, label: 'Feed', plantFlag: 'ro_has_feed_meter' as const },
+  { key: 'permeate', field: 'em_stream_permeate' as const, label: 'Product', plantFlag: 'ro_has_permeate_meter' as const },
+  { key: 'reject', field: 'em_stream_reject' as const, label: 'Reject', plantFlag: 'ro_has_reject_meter' as const },
+];
+
+function TrainEmConfigRow({ trainLabel, cfg, plantCfg, onUpdate, canEdit }: {
   trainLabel: string;
   cfg: { uses_em_meter: boolean | null; em_all_streams: boolean | null; em_stream_feed: boolean | null; em_stream_permeate: boolean | null; em_stream_reject: boolean | null };
   plantCfg: import('@/pages/plants/shared').PlantMeterConfig;
   onUpdate: (p: EmConfigPatch) => void;
   canEdit: boolean;
-  mode: string;
 }) {
   const usesEm = cfg.uses_em_meter ?? false;
   const allStreams = cfg.em_all_streams ?? false;
-  // Per-stream toggles are inert while "All streams EM" is on (trainUsesEmForStream
-  // short-circuits to true for every stream), so disable them rather than let an
-  // operator toggle a control that silently does nothing.
-  const streamDisabled = !canEdit || !usesEm || allStreams;
+  const mode: EmMode = !usesEm ? 'manual' : allStreams ? 'all' : 'mixed';
+  const notYetConfigured = cfg.uses_em_meter === null;
+
+  const selectMode = (next: EmMode) => {
+    if (next === 'manual') onUpdate({ uses_em_meter: false, em_all_streams: false });
+    else if (next === 'all') onUpdate({ uses_em_meter: true, em_all_streams: true });
+    else onUpdate({ uses_em_meter: true, em_all_streams: false });
+  };
+
+  const streams = STREAM_FIELDS.filter(s => plantCfg[s.plantFlag]);
 
   return (
-    <div className="rounded-lg border border-border-2 bg-muted/20 p-2.5">
-      <div className="flex items-center justify-between gap-2 mb-2">
-        <span className="text-xs font-semibold text-foreground">{trainLabel}</span>
-        <span
-          className={cn(
-            'text-2xs font-medium px-1.5 py-0.5 rounded-full border shrink-0',
-            mode === 'all' && 'border-info/40 bg-info-soft text-info',
-            mode === 'mixed' && 'border-warn/40 bg-warn-soft text-warn',
-            (mode === 'off' || mode === 'unset') && 'border-border-2 bg-muted-foreground/10 text-muted-foreground',
-          )}
-        >
-          {EM_MODE_LABEL[mode] ?? mode}
-        </span>
-      </div>
-      <div className="flex flex-wrap gap-2.5">
-        <TooltipLabel label="Uses EM meter">
-          <ToggleChip checked={usesEm} onToggle={v => {
-            if (v) {
-              onUpdate({ uses_em_meter: true, em_all_streams: true });
-            } else {
-              onUpdate({ uses_em_meter: false, em_all_streams: false });
-            }
-          }} disabled={!canEdit}/>
-        </TooltipLabel>
-        <TooltipLabel label="All streams EM">
-          <ToggleChip checked={allStreams} onToggle={v => onUpdate({ em_all_streams: v })} disabled={!canEdit || !usesEm}/>
-        </TooltipLabel>
-        {/* Per-stream toggles only make sense for a stream that has a physical meter
-            at all — hide the ones the plant-wide Feed/Permeate/Reject presence
-            toggles have already turned off. */}
-        {plantCfg.ro_has_feed_meter && (
-          <TooltipLabel label="Feed EM">
-            <ToggleChip checked={cfg.em_stream_feed ?? false} onToggle={v => onUpdate({ em_stream_feed: v })} disabled={streamDisabled}/>
-          </TooltipLabel>
-        )}
-        {plantCfg.ro_has_permeate_meter && (
-          <TooltipLabel label="Permeate EM">
-            <ToggleChip checked={cfg.em_stream_permeate ?? false} onToggle={v => onUpdate({ em_stream_permeate: v })} disabled={streamDisabled}/>
-          </TooltipLabel>
-        )}
-        {plantCfg.ro_has_reject_meter && (
-          <TooltipLabel label="Reject EM">
-            <ToggleChip checked={cfg.em_stream_reject ?? false} onToggle={v => onUpdate({ em_stream_reject: v })} disabled={streamDisabled}/>
-          </TooltipLabel>
-        )}
-      </div>
-    </div>
-  );
-}
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2.5">
+      <span className="w-16 shrink-0 text-sm font-medium">{trainLabel}</span>
 
-function ToggleChip({ checked, onToggle, disabled, id, ariaLabel }: {
-  checked: boolean;
-  onToggle: (v: boolean) => void;
-  disabled?: boolean;
-  id?: string;
-  ariaLabel?: string;
-}) {
-  return (
-    <button
-      type="button"
-      id={id}
-      disabled={disabled}
-      onClick={() => onToggle(!checked)}
-      aria-label={ariaLabel}
-      aria-pressed={checked}
-      className={cn(
-        'relative flex h-7 px-3 shrink-0 select-none items-center rounded-full border text-xs font-medium transition-all',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-warn/50',
-        disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer',
-        checked
-          ? 'border-info bg-info-soft/70 text-info shadow-sm'
-          : 'border-border-2 bg-muted-foreground/5 text-muted-foreground',
-        disabled && !checked ? 'border-muted-foreground/20' : ''
+      <div className="inline-flex items-center gap-0.5 bg-muted p-0.5 rounded-lg shrink-0">
+        {(['manual', 'all', 'mixed'] as const).map(opt => {
+          const active = mode === opt;
+          return (
+            <button
+              key={opt}
+              type="button"
+              disabled={!canEdit}
+              onClick={() => selectMode(opt)}
+              aria-pressed={active}
+              className={cn(
+                'px-2.5 py-1 rounded-md text-2xs font-medium transition-all duration-150',
+                active ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
+                !canEdit ? 'cursor-default opacity-70' : 'cursor-pointer',
+              )}
+            >
+              {MODE_LABEL[opt]}
+            </button>
+          );
+        })}
+      </div>
+
+      {mode === 'mixed' && streams.length > 0 && (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
+          {streams.map(s => (
+            <label key={s.key} className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+              <Switch
+                checked={cfg[s.field] ?? false}
+                onCheckedChange={canEdit ? (v: boolean) => onUpdate({ [s.field]: v }) : undefined}
+                disabled={!canEdit}
+                className="h-4 w-7 [&>span]:h-3 [&>span]:w-3 [&>span]:data-[state=checked]:translate-x-3 data-[state=checked]:bg-info"
+              />
+              {s.label}
+            </label>
+          ))}
+        </div>
       )}
-    >
-      <span className="sr-only">{checked ? 'Disable' : 'Enable'}</span>
-      {checked && <span className="absolute left-1.5 inline-block h-1.5 w-1.5 rounded-full bg-info/80" />}
-      <span className="pl-4 pr-1.5">{checked ? 'On' : 'Off'}</span>
-    </button>
-  );
-}
 
-function TooltipLabel({ label, children }: { label: string; children: ReactElement<{ id?: string; ariaLabel?: string }> }) {
-  const id = useId();
-  return (
-    <div className="min-w-0 flex flex-col items-start gap-1">
-      <label htmlFor={id} className="text-2xs font-medium text-muted-foreground leading-none whitespace-nowrap">{label}</label>
-      {isValidElement(children) ? cloneElement(children, { id, ariaLabel: label }) : children}
+      {mode === 'manual' && notYetConfigured && (
+        <span className="text-2xs text-muted-foreground italic">Not yet set — treated as manual for now</span>
+      )}
     </div>
   );
 }
