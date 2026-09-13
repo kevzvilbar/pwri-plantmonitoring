@@ -30,11 +30,12 @@ export function PowerForm() {
     solarInputMode, setSolarInputMode,
     powerAnomaly, setPowerAnomaly,
     anomalyRemark, setAnomalyRemark,
+    gapMeterTarget, setGapMeterTarget,
     savingMeter, setSavingMeter,
     setGridMeterReading,
     setSolarMeterReading,
     configLoading, powerConfig,
-    gapReasonToday, todayDateStr,
+    powerGapReasonsToday, todayDateStr,
     plant, showSolar,
     solarMeterCount, gridMeterCount,
     getSolarLabel, getGridLabel,
@@ -53,14 +54,18 @@ export function PowerForm() {
 
   const { submitMeter, handlePlantChange } = actions;
 
+  // Human label for the meter the gap-reason dialog is currently targeting
+  // (null when the dialog is closed), used to title the meter-scoped dialog.
+  const gapMeterLabel = gapMeterTarget
+    ? (gapMeterTarget.type === 'grid' ? getGridLabel(gapMeterTarget.idx) : getSolarLabel(gapMeterTarget.idx))
+    : null;
+
   return (
     <div className="space-y-3">
       <Card className="p-4 space-y-4">
         <PowerFormHeader
           plantId={plantId}
           handlePlantChange={handlePlantChange}
-          gapReasonToday={gapReasonToday}
-          setGapDialogOpen={() => state.setGapDialogOpen(true)}
           setImportOpen={setImportOpen}
           isAdmin={isAdmin}
           isManager={isManager}
@@ -121,6 +126,8 @@ export function PowerForm() {
             submitMeter={submitMeter}
             setPowerHistoryOpen={setPowerHistoryOpen}
             setReplaceMeterIdx={setReplaceMeterIdx}
+            powerGapReasonsToday={powerGapReasonsToday}
+            setGapMeterTarget={setGapMeterTarget}
             powerAnomaly={powerAnomaly}
             anomalyRemark={anomalyRemark}
             setAnomalyRemark={setAnomalyRemark}
@@ -150,6 +157,8 @@ export function PowerForm() {
             submitMeter={submitMeter}
             setPowerHistoryOpen={setPowerHistoryOpen}
             setReplaceMeterIdx={setReplaceMeterIdx}
+            powerGapReasonsToday={powerGapReasonsToday}
+            setGapMeterTarget={setGapMeterTarget}
           />
         )}
 
@@ -173,7 +182,8 @@ export function PowerForm() {
         importOpen={importOpen} setImportOpen={setImportOpen}
         powerHistoryOpen={powerHistoryOpen} setPowerHistoryOpen={setPowerHistoryOpen}
         replaceMeterIdx={replaceMeterIdx} setReplaceMeterIdx={setReplaceMeterIdx}
-        gapDialogOpen={state.gapDialogOpen} setGapDialogOpen={state.setGapDialogOpen}
+        gapMeterTarget={gapMeterTarget} setGapMeterTarget={setGapMeterTarget}
+        gapMeterLabel={gapMeterLabel}
         gapSaving={state.gapSaving} setGapSaving={state.setGapSaving}
         plantId={plantId}
         plant={plant}

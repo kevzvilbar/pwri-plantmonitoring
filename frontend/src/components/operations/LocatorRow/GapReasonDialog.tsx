@@ -37,9 +37,9 @@ export function GapReasonDialog({
           [{
             entity_type: 'locator', entity_id: locatorId, plant_id: plantId,
             gap_date: todayDateStr, reason_category: category, reason_detail: detail || null,
-            logged_by: userId ?? null,
+            meter_key: '', logged_by: userId ?? null,
           }] as any,
-          { onConflict: 'entity_type,entity_id,gap_date' },
+          { onConflict: 'entity_type,entity_id,gap_date,meter_key' },
         ) as any);
         setGapSaving(false);
         if (error) { toast.error(friendlyError(error)); return; }

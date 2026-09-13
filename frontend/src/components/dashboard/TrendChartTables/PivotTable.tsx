@@ -69,9 +69,9 @@ export function PivotTable({
       [{
         entity_type: entityType, entity_id: gapTarget.entityId, plant_id: entityRow.plant_id,
         gap_date: gapTarget.dateKey, reason_category: category, reason_detail: detail || null,
-        logged_by: user?.id ?? null,
+        meter_key: '', logged_by: user?.id ?? null,
       }] as any,
-      { onConflict: 'entity_type,entity_id,gap_date' },
+      { onConflict: 'entity_type,entity_id,gap_date,meter_key' },
     );
     setGapSaving(false);
     if (error) { toast.error(friendlyError(error)); return; }

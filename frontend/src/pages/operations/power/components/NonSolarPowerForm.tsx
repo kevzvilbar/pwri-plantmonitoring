@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { OdometerRollerInput, MobileCarousel } from '@/components/OdometerRollerInput';
 import { GridPylonIcon } from '@/pages/operations/shared';
 import { ChangeMeterIcon } from '@/components/icons/water-icons';
-import { History, Loader2, Zap } from 'lucide-react';
+import { History, Loader2, Zap, MessageCircleOff } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { fmtNum } from '@/lib/calculations';
 
@@ -34,6 +34,8 @@ interface NonSolarPowerFormProps {
   submitMeter: (type: 'solar' | 'grid', idx: number) => void;
   setPowerHistoryOpen: (v: { type: 'solar' | 'grid'; idx: number } | null) => void;
   setReplaceMeterIdx: (v: number | null) => void;
+  powerGapReasonsToday: Map<string, { reason_category: string; reason_detail: string | null }> | undefined;
+  setGapMeterTarget: (v: { type: 'solar' | 'grid'; idx: number } | null) => void;
 }
 
 export function NonSolarPowerForm({
@@ -61,6 +63,8 @@ export function NonSolarPowerForm({
   submitMeter,
   setPowerHistoryOpen,
   setReplaceMeterIdx,
+  powerGapReasonsToday,
+  setGapMeterTarget,
 }: NonSolarPowerFormProps) {
   return (
     <div className="space-y-3">
@@ -107,6 +111,18 @@ export function NonSolarPowerForm({
                     <ChangeMeterIcon className="h-3.5 w-3.5" />
                   </Button>
                 )}
+                <Button variant="ghost" size="sm"
+                  className={cn('h-8 w-8 p-0 shrink-0 rounded-full transition-colors',
+                    powerGapReasonsToday?.get(`grid-${idx}`)
+                      ? 'text-warn hover:text-warn bg-warn-soft/20'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-muted')}
+                  onClick={() => setGapMeterTarget({ type: 'grid', idx })}
+                  data-testid={`power-gap-reason-btn-grid-${idx}`}
+                  title={powerGapReasonsToday?.get(`grid-${idx}`)
+                    ? `Reason logged: ${powerGapReasonsToday.get(`grid-${idx}`)!.reason_category}`
+                    : `No ${meterLabel} reading today? Log reason`}>
+                  <MessageCircleOff className="h-3.5 w-3.5" />
+                </Button>
                 {(isAdmin || isManager || isDataAnalyst) && (
                   <Button variant="ghost" size="sm" className="h-8 w-8 p-0 shrink-0 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted"
                     onClick={() => setPowerHistoryOpen({ type: 'grid', idx })} title={`View ${meterLabel} history`}>

@@ -32,7 +32,7 @@ export function usePowerFormState() {
     idx: number;
   } | null>(null);
   const [anomalyRemark, setAnomalyRemark] = useState('');
-  const [gapDialogOpen, setGapDialogOpen] = useState(false);
+  const [gapMeterTarget, setGapMeterTarget] = useState<{ type: 'solar' | 'grid'; idx: number } | null>(null);
   const [gapSaving, setGapSaving] = useState(false);
   const [savingMeter, setSavingMeter] = useState<string | null>(null);
 
@@ -176,17 +176,20 @@ export function usePowerFormState() {
     return computeRollingAverageRateFromDeltas(points, 14);
   }, [powerHistory14d]);
 
-  const { data: gapReasonToday } = useQuery({
-    queryKey: ['power-gap-reason-for-date', plantId, todayDateStr],
+  const { data: powerGapReasonsToday } = useQuery({
+    queryKey: ['power-gap-reasons-for-date', plantId, todayDateStr],
     enabled: !!plantId,
     queryFn: async () => {
       const { data } = await (supabase.from('reading_gap_reasons' as any) as any)
-        .select('reason_category, reason_detail')
+        .select('meter_key, reason_category, reason_detail')
         .eq('entity_type', 'power')
-        .eq('entity_id', plantId)
-        .eq('gap_date', todayDateStr)
-        .maybeSingle();
-      return data as { reason_category: string; reason_detail: string | null } | null;
+        .eq('plant_id', plantId)
+        .eq('gap_date', todayDateStr);
+      const map = new Map<string, { reason_category: string; reason_detail: string | null }>();
+      (data ?? []).forEach((r: any) => {
+        if (r?.meter_key != null) map.set(String(r.meter_key), { reason_category: r.reason_category, reason_detail: r.reason_detail });
+      });
+      return map;
     },
   });
 
@@ -258,14 +261,14 @@ export function usePowerFormState() {
     solarInputMode, setSolarInputMode,
     powerAnomaly, setPowerAnomaly,
     anomalyRemark, setAnomalyRemark,
-    gapDialogOpen, setGapDialogOpen,
+    gapMeterTarget, setGapMeterTarget,
     gapSaving, setGapSaving,
     savingMeter, setSavingMeter,
     setGridMeterReading,
     setSolarMeterReading,
     plants, powerConfig, configLoading, meterConfig,
     history, powerHistory14d, avgPowerRate,
-    gapReasonToday, todayDateStr,
+    powerGapReasonsToday, todayDateStr,
     plant, showSolar, showGrid,
     solarMeterCount, gridMeterCount,
     solarMeterNames, gridMeterNames,

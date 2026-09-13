@@ -487,9 +487,9 @@ function ProductMeterRow({
             [{
               entity_type: 'product', entity_id: meter.id, plant_id: plantId,
               gap_date: todayDateStr, reason_category: category, reason_detail: detail || null,
-              logged_by: userId ?? null,
+              meter_key: '', logged_by: userId ?? null,
             }] as any,
-            { onConflict: 'entity_type,entity_id,gap_date' },
+            { onConflict: 'entity_type,entity_id,gap_date,meter_key' },
           );
           setGapSaving(false);
           if (error) { toast.error(friendlyError(error)); return; }

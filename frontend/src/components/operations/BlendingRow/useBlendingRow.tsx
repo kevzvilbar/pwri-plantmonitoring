@@ -229,9 +229,9 @@ export function useBlendingRow(props: BlendingRowProps) {
       [{
         entity_type: 'blending', entity_id: well.id, plant_id: plantId,
         gap_date: eventDate, reason_category: category, reason_detail: detail || null,
-        logged_by: userId ?? null,
+        meter_key: '', logged_by: userId ?? null,
       }] as any,
-      { onConflict: 'entity_type,entity_id,gap_date' },
+      { onConflict: 'entity_type,entity_id,gap_date,meter_key' },
     );
     setGapSaving(false);
     if (error) { toast.error(friendlyError(error)); return; }

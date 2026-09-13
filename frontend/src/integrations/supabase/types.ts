@@ -3619,6 +3619,7 @@ export type Database = {
           id: string
           logged_at: string
           logged_by: string | null
+          meter_key: string
           plant_id: string
           reason_category: string
           reason_detail: string | null
@@ -3630,6 +3631,7 @@ export type Database = {
           id?: string
           logged_at?: string
           logged_by?: string | null
+          meter_key: string
           plant_id: string
           reason_category: string
           reason_detail?: string | null
@@ -3641,6 +3643,7 @@ export type Database = {
           id?: string
           logged_at?: string
           logged_by?: string | null
+          meter_key?: string
           plant_id?: string
           reason_category?: string
           reason_detail?: string | null

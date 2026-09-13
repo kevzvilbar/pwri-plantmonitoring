@@ -27,6 +27,8 @@ const CONSTRAINT_MESSAGES: Record<string, string> = {
     'A reading for this locator was already saved in the last hour.',
   reading_gap_reasons_entity_type_entity_id_gap_date_key:
     'A gap reason for this entity and date already exists. Edit the existing entry.',
+  reading_gap_reasons_entity_type_entity_id_gap_date_meter_key_key:
+    'A gap reason for this meter and date already exists. Edit the existing entry.',
 };
 
 /** PostgREST schema-cache messages → hints */

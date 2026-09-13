@@ -36,8 +36,9 @@ interface PowerFormDialogsProps {
   setPowerHistoryOpen: (v: { type: 'solar' | 'grid'; idx: number } | null) => void;
   replaceMeterIdx: number | null;
   setReplaceMeterIdx: (v: number | null) => void;
-  gapDialogOpen: boolean;
-  setGapDialogOpen: (v: boolean) => void;
+  gapMeterTarget: { type: 'solar' | 'grid'; idx: number } | null;
+  setGapMeterTarget: (v: { type: 'solar' | 'grid'; idx: number } | null) => void;
+  gapMeterLabel: string | null;
   gapSaving: boolean;
   setGapSaving: (v: boolean) => void;
   plantId: string;
@@ -62,8 +63,9 @@ export function PowerFormDialogs({
   setPowerHistoryOpen,
   replaceMeterIdx,
   setReplaceMeterIdx,
-  gapDialogOpen,
-  setGapDialogOpen,
+  gapMeterTarget,
+  setGapMeterTarget,
+  gapMeterLabel,
   gapSaving,
   setGapSaving,
   plantId,
@@ -80,6 +82,8 @@ export function PowerFormDialogs({
   qc,
 }: PowerFormDialogsProps) {
   const handleGapConfirm = async (category: string, detail: string) => {
+    if (!gapMeterTarget) return;
+    const meterKey = `${gapMeterTarget.type}-${gapMeterTarget.idx}`;
     setGapSaving(true);
     const { error } = await supabase.from('reading_gap_reasons' as any).upsert(
       [{
@@ -87,17 +91,18 @@ export function PowerFormDialogs({
         entity_id: plantId,
         plant_id: plantId,
         gap_date: todayDateStr,
+        meter_key: meterKey,
         reason_category: category,
         reason_detail: detail || null,
         logged_by: userId,
       }] as any,
-      { onConflict: 'entity_type,entity_id,gap_date' },
+      { onConflict: 'entity_type,entity_id,gap_date,meter_key' },
     );
     setGapSaving(false);
     if (error) { toast.error(friendlyError(error)); return; }
-    toast.success('Power: reason logged');
-    setGapDialogOpen(false);
-    qc.invalidateQueries({ queryKey: ['power-gap-reason-for-date', plantId, todayDateStr] });
+    toast.success(`${gapMeterLabel ?? 'Power'}: reason logged`);
+    setGapMeterTarget(null);
+    qc.invalidateQueries({ queryKey: ['power-gap-reasons-for-date', plantId, todayDateStr] });
     qc.invalidateQueries({ queryKey: ['pivot-gap-reasons'] });
   };
 
@@ -146,9 +151,9 @@ export function PowerFormDialogs({
         />
       )}
       <ReasonDialog
-        open={gapDialogOpen}
-        onOpenChange={setGapDialogOpen}
-        title="No power reading today — why?"
+        open={gapMeterTarget != null}
+        onOpenChange={(v) => { if (!v) setGapMeterTarget(null); }}
+        title={gapMeterLabel ? `No reading today for "${gapMeterLabel}" — why?` : 'No power reading today — why?'}
         description="This explains the gap in Data Summary for today and exempts it from automated backfill. If a reading comes in later today, it takes priority over this note."
         confirmLabel="Log reason"
         busy={gapSaving}

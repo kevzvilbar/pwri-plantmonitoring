@@ -6,7 +6,7 @@ import { AnomalyRemarkBanner } from '@/components/AnomalyRemarkBanner';
 import { OdometerRollerInput, MobileCarousel } from '@/components/OdometerRollerInput';
 import { GridPylonIcon } from '@/pages/operations/shared';
 import { ChangeMeterIcon } from '@/components/icons/water-icons';
-import { History, Loader2, Sun } from 'lucide-react';
+import { History, Loader2, Sun, MessageCircleOff } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { fmtNum } from '@/lib/calculations';
 
@@ -45,6 +45,8 @@ interface SolarPowerFormProps {
   submitMeter: (type: 'solar' | 'grid', idx: number) => void;
   setPowerHistoryOpen: (v: { type: 'solar' | 'grid'; idx: number } | null) => void;
   setReplaceMeterIdx: (v: number | null) => void;
+  powerGapReasonsToday: Map<string, { reason_category: string; reason_detail: string | null }> | undefined;
+  setGapMeterTarget: (v: { type: 'solar' | 'grid'; idx: number } | null) => void;
   powerAnomaly: any;
   anomalyRemark: string;
   setAnomalyRemark: (v: string) => void;
@@ -85,6 +87,8 @@ export function SolarPowerForm({
   submitMeter,
   setPowerHistoryOpen,
   setReplaceMeterIdx,
+  powerGapReasonsToday,
+  setGapMeterTarget,
   powerAnomaly,
   anomalyRemark,
   setAnomalyRemark,
@@ -149,10 +153,21 @@ export function SolarPowerForm({
                     {prevRow?.is_estimated && (
                       <span className="text-3xs font-semibold uppercase tracking-wide text-warn bg-warn-soft/40 px-1 py-0.5 rounded leading-none border border-warn/40 ml-1" title="Latest reading is system-generated / backfilled">Est.</span>
                     )}
+                    <button type="button"
+                      title={powerGapReasonsToday?.get(`solar-${idx}`) ? `Reason logged: ${powerGapReasonsToday.get(`solar-${idx}`)!.reason_category}` : `No ${meterLabel} reading today? Log reason`}
+                      aria-label={powerGapReasonsToday?.get(`solar-${idx}`) ? `Reason logged for ${meterLabel}` : `No ${meterLabel} reading today`}
+                      onClick={() => setGapMeterTarget({ type: 'solar', idx })}
+                      data-testid={`power-gap-reason-btn-solar-${idx}`}
+                      className={cn('ml-auto p-0.5 rounded transition-colors',
+                        powerGapReasonsToday?.get(`solar-${idx}`)
+                          ? 'text-warn hover:text-warn bg-warn-soft/20'
+                          : 'text-muted-foreground hover:text-foreground hover:bg-muted')}>
+                      <MessageCircleOff className="h-3 w-3" />
+                    </button>
                     {(isAdmin || isManager || isDataAnalyst) && (
                       <button type="button" title={`View ${meterLabel} history`} aria-label={`View ${meterLabel} history`}
                         onClick={() => setPowerHistoryOpen({ type: 'solar', idx })}
-                        className="ml-auto p-0.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
+                        className="p-0.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
                         <History className="h-3 w-3" />
                       </button>
                     )}
@@ -245,6 +260,17 @@ export function SolarPowerForm({
                         <ChangeMeterIcon className="h-3 w-3" />
                       </button>
                     )}
+                    <button type="button"
+                      title={powerGapReasonsToday?.get(`grid-${idx}`) ? `Reason logged: ${powerGapReasonsToday.get(`grid-${idx}`)!.reason_category}` : `No ${meterLabel} reading today? Log reason`}
+                      aria-label={powerGapReasonsToday?.get(`grid-${idx}`) ? `Reason logged for ${meterLabel}` : `No ${meterLabel} reading today`}
+                      onClick={() => setGapMeterTarget({ type: 'grid', idx })}
+                      data-testid={`power-gap-reason-btn-grid-${idx}`}
+                      className={cn('p-0.5 rounded transition-colors',
+                        powerGapReasonsToday?.get(`grid-${idx}`)
+                          ? 'text-warn hover:text-warn bg-warn-soft/20'
+                          : 'text-muted-foreground hover:text-foreground hover:bg-muted')}>
+                      <MessageCircleOff className="h-3 w-3" />
+                    </button>
                     {(isAdmin || isManager || isDataAnalyst) && (
                       <button type="button" title={`View ${meterLabel} history`} aria-label={`View ${meterLabel} history`}
                         onClick={() => setPowerHistoryOpen({ type: 'grid', idx })}
@@ -345,6 +371,18 @@ export function SolarPowerForm({
                         <ChangeMeterIcon className="h-3.5 w-3.5" />
                       </Button>
                     )}
+                    <Button variant="ghost" size="sm"
+                      className={cn('h-8 w-8 p-0 shrink-0 rounded-full transition-colors',
+                        powerGapReasonsToday?.get(`grid-${item.idx}`)
+                          ? 'text-warn hover:text-warn bg-warn-soft/20'
+                          : 'text-muted-foreground hover:text-foreground hover:bg-muted')}
+                      onClick={() => setGapMeterTarget({ type: 'grid', idx: item.idx })}
+                      data-testid={`power-gap-reason-btn-grid-${item.idx}`}
+                      title={powerGapReasonsToday?.get(`grid-${item.idx}`)
+                        ? `Reason logged: ${powerGapReasonsToday.get(`grid-${item.idx}`)!.reason_category}`
+                        : `No ${meterLabel} reading today? Log reason`}>
+                      <MessageCircleOff className="h-3.5 w-3.5" />
+                    </Button>
                     {(isAdmin || isManager || isDataAnalyst) && (
                       <Button variant="ghost" size="sm" className="h-8 w-8 p-0 shrink-0 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted"
                         onClick={() => setPowerHistoryOpen({ type: 'grid', idx: item.idx })} title={`View ${meterLabel} history`}>
@@ -391,6 +429,18 @@ export function SolarPowerForm({
                       <span className="text-3xs font-semibold uppercase tracking-wide text-warn bg-warn-soft/40 px-1 py-0.5 rounded leading-none border border-warn/40" title="Latest reading is system-generated / backfilled">Est.</span>
                     )}
                   </Label>
+                  <Button variant="ghost" size="sm"
+                    className={cn('h-8 w-8 p-0 shrink-0 rounded-full transition-colors',
+                      powerGapReasonsToday?.get(`solar-${item.idx}`)
+                        ? 'text-warn hover:text-warn bg-warn-soft/20'
+                        : 'text-muted-foreground hover:text-foreground hover:bg-muted')}
+                    onClick={() => setGapMeterTarget({ type: 'solar', idx: item.idx })}
+                    data-testid={`power-gap-reason-btn-solar-${item.idx}`}
+                    title={powerGapReasonsToday?.get(`solar-${item.idx}`)
+                      ? `Reason logged: ${powerGapReasonsToday.get(`solar-${item.idx}`)!.reason_category}`
+                      : `No ${meterLabel} reading today? Log reason`}>
+                    <MessageCircleOff className="h-3.5 w-3.5" />
+                  </Button>
                   {(isAdmin || isManager || isDataAnalyst) && (
                     <Button variant="ghost" size="sm" className="h-8 w-8 p-0 shrink-0 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted"
                       onClick={() => setPowerHistoryOpen({ type: 'solar', idx: item.idx })} title={`View ${meterLabel} history`}>
