@@ -29,6 +29,9 @@ export interface ROTrain {
   em_stream_feed: boolean;
   em_stream_permeate: boolean;
   em_stream_reject: boolean;
+  has_feed_meter: boolean;
+  has_permeate_meter: boolean;
+  has_reject_meter: boolean;
   status: 'Running' | 'Offline' | 'Maintenance';
   well_id: string | null;
   created_at: string;
@@ -47,7 +50,7 @@ export function useROTrains(plantId?: string | string[]) {
       if (ids?.length) q = (q as any).in('plant_id', ids);
       const { data, error } = await q;
       if (error) throw error;
-      return (data ?? []) as ROTrain[];
+      return (data ?? []) as unknown as ROTrain[];
     },
     staleTime: 10 * 60_000,
   });

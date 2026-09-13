@@ -145,7 +145,10 @@ export function CollapsibleSection({
 
 
 export interface PlantMeterConfig {
-  // RO Train flow meters
+  // RO Train flow meters — these are FLEET DEFAULTS applied when a new train
+  // is created. The authoritative per-train values live on ro_trains
+  // (has_feed_meter, has_permeate_meter, has_reject_meter); the reading form
+  // reads from the train row, not from these flags.
   ro_has_feed_meter: boolean;
   ro_has_permeate_meter: boolean;
   ro_has_reject_meter: boolean;

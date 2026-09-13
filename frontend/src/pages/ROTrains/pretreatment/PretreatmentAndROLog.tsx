@@ -24,6 +24,7 @@ import { usePretreatmentActions } from './hooks/usePretreatmentActions';
 import { invalidateAllRoQueries } from './hooks/useRoQueryInvalidation';
 import { isWasActuallyRunningReason, WAS_ACTUALLY_RUNNING_REASON } from '@/lib/trainUptimeExemption';
 import { trainEmFlags } from '@/lib/trainEmMeter';
+import { trainMeterFlags } from '@/lib/trainMeterPresence';
 
 export function PretreatmentAndROLog() {
   const qc = useQueryClient();
@@ -81,9 +82,10 @@ export function PretreatmentAndROLog() {
   const data = usePretreatmentData(plantId, trainId, form.roValues, isSynchronized);
   const { train, meterCfg, siblingTrains, latestStatusLog } = data;
 
-  const showFeedMeter = !((train as any)?.unit_type === 'secondary') && (meterCfg.ro_has_feed_meter ?? true);
-  const showPermeateMeter = meterCfg.ro_has_permeate_meter ?? true;
-  const showRejectMeter = meterCfg.ro_has_reject_meter ?? true;
+  const meterFlags = trainMeterFlags(train);
+  const showFeedMeter = !((train as any)?.unit_type === 'secondary') && meterFlags.feed;
+  const showPermeateMeter = meterFlags.permeate;
+  const showRejectMeter = meterFlags.reject;
   const showPowerMeter = meterCfg.ro_has_per_train_electricity ?? true;
   const productionLabel = meterCfg.ro_production_source === 'permeate' ? 'Permeate / Production' : 'Permeate / Product';
 

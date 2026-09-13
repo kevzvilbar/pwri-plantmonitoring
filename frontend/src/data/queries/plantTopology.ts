@@ -32,6 +32,9 @@ export interface TopoRoTrain {
   unit_type: string | null;
   feed_source_train_id: string | null;
   reject_routing: string | null;
+  has_feed_meter: boolean;
+  has_permeate_meter: boolean;
+  has_reject_meter: boolean;
 }
 
 /** Locator data for topology */
@@ -90,7 +93,8 @@ export async function fetchTopologyData(plantId: string): Promise<TopologyData> 
       'id,train_number,name,status,shared_power_meter_group,' +
       'num_afm,num_booster_pumps,num_hp_pumps,num_cartridge_filters,num_controllers,' +
       'filter_media_type,filter_housing_type,' +
-      'unit_type,feed_source_train_id,reject_routing'
+      'unit_type,feed_source_train_id,reject_routing,' +
+      'has_feed_meter,has_permeate_meter,has_reject_meter'
     ).eq('plant_id', plantId).order('train_number'),
     supabase.from('locators').select('id,name,status,product_meter_id').eq('plant_id', plantId).order('name'),
     supabase.from('product_meters').select('id,name,status').eq('plant_id', plantId).order('name'),
@@ -151,7 +155,8 @@ export async function fetchRoTrainsForTopology(plantId: string): Promise<TopoRoT
     'id,train_number,name,status,shared_power_meter_group,' +
     'num_afm,num_booster_pumps,num_hp_pumps,num_cartridge_filters,num_controllers,' +
     'filter_media_type,filter_housing_type,' +
-    'unit_type,feed_source_train_id,reject_routing'
+    'unit_type,feed_source_train_id,reject_routing,' +
+    'has_feed_meter,has_permeate_meter,has_reject_meter'
   ).eq('plant_id', plantId).order('train_number');
   if (error) throw error;
   return (data ?? []) as unknown as TopoRoTrain[];

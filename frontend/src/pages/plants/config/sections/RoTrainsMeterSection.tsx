@@ -1,7 +1,7 @@
 import { useState, useId } from 'react';
 import { MeterToggleTile } from '../MeterConfig';
 import { RawWaterIcon, PermeateIcon, RejectIcon } from '@/components/icons/water-icons';
-import { Gauge, Zap, Wrench, Info } from 'lucide-react';
+import { Gauge, Zap, Wrench } from 'lucide-react';
 import { useROTrainsForPlant, type ROTrain } from '@/hooks/useROTrains';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
@@ -22,60 +22,15 @@ interface RoTrainsMeterSectionProps {
 export function RoTrainsMeterSection({ cfg, update, canEdit, plantId }: RoTrainsMeterSectionProps) {
   return (
     <>
-      {/* ══ SECTION: RO Trains ══ */}
-      <div className="space-y-3">
-        {/* 3 presence toggles, 3 columns — an even row at every desktop width */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-          <MeterToggleTile
-            icon={<RawWaterIcon className="h-4 w-4 text-info" />}
-            title="Feed meter"
-            subtitle={
-              !cfg.ro_has_feed_meter && cfg.ro_has_permeate_meter && cfg.ro_has_reject_meter
-                ? 'Off — computed as permeate + reject'
-                : 'Raw input flow into RO train'
-            }
-            checked={cfg.ro_has_feed_meter}
-            onToggle={v => update({ ro_has_feed_meter: v })}
-            canEdit={canEdit}
-            accentColor="blue"
-          />
-          <MeterToggleTile
-            icon={<PermeateIcon className="h-4 w-4 text-primary" />}
-            title="Permeate meter"
-            subtitle="Filtered / product-side output"
-            checked={cfg.ro_has_permeate_meter}
-            onToggle={v => update({ ro_has_permeate_meter: v })}
-            canEdit={canEdit}
-          />
-          <MeterToggleTile
-            icon={<RejectIcon className="h-4 w-4 text-muted-foreground" />}
-            title="Reject meter"
-            subtitle={!cfg.ro_has_reject_meter ? 'Off — computed as feed − permeate' : 'Brine / concentrate output'}
-            checked={cfg.ro_has_reject_meter}
-            onToggle={v => update({ ro_has_reject_meter: v })}
-            canEdit={canEdit}
-            // Neutral, not amber/warn — see MeterToggleTile.tsx and
-            // RejectIcon in water-icons.tsx for the shared rationale.
-            accentColor="neutral"
-          />
-        </div>
-        {!cfg.ro_has_reject_meter && (
-          <div className="flex items-start gap-1.5 text-xs text-info bg-info-soft border border-info rounded-md px-2.5 py-1.5">
-            <Info className="h-3.5 w-3.5 mt-0.5 shrink-0" />
-            <span>No reject meter — reject flow auto-inferred as feed − permeate. Operators won't see a reject meter input.</span>
-          </div>
-        )}
-        {!cfg.ro_has_feed_meter && cfg.ro_has_permeate_meter && cfg.ro_has_reject_meter && (
-          <div className="flex items-start gap-1.5 text-xs text-info bg-info-soft border border-info rounded-md px-2.5 py-1.5">
-            <Info className="h-3.5 w-3.5 mt-0.5 shrink-0" />
-            <span>No feed meter — feed flow auto-inferred as permeate + reject.</span>
-          </div>
-        )}
-        {/* ── Per-train Electromagnetic (EMF) meter configuration ── */}
-        {plantId && (
-          <TrainEmConfigSection plantId={plantId} canEdit={canEdit} cfg={cfg} />
-        )}
-      </div>
+      {/* ══ Per-train meter presence ══ */}
+      {plantId && (
+        <TrainMeterPresenceSection plantId={plantId} canEdit={canEdit} />
+      )}
+
+      {/* ── Per-train Electromagnetic (EMF) meter configuration ── */}
+      {plantId && (
+        <TrainEmConfigSection plantId={plantId} canEdit={canEdit} />
+      )}
 
       {/* ── Per-train utility meters ── */}
       <div className="space-y-3">
@@ -128,13 +83,223 @@ export function RoTrainsMeterSection({ cfg, update, canEdit, plantId }: RoTrains
 }
 
 /* ───────────────────────────────────────────────────────────────────────────
+   Per-train water meter presence configuration section
+   ─────────────────────────────────────────────────────────────────────────── */
+
+function TrainMeterPresenceSection({ plantId, canEdit }: {
+  plantId: string;
+  canEdit: boolean;
+}) {
+  const queryClient = useQueryClient();
+  const { data: trains = [], isLoading, error } = useROTrainsForPlant(plantId);
+  const [bulkApplying, setBulkApplying] = useState<MeterPresenceMode | null>(null);
+
+  if (isLoading) return <div className="pt-2 text-xs text-muted-foreground/60">Loading trains…</div>;
+  if (error) return <div className="pt-2 text-xs text-warn">Could not load trains</div>;
+  if (trains.length === 0) return null;
+
+  const handleUpdate = async (trainId: string, trainLabel: string, patch: MeterPresencePatch) => {
+    try {
+      await updateTrainMeterPresence(trainId, patch);
+      toast.success(`${trainLabel} meter presence updated`);
+      await queryClient.invalidateQueries({ queryKey: ['ro_trains', [plantId]] });
+    } catch (err: any) {
+      toast.error('Failed to update meter presence', { description: err.message });
+    }
+  };
+
+  const handleBulkApply = async (mode: MeterPresenceMode) => {
+    if (!canEdit || bulkApplying) return;
+    setBulkApplying(mode);
+    const patch = meterPresenceModeToPatch(mode);
+    const results = await Promise.allSettled(trains.map(t => updateTrainMeterPresence(t.id, patch)));
+    const failed = results.filter(r => r.status === 'rejected').length;
+    await queryClient.invalidateQueries({ queryKey: ['ro_trains', [plantId]] });
+    setBulkApplying(null);
+    if (failed === 0) {
+      toast.success(`Set all ${trains.length} trains to ${METER_PRESENCE_MODE_LABEL[mode]}`);
+    } else {
+      toast.warning(`${trains.length - failed} of ${trains.length} trains updated`, {
+        description: `${failed} train${failed === 1 ? '' : 's'} failed — check the individual rows below.`,
+      });
+    }
+  };
+
+  return (
+    <div>
+      <div className="flex items-center gap-2 mb-2">
+        <RawWaterIcon className="h-3.5 w-3.5 text-muted-foreground" />
+        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Per-train water meters</span>
+        <span className="text-xs font-medium text-primary bg-primary-soft rounded-full px-2 py-0.5">Saves instantly</span>
+      </div>
+      <div className="rounded-lg border border-border overflow-hidden">
+        <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 bg-muted/40 border-b border-border">
+          <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            {trains.length} train{trains.length === 1 ? '' : 's'}
+          </span>
+          {canEdit && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">Set all to</span>
+              <MeterPresenceModeToggle
+                mode={bulkApplying ?? undefined}
+                onSelect={handleBulkApply}
+                disabled={!!bulkApplying}
+                ariaPrefix="Set all trains to"
+              />
+            </div>
+          )}
+        </div>
+        <Table>
+          <TableHeader>
+            <TableRow className="hover:bg-transparent">
+              <TableHead>Train</TableHead>
+              <TableHead>Feed Meter</TableHead>
+              <TableHead>Permeate Meter</TableHead>
+              <TableHead>Reject Meter</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {trains.map(t => {
+              const trainLabel = t.name ?? `Train ${t.train_number}`;
+              return (
+                <TableRow key={t.id}>
+                  <TableCell className="font-semibold text-foreground whitespace-nowrap align-top py-3">{trainLabel}</TableCell>
+                  <MeterPresenceCell
+                    checked={t.has_feed_meter}
+                    onChange={v => handleUpdate(t.id, trainLabel, { has_feed_meter: v })}
+                    canEdit={canEdit}
+                    label="Feed"
+                  />
+                  <MeterPresenceCell
+                    checked={t.has_permeate_meter}
+                    onChange={v => handleUpdate(t.id, trainLabel, { has_permeate_meter: v })}
+                    canEdit={canEdit}
+                    label="Permeate"
+                  />
+                  <MeterPresenceCell
+                    checked={t.has_reject_meter}
+                    onChange={v => handleUpdate(t.id, trainLabel, { has_reject_meter: v })}
+                    canEdit={canEdit}
+                    label="Reject"
+                  />
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </div>
+    </div>
+  );
+}
+
+function MeterPresenceCell({ checked, onChange, canEdit, label }: {
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  canEdit: boolean;
+  label: string;
+}) {
+  const rowId = useId();
+  const id = `${rowId}-${label.toLowerCase()}`;
+  return (
+    <TableCell className="align-top py-3">
+      <div className="flex items-center gap-1.5">
+        <Checkbox
+          id={id}
+          checked={checked}
+          onCheckedChange={v => onChange(v === true)}
+          disabled={!canEdit}
+        />
+        <Label htmlFor={id} className="text-2xs font-normal text-muted-foreground cursor-pointer">{label}</Label>
+      </div>
+    </TableCell>
+  );
+}
+
+type MeterPresencePatch = Partial<{
+  has_feed_meter: boolean;
+  has_permeate_meter: boolean;
+  has_reject_meter: boolean;
+}>;
+
+type MeterPresenceMode = 'all' | 'feed_only' | 'feed_perm' | 'none';
+const METER_PRESENCE_MODE_LABEL: Record<MeterPresenceMode, string> = {
+  all: 'All Meters',
+  feed_only: 'Feed Only',
+  feed_perm: 'Feed + Permeate',
+  none: 'No Meters',
+};
+const METER_PRESENCE_MODES: MeterPresenceMode[] = ['all', 'feed_perm', 'feed_only', 'none'];
+
+const METER_PRESENCE_META: Record<MeterPresenceMode, { activeClass: string }> = {
+  all: { activeClass: 'data-[state=on]:bg-info-soft data-[state=on]:text-info data-[state=on]:border-info/40' },
+  feed_perm: { activeClass: 'data-[state=on]:bg-info-soft data-[state=on]:text-info data-[state=on]:border-info/40' },
+  feed_only: { activeClass: 'data-[state=on]:bg-warn-soft data-[state=on]:text-warn data-[state=on]:border-warn/40' },
+  none: { activeClass: 'data-[state=on]:bg-muted data-[state=on]:text-foreground data-[state=on]:border-border' },
+};
+
+function meterPresenceModeToPatch(mode: MeterPresenceMode): MeterPresencePatch {
+  switch (mode) {
+    case 'all': return { has_feed_meter: true, has_permeate_meter: true, has_reject_meter: true };
+    case 'feed_only': return { has_feed_meter: true, has_permeate_meter: false, has_reject_meter: false };
+    case 'feed_perm': return { has_feed_meter: true, has_permeate_meter: true, has_reject_meter: false };
+    case 'none': return { has_feed_meter: false, has_permeate_meter: false, has_reject_meter: false };
+  }
+}
+
+function MeterPresenceModeToggle({ mode, onSelect, disabled, ariaPrefix }: {
+  mode?: MeterPresenceMode;
+  onSelect: (m: MeterPresenceMode) => void;
+  disabled?: boolean;
+  ariaPrefix: string;
+}) {
+  return (
+    <ToggleGroup
+      type="single"
+      value={mode}
+      onValueChange={v => { if (v) onSelect(v as MeterPresenceMode); }}
+      disabled={disabled}
+      aria-label={ariaPrefix}
+      className="w-fit justify-start gap-0.5 rounded-md border border-border bg-muted/30 p-0.5"
+    >
+      {METER_PRESENCE_MODES.map(m => (
+        <ToggleGroupItem
+          key={m}
+          value={m}
+          aria-label={`${ariaPrefix} ${METER_PRESENCE_MODE_LABEL[m]}`}
+          className={cn(
+            'h-6 rounded-[5px] px-2 text-2xs font-medium border border-transparent text-muted-foreground hover:text-foreground transition-colors',
+            METER_PRESENCE_META[m].activeClass,
+          )}
+        >
+          {METER_PRESENCE_MODE_LABEL[m]}
+        </ToggleGroupItem>
+      ))}
+    </ToggleGroup>
+  );
+}
+
+function updateTrainMeterPresence(trainId: string, patch: MeterPresencePatch): Promise<{ success: boolean; error?: string }> {
+  return (async () => {
+    const { data, error } = await (supabase as any).rpc('fn_update_ro_train_meter_config', {
+      p_train_id: trainId,
+      p_has_feed_meter: patch.has_feed_meter ?? null,
+      p_has_permeate_meter: patch.has_permeate_meter ?? null,
+      p_has_reject_meter: patch.has_reject_meter ?? null,
+    });
+    if (error) throw new Error(error.message);
+    const result = data as { success: boolean; error?: string };
+    if (!result.success) throw new Error(result.error ?? 'Update rejected');
+    return result;
+  })();
+}
+
+/* ───────────────────────────────────────────────────────────────────────────
    Per-train Electromagnetic (EMF) meter configuration section
    ─────────────────────────────────────────────────────────────────────────── */
 
-function TrainEmConfigSection({ plantId, canEdit, cfg: plantCfg }: {
+function TrainEmConfigSection({ plantId, canEdit }: {
   plantId: string;
   canEdit: boolean;
-  cfg: import('@/pages/plants/shared').PlantMeterConfig;
 }) {
   const queryClient = useQueryClient();
   const { data: trains = [], isLoading, error } = useROTrainsForPlant(plantId);
@@ -226,7 +391,9 @@ function TrainEmConfigSection({ plantId, canEdit, cfg: plantCfg }: {
                   key={t.id}
                   trainLabel={trainLabel}
                   cfg={getTrainEmConfig(t)}
-                  plantCfg={plantCfg}
+                  hasFeedMeter={t.has_feed_meter}
+                  hasPermeateMeter={t.has_permeate_meter}
+                  hasRejectMeter={t.has_reject_meter}
                   onUpdate={patch => handleUpdate(t.id, trainLabel, patch)}
                   canEdit={canEdit}
                 />
@@ -304,9 +471,9 @@ function modeOf(cfg: TrainEmCfg): EmMode {
 }
 
 const STREAM_FIELDS = [
-  { field: 'em_stream_feed' as const, label: 'Feed', plantFlag: 'ro_has_feed_meter' as const },
-  { field: 'em_stream_permeate' as const, label: 'Permeate', plantFlag: 'ro_has_permeate_meter' as const },
-  { field: 'em_stream_reject' as const, label: 'Reject', plantFlag: 'ro_has_reject_meter' as const },
+  { field: 'em_stream_feed' as const, label: 'Feed' },
+  { field: 'em_stream_permeate' as const, label: 'Permeate' },
+  { field: 'em_stream_reject' as const, label: 'Reject' },
 ];
 
 function modeToPatch(mode: EmMode): EmConfigPatch {
@@ -358,21 +525,21 @@ function EmModeToggle({ mode, onSelect, disabled, ariaPrefix }: {
    flags are implied, so there is nothing to toggle that would silently be moot.
    ─────────────────────────────────────────────────────────────────────────── */
 
-function TrainEmConfigRow({ trainLabel, cfg, plantCfg, onUpdate, canEdit }: {
+function TrainEmConfigRow({ trainLabel, cfg, hasFeedMeter, hasPermeateMeter, hasRejectMeter, onUpdate, canEdit }: {
   trainLabel: string;
   cfg: TrainEmCfg;
-  plantCfg: import('@/pages/plants/shared').PlantMeterConfig;
+  hasFeedMeter: boolean;
+  hasPermeateMeter: boolean;
+  hasRejectMeter: boolean;
   onUpdate: (p: EmConfigPatch) => void;
   canEdit: boolean;
 }) {
   const rowId = useId();
   const mode = modeOf(cfg);
 
-  // Only offer a stream to configure if that stream's physical meter exists at
-  // all, plant-wide (ro_has_feed/permeate/reject_meter) — mirrors the
-  // plant-wide presence toggles above.
+  const meterPresence = [hasFeedMeter, hasPermeateMeter, hasRejectMeter];
   const streams = STREAM_FIELDS
-    .filter(s => plantCfg[s.plantFlag])
+    .filter((_, i) => meterPresence[i])
     .map(s => ({ ...s, checked: cfg[s.field] }));
 
   return (
