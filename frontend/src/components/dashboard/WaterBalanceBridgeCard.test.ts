@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { format, subDays } from 'date-fns';
 import { buildBridgeRows, resolveDateWindow, type WaterBalanceTotals } from './WaterBalanceBridgeCard';
+import { formatRangeLabel } from './types';
 
 describe('buildBridgeRows', () => {
   it('telescopes exactly from raw water to locator consumption with no drift', () => {
@@ -67,5 +68,22 @@ describe('resolveDateWindow', () => {
     expect(w.endKey).toBe('2026-08-31');
     expect(w.startISO).toBe(new Date('2026-08-01T00:00:00').toISOString());
     expect(w.endISO).toBe(new Date('2026-08-31T23:59:59').toISOString());
+  });
+});
+describe('formatRangeLabel', () => {
+  it('renders presets as last Nd', () => {
+    expect(formatRangeLabel('14D', '', '', '', '')).toBe('last 14d');
+  });
+
+  it('renders CUSTOM / MONTHLY windows as real dates', () => {
+    expect(formatRangeLabel('CUSTOM', '2026-07-01', '2026-07-31', '2026-07-01', '2026-07-31'))
+      .toBe('Jul 1–Jul 31');
+    expect(formatRangeLabel('MONTHLY', '2026-08-01', '2026-08-31', '2026-08-01', '2026-08-31'))
+      .toBe('Aug 1–Aug 31');
+  });
+
+  it('renders a single-day window as one date', () => {
+    expect(formatRangeLabel('CUSTOM', '2026-07-15', '2026-07-15', '2026-07-15', '2026-07-15'))
+      .toBe('Jul 15');
   });
 });

@@ -1,12 +1,11 @@
 import { useNavigate } from 'react-router-dom';
-import { format, parseISO } from 'date-fns';
 import { Scale, AlertTriangle, HelpCircle, CheckCircle2, ArrowRight, type LucideIcon } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { fmtNum } from '@/lib/calculations';
 import { usePlantStore } from '@/store/plantStore';
 import { useReconciliationHealthTotals } from './useReconciliationHealthTotals';
-import { rangeKeyToDays } from '../types';
+import { formatRangeLabel } from '../types';
 import type { ReconciliationStatus } from '@/lib/waterBalanceReconciliation';
 
 const STATUS_META: Record<ReconciliationStatus, { label: string; icon: LucideIcon; cls: string }> = {
@@ -19,7 +18,7 @@ export function ReconciliationHealthCard({ plantIds }: { plantIds: string[] }) {
   const navigate = useNavigate();
   const setSelectedPlantId = usePlantStore((s) => s.setSelectedPlantId);
   const {
-    rows, isLoading, chartRange, chartFrom, chartTo, startKey, endKey,
+    rows, isLoading, error, chartRange, chartFrom, chartTo, startKey, endKey,
   } = useReconciliationHealthTotals(plantIds);
 
   const alertCount = rows.filter((r) => r.result.status === 'alert').length;
@@ -27,13 +26,7 @@ export function ReconciliationHealthCard({ plantIds }: { plantIds: string[] }) {
 
   // Same range label the sibling Water balance card shows, so the two cards
   // paired in this row read as one system rather than two different ones.
-  const isCustomRange = chartRange === 'CUSTOM' || chartRange === 'MONTHLY';
-  const days = rangeKeyToDays(chartRange, chartFrom, chartTo);
-  const rangeLabel = isCustomRange
-    ? (startKey === endKey
-        ? format(parseISO(startKey), 'MMM d')
-        : `${format(parseISO(startKey), 'MMM d')}–${format(parseISO(endKey), 'MMM d')}`)
-    : `last ${days}d`;
+  const rangeLabel = formatRangeLabel(chartRange, chartFrom, chartTo, startKey, endKey);
 
   const goToPlant = (plantId: string) => {
     setSelectedPlantId(plantId);
@@ -76,9 +69,13 @@ export function ReconciliationHealthCard({ plantIds }: { plantIds: string[] }) {
       <div className="flex-1 min-h-[90px]">
         {isLoading ? (
           <div className="h-full flex items-center justify-center text-xs text-muted-foreground">Loading…</div>
+        ) : error ? (
+          <div className="h-full flex items-center justify-center text-center text-xs text-danger px-4">
+            Couldn&apos;t load reconciliation data.
+          </div>
         ) : rows.length === 0 ? (
           <div className="h-full flex items-center justify-center text-center text-xs text-muted-foreground px-4">
-            No plant here has both an RO permeate meter and a separate product meter in this range — nothing to reconcile yet.
+            No plant here has both a dedicated product meter and RO permeate readings in this range — nothing to reconcile yet.
           </div>
         ) : (
           // Centered rather than top-anchored: with as few as one row, this

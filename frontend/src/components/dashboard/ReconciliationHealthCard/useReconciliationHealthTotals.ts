@@ -7,37 +7,35 @@
  * `frontend/src/data/hooks/useWaterBalanceReconciliation.ts`), but computed
  * PER PLANT across a list of plants instead of for one plant in depth.
  *
- * A plant is only included in the result if it has BOTH RO train permeate
- * readings AND separate product/bulk meter readings in the window — i.e.
- * plants where `ro_production_source` is 'product' or 'both' and there's
- * something to actually compare. Permeate-only plants (no dedicated product
- * meter) have nothing to reconcile against and are silently excluded.
+ * A plant is only included in the result if it runs a DEDICATED product
+ * meter (`plant_meter_config.config.ro_production_source === 'product'`;
+ * plants without a saved config fall back to the DEFAULT_METER_CONFIG
+ * default of 'product') AND it has RO train permeate readings and product
+ * meter readings in the window — i.e. genuinely separate metering to
+ * compare. 'permeate' plants (permeate IS production; any product meter
+ * just re-reads the same flow) and 'both' plants (permeate and product are
+ * independent sources whose totals are ADDED, so a gap is expected, not a
+ * fault) are excluded — neither has a meaningful reconciliation delta.
  *
- * Deliberately lighter than useWaterBalanceReconciliation: no wells,
- * locators, or blending events, since this card only needs the two meter
- * streams, not the full NRW mass balance. Follows the same global date
- * range as every other Dashboard card (appStore.chartRange/From/To), unlike
- * the Topology page's local 7D/30D/Monthly toggle.
+ * Lighter than useWaterBalanceReconciliation on purpose: no wells, locators,
+ * or blending events, since this card only needs the two meter streams, not
+ * the full NRW mass balance. Follows the same global date range as every
+ * other Dashboard card (appStore.chartRange/From/To), unlike the Topology
+ * page's local 7D/30D/Monthly toggle.
  */
 
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { computeEntityDeltas } from '@/lib/entityDeltas';
 import { useAppStore } from '@/store/appStore';
 import { resolveDateWindow } from '../WaterBalanceBridgeCard';
 import {
-  computePermeateReconciliation,
-  type TrainPermeateDetail,
-  type ProductMeterDetail,
-  type PermeateReconciliationResult,
-} from '@/lib/waterBalanceReconciliation';
+  resolveReconcilablePlantIds,
+  buildPlantReconciliationRows,
+  type PlantReconciliationRow,
+} from './plantReconciliation';
 
-export interface PlantReconciliationRow {
-  plantId: string;
-  plantName: string;
-  result: PermeateReconciliationResult;
-}
+export type { PlantReconciliationRow } from './plantReconciliation';
 
 export function useReconciliationHealthTotals(plantIds: string[]) {
   const hasPlants = plantIds.length > 0;
@@ -50,7 +48,7 @@ export function useReconciliationHealthTotals(plantIds: string[]) {
     [chartRange, chartFrom, chartTo],
   );
 
-  const { data: plants, isFetching: fPlants } = useQuery({
+  const { data: plants, isFetching: fPlants, error: ePlants } = useQuery({
     queryKey: ['rhc-plants', plantIds],
     queryFn: async () => {
       const { data, error } = await supabase.from('plants').select('id,name').in('id', plantIds);
@@ -61,7 +59,27 @@ export function useReconciliationHealthTotals(plantIds: string[]) {
     staleTime: 10 * 60_000,
   });
 
-  const { data: roTrains, isFetching: fTrains } = useQuery({
+  // Plant meter config — which plants run a dedicated product meter whose
+  // readings SHOULD agree with their RO permeate meters. Mirrors the config
+  // split the WaterBalanceBridgeCard / TrendChart already apply for
+  // production billing: 'product' → dedicated meter → reconcile; 'permeate'
+  // → permeate IS production → not comparable; 'both' → independent sources
+  // that get ADDED → a gap is expected, not a fault. Missing config rows fall
+  // back to the DEFAULT_METER_CONFIG default ('product').
+  const { data: meterConfigs, isFetching: fConfig, error: eConfig } = useQuery({
+    queryKey: ['rhc-meter-config', plantIds],
+    queryFn: async () => {
+      const { data, error } = await (supabase.from('plant_meter_config' as any) as any)
+        .select('plant_id, config')
+        .in('plant_id', plantIds);
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: hasPlants,
+    staleTime: 10 * 60_000,
+  });
+
+  const { data: roTrains, isFetching: fTrains, error: eTrains } = useQuery({
     queryKey: ['rhc-ro-trains', plantIds],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -75,7 +93,7 @@ export function useReconciliationHealthTotals(plantIds: string[]) {
     staleTime: 10 * 60_000,
   });
 
-  const { data: productMeters, isFetching: fMeters } = useQuery({
+  const { data: productMeters, isFetching: fMeters, error: eMeters } = useQuery({
     queryKey: ['rhc-product-meters', plantIds],
     queryFn: async () => {
       const { data, error } = await (supabase.from('product_meters' as never) as any)
@@ -91,7 +109,25 @@ export function useReconciliationHealthTotals(plantIds: string[]) {
   const trainIds = useMemo(() => (roTrains ?? []).map((t) => t.id), [roTrains]);
   const productMeterIds = useMemo(() => (productMeters ?? []).map((m: any) => m.id as string), [productMeters]);
 
-  const { data: roReadings, isFetching: fRo } = useQuery({
+  // ro_trains fetch `unit_type` but only PRIMARY units produce the permeate
+  // a bulk product meter can be reconciled against — a secondary (2nd-pass)
+  // unit's permeate is already downstream of the primary loop, so counting it
+  // would double-count production against the same product meter. Matches the
+  // WaterBalanceBridgeCard's production split.
+  const secondaryTrainIds = useMemo(
+    () => new Set((roTrains ?? []).filter((t: any) => t.unit_type === 'secondary').map((t: any) => t.id as string)),
+    [roTrains],
+  );
+
+  // Plants with a genuinely separate product meter (dedicated 'product'
+  // source). Plants absent from plant_meter_config fall back to the
+  // DEFAULT_METER_CONFIG default ('product') — see resolveReconcilablePlantIds.
+  const reconcilablePlantIds = useMemo(
+    () => resolveReconcilablePlantIds(plants ?? [], meterConfigs ?? []),
+    [plants, meterConfigs],
+  );
+
+  const { data: roReadings, isFetching: fRo, error: eRo } = useQuery({
     queryKey: ['rhc-ro-readings', trainIds, startKey, endKey],
     queryFn: async () => {
       if (!trainIds.length) return [];
@@ -107,7 +143,7 @@ export function useReconciliationHealthTotals(plantIds: string[]) {
     staleTime: 5 * 60_000,
   });
 
-  const { data: productReadings, isFetching: fProduct } = useQuery({
+  const { data: productReadings, isFetching: fProduct, error: eProduct } = useQuery({
     queryKey: ['rhc-product-readings', productMeterIds, startKey, endKey],
     queryFn: async () => {
       if (!productMeterIds.length) return [];
@@ -123,74 +159,26 @@ export function useReconciliationHealthTotals(plantIds: string[]) {
     staleTime: 5 * 60_000,
   });
 
-  const metaLoaded = plants !== undefined && roTrains !== undefined && productMeters !== undefined;
-  const isLoading = hasPlants && (!metaLoaded || fPlants || fTrains || fMeters || fRo || fProduct);
+  const metaLoaded = plants !== undefined && meterConfigs !== undefined
+    && roTrains !== undefined && productMeters !== undefined;
+  const isLoading = hasPlants && (!metaLoaded || fPlants || fConfig || fTrains || fMeters || fRo || fProduct);
+  const error = ePlants || eConfig || eTrains || eMeters || eRo || eProduct;
 
   const rows = useMemo<PlantReconciliationRow[]>(() => {
     if (!hasPlants || isLoading) return [];
-
-    // Per-train permeate delta (mirrors useWaterBalanceReconciliation.ts)
-    const trainVolumeMap = new Map<string, number>();
-    (roReadings ?? []).forEach((r: any) => {
-      if (!r?.train_id || r.is_meter_replacement) return;
-      const delta =
-        r.permeate_meter_delta != null
-          ? Math.max(0, +r.permeate_meter_delta)
-          : r.permeate_meter != null && r.permeate_meter_prev != null
-          ? Math.max(0, +r.permeate_meter - +r.permeate_meter_prev)
-          : 0;
-      trainVolumeMap.set(r.train_id, (trainVolumeMap.get(r.train_id) || 0) + delta);
+    return buildPlantReconciliationRows({
+      roReadings: roReadings ?? [],
+      productReadings: productReadings ?? [],
+      roTrains: roTrains ?? [],
+      productMeters: productMeters ?? [],
+      plants: plants ?? [],
+      reconcilablePlantIds,
+      secondaryTrainIds,
     });
+  }, [
+    hasPlants, isLoading, roReadings, productReadings, roTrains, productMeters, plants,
+    reconcilablePlantIds, secondaryTrainIds,
+  ]);
 
-    // Per-meter product delta
-    const directProductMeterIds = new Set(
-      (productMeters ?? []).filter((m: any) => m.is_derived).map((m: any) => m.id as string),
-    );
-    const prodDeltas = computeEntityDeltas(
-      productReadings ?? [],
-      'meter_id',
-      'daily_volume',
-      { directModeIds: directProductMeterIds },
-    );
-    const meterVolumeMap = new Map<string, number>();
-    prodDeltas.forEach(({ r, delta }) => {
-      if (r?.meter_id) meterVolumeMap.set(r.meter_id, (meterVolumeMap.get(r.meter_id) || 0) + delta);
-    });
-
-    // Group trains + meters by plant
-    const byPlant = new Map<string, { trains: TrainPermeateDetail[]; meters: ProductMeterDetail[] }>();
-    (roTrains ?? []).forEach((t) => {
-      const entry = byPlant.get(t.plant_id) ?? { trains: [], meters: [] };
-      entry.trains.push({
-        trainId: t.id,
-        trainNumber: t.train_number,
-        name: t.name,
-        volume: trainVolumeMap.get(t.id) ?? 0,
-      });
-      byPlant.set(t.plant_id, entry);
-    });
-    (productMeters ?? []).forEach((m: any) => {
-      const entry = byPlant.get(m.plant_id) ?? { trains: [], meters: [] };
-      entry.meters.push({ meterId: m.id, name: m.name, volume: meterVolumeMap.get(m.id) ?? 0 });
-      byPlant.set(m.plant_id, entry);
-    });
-
-    const plantNameMap = new Map<string, string>();
-    (plants ?? []).forEach((p: any) => plantNameMap.set(p.id, p.name));
-
-    const out: PlantReconciliationRow[] = [];
-    byPlant.forEach((entry, plantId) => {
-      const result = computePermeateReconciliation(entry.trains, entry.meters);
-      // Only plants with genuinely separate permeate + product meter data are
-      // comparable — a permeate-only plant has nothing to reconcile against.
-      if (!result.hasTrainData || !result.hasProductData) return;
-      out.push({ plantId, plantName: plantNameMap.get(plantId) ?? 'Unknown plant', result });
-    });
-
-    // Worst variance first so the plants most likely to need attention surface at the top.
-    out.sort((a, b) => (b.result.variancePct ?? 0) - (a.result.variancePct ?? 0));
-    return out;
-  }, [hasPlants, isLoading, roTrains, productMeters, roReadings, productReadings, plants]);
-
-  return { rows, isLoading, chartRange, chartFrom, chartTo, startKey, endKey };
+  return { rows, isLoading, error, chartRange, chartFrom, chartTo, startKey, endKey };
 }

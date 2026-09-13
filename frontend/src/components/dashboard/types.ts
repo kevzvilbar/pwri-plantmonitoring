@@ -1,3 +1,5 @@
+import { format, parseISO } from 'date-fns';
+
 // Shared types and constants for the Dashboard cluster components.
 // These pieces are factored out of Dashboard.tsx so the page file
 // stays focused on data orchestration. Changing a constant or type
@@ -42,6 +44,28 @@ export function rangeKeyToDays(range: RangeKey, from: string, to: string): numbe
     return Math.max(1, Math.round(ms / 86_400_000) + 1);
   }
   return RANGE_DAYS[range];
+}
+
+// Shared range label for cards that follow the dashboard date range
+// (appStore.chartRange/From/To) but don't render their own picker: presets
+// render "last 7d", CUSTOM / MONTHLY render the real dates ("Jan 1 – Jan 30",
+// or a single day for a one-day window). Lives here so WaterBalanceBridgeCard
+// and ReconciliationHealthCard — which sit side by side on the Overview —
+// always render the same label for the same window instead of each keeping
+// its own copy of the block.
+export function formatRangeLabel(
+  range: RangeKey,
+  from: string,
+  to: string,
+  startKey: string,
+  endKey: string,
+): string {
+  if (range === 'CUSTOM' || range === 'MONTHLY') {
+    return startKey === endKey
+      ? format(parseISO(startKey), 'MMM d')
+      : `${format(parseISO(startKey), 'MMM d')}–${format(parseISO(endKey), 'MMM d')}`;
+  }
+  return `last ${rangeKeyToDays(range, from, to)}d`;
 }
 
 export const TREND_Y_LABEL: Record<string, string> = {

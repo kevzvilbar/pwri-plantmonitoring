@@ -1,11 +1,10 @@
 import { useMemo } from 'react';
-import { format, parseISO } from 'date-fns';
 import { Card } from '@/components/ui/card';
 import { useWaterBalancePeriodTotals } from './useWaterBalancePeriodTotals';
 import { buildBridgeRows } from './bridgeMath';
 import { BridgeHeader } from './BridgeHeader';
 import { BridgeChart } from './BridgeChart';
-import { RANGE_DAYS, rangeKeyToDays, type RangeKey } from '../types';
+import { formatRangeLabel } from '../types';
 
 export type { WaterBalanceTotals } from './types';
 export type { BridgeRow } from './types';
@@ -23,13 +22,7 @@ export function WaterBalanceBridgeCard({
   } = useWaterBalancePeriodTotals(plantIds);
   const rows = useMemo(() => (totals ? buildBridgeRows(totals) : []), [totals]);
 
-  const isCustomRange = chartRange === 'CUSTOM' || chartRange === 'MONTHLY';
-  const days = rangeKeyToDays(chartRange, chartFrom, chartTo);
-  const rangeLabel = isCustomRange
-    ? (startKey === endKey
-        ? format(parseISO(startKey), 'MMM d')
-        : `${format(parseISO(startKey), 'MMM d')}–${format(parseISO(endKey), 'MMM d')}`)
-    : `last ${days}d`;
+  const rangeLabel = formatRangeLabel(chartRange, chartFrom, chartTo, startKey, endKey);
 
   return (
     <Card className="rounded-2xl p-3.5 transition-all hover:border-border/90" data-testid="water-balance-bridge">
