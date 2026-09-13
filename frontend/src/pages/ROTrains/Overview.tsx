@@ -23,9 +23,9 @@ export function Overview() {
   const [search, setSearch] = useState('');
   const lastSyncedPlantRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!selectedPlantId || selectedPlantId === lastSyncedPlantRef.current) return;
+    if (selectedPlantId === lastSyncedPlantRef.current) return;
     lastSyncedPlantRef.current = selectedPlantId;
-    setPlantId(selectedPlantId);
+    setPlantId(selectedPlantId ?? '');
   }, [selectedPlantId]);
 
   // ── Deep-link from an alert: /ro-trains?tab=overview&plant=<id>&train=<id>&log=1&logTab=ro|pretreat&highlight=<readingId> ──

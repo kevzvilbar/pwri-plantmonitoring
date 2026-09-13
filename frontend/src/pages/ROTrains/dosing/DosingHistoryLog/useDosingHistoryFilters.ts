@@ -10,9 +10,9 @@ export function useDosingHistoryFilters(selectedPlantId: string | null | undefin
 
   const lastSyncedPlantRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!selectedPlantId || selectedPlantId === lastSyncedPlantRef.current) return;
-    lastSyncedPlantRef.current = selectedPlantId;
-    setFilterPlantId(selectedPlantId);
+    if (selectedPlantId === lastSyncedPlantRef.current) return;
+    lastSyncedPlantRef.current = selectedPlantId ?? null;
+    setFilterPlantId(selectedPlantId ?? '');
   }, [selectedPlantId]);
 
   const { from, to } = useMemo(() => {

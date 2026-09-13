@@ -9,9 +9,9 @@ export function PlantSelector({ value, onChange, id }: { value: string; onChange
 
   const lastSyncedRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!selectedPlantId || selectedPlantId === lastSyncedRef.current) return;
+    if (selectedPlantId === lastSyncedRef.current) return;
     lastSyncedRef.current = selectedPlantId;
-    onChange(selectedPlantId);
+    onChange(selectedPlantId ?? '');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedPlantId]);
 

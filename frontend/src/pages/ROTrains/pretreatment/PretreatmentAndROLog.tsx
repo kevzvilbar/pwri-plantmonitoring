@@ -54,9 +54,9 @@ export function PretreatmentAndROLog() {
   // ── Sync with global plant selector (TopBar) ───────────────────────────────
   const lastSyncedPlantRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!selectedPlantId || selectedPlantId === lastSyncedPlantRef.current) return;
+    if (selectedPlantId === lastSyncedPlantRef.current) return;
     lastSyncedPlantRef.current = selectedPlantId;
-    setPlantId(selectedPlantId);
+    setPlantId(selectedPlantId ?? '');
     setTrainId('');
   }, [selectedPlantId]);
 
