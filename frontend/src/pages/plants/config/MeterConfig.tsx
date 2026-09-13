@@ -251,7 +251,7 @@ export function PlantMeterConfigCard({ plant }: { plant: any }) {
                 </span>
               </AccordionTrigger>
               <AccordionContent className="space-y-5">
-                <ProductMeterSection cfg={cfg} update={update} canEdit={canEdit} />
+                <ProductMeterSection cfg={cfg} update={update} canEdit={canEdit} plantId={plant.id} plantName={plant.name} />
               </AccordionContent>
             </AccordionItem>
 

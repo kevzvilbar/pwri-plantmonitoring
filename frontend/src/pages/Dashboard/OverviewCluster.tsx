@@ -6,6 +6,7 @@ import { StatCard, ClusterHeader } from '@/components/dashboard/StatCard';
 import { NRWGaugeCard } from '@/components/dashboard/NRWGaugeCard';
 import { ClusterCharts } from '@/components/dashboard/TrendChartWrappers';
 import { WaterBalanceBridgeCard } from '@/components/dashboard/WaterBalanceBridgeCard';
+import { ReconciliationHealthCard } from '@/components/dashboard/ReconciliationHealthCard';
 import { OVERVIEW_CHART_METRICS } from '@/components/dashboard/types';
 import type { DashboardViewMode } from '@/components/dashboard/types';
 
@@ -65,7 +66,10 @@ export function OverviewCluster({
       </div>
 
       <ClusterCharts metrics={OVERVIEW_CHART_METRICS} viewMode={viewMode} expandedMetric={expandedMetric} plantIds={plantIds} clusterId="overview" />
-      <WaterBalanceBridgeCard plantIds={plantIds} />
+      <div className="grid gap-2.5 sm:gap-3 grid-cols-1 lg:grid-cols-2 items-stretch">
+        <WaterBalanceBridgeCard plantIds={plantIds} />
+        <ReconciliationHealthCard plantIds={plantIds} />
+      </div>
     </section>
   );
 }

@@ -3,14 +3,17 @@ import { Switch } from '@/components/ui/switch';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { TrendingUp, BarChart2, Gauge } from 'lucide-react';
+import { PermeateProductCheck } from './PermeateProductCheck';
 
 interface ProductMeterSectionProps {
   cfg: import('@/pages/plants/shared').PlantMeterConfig;
   update: (patch: Partial<import('@/pages/plants/shared').PlantMeterConfig>) => void;
   canEdit: boolean;
+  plantId?: string;
+  plantName?: string;
 }
 
-export function ProductMeterSection({ cfg, update, canEdit }: ProductMeterSectionProps) {
+export function ProductMeterSection({ cfg, update, canEdit, plantId, plantName }: ProductMeterSectionProps) {
   return (
     <>
       {/* ── Production source ── */}
@@ -51,6 +54,14 @@ export function ProductMeterSection({ cfg, update, canEdit }: ProductMeterSectio
             measure the same water twice, use "Permeate meter = production" instead — otherwise Total
             Production and NRW % will be inflated.
           </p>
+        )}
+
+        {/* Live check: whenever permeate and product are metered separately (i.e. NOT
+            the 'permeate meter = production' mode), verify the two actually agree. */}
+        {cfg.ro_production_source !== 'permeate' && (
+          <div className="mt-2.5">
+            <PermeateProductCheck plantId={plantId} plantName={plantName} />
+          </div>
         )}
       </div>
 
