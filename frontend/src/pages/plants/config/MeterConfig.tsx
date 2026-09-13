@@ -198,9 +198,9 @@ export function PlantMeterConfigCard({ plant }: { plant: any }) {
       </CardHeader>
 
       {open && (
-        <div className="px-4 pb-4 border-t border-border/50">
+        <div className="px-4 pt-5 pb-4 border-t border-border/50">
           {isLocalOnly && (
-            <div className="mt-4 flex items-start gap-2 text-xs text-warn bg-warn-soft border border-warn rounded-md px-3 py-2">
+            <div className="mb-4 flex items-start gap-2 text-xs text-warn bg-warn-soft border border-warn rounded-md px-3 py-2">
               <span className="mt-0.5">⚠</span>
               <span>
                 A saved change to this plant's configuration hasn't reached the database yet — it's stored
