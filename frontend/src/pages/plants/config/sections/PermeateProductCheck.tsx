@@ -60,8 +60,8 @@ export function PermeateProductCheck({ plantId, plantName }: { plantId?: string;
                 </div>
               </div>
               <div className="text-right shrink-0">
-                <div className={cn('text-sm font-bold font-mono', meta.cls)}>
-                  {rec.variancePct != null ? `${fmtNum(rec.variancePct, 1)}%` : '0.0%'}
+                <div className={cn('text-sm font-bold font-mono-num', meta.cls)}>
+                  {rec.variancePct != null ? `${fmtNum(rec.variancePct, 1)}%` : '—'}
                 </div>
                 <button
                   onClick={() => setLedgerOpen(true)}

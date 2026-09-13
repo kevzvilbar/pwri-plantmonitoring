@@ -192,5 +192,5 @@ export function useReconciliationHealthTotals(plantIds: string[]) {
     return out;
   }, [hasPlants, isLoading, roTrains, productMeters, roReadings, productReadings, plants]);
 
-  return { rows, isLoading, startKey, endKey };
+  return { rows, isLoading, chartRange, chartFrom, chartTo, startKey, endKey };
 }
