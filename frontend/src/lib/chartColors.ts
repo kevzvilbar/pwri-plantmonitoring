@@ -24,6 +24,12 @@ export const C_SOLAR       = 'hsl(var(--kpi-solar))';           // solar power g
 export const C_GRID        = 'hsl(var(--kpi-grid))';            // utility grid power
 export const C_BLEND_PCT   = 'hsl(var(--metric-blendpct))';     // % of a well's raw output diverted to blending
 
+/** ReconciliationHealthCard's per-plant permeate-vs-product-meter bars. Off
+ *  the green/amber/red family on purpose — that trio is already the card's
+ *  balanced/marginal/alert status vocabulary. */
+export const C_PERMEATE      = 'hsl(var(--metric-permeate))';      // RO train permeate reading
+export const C_PRODUCT_METER = 'hsl(var(--metric-productmeter))';  // dedicated bulk product meter reading
+
 /** Same fill BlendingVolumeCard.tsx uses for its "Total" blending bar/gradient
  *  — reused here so a well's own blended-volume bar (EntityHistoryChart.tsx)
  *  reads as the same series wherever it shows up. */

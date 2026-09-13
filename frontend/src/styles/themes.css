@@ -254,6 +254,16 @@
     --metric-recovery:     27 96% 61%;
     --metric-tds:         255 92% 76%;
     --metric-gridpv:       38 92% 50%;
+    /* ReconciliationHealthCard's per-plant permeate-vs-product-meter bars —
+       the two raw readings a variance % is computed from. Kept off the
+       green/amber/red family entirely: that trio is already the card's
+       balanced/marginal/alert status vocabulary, so a series color from
+       the same family would read as a second, conflicting status signal
+       on the same row. Permeate borrows the brand teal (this plant's own
+       RO output); product meter gets a violet on the opposite side of the
+       wheel so the two bars never read as the same hue at a glance. */
+    --metric-permeate:    175 75% 42%;
+    --metric-productmeter: 271 70% 62%;
     /* % of a blending well's raw output that was diverted into blending —
        EntityHistoryChart.tsx's per-well composed chart. Distinct hue from
        --metric-nrw so the two ratio lines can't be mistaken for each other
