@@ -1,7 +1,7 @@
 ﻿import type { BookPart } from './types';
 import { Lead, P, H3, List, Ref, Note, ManualFigure, WorkflowStrip } from '../bookPrimitives';
 export const partI : BookPart =   {
-    part: 'Part I â€” Orientation',
+    part: 'Part I: Orientation',
     chapters: [
       {
         id: 'introduction',
@@ -30,9 +30,9 @@ export const partI : BookPart =   {
             <H3>How to read a chapter</H3>
             <P>
               Every chapter opens with what the module is for and who uses it, then walks through the actual
-              mechanics â€” the tabs you&rsquo;ll see, the fields on each form, and the rules the system enforces
+              mechanics, the tabs you&rsquo;ll see, the fields on each form, and the rules the system enforces
               automatically (cooldowns, duplicate protection, spike detection, and so on). Where it matters,
-              a chapter also says plainly who can do what â€” a field Operator sees a very different app than a
+              a chapter also says plainly who can do what, a field Operator sees a very different app than a
               Manager or an Admin, and that&rsquo;s by design, not a bug.
             </P>
             <Note kind="tip">
@@ -51,7 +51,7 @@ export const partI : BookPart =   {
         body: (
           <>
             <Lead>
-              There is no app store install â€” open the app&rsquo;s URL in any browser and you land on a single
+              There is no app store install, open the app&rsquo;s URL in any browser and you land on a single
               Sign in / Sign up screen. Before creating an account, it helps to know which of two account
               types you need, because the sign-up form itself branches based on your choice.
             </Lead>
@@ -61,29 +61,29 @@ export const partI : BookPart =   {
                 [
                   'Operator',
                   'Field/shift staff logging readings on a shared plant device or their own phone.',
-                  'All Operators at one plant can share a single email â€” each person just picks their own username at sign-in. Limited to exactly one plant.',
+                  'All Operators at one plant can share a single email, each person just picks their own username at sign-in. Limited to exactly one plant.',
                 ],
                 [
                   'Non-operator',
-                  'Office, management, or technical staff â€” Admin, Manager, Supervisor, Maintenance, Quality Assurance, Data Analyst.',
+                  'Office, management, or technical staff, Admin, Manager, Supervisor, Maintenance, Quality Assurance, Data Analyst.',
                   'Requires its own unique email address. Can be assigned to multiple plants.',
                 ],
               ]}
             />
             <P>
               Signing up walks you through a short wizard: email, password, and a designation (your job
-              title â€” Operator switches the whole wizard into shared-email mode); how many operators will
+              title, Operator switches the whole wizard into shared-email mode); how many operators will
               share this device, if applicable; each person&rsquo;s username and name; which plant(s) you belong
-              to; and a final review step. Every new account â€” however it was created â€” starts in{' '}
+              to; and a final review step. Every new account, however it was created, starts in{' '}
               <strong className="font-sans font-semibold not-italic">Pending</strong> status. Trying to sign in
               before an Admin approves you lands you on an &ldquo;awaiting approval&rdquo; screen with a{' '}
               <strong className="font-sans font-semibold not-italic">Refresh status</strong> button that drops
-              you straight into the app the moment you&rsquo;re approved â€” no need to sign out and back in.
+              you straight into the app the moment you&rsquo;re approved, no need to sign out and back in.
             </P>
             <H3>Signing in, and the operator picker</H3>
             <P>
               Enter your email and password as usual. If more than one Operator is active at your assigned
-              plant, a &ldquo;Who is signing in?&rdquo; screen appears listing every Operator there â€” tap your
+              plant, a &ldquo;Who is signing in?&rdquo; screen appears listing every Operator there, tap your
               name, and everything you do for the rest of the session is attributed to you specifically, even
               though the device itself is shared. Forgot your password? Use{' '}
               <strong className="font-sans font-semibold not-italic">Forgot password?</strong> on the sign-in
@@ -93,7 +93,7 @@ export const partI : BookPart =   {
               On a shared plant tablet, get in the habit of using{' '}
               <strong className="font-sans font-semibold not-italic">Switch operator</strong> (in the account
               menu) at the start of every shift, rather than staying logged in as whoever used the device
-              last â€” it&rsquo;s the difference between readings being attributed correctly and not.
+              last, it&rsquo;s the difference between readings being attributed correctly and not.
             </Note>
           </>
         ),
@@ -109,13 +109,13 @@ export const partI : BookPart =   {
               On desktop and tablet, a left sidebar handles navigation and a top bar carries context; on a
               phone, the sidebar becomes a bottom navigation bar with a &ldquo;More&rdquo; sheet for anything
               that doesn&rsquo;t fit in the main row. In every layout, items are organized into named
-              groups â€” Overview, Operations, Maintenance, Finance, Team, Data, Analysis, Admin â€” and which
+              groups, Overview, Operations, Maintenance, Finance, Team, Data, Analysis, Admin, and which
               groups you actually see depends entirely on your role.
             </Lead>
             <P>
               The top bar is constant across every page. A{' '}
               <strong className="font-sans font-semibold not-italic">plant selector</strong> controls which
-              plant&rsquo;s data the current page shows â€” Operators are locked to their one assigned plant,
+              plant&rsquo;s data the current page shows, Operators are locked to their one assigned plant,
               everyone else can switch freely. A{' '}
               <strong className="font-sans font-semibold not-italic">notification bell</strong> surfaces active
               alarms and system logs with anti-fatigue rate-limited ringing on new critical events, quick snooze (1h / 24h),
@@ -125,7 +125,7 @@ export const partI : BookPart =   {
               and your account menu (Profile, Switch operator, Sign out).
             </P>
             <Note kind="tip">
-              Chapter 4 covers exactly who can see what, module by module â€” but as a shortcut while reading the
+              Chapter 4 covers exactly who can see what, module by module, but as a shortcut while reading the
               rest of this manual: Operators see the fewest pages, Technician-tier roles see the same pages as
               a Manager but with edit actions blocked inside them, and Manager/Data Analyst/Admin see
               everything, with the Admin Console itself further split three ways.
@@ -141,7 +141,7 @@ export const partI : BookPart =   {
         body: (
           <>
             <Lead>
-              Every account is assigned one or more roles, and roles are what actually control access â€” not
+              Every account is assigned one or more roles, and roles are what actually control access, not
               designation, which is just your descriptive job title (&ldquo;Maintenance Technician,&rdquo;
               say). An Admin sets your real role when approving your account, separately from whatever
               designation you picked at sign-up.
@@ -149,19 +149,19 @@ export const partI : BookPart =   {
             <Ref
               cols={['Role', 'Typical user', 'Access level']}
               rows={[
-                ['Operator', 'Field operator, shared shift terminal', 'Narrowest access â€” Dashboard, Plants, Operations, RO Trains, Maintenance, Incidents, Employees, Profile only.'],
-                ['Technician', 'Maintenance / QA staff', 'Same page-level navigation as Manager/Admin, but Manager-and-above actions inside a page â€” deletions, budget, admin tools â€” stay blocked.'],
+                ['Operator', 'Field operator, shared shift terminal', 'Narrowest access, Dashboard, Plants, Operations, RO Trains, Maintenance, Incidents, Employees, Profile only.'],
+                ['Technician', 'Maintenance / QA staff', 'Same page-level navigation as Manager/Admin, but Manager-and-above actions inside a page, deletions, budget, admin tools, stay blocked.'],
                 ['Manager', 'Plant / area manager', 'Full operational visibility plus Exports, Data Analysis (view-only), Data Corrections, Budget, and a limited Admin Console (Plants + Audit only).'],
                 ['Data Analyst', 'Data quality / analytics staff', 'Everything a Manager can see for data purposes, plus full edit access in Data Analysis & Data Corrections. Redirected to Data Corrections instead of the Admin Console.'],
-                ['Admin', 'System administrator', 'Full access to every module, including the complete Admin Console â€” user approval, role assignment, plant lifecycle, migrations, and audit log.'],
+                ['Admin', 'System administrator', 'Full access to every module, including the complete Admin Console, user approval, role assignment, plant lifecycle, migrations, and audit log.'],
               ]}
             />
             <P>
-              A user can hold more than one role at once â€” the system always grants the most generous
+              A user can hold more than one role at once, the system always grants the most generous
               applicable permission, so someone with both Technician and Manager, for instance, simply gets
               Manager-level access. An Admin can also go further and build named{' '}
               <strong className="font-sans font-semibold not-italic">custom roles</strong> on top of a system
-              role, from the Roles tab in the Admin Console (Chapter 20) â€” useful for a title like &ldquo;Senior
+              role, from the Roles tab in the Admin Console (Chapter 20), useful for a title like &ldquo;Senior
               Technician&rdquo; that should carry one or two extra permissions without being a full Manager.
             </P>
             <Note kind="tip">

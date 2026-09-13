@@ -2,7 +2,7 @@ import type { BookPart } from './types';
 import { Lead, P, H3, List, Ref, Note, ManualFigure, WorkflowStrip } from '../bookPrimitives';
 
 export const partVIII: BookPart = {
-  part: 'Part VIII — Reference',
+  part: 'Part VIII: Reference',
   chapters: [
     {
       id: 'troubleshooting',
@@ -12,7 +12,7 @@ export const partVIII: BookPart = {
       body: (
         <>
           <Lead>
-            A handful of situations account for most support questions — most of them are covered in detail
+            A handful of situations account for most support questions, most of them are covered in detail
             in their own chapter, but here they are gathered in one place.
           </Lead>
           <Ref
@@ -20,8 +20,8 @@ export const partVIII: BookPart = {
             rows={[
               ['"Incorrect email or password"', 'Wrong credentials, or the wrong plus-addressed email for a multi-operator batch.', 'Confirm the exact email used at account creation; reset the password if truly forgotten.'],
               ['Stuck on "awaiting Admin approval"', 'No Admin has approved the account yet.', 'Select Refresh status periodically, or ask an Admin to check Admin Console → Users.'],
-              ['"cooldown — next reading available in ..."', 'You already saved a reading for this asset within the last 45 minutes.', 'Wait it out, or have a different authorized person take it if genuinely urgent.'],
-              ['A reading is greyed out / flagged', 'Auto-tagged as a backward reading or a spike.', 'No action needed — a Manager/Data Analyst reviews it in Data Corrections.'],
+              ['"cooldown, next reading available in ..."', 'You already saved a reading for this asset within the last 45 minutes.', 'Wait it out, or have a different authorized person take it if genuinely urgent.'],
+              ['A reading is greyed out / flagged', 'Auto-tagged as a backward reading or a spike.', 'No action needed, a Manager/Data Analyst reviews it in Data Corrections.'],
               ["I can't edit a reading I entered", "It's outside your edit window, or belongs to someone else.", 'Submit a correction request instead (Chapter 17).'],
               ['CSV import fails immediately', "Column headers don't match the expected template.", 'Re-download the current template and match headers exactly.'],
               ["An import created records I didn't want", 'A malformed CSV, or the wrong target plant.', "Ask an Admin to run Bad Import Cleanup in the Admin Console."],
@@ -29,7 +29,7 @@ export const partVIII: BookPart = {
           />
           <H3>Frequently asked questions</H3>
           <P>
-            <strong className="font-sans font-semibold not-italic">Can I use the app offline?</strong> No — it&rsquo;s
+            <strong className="font-sans font-semibold not-italic">Can I use the app offline?</strong> No, it&rsquo;s
             a connected web app; you need network access to sign in and save data. If connectivity at your
             site is unreliable, plan to record readings on paper as a backup and enter them once you&rsquo;re
             back online.
@@ -41,10 +41,10 @@ export const partVIII: BookPart = {
             Technician-or-higher role, not a bug to report.
           </P>
           <P>
-            <strong className="font-sans font-semibold not-italic">I found a data error from months ago —
+            <strong className="font-sans font-semibold not-italic">I found a data error from months ago,
             what do I do?</strong> Don&rsquo;t try to fix it with a new reading. Use Data Corrections
-            (Chapter 17) — a correction request if you can&rsquo;t edit it directly, or the regression/raw-edit
-            tool in Data Analysis &amp; Review (Chapter 16) if you have Data Analyst/Admin access — so the
+            (Chapter 17), a correction request if you can&rsquo;t edit it directly, or the regression/raw-edit
+            tool in Data Analysis &amp; Review (Chapter 16) if you have Data Analyst/Admin access, so the
             change is reviewed and captured in the audit trail.
           </P>
         </>
@@ -69,16 +69,16 @@ export const partVIII: BookPart = {
               ['Well', 'A production/injection well with its own water meter and, optionally, a dedicated electric meter.'],
               ['Blending well', 'A well flagged as feeding blended distribution rather than tracked as an independent source.'],
               ['RO Train', 'A Reverse Osmosis processing line within a plant.'],
-              ['CIP', 'Clean-In-Place — a chemical cleaning cycle run on an RO train.'],
-              ['NRW', 'Non-Revenue Water — water produced but not accounted for as delivered/billed output.'],
-              ['ΔP', 'Differential pressure — the pressure drop across a filter, membrane, or element; a rising ΔP often signals fouling.'],
+              ['CIP', 'Clean-In-Place, a chemical cleaning cycle run on an RO train.'],
+              ['NRW', 'Non-Revenue Water, water produced but not accounted for as delivered/billed output.'],
+              ['ΔP', 'Differential pressure, the pressure drop across a filter, membrane, or element; a rising ΔP often signals fouling.'],
               ['Recovery %', 'The percentage of feed water converted to permeate (product) water in an RO process.'],
               ['Salt rejection %', "The percentage of dissolved salts an RO membrane removes from the feed stream."],
-              ['Designation', "A user's descriptive job title — distinct from their system role."],
+              ['Designation', "A user's descriptive job title, distinct from their system role."],
               ['Role', 'The access-control level assigned to a user: Operator, Technician, Manager, Data Analyst, or Admin.'],
-              ['Soft delete', 'Deactivating a record without erasing it — reversible.'],
-              ['Hard delete', 'Permanently erasing a record — blocked while dependent records exist.'],
-              ['Force delete', 'A hard delete with an explicit override that cascades through dependent records — irreversible.'],
+              ['Soft delete', 'Deactivating a record without erasing it, reversible.'],
+              ['Hard delete', 'Permanently erasing a record, blocked while dependent records exist.'],
+              ['Force delete', 'A hard delete with an explicit override that cascades through dependent records, irreversible.'],
             ]}
           />
         </>

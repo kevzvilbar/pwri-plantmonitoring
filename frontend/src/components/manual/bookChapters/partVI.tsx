@@ -1,7 +1,7 @@
 ﻿import type { BookPart } from './types';
 import { Lead, P, H3, List, Ref, Note, ManualFigure, WorkflowStrip } from '../bookPrimitives';
 export const partVI : BookPart =   {
-    part: 'Part VI â€” Data & Analysis',
+    part: 'Part VI: Data & Analysis',
     chapters: [
       {
         id: 'smart-import',
@@ -12,7 +12,7 @@ export const partVI : BookPart =   {
           <>
             <Lead>
               Manager, Data Analyst, and Admin only. Smart Import is a general-purpose bulk-loader, grouped by
-              category â€” Operations (locator, well, product readings), RO Trains (TDS, water quality, pump, AFM
+              category, Operations (locator, well, product readings), RO Trains (TDS, water quality, pump, AFM
               readings), Chemical (dosing, deliveries), Power, and Finance.
             </Lead>
             <P>
@@ -20,7 +20,7 @@ export const partVI : BookPart =   {
               the built-in template for the exact expected column layout, then drop in your CSV or plain-text
               file. A parsed preview lets you check the data before committing anything, and an optional{' '}
               <strong className="font-sans font-semibold not-italic">skip invalid rows</strong> setting means a
-              handful of bad rows don&rsquo;t block the whole file â€” a progress log then shows exactly what was
+              handful of bad rows don&rsquo;t block the whole file, a progress log then shows exactly what was
               processed and what wasn&rsquo;t.
             </P>
             <Note kind="warn">
@@ -39,14 +39,14 @@ export const partVI : BookPart =   {
         body: (
           <>
             <Lead>
-              Manager, Data Analyst, and Admin only. Tables are grouped by category â€” Operations, RO Trains,
-              Chemical, Power, Maintenance, Incidents, Finance, and more â€” each exportable individually or as
+              Manager, Data Analyst, and Admin only. Tables are grouped by category, Operations, RO Trains,
+              Chemical, Power, Maintenance, Incidents, Finance, and more, each exportable individually or as
               part of a full export.
             </Lead>
             <P>
               Set a plant filter and a date range (quick presets, or a custom range), then export whichever
               table you need under its category card, and a filtered download begins immediately. When you need
-              everything rather than one table at a time â€”{' '}
+              everything rather than one table at a time {' '}
               <strong className="font-sans font-semibold not-italic">Export All</strong> pulls every table for
               the current scope in a single action, which is the fastest route to a full backup or a complete
               handover package.
@@ -63,22 +63,22 @@ export const partVI : BookPart =   {
           <>
             <Lead>
               Every other page in the app is intentionally read-only with respect to historical values. Data
-              Analysis & Review is the exception â€” visible to Manager, Data Analyst, and Admin, though Manager
+              Analysis & Review is the exception, visible to Manager, Data Analyst, and Admin, though Manager
               access is view-only; only Data Analyst and Admin can actually run the tool and edit values.
             </Lead>
             <P>
               The core tool runs an{' '}
               <strong className="font-sans font-semibold not-italic">OLS regression</strong> against a chosen
-              column â€” daily volume, a meter reading, permeate TDS, recovery percentage, and similar fields
-              across well, locator, product-meter, RO-train, and power readings â€” flags statistical outliers by
+              column, daily volume, a meter reading, permeate TDS, recovery percentage, and similar fields
+              across well, locator, product-meter, RO-train, and power readings, flags statistical outliers by
               Z-score, and proposes a corrected value for each. Nothing is changed automatically: you review
               each proposed correction and choose{' '}
               <strong className="font-sans font-semibold not-italic">Apply</strong> or leave it, and can{' '}
               <strong className="font-sans font-semibold not-italic">Retract</strong> a correction you&rsquo;ve
               already applied. A raw-data table alongside it lets you edit any of the latest 200 rows by hand
-              instead, when that&rsquo;s the more direct fix â€” either way, every edit is written to the audit
+              instead, when that&rsquo;s the more direct fix, either way, every edit is written to the audit
               trail. Two sub-tabs round the page out: Edit Audit (every manual edit made here) and Flagged
-              Readings (what&rsquo;s currently marked abnormal for the selected table) â€” a narrower,
+              Readings (what&rsquo;s currently marked abnormal for the selected table), a narrower,
               table-specific slice of what Data Corrections shows across every table at once.
             </P>
           </>
@@ -103,7 +103,7 @@ export const partVI : BookPart =   {
               current reading, the computed volume, and who recorded it; from there a reviewer can{' '}
               <strong className="font-sans font-semibold not-italic">Approve</strong> it as-is,{' '}
               <strong className="font-sans font-semibold not-italic">Edit value</strong> to type the corrected
-              figure, or <strong className="font-sans font-semibold not-italic">Reject</strong> it as invalid â€”
+              figure, or <strong className="font-sans font-semibold not-italic">Reject</strong> it as invalid,
               with bulk actions for handling several readings that share the same disposition at once. Approving
               a reading <strong className="font-sans font-semibold not-italic">locks</strong> it against further
               edits; an Unlock control reopens it if needed later.
@@ -111,7 +111,7 @@ export const partVI : BookPart =   {
             <H3>Requesting a correction</H3>
             <P>
               When a reading is outside your own edit window (same session for Wells/Locators, 8 hours for RO
-              Trains logs â€” Chapter 8) or was recorded by someone else, the right move is a{' '}
+              Trains logs, Chapter 8) or was recorded by someone else, the right move is a{' '}
               <strong className="font-sans font-semibold not-italic">correction request</strong>, not a direct
               edit: propose the correct value, pick the closest reason (meter misread, data-entry typo, wrong
               anchor reading, meter replaced, duplicate submission, wrong asset, or other), and add a short
@@ -120,13 +120,13 @@ export const partVI : BookPart =   {
             </P>
             <H3>Inbox, History, and Operators</H3>
             <P>
-              <strong className="font-sans font-semibold not-italic">Inbox</strong> is a separate safety net â€”
+              <strong className="font-sans font-semibold not-italic">Inbox</strong> is a separate safety net,
               readings technically marked &ldquo;normal&rdquo; that still compute to a negative daily volume,
               something worth a second look even though nothing auto-flagged it.{' '}
               <strong className="font-sans font-semibold not-italic">History</strong> is the full audit trail of
               every correction action taken anywhere in the system, and{' '}
               <strong className="font-sans font-semibold not-italic">Operators</strong> rolls up accuracy
-              statistics per person â€” how often their readings get flagged â€” a useful lens for coaching, not
+              statistics per person, how often their readings get flagged, a useful lens for coaching, not
               just correction.
             </P>
           </>
@@ -141,8 +141,8 @@ export const partVI : BookPart =   {
           <>
             <Lead>
               Visible to Manager, Data Analyst, and Admin. Manager Scorecard rolls up data-quality
-              oversight per plant over a selectable time window â€” completeness, unexplained gaps, and open
-              exceptions â€” so a manager doesn&rsquo;t have to reconcile several other pages by hand just to know
+              oversight per plant over a selectable time window, completeness, unexplained gaps, and open
+              exceptions, so a manager doesn&rsquo;t have to reconcile several other pages by hand just to know
               whether a plant&rsquo;s data is actually being kept up.
             </Lead>
             <P>

@@ -4,11 +4,11 @@ import { cn } from '@/lib/utils';
 /**
  * Shared typography for the full-screen Manual book reader (BookReader.tsx).
  * Every chapter in bookChapters.tsx is written using only these primitives,
- * so the reading style — serif family, measure, line-height, drop cap — is
+ * so the reading style, serif family, measure, line-height, drop cap, is
  * controlled from one place instead of being repeated 23 times.
  */
 
-// Opening paragraph of a chapter — gets the drop cap, book-style.
+// Opening paragraph of a chapter, gets the drop cap, book-style.
 export function Lead({ children }: { children: ReactNode }) {
   return (
     <p
@@ -45,7 +45,7 @@ export function List({ items }: { items: ReactNode[] }) {
   );
 }
 
-// A small reference table (role tiers, thresholds, tab lists) — kept in the
+// A small reference table (role tiers, thresholds, tab lists), kept in the
 // app's UI sans-serif rather than the reading serif, the way a real book
 // sets its data tables in a different face than the body copy.
 export function Ref({ rows, cols }: { rows: ReactNode[][]; cols: string[] }) {
@@ -77,7 +77,7 @@ export function Ref({ rows, cols }: { rows: ReactNode[][]; cols: string[] }) {
   );
 }
 
-// Marginal callout — a "tip" or a "caution," set like a printed manual's
+// Marginal callout, a "tip" or a "caution," set like a printed manual's
 // sidebar note rather than blended into the reading paragraph.
 export function Note({ children, kind = 'tip' }: { children: ReactNode; kind?: 'tip' | 'warn' }) {
   return (

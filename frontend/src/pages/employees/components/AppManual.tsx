@@ -36,7 +36,7 @@ function AppManual() {
             Operations Manual
           </h3>
           <p className="text-xs text-muted-foreground mt-1">
-            {ALL_MANUAL_CHAPTERS.length} chapters, from your first sign-in to running the Admin Console —
+            {ALL_MANUAL_CHAPTERS.length} chapters, from your first sign-in to running the Admin Console,
             open it as a book, or search for a topic below.
           </p>
         </div>
@@ -76,7 +76,7 @@ function AppManual() {
           <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Jump to a topic — e.g. “compliance thresholds” or “delete a user”…"
+            placeholder="Jump to a topic, e.g. “compliance thresholds” or “delete a user”…"
             className="pl-8 h-9 text-xs bg-background"
           />
         </div>
@@ -90,7 +90,7 @@ function AppManual() {
               >
                 <span className="font-sans tabular-nums text-muted-foreground w-4 text-right shrink-0">{c.number}</span>
                 <span className="text-foreground font-medium">{c.title}</span>
-                <span className="text-muted-foreground truncate">— {c.dek}</span>
+                <span className="text-muted-foreground truncate">{c.dek}</span>
               </button>
             ))}
           </div>

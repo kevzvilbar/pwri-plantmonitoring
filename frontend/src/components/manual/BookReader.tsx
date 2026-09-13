@@ -128,7 +128,7 @@ export function BookReader({ open, onOpenChange, initialChapterId }: BookReaderP
         className="max-w-none w-screen h-[100dvh] inset-0 top-0 left-0 translate-x-0 translate-y-0 rounded-none border-0 p-0 gap-0 flex flex-col sm:rounded-none [&>button]:z-30"
         onOpenAutoFocus={(e) => e.preventDefault()}
       >
-        <DialogTitle className="sr-only">PWRI Plant Monitoring — Operations Manual</DialogTitle>
+        <DialogTitle className="sr-only">PWRI Plant Monitoring: Operations Manual</DialogTitle>
 
         {/* Header Toolbar */}
         <div className="shrink-0 h-14 border-b flex items-center justify-between gap-3 px-4 sm:px-5 bg-background select-none">
@@ -143,10 +143,10 @@ export function BookReader({ open, onOpenChange, initialChapterId }: BookReaderP
             <BookOpen className="h-4 w-4 text-primary shrink-0 hidden sm:block" />
             <div className="min-w-0">
               <div className="font-sans text-sm font-semibold text-foreground truncate">
-                PWRI Plant Monitoring — Operations Manual
+                PWRI Plant Monitoring: Operations Manual
               </div>
               <div className="font-sans text-2xs text-muted-foreground hidden sm:block">
-                Chapter {active.number} of {TOTAL_CHAPTERS} · {activePart.replace(/^Part [IVX]+ — /, '')}
+                Chapter {active.number} of {TOTAL_CHAPTERS} · {activePart.replace(/^Part [IVX]+: /, '')}
               </div>
             </div>
           </div>

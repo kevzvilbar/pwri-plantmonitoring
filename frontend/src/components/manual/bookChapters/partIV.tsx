@@ -1,7 +1,7 @@
 ﻿import type { BookPart } from './types';
 import { Lead, P, H3, List, Ref, Note, ManualFigure, WorkflowStrip } from '../bookPrimitives';
 export const partIV : BookPart =   {
-    part: 'Part IV â€” Finance',
+    part: 'Part IV: Finance',
     chapters: [
       {
         id: 'costs',
@@ -11,23 +11,23 @@ export const partIV : BookPart =   {
         body: (
           <>
             <Lead>
-              Hidden for Operators. Up to six tabs depending on role â€” Rollup, Power, Compare, Prices, Filters,
+              Hidden for Operators. Up to six tabs depending on role, Rollup, Power, Compare, Prices, Filters,
               and, Manager/Admin only, Budget.
             </Lead>
             <Ref
               cols={['Tab', 'Purpose']}
               rows={[
-                ['Rollup', 'Combined production-cost breakdown â€” chemicals, power, other inputs â€” for a plant and period.'],
+                ['Rollup', 'Combined production-cost breakdown, chemicals, power, other inputs, for a plant and period.'],
                 ['Power', 'Electric bill entry and history, reconciled against logged power readings.'],
                 ['Compare', 'Side-by-side cost/production comparison across plants.'],
-                ['Prices', "Unit price list for chemicals â€” feeds the dosing cost estimates in RO Trains."],
+                ['Prices', "Unit price list for chemicals, feeds the dosing cost estimates in RO Trains."],
                 ['Filters', 'Cost tracking for filter media (cartridge filters, AFM, etc.).'],
                 ['Budget', 'Budget vs. actual by month, Manager/Admin only.'],
               ]}
             />
             <P>
-              Logging a monthly electric bill on the Power tab takes previous and current meter readings â€” total
-              kWh is calculated automatically â€” plus generation, distribution, and other charges. Chemical and
+              Logging a monthly electric bill on the Power tab takes previous and current meter readings, total
+              kWh is calculated automatically, plus generation, distribution, and other charges. Chemical and
               filter prices on the Prices/Filters tabs carry an{' '}
               <strong className="font-sans font-semibold not-italic">effective date</strong> rather than simply
               overwriting the old figure, so a cost calculation for a past period keeps using whatever price
