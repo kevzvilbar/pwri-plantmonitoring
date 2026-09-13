@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { X } from 'lucide-react';
+import { X, SprayCan } from 'lucide-react';
 
 export const BUILTIN_CIP_CHEMICALS = ['Caustic Soda', 'HCl', 'SLS'];
 export const CIP_CHEM_UNITS = ['kg', 'g', 'L', 'mL', 'pcs', 'gal'];
@@ -48,7 +48,7 @@ export function CIPChemicalsSection({
   return (
     <div>
       <div className="flex items-center gap-2 mb-1">
-        <span className="text-base leading-none">🧫</span>
+        <SprayCan className="h-4 w-4 text-muted-foreground" />
         <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">CIP Chemicals</span>
       </div>
       <p className="text-xs text-muted-foreground mb-3">

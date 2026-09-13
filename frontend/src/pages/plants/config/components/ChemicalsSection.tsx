@@ -1,4 +1,5 @@
 import { Switch } from '@/components/ui/switch';
+import { FlaskConical } from 'lucide-react';
 import { PLANT_CHEMICALS } from '../../shared';
 
 export function ChemicalsSection({
@@ -15,7 +16,7 @@ export function ChemicalsSection({
   return (
     <div>
       <div className="flex items-center gap-2 mb-1">
-        <span className="text-base leading-none">🧪</span>
+        <FlaskConical className="h-4 w-4 text-muted-foreground" />
         <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Chemicals in use</span>
       </div>
       <p className="text-xs text-muted-foreground mb-3">
