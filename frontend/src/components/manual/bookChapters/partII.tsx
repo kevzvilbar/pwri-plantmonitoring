@@ -1,5 +1,6 @@
 ﻿import type { BookPart } from './types';
 import { Lead, P, H3, List, Ref, Note, ManualFigure, WorkflowStrip } from '../bookPrimitives';
+import { FlaskConical, Droplets } from 'lucide-react';
 export const partII : BookPart =   {
     part: 'Part II â€” Daily Operations',
     chapters: [
@@ -64,6 +65,146 @@ export const partII : BookPart =   {
               That toggle is Manager/Admin only, and turning it on asks you to confirm the well&rsquo;s current
               meter reading as the baseline.
             </P>
+            <H3>The Configuration tab &mdash; meter instrumentation</H3>
+            <P>
+              The Configuration tab is where you tell the system which meters <em>actually exist</em> and how
+              each train&rsquo;s readings are taken &mdash; Operations, RO Trains, Costs, and the NRW math all
+              read their expectations from here. It&rsquo;s an accordion of independently collapsible sections
+              &mdash; RO Trains, Product Meters, Wells, Locators, Power, Component Types, and Chemicals &mdash;
+              each with a badge counting how many meters are switched on. A Manager or Admin makes changes
+              here; everyone else sees the current truth.
+            </P>
+            <P>
+              The RO Trains section opens with the three flow-meter tiles on one row &mdash; Feed, Permeate,
+              and Reject. Toggling a meter off isn&rsquo;t losing data, it&rsquo;s choosing derived math: with
+              the feed meter off and the other two on, feed volume is computed as{' '}
+              <span className="font-mono text-[0.85em]">permeate + reject</span>; with the reject meter off,
+              it&rsquo;s <span className="font-mono text-[0.85em]">feed &minus; permeate</span>. Each
+              tile&rsquo;s subtitle states exactly which equation is in effect, so you never have to guess.
+              Below the tiles sits the per-train meter instrumentation list &mdash; every train gets a
+              three-way control: <strong className="font-sans font-semibold not-italic">Manual</strong>{' '}
+              (operator-entered flows),{' '}
+              <strong className="font-sans font-semibold not-italic">All EM</strong> (an electromagnetic
+              flow meter on every stream), or{' '}
+              <strong className="font-sans font-semibold not-italic">Mixed</strong> (EM on selected streams
+              only &mdash; picking it reveals per-stream toggles). The{' '}
+              <strong className="font-sans font-semibold not-italic">Set all to</strong> control in the
+              header applies one choice to every train as a single confirmed batch. On desktop the train
+              list sits two-up with each control stretched across its row &mdash; a seven-train plant reads
+              at a glance instead of scrolling &mdash; and the rows stack one-per-train on phones.
+            </P>
+            <ManualFigure
+              title="Plant Configuration — RO Trains section"
+              caption="The three flow-meter tiles share one row, and the per-train instrumentation list sits two-up on desktop with each Manual / All EM / Mixed control stretched across its row. Set all to (header, right) batch-applies one mode to every train; here the feed meter is off, so feed volume is derived as permeate + reject."
+            >
+              <div className="min-w-[560px] rounded-lg border bg-background p-3 font-sans text-xs">
+                <div className="mb-3 grid grid-cols-3 gap-2">
+                  <div className="flex items-center justify-between gap-2 rounded-lg border border-border bg-muted/10 p-2.5">
+                    <div className="min-w-0"><div className="font-semibold text-foreground">Feed meter</div><div className="text-3xs leading-snug text-muted-foreground">Off &mdash; computed as permeate + reject</div></div>
+                    <span className="h-4 w-7 shrink-0 rounded-full bg-muted" aria-hidden="true" />
+                  </div>
+                  <div className="flex items-center justify-between gap-2 rounded-lg border-2 border-primary/50 bg-primary-soft/30 p-2.5">
+                    <div className="min-w-0"><div className="font-semibold text-foreground">Permeate meter</div><div className="text-3xs leading-snug text-muted-foreground">Filtered / product-side output</div></div>
+                    <span className="h-4 w-7 shrink-0 rounded-full bg-primary" aria-hidden="true" />
+                  </div>
+                  <div className="flex items-center justify-between gap-2 rounded-lg border-2 border-border bg-muted/20 p-2.5">
+                    <div className="min-w-0"><div className="font-semibold text-foreground">Reject meter</div><div className="text-3xs leading-snug text-muted-foreground">Brine / concentrate output</div></div>
+                    <span className="h-4 w-7 shrink-0 rounded-full bg-foreground/70" aria-hidden="true" />
+                  </div>
+                </div>
+                <div className="rounded-lg border border-border">
+                  <div className="flex items-center justify-between gap-2 border-b border-border bg-muted/40 px-3 py-2">
+                    <span className="font-medium uppercase tracking-wide text-muted-foreground">Per-train meter instrumentation &middot; 7 trains</span>
+                    <span className="flex items-center gap-1.5">
+                      <span className="text-muted-foreground">Set all to</span>
+                      <span className="inline-flex gap-0.5 rounded-lg bg-muted p-0.5">
+                        <span className="rounded-md px-2 py-1 text-muted-foreground">Manual</span>
+                        <span className="rounded-md bg-primary px-2 py-1 font-medium text-primary-foreground shadow-sm">All EM</span>
+                        <span className="rounded-md px-2 py-1 text-muted-foreground">Mixed</span>
+                      </span>
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2">
+                    {[
+                      { t: 'RO1', m: 'all' as const },
+                      { t: 'RO2', m: 'mixed' as const },
+                      { t: 'RO3', m: 'all' as const },
+                      { t: 'RO4', m: 'manual' as const },
+                    ].map((row, i) => (
+                      <div key={row.t} className={'flex items-center gap-2 border-b border-border px-3 py-2.5' + (i % 2 === 0 ? ' border-r' : '')}>
+                        <span className="w-9 shrink-0 font-medium text-foreground">{row.t}</span>
+                        <span className="flex flex-1 gap-0.5 rounded-lg bg-muted p-0.5">
+                          {(['manual', 'all', 'mixed'] as const).map(opt => (
+                            <span
+                              key={opt}
+                              className={'flex-1 rounded-md px-2 py-1 text-center ' + (row.m === opt ? 'bg-primary font-medium text-primary-foreground shadow-sm' : 'text-muted-foreground')}
+                            >
+                              {opt === 'all' ? 'All EM' : opt === 'manual' ? 'Manual' : 'Mixed'}
+                            </span>
+                          ))}
+                        </span>
+                      </div>
+                    ))}
+                    <div className="hidden border-b border-border sm:block" aria-hidden="true" />
+                  </div>
+                </div>
+                <div className="mt-2 text-3xs text-muted-foreground">RO2 is set to Mixed &mdash; in the live app its row expands with per-stream toggles (Feed / Permeate / Reject) choosing which streams carry EM meters. Trains RO5&ndash;RO7 continue below; on phones everything stacks one row per train.</div>
+              </div>
+            </ManualFigure>
+            <P>
+              The same one-row treatment continues through the other asset sections. Per-train utility
+              meters are separate toggles &mdash; does each train have its own kWh meter, its own water
+              meter &mdash; and enabling per-train electricity raises shared power meter groups (several
+              trains splitting one physical meter). Wells always have their own water meter; their section
+              only asks how <em>electricity</em> is metered, as three tiles on one row &mdash; shared,
+              dedicated per well, or none. Locators likewise always log a water meter; their section asks
+              how <em>bulk</em> metering works &mdash; dedicated bulk meter, a shared bulk meter group
+              (several locators splitting one mother meter, with the member list managed right below), or
+              no bulk meter at all.
+            </P>
+            <ManualFigure
+              title="Wells and Locators meter sections"
+              caption="Both asset sections present their full choice set on one row. Wells ask how electricity is metered (shared, dedicated per well, or none); locators ask how bulk metering works. A purple-highlighted tile marks the active shared bulk meter group option."
+            >
+              <div className="min-w-[560px] rounded-lg border bg-background p-3 font-sans text-xs">
+                <div className="mb-2 text-3xs font-semibold uppercase tracking-wider text-muted-foreground">Wells &mdash; electricity metering</div>
+                <div className="mb-4 grid grid-cols-3 gap-2">
+                  <div className="flex items-center justify-between gap-2 rounded-lg border border-border bg-muted/10 p-2.5">
+                    <div className="min-w-0"><div className="font-semibold text-foreground">Shared electric meter</div><div className="text-3xs leading-snug text-muted-foreground">Multiple wells / colboxes share one kWh meter</div></div>
+                    <span className="h-4 w-7 shrink-0 rounded-full bg-muted" aria-hidden="true" />
+                  </div>
+                  <div className="flex items-center justify-between gap-2 rounded-lg border border-border bg-muted/10 p-2.5">
+                    <div className="min-w-0"><div className="font-semibold text-foreground">Dedicated meter (per well)</div><div className="text-3xs leading-snug text-muted-foreground">Some wells have their own kWh meter</div></div>
+                    <span className="h-4 w-7 shrink-0 rounded-full bg-muted" aria-hidden="true" />
+                  </div>
+                  <div className="flex items-center justify-between gap-2 rounded-lg border-2 border-primary/50 bg-primary-soft/30 p-2.5">
+                    <div className="min-w-0"><div className="font-semibold text-foreground">No electricity metering</div><div className="text-3xs leading-snug text-muted-foreground">Some wells have no kWh meter at all</div></div>
+                    <span className="h-4 w-7 shrink-0 rounded-full bg-primary" aria-hidden="true" />
+                  </div>
+                </div>
+                <div className="mb-2 text-3xs font-semibold uppercase tracking-wider text-muted-foreground">Locators &mdash; bulk / product metering</div>
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="flex items-center justify-between gap-2 rounded-lg border border-border bg-muted/10 p-2.5">
+                    <div className="min-w-0"><div className="font-semibold text-foreground">Dedicated bulk meter</div><div className="text-3xs leading-snug text-muted-foreground">Some locators have their own bulk meter</div></div>
+                    <span className="h-4 w-7 shrink-0 rounded-full bg-muted" aria-hidden="true" />
+                  </div>
+                  <div className="flex items-center justify-between gap-2 rounded-lg border-2 border-purple-400/60 bg-purple-500/10 p-2.5">
+                    <div className="min-w-0"><div className="font-semibold text-foreground">Shared bulk meter group</div><div className="text-3xs leading-snug text-muted-foreground">Multiple locators share one bulk meter</div></div>
+                    <span className="h-4 w-7 shrink-0 rounded-full bg-purple-500" aria-hidden="true" />
+                  </div>
+                  <div className="flex items-center justify-between gap-2 rounded-lg border border-border bg-muted/10 p-2.5">
+                    <div className="min-w-0"><div className="font-semibold text-foreground">No bulk meter (some locators)</div><div className="text-3xs leading-snug text-muted-foreground">Certain locators only track water meter</div></div>
+                    <span className="h-4 w-7 shrink-0 rounded-full bg-muted" aria-hidden="true" />
+                  </div>
+                </div>
+              </div>
+            </ManualFigure>
+            <Note kind="tip">
+              These switches are expectations, not observations &mdash; they change what Operations asks
+              for and what the system derives, and per-train instrumentation saves the moment you tap a
+              mode (hence its &ldquo;Saves instantly&rdquo; badge). Historical readings are never rewritten
+              by a later change: turning a meter off today doesn&rsquo;t recompute yesterday.
+            </Note>
             <H3>Replacing a meter</H3>
             <P>
               Whenever a physical meter â€” locator or well â€” gets physically swapped, use{' '}
@@ -201,6 +342,74 @@ export const partII : BookPart =   {
               several sampling points in one entry. Cost for both is estimated automatically from the current
               unit price (Chapter 13).
             </P>
+            <P>
+              The dosing form itself is built for speed at the end of a shift. Each chemical is an
+              icon-coded card &mdash; a flask for each dosed chemical, droplets for the water-quality
+              header &mdash; with its own quantity input and unit; a card lights up in its accent color the
+              moment it has a value. Only the chemicals your plant actually doses appear (the set is
+              controlled per plant in Configuration, Chapter 6), a sidebar keeps running totals &mdash;
+              mass dosed, liquid volume, estimated cost &mdash; and the free-chlorine residual test
+              expands into one row per sampling point: name the point, enter the ppm, and the average
+              is stored with the entry. Bulk-logged a paper sheet instead? The import dialog accepts a
+              CSV of dosing rows.
+            </P>
+            <ManualFigure
+              title="Chemical Dosing — daily log"
+              caption="Icon-coded chemical cards light up as quantities are entered; the sidebar totals mass, volume, and estimated cost live. Below the cards, the free-chlorine residual test expands to one row per sampling point, and the average residual is saved with the entry."
+            >
+              <div className="min-w-[560px] rounded-lg border bg-background p-3 font-sans text-xs">
+                <div className="grid grid-cols-[1fr_170px] gap-3">
+                  <div>
+                    <div className="mb-2 flex items-center gap-2 rounded-md border border-border bg-muted/20 px-2.5 py-1.5">
+                      <Droplets className="h-3.5 w-3.5 text-primary" aria-hidden="true" />
+                      <span className="font-medium text-foreground">North Injection Plant</span>
+                      <span className="ml-auto text-muted-foreground">2026-09-13 14:00</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      {[
+                        { n: 'Chlorine', u: 'kg', a: 'teal', v: '12.5' },
+                        { n: 'SMBS', u: 'kg', a: 'amber', v: '6.0' },
+                        { n: 'Anti-scalant', u: 'L', a: 'olive', v: '8.0' },
+                        { n: 'Soda Ash', u: 'kg', a: 'default', v: '' },
+                      ].map(c => (
+                        <div key={c.n} className={'rounded-lg border-2 p-2 ' + (c.v ? (c.a === 'teal' ? 'border-primary bg-primary-soft/40' : 'border-warn bg-warn-soft/40') : 'border-border bg-muted/10')}>
+                          <div className="mb-1 flex items-center gap-1.5">
+                            <FlaskConical className={'h-3.5 w-3.5 ' + (c.v ? 'text-primary' : 'text-muted-foreground')} aria-hidden="true" />
+                            <span className="font-semibold text-foreground">{c.n}</span>
+                          </div>
+                          <div className="flex items-center justify-between rounded-md border border-border bg-background px-2 py-1">
+                            <span className={c.v ? 'text-foreground' : 'text-muted-foreground/50'}>{c.v || 'Inputs'}</span>
+                            <span className="text-muted-foreground">{c.u}</span>
+                          </div>
+                          <div className={'mt-1.5 h-0.5 rounded-full ' + (c.v ? 'bg-primary/60' : 'bg-muted')}>
+                            <div className={'h-full rounded-full ' + (c.v ? 'w-1/2 bg-primary' : 'w-0')} />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="mt-2 rounded-md border border-border p-2">
+                      <div className="mb-1.5 font-semibold text-foreground">Free chlorine residual &mdash; 3 sampling points</div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="flex items-center justify-between rounded-md border border-border bg-background px-2 py-1"><span className="text-muted-foreground">After cartridge filter</span><span className="font-medium text-foreground">0.42 ppm</span></div>
+                        <div className="flex items-center justify-between rounded-md border border-border bg-background px-2 py-1"><span className="text-muted-foreground">Product tank</span><span className="font-medium text-foreground">0.38 ppm</span></div>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="rounded-md border border-border bg-muted/20 p-2.5">
+                      <div className="mb-1 font-semibold uppercase tracking-wide text-muted-foreground">Today&rsquo;s totals</div>
+                      <div className="flex justify-between"><span className="text-muted-foreground">Mass dosed</span><span className="font-medium text-foreground">18.5 kg</span></div>
+                      <div className="flex justify-between"><span className="text-muted-foreground">Liquid volume</span><span className="font-medium text-foreground">8.0 L</span></div>
+                    </div>
+                    <div className="rounded-md border-2 border-primary/50 bg-primary-soft/30 p-2.5">
+                      <div className="text-muted-foreground">Estimated cost</div>
+                      <div className="text-base font-semibold text-primary">&#8369;1,240.50</div>
+                      <div className="text-3xs text-muted-foreground">from current unit prices</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </ManualFigure>
             <H3>Chemical inventory</H3>
             <P>
               Current stock for each chemical is simply deliveries received minus quantity dosed, shown with a
