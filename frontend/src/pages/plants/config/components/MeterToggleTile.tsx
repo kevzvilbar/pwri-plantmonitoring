@@ -11,13 +11,18 @@ export function MeterToggleTile({
   checked: boolean;
   onToggle: (v: boolean) => void;
   canEdit: boolean;
-  accentColor?: 'teal' | 'amber' | 'blue' | 'purple';
+  accentColor?: 'teal' | 'amber' | 'blue' | 'purple' | 'neutral';
 }) {
   const colors = {
     teal:   { on: 'border-primary/60 bg-primary-soft/70', icon: 'bg-primary-soft', sw: 'data-[state=checked]:bg-primary' },
     amber:  { on: 'border-warn/60 bg-warn-soft/70', icon: 'bg-warn-soft', sw: 'data-[state=checked]:bg-warn' },
     blue:   { on: 'border-info/60 bg-info-soft/70', icon: 'bg-info-soft', sw: 'data-[state=checked]:bg-info' },
     purple: { on: 'border-kpi-ro/60 bg-kpi-ro/70', icon: 'bg-kpi-ro/15', sw: 'data-[state=checked]:bg-kpi-ro' },
+    // A plain "on" state that isn't a caution and isn't tied to one specific
+    // domain color — e.g. a reject meter, where amber/warn would read as an
+    // alarm even though the train is configured exactly as intended. Mirrors
+    // RejectIcon's "deliberately neutral, not warn" rationale in water-icons.tsx.
+    neutral: { on: 'border-foreground/25 bg-muted/70', icon: 'bg-muted', sw: 'data-[state=checked]:bg-foreground/70' },
   }[accentColor];
 
   return (
