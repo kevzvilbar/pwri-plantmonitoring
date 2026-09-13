@@ -23,7 +23,7 @@ export function RoTrainsMeterSection({ cfg, update, canEdit, plantId }: RoTrains
   return (
     <>
       {/* ══ SECTION: RO Trains ══ */}
-      <div>
+      <div className="space-y-3">
         {/* 3 presence toggles, 3 columns — an even row at every desktop width */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
           <MeterToggleTile
@@ -60,13 +60,13 @@ export function RoTrainsMeterSection({ cfg, update, canEdit, plantId }: RoTrains
           />
         </div>
         {!cfg.ro_has_reject_meter && (
-          <div className="mt-2 flex items-start gap-1.5 text-xs text-info bg-info-soft border border-info rounded-md px-2.5 py-1.5">
+          <div className="flex items-start gap-1.5 text-xs text-info bg-info-soft border border-info rounded-md px-2.5 py-1.5">
             <Info className="h-3.5 w-3.5 mt-0.5 shrink-0" />
             <span>No reject meter — reject flow auto-inferred as feed − permeate. Operators won't see a reject meter input.</span>
           </div>
         )}
         {!cfg.ro_has_feed_meter && cfg.ro_has_permeate_meter && cfg.ro_has_reject_meter && (
-          <div className="mt-2 flex items-start gap-1.5 text-xs text-info bg-info-soft border border-info rounded-md px-2.5 py-1.5">
+          <div className="flex items-start gap-1.5 text-xs text-info bg-info-soft border border-info rounded-md px-2.5 py-1.5">
             <Info className="h-3.5 w-3.5 mt-0.5 shrink-0" />
             <span>No feed meter — feed flow auto-inferred as permeate + reject.</span>
           </div>
@@ -78,8 +78,8 @@ export function RoTrainsMeterSection({ cfg, update, canEdit, plantId }: RoTrains
       </div>
 
       {/* ── Per-train utility meters ── */}
-      <div>
-        <div className="flex items-center gap-2 mb-3">
+      <div className="space-y-3">
+        <div className="flex items-center gap-2">
           <Wrench className="h-3.5 w-3.5 text-muted-foreground" />
           <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Per-train utility meters</span>
         </div>
@@ -106,7 +106,7 @@ export function RoTrainsMeterSection({ cfg, update, canEdit, plantId }: RoTrains
 
         {/* Shared power meter group notice — shown when per-train kWh is enabled */}
         {cfg.ro_has_per_train_electricity && (
-          <div className="mt-2 rounded-md border border-warn bg-warn-soft/60 px-3 py-2 text-xs text-warn space-y-1">
+          <div className="rounded-md border border-warn bg-warn-soft/60 px-3 py-2 text-xs text-warn space-y-1">
             <p className="font-semibold flex items-center gap-1.5">
               <Zap className="h-3 w-3 shrink-0" /> Shared Power Meter Groups
             </p>

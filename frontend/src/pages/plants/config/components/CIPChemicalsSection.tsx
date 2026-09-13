@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { X, SprayCan } from 'lucide-react';
@@ -58,83 +57,74 @@ export function CIPChemicalsSection({
         in the remarks field.{!canEdit && ' (view only)'}
       </p>
 
-      <div className="space-y-1.5">
+      <div className="flex flex-wrap items-center gap-2">
         {chemicals.map(chem => {
           const isBuiltin = BUILTIN_CIP_CHEMICALS.includes(chem.name);
           const isConfirming = confirmRemove === chem.name;
           return (
-            <div
+            <span
               key={chem.name}
               className={[
-                'flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors',
+                'inline-flex items-center gap-1.5 text-xs pl-1 pr-2.5 py-1 rounded-full border font-medium shadow-2xs transition-colors',
                 isBuiltin
-                  ? 'border-primary/60 bg-primary-soft/50'
-                  : 'border-border bg-muted/20',
+                  ? 'bg-primary-soft text-primary border-primary/40'
+                  : 'bg-muted/40 text-foreground border-border',
               ].join(' ')}
             >
               <span className={[
-                'inline-flex items-center justify-center w-6 h-6 rounded-full text-3xs font-bold shrink-0',
-                isBuiltin
-                  ? 'bg-primary-soft text-primary'
-                  : 'bg-muted text-muted-foreground',
+                'inline-flex items-center justify-center w-5 h-5 rounded-full text-3xs font-bold shrink-0',
+                isBuiltin ? 'bg-primary/15 text-primary' : 'bg-muted text-muted-foreground',
               ].join(' ')}>
                 {isBuiltin ? '★' : '✦'}
               </span>
-
-              <div className="flex-1 min-w-0">
-                <span className="text-sm font-medium">{chem.name}</span>
-                <span className="ml-1.5 text-xs text-muted-foreground">({chem.unit})</span>
-                {isBuiltin && (
-                  <span className="ml-2 text-3xs font-semibold uppercase tracking-wide text-primary">built-in</span>
-                )}
-              </div>
+              <span>{chem.name}</span>
+              <span className="opacity-60">({chem.unit})</span>
 
               {canEdit && (
                 isConfirming ? (
-                  <div className="flex items-center gap-1 shrink-0">
-                    <span className="text-2xs text-muted-foreground">Remove?</span>
+                  <span className="flex items-center gap-1 -mr-1">
                     <button
                       type="button"
                       onClick={() => removeChemical(chem.name)}
-                      className="px-2 py-0.5 rounded bg-destructive/10 text-destructive hover:bg-destructive/20 text-2xs font-semibold"
+                      className="px-1.5 py-0.5 rounded-full bg-destructive/10 text-destructive hover:bg-destructive/20 text-2xs font-semibold"
                     >
-                      Yes
+                      Remove
                     </button>
                     <button
                       type="button"
                       onClick={() => setConfirmRemove(null)}
-                      className="px-2 py-0.5 rounded hover:bg-muted text-muted-foreground text-2xs"
+                      className="px-1.5 py-0.5 rounded-full hover:bg-muted text-muted-foreground text-2xs"
                     >
-                      No
+                      Cancel
                     </button>
-                  </div>
+                  </span>
                 ) : (
                   <button
                     type="button"
                     onClick={() => setConfirmRemove(chem.name)}
-                    className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors shrink-0"
+                    className="h-3.5 w-3.5 rounded-full hover:bg-destructive/10 flex items-center justify-center text-muted-foreground/70 hover:text-destructive transition-colors -mr-1"
                     title={`Remove ${chem.name} from CIP`}
                     aria-label={`Remove ${chem.name} from CIP`}
                   >
-                    <X className="h-3.5 w-3.5" />
+                    <X className="h-2.5 w-2.5" />
                   </button>
                 )
               )}
-            </div>
+            </span>
           );
         })}
 
         {canEdit && (
-          <div className="flex items-center gap-2 pt-1">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-dashed border-border/80 bg-muted/30 pl-1 pr-1 py-1">
             <Input
               value={newName}
               onChange={e => setNewName(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && addChemical()}
-              placeholder="New chemical name…"
-              className="h-8 text-xs flex-1"
+              placeholder="New chemical…"
+              className="h-6 w-28 text-xs border-0 bg-transparent shadow-none focus-visible:ring-0 px-1.5"
             />
             <Select value={newUnit} onValueChange={setNewUnit}>
-              <SelectTrigger className="h-8 w-20 text-xs">
+              <SelectTrigger className="h-6 w-16 text-2xs border-0 bg-transparent shadow-none focus:ring-0 px-1.5">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -147,15 +137,15 @@ export function CIPChemicalsSection({
               type="button"
               onClick={addChemical}
               disabled={!newName.trim()}
-              className="h-8 px-3 rounded-md text-xs font-medium bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shrink-0"
+              className="h-6 px-2.5 rounded-full text-2xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shrink-0"
             >
               + Add
             </button>
-          </div>
+          </span>
         )}
 
         {chemicals.length === 0 && (
-          <p className="text-xs text-muted-foreground text-center py-2">
+          <p className="text-xs text-muted-foreground py-2">
             No CIP chemicals configured — add one above.
           </p>
         )}

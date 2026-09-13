@@ -24,7 +24,7 @@ export function ChemicalsSection({
         <strong className="font-medium">RO Trains → Chemical Dosing</strong>.
         {!canEdit && ' (view only)'}
       </p>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
         {PLANT_CHEMICALS.map(chem => {
           const isEnabled = cfg.enabled_chemicals.length === 0 || cfg.enabled_chemicals.includes(chem.name);
           return (

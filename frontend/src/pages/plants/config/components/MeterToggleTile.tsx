@@ -17,7 +17,11 @@ export function MeterToggleTile({
     teal:   { on: 'border-primary/60 bg-primary-soft/70', icon: 'bg-primary-soft', sw: 'data-[state=checked]:bg-primary' },
     amber:  { on: 'border-warn/60 bg-warn-soft/70', icon: 'bg-warn-soft', sw: 'data-[state=checked]:bg-warn' },
     blue:   { on: 'border-info/60 bg-info-soft/70', icon: 'bg-info-soft', sw: 'data-[state=checked]:bg-info' },
-    purple: { on: 'border-kpi-ro/60 bg-kpi-ro/70', icon: 'bg-kpi-ro/15', sw: 'data-[state=checked]:bg-kpi-ro' },
+    // kpi-ro and elevated share the same violet hue — elevated/elevated-soft
+    // is the token pair actually meant for a soft wash (kpi-ro has no -soft
+    // counterpart), so this follows the same shape as teal/amber/blue instead
+    // of applying opacity to a fully-saturated fill.
+    purple: { on: 'border-elevated/60 bg-elevated-soft/70', icon: 'bg-elevated-soft', sw: 'data-[state=checked]:bg-elevated' },
     // A plain "on" state that isn't a caution and isn't tied to one specific
     // domain color — e.g. a reject meter, where amber/warn would read as an
     // alarm even though the train is configured exactly as intended. Mirrors

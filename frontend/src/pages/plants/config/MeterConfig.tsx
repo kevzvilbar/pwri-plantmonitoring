@@ -7,6 +7,7 @@ import type { Database } from '@/integrations/supabase/types';
 import { useAppStore } from '@/store/appStore';
 import { usePlants } from '@/hooks/usePlants';
 import { useAuth } from '@/hooks/useAuth';
+import { cn } from '@/lib/utils';
 import { Card, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -65,6 +66,19 @@ const ALL_CONFIG_SECTIONS = [
 
 const CONFIG_SECTION_BADGE =
   'shrink-0 text-2xs font-medium bg-muted text-muted-foreground px-1.5 py-0.5 rounded whitespace-nowrap';
+
+// Small tinted icon chip for section-identity coding — reuses the plant's
+// existing kpi-wells/kpi-locator/kpi-ro/kpi-meter/kpi-solar/kpi-grid/kpi-chem
+// tokens (already defined for exactly this purpose, previously unused here).
+// className must be a literal Tailwind string at each call site (e.g.
+// "bg-kpi-ro/15 text-kpi-ro") — Tailwind can't resolve interpolated names.
+function SectionIcon({ className, children }: { className: string; children: ReactNode }) {
+  return (
+    <span className={cn('flex h-6 w-6 shrink-0 items-center justify-center rounded-md', className)}>
+      {children}
+    </span>
+  );
+}
 
 function ConfigSectionTitle({ icon, hint, children }: {
   icon: ReactNode;
@@ -213,19 +227,19 @@ export function PlantMeterConfigCard({ plant }: { plant: any }) {
           <Accordion type="multiple" defaultValue={ALL_CONFIG_SECTIONS}>
             <AccordionItem value="ro-trains" className="border-border/50">
               <AccordionTrigger className="py-3 hover:no-underline">
-                <ConfigSectionTitle icon={<ROTrainIcon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />}>
+                <ConfigSectionTitle icon={<SectionIcon className="bg-kpi-ro/15 text-kpi-ro"><ROTrainIcon className="h-3.5 w-3.5" /></SectionIcon>}>
                   RO Trains
                 </ConfigSectionTitle>
                 <span className={CONFIG_SECTION_BADGE}>{roFlags}</span>
               </AccordionTrigger>
-              <AccordionContent>
+              <AccordionContent className="space-y-5">
                 <RoTrainsMeterSection cfg={cfg} update={update} canEdit={canEdit} plantId={plant.id} />
               </AccordionContent>
             </AccordionItem>
 
             <AccordionItem value="product-meters" className="border-border/50">
               <AccordionTrigger className="py-3 hover:no-underline">
-                <ConfigSectionTitle icon={<Gauge className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />}>
+                <ConfigSectionTitle icon={<SectionIcon className="bg-kpi-meter/15 text-kpi-meter"><Gauge className="h-3.5 w-3.5" /></SectionIcon>}>
                   Product Meters
                 </ConfigSectionTitle>
                 <span className={CONFIG_SECTION_BADGE}>
@@ -236,7 +250,7 @@ export function PlantMeterConfigCard({ plant }: { plant: any }) {
                       : 'Product meter'}
                 </span>
               </AccordionTrigger>
-              <AccordionContent>
+              <AccordionContent className="space-y-5">
                 <ProductMeterSection cfg={cfg} update={update} canEdit={canEdit} />
               </AccordionContent>
             </AccordionItem>
@@ -244,13 +258,13 @@ export function PlantMeterConfigCard({ plant }: { plant: any }) {
             <AccordionItem value="wells" className="border-border/50">
               <AccordionTrigger className="py-3 hover:no-underline">
                 <ConfigSectionTitle
-                  icon={<Droplet className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />}
+                  icon={<SectionIcon className="bg-kpi-wells/15 text-kpi-wells"><Droplet className="h-3.5 w-3.5" /></SectionIcon>}
                   hint="(each well always has its own water meter)"
                 >
                   Wells
                 </ConfigSectionTitle>
               </AccordionTrigger>
-              <AccordionContent>
+              <AccordionContent className="space-y-5">
                 <WellsMeterSection cfg={cfg} update={update} canEdit={canEdit} wells={wells} />
               </AccordionContent>
             </AccordionItem>
@@ -258,40 +272,40 @@ export function PlantMeterConfigCard({ plant }: { plant: any }) {
             <AccordionItem value="locators" className="border-border/50">
               <AccordionTrigger className="py-3 hover:no-underline">
                 <ConfigSectionTitle
-                  icon={<MapPin className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />}
+                  icon={<SectionIcon className="bg-kpi-locator/15 text-kpi-locator"><MapPin className="h-3.5 w-3.5" /></SectionIcon>}
                   hint="(each locator always has its own water meter)"
                 >
                   Locators
                 </ConfigSectionTitle>
               </AccordionTrigger>
-              <AccordionContent>
+              <AccordionContent className="space-y-5">
                 <LocatorsMeterSection cfg={cfg} update={update} canEdit={canEdit} locators={locators} configProductMeters={configProductMeters} />
               </AccordionContent>
             </AccordionItem>
 
             <AccordionItem value="power" className="border-border/50">
               <AccordionTrigger className="py-3 hover:no-underline">
-                <ConfigSectionTitle icon={<Zap className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />}>
+                <ConfigSectionTitle icon={<SectionIcon className="bg-kpi-solar/15 text-kpi-solar"><Zap className="h-3.5 w-3.5" /></SectionIcon>}>
                   Power
                 </ConfigSectionTitle>
                 <span className={CONFIG_SECTION_BADGE}>
                   {cfg.has_solar && cfg.has_grid ? 'Solar + Grid' : cfg.has_solar ? 'Solar' : 'Grid'}
                 </span>
               </AccordionTrigger>
-              <AccordionContent>
+              <AccordionContent className="space-y-5">
                 <PowerMeterSection cfg={cfg} update={update} canEdit={canEdit} />
               </AccordionContent>
             </AccordionItem>
 
             <AccordionItem value="component-types" className="border-border/50">
               <AccordionTrigger className="py-3 hover:no-underline">
-                <ConfigSectionTitle icon={<Wrench className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />}>
+                <ConfigSectionTitle icon={<SectionIcon className="bg-kpi-grid/15 text-kpi-grid"><Wrench className="h-3.5 w-3.5" /></SectionIcon>}>
                   Component Types & Backwash
                 </ConfigSectionTitle>
               </AccordionTrigger>
-              <AccordionContent>
+              <AccordionContent className="space-y-5">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  <PlantComponentTypeCard plant={plant} embedded />
+                  <PlantComponentTypeCard plant={plant} />
                   <BackwashModeCard plant={plant} />
                 </div>
               </AccordionContent>
@@ -299,7 +313,7 @@ export function PlantMeterConfigCard({ plant }: { plant: any }) {
 
             <AccordionItem value="chemicals" className="border-border/50">
               <AccordionTrigger className="py-3 hover:no-underline">
-                <ConfigSectionTitle icon={<FlaskConical className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />}>
+                <ConfigSectionTitle icon={<SectionIcon className="bg-kpi-chem/15 text-kpi-chem"><FlaskConical className="h-3.5 w-3.5" /></SectionIcon>}>
                   Chemicals
                 </ConfigSectionTitle>
               </AccordionTrigger>
