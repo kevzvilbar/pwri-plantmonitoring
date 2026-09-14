@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { deltaCache } from '@/lib/deltaCache';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
@@ -57,6 +57,20 @@ export default function Plants() {
     ? visiblePlants.filter(p => p.id === selectedPlantId)
     : visiblePlants;
   const navigate = useNavigate();
+
+  // ── Follow the universal plant picker (TopBar) ────────────────────────────
+  // The facility cockpit (/plants/:id) is driven entirely by the route param,
+  // so switching plants in the top bar previously had no effect while a
+  // specific facility was open. Navigate to the newly selected facility, or
+  // back to the list if the picker is cleared to "All plants".
+  const lastSyncedPlantRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (selectedPlantId === lastSyncedPlantRef.current) return;
+    lastSyncedPlantRef.current = selectedPlantId;
+    if (!id) return;
+    if (selectedPlantId && selectedPlantId !== id) navigate(`/plants/${selectedPlantId}`);
+    else if (!selectedPlantId) navigate('/plants');
+  }, [selectedPlantId, id, navigate]);
 
   const { data: summaryCounts } = usePlantSummary();
 
