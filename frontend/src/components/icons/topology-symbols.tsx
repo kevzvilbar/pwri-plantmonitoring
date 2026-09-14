@@ -362,4 +362,111 @@ export function LocatorSymbol({ size, className, accent, status }: SymbolProps) 
       <StatusDot status={status} cx={37} cy={8} r={3.5} />
     </svg>
   );
+// ─── Per-train pre-treatment chain symbols ───────────────────────────────────
+// Each primary RO train carries its own set: Raw Tank → Raw Water Pump →
+// AFM/MMF → Bag/Cartridge Filter → High Pressure Pump → Feed Meter → Train.
+
+export function RawTankSymbol({ size, className, accent, status }: SymbolProps) {
+  return (
+    <svg {...baseProps({ size, className })} viewBox="0 0 48 48">
+      {/* Vertical storage tank with domed top and level marks */}
+      <rect x="14" y="10" width="20" height="30" rx="4" opacity={0.12} />
+      <rect x="14" y="10" width="20" height="30" rx="4" />
+      <line x1="18" y1="18" x2="30" y2="18" opacity={0.25} />
+      <line x1="18" y1="24" x2="30" y2="24" opacity={0.45} />
+      <line x1="18" y1="30" x2="30" y2="30" opacity={0.25} />
+      <rect x="21" y="4" width="6" height="6" rx="1" opacity={0.4} />
+      {/* Inlet (top left, arrow in) + outlet (bottom right, arrow out) */}
+      <line x1="5" y1="14" x2="14" y2="14" />
+      <polyline points="10,11 14,14 10,17" />
+      <line x1="34" y1="36" x2="43" y2="36" />
+      <polyline points="40,33 43,36 40,39" />
+      <StatusDot status={status} cx={38} cy={8} r={3.5} />
+    </svg>
+  );
+}
+
+export function RawWaterPumpSymbol({ size, className, accent, status }: SymbolProps) {
+  return (
+    <svg {...baseProps({ size, className })} viewBox="0 0 48 48">
+      {/* Centrifugal pump volute with impeller */}
+      <circle cx="24" cy="27" r="12" opacity={0.12} />
+      <circle cx="24" cy="27" r="12" />
+      <path d="M24 27 L24 19 M24 27 L31 31 M24 27 L17 31" />
+      <circle cx="24" cy="27" r="2" fill="currentColor" stroke="none" />
+      {/* Motor block behind the volute */}
+      <rect x="6" y="23" width="6" height="8" rx="1.5" opacity={0.5} />
+      {/* Suction in (left) + discharge out (right) */}
+      <line x1="1" y1="27" x2="6" y2="27" opacity={0.6} />
+      <line x1="36" y1="27" x2="43" y2="27" />
+      <polyline points="40,24 43,27 40,30" />
+      <StatusDot status={status} cx={38} cy={8} r={3.5} />
+    </svg>
+  );
+}
+
+export function MediaFilterSymbol({ size, className, accent, status }: SymbolProps) {
+  return (
+    <svg {...baseProps({ size, className })} viewBox="0 0 48 48">
+      {/* Pressurized vertical media vessel (AFM / MMF / sand) */}
+      <rect x="16" y="6" width="16" height="34" rx="5" opacity={0.12} />
+      <rect x="16" y="6" width="16" height="34" rx="5" />
+      {/* Media bed layers + grains */}
+      <line x1="16" y1="22" x2="32" y2="22" opacity={0.5} />
+      <line x1="16" y1="30" x2="32" y2="30" opacity={0.5} />
+      <circle cx="24" cy="18" r="0.8" fill="currentColor" stroke="none" opacity={0.5} />
+      <circle cx="20" cy="26" r="0.8" fill="currentColor" stroke="none" opacity={0.5} />
+      <circle cx="28" cy="26" r="0.8" fill="currentColor" stroke="none" opacity={0.5} />
+      {/* Underdrain spokes */}
+      <line x1="19" y1="40" x2="19" y2="36" opacity={0.4} />
+      <line x1="24" y1="41" x2="24" y2="36" opacity={0.4} />
+      <line x1="29" y1="40" x2="29" y2="36" opacity={0.4} />
+      <line x1="6" y1="14" x2="16" y2="14" />
+      <polyline points="12,11 16,14 12,17" />
+      <line x1="32" y1="36" x2="42" y2="36" />
+      <polyline points="39,33 42,36 39,39" />
+      <StatusDot status={status} cx={38} cy={7} r={3.5} />
+    </svg>
+  );
+}
+
+export function CartridgeFilterSymbol({ size, className, accent, status }: SymbolProps) {
+  return (
+    <svg {...baseProps({ size, className })} viewBox="0 0 48 48">
+      {/* Bag / cartridge housing with core element */}
+      <rect x="17" y="8" width="14" height="30" rx="3" opacity={0.12} />
+      <rect x="17" y="8" width="14" height="30" rx="3" />
+      <rect x="20" y="12" width="8" height="3" rx="1" opacity={0.5} />
+      <line x1="24" y1="15" x2="24" y2="30" opacity={0.6} />
+      <path d="M20 20 H28 M20 26 H28" opacity={0.35} />
+      <path d="M21 31 L21 24 M24 31 L24 22 M27 31 L27 24" opacity={0.3} />
+      <line x1="7" y1="14" x2="17" y2="14" />
+      <polyline points="13,11 17,14 13,17" />
+      <line x1="31" y1="34" x2="41" y2="34" />
+      <polyline points="38,31 41,34 38,37" />
+      <StatusDot status={status} cx={37} cy={6} r={3.5} />
+    </svg>
+  );
+}
+
+export function HPPumpSymbol({ size, className, accent, status }: SymbolProps) {
+  return (
+    <svg {...baseProps({ size, className })} viewBox="0 0 48 48">
+      {/* Multi-stage high-pressure centrifugal pump */}
+      <circle cx="20" cy="27" r="11" opacity={0.12} />
+      <circle cx="20" cy="27" r="11" />
+      <circle cx="20" cy="27" r="6" opacity={0.4} />
+      <path d="M20 27 L20 21 M20 27 L25.2 30 M20 27 L14.8 30" />
+      <circle cx="20" cy="27" r="1.5" fill="currentColor" stroke="none" />
+      {/* Stage pressure ramps */}
+      <path d="M31 23 H37 M31 27 H40 M31 31 H37" opacity={0.5} />
+      {/* Suction in (top) + high-pressure discharge (right, thicker) */}
+      <line x1="20" y1="6" x2="20" y2="16" />
+      <polyline points="17,13 20,16 23,13" />
+      <line x1="31" y1="27" x2="42" y2="27" strokeWidth={2} />
+      <polyline points="39,24 42,27 39,30" />
+      <StatusDot status={status} cx={36} cy={9} r={3.5} />
+    </svg>
+  );
+}
 }

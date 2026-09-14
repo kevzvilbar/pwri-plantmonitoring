@@ -83,6 +83,12 @@ export function NodeInspector({
       case 'reject':
       case 'bulk':
         return { label: 'Open in Operations (Meters)', path: `/operations${plantId ? `?plant=${plantId}` : ''}` };
+      case 'rawTank':
+      case 'rawWaterPump':
+      case 'mediaFilter':
+      case 'bagCartridge':
+      case 'hpPump':
+        return { label: 'Open in Operations (RO Trains)', path: `/operations${plantId ? `?plant=${plantId}` : ''}` };
       case 'solarSource':
       case 'gridSource':
       case 'solarMeter':

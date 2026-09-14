@@ -122,6 +122,31 @@
     --topo-rawMeter-text:      244 47% 20%;
     --topo-rawMeter-lane:      226 100% 97%;
 
+    --topo-rawTank-bg:         217 80% 92%;
+    --topo-rawTank-border:     217 62% 42%;
+    --topo-rawTank-text:       217 47% 22%;
+    --topo-rawTank-lane:       217 55% 97%;
+
+    --topo-rawWaterPump-bg:    191 85% 91%;
+    --topo-rawWaterPump-border: 191 80% 38%;
+    --topo-rawWaterPump-text:  191 60% 21%;
+    --topo-rawWaterPump-lane:  191 70% 96%;
+
+    --topo-mediaFilter-bg:     152 75% 92%;
+    --topo-mediaFilter-border: 152 70% 38%;
+    --topo-mediaFilter-text:   152 55% 21%;
+    --topo-mediaFilter-lane:   152 60% 96%;
+
+    --topo-bagCartridge-bg:    134 70% 92%;
+    --topo-bagCartridge-border: 134 65% 40%;
+    --topo-bagCartridge-text:  134 50% 21%;
+    --topo-bagCartridge-lane:  134 55% 96%;
+
+    --topo-hpPump-bg:          174 75% 91%;
+    --topo-hpPump-border:      174 75% 36%;
+    --topo-hpPump-text:        174 55% 20%;
+    --topo-hpPump-lane:        174 60% 96%;
+
     --topo-pretreat-bg:        141 84% 93%;
     --topo-pretreat-border:    142 76% 36%;
     --topo-pretreat-text:      144 61% 20%;
@@ -429,6 +454,31 @@
     --topo-rawMeter-border:    245 48% 58%;
     --topo-rawMeter-text:      245 28% 88%;
     --topo-rawMeter-lane:      245 38% 12%;
+
+    --topo-rawTank-bg:         217 40% 18%;
+    --topo-rawTank-border:     217 55% 55%;
+    --topo-rawTank-text:       217 30% 88%;
+    --topo-rawTank-lane:       217 35% 12%;
+
+    --topo-rawWaterPump-bg:    191 42% 18%;
+    --topo-rawWaterPump-border: 191 65% 50%;
+    --topo-rawWaterPump-text:  191 32% 88%;
+    --topo-rawWaterPump-lane:  191 38% 12%;
+
+    --topo-mediaFilter-bg:     152 40% 18%;
+    --topo-mediaFilter-border: 152 60% 48%;
+    --topo-mediaFilter-text:   152 32% 88%;
+    --topo-mediaFilter-lane:   152 35% 12%;
+
+    --topo-bagCartridge-bg:    134 38% 18%;
+    --topo-bagCartridge-border: 134 55% 50%;
+    --topo-bagCartridge-text:  134 30% 88%;
+    --topo-bagCartridge-lane:  134 33% 12%;
+
+    --topo-hpPump-bg:          174 42% 18%;
+    --topo-hpPump-border:      174 62% 46%;
+    --topo-hpPump-text:        174 32% 88%;
+    --topo-hpPump-lane:        174 38% 12%;
 
     --topo-pretreat-bg:        142 45% 18%;
     --topo-pretreat-border:    142 66% 50%;

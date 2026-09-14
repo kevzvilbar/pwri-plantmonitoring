@@ -4,9 +4,12 @@
  * Visual wiring diagram for each plant showing:
  *
  *  WATER FLOW (left → right)
- *    Well → Raw Meter → Pre-treatment → Feed Meter → RO Train
+ *    Well → Raw Meter → Raw Tank → Raw Water Pump → AFM/MMF → Bag/CF Filter
+ *        → High Pressure Pump → Feed Meter → RO Train
  *        → Permeate Meter → Bulk/Mother Meter → Locator
  *        → Reject Meter
+ *    (each primary RO train carries its own pre-treatment set; secondary
+ *    2nd-pass units are fed directly by an upstream train's permeate)
  *
  *  POWER LAYER (below water flow)
  *    Solar Array → Solar Meter(s) ─┐

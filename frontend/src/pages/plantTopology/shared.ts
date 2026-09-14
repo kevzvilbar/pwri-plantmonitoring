@@ -32,12 +32,18 @@ import {
   GridSymbol,
   PowerMeterSymbol,
   LocatorSymbol,
+  RawTankSymbol,
+  RawWaterPumpSymbol,
+  MediaFilterSymbol,
+  CartridgeFilterSymbol,
+  HPPumpSymbol,
 } from '@/components/icons/topology-symbols';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
 export type NodeType =
-  | 'well' | 'rawMeter' | 'pretreat' | 'feedMeter'
+  | 'well' | 'rawMeter' | 'rawTank' | 'rawWaterPump' | 'mediaFilter'
+  | 'bagCartridge' | 'hpPump' | 'pretreat' | 'feedMeter'
   | 'roTrain' | 'permeate' | 'reject' | 'bulk' | 'locator'
   | 'solarSource' | 'gridSource' | 'solarMeter' | 'gridMeter'
   | 'customNode';
@@ -60,14 +66,18 @@ export interface BaseColSlot {
 }
 
 export const BASE_COL_SLOTS: BaseColSlot[] = [
-  { key: 'well',      label: 'WELLS',              type: 'well' },
-  { key: 'rawMeter',  label: 'RAW METERS',         type: 'rawMeter' },
-  { key: 'pretreat',  label: 'PRE-TREAT',          type: 'pretreat' },
-  { key: 'feedMeter', label: 'FEED',               type: 'feedMeter' },
-  { key: 'roTrain',   label: 'RO TRAINS',          type: 'roTrain' },
-  { key: 'permeate',  label: 'PERMEATE / REJECT',  type: 'permeate' },
-  { key: 'bulk',      label: 'BULK METERS',        type: 'bulk' },
-  { key: 'locator',   label: 'LOCATORS',           type: 'locator' },
+  { key: 'well',         label: 'WELLS',        type: 'well' },
+  { key: 'rawMeter',     label: 'RAW METERS',   type: 'rawMeter' },
+  { key: 'rawTank',      label: 'RAW TANK',     type: 'rawTank' },
+  { key: 'rawWaterPump', label: 'RAW PUMP',     type: 'rawWaterPump' },
+  { key: 'mediaFilter',  label: 'AFM / MMF',    type: 'mediaFilter' },
+  { key: 'bagCartridge', label: 'BAG / CF',     type: 'bagCartridge' },
+  { key: 'hpPump',       label: 'HPP',          type: 'hpPump' },
+  { key: 'feedMeter',    label: 'FEED',         type: 'feedMeter' },
+  { key: 'roTrain',      label: 'RO TRAINS',    type: 'roTrain' },
+  { key: 'permeate',     label: 'PERMEATE / REJECT', type: 'permeate' },
+  { key: 'bulk',         label: 'BULK METERS',  type: 'bulk' },
+  { key: 'locator',      label: 'LOCATORS',     type: 'locator' },
 ];
 
 export interface ColSlot {
@@ -211,6 +221,11 @@ export const CANVAS_REF = { current: null as HTMLDivElement | null };
 export const NODE_LABELS: Record<NodeType, string> = {
   well:        'WELL',
   rawMeter:    'RAW METER',
+  rawTank:     'RAW TANK',
+  rawWaterPump:'RAW PUMP',
+  mediaFilter: 'AFM/MMF',
+  bagCartridge:'BAG/CF',
+  hpPump:      'HPP',
   pretreat:    'PRE-TREAT',
   feedMeter:   'FEED METER',
   roTrain:     'RO TRAIN',
@@ -232,6 +247,11 @@ export const NODE_LABELS: Record<NodeType, string> = {
 export const COLORS: Record<NodeType, { bg: string; border: string; text: string; accent: string; lane: string }> = {
   well:        { bg: 'hsl(var(--topo-well-bg))',        border: 'hsl(var(--topo-well-border))',        text: 'hsl(var(--topo-well-text))',        accent: 'hsl(var(--topo-well-border))',        lane: 'hsl(var(--topo-well-lane))' },
   rawMeter:    { bg: 'hsl(var(--topo-rawMeter-bg))',    border: 'hsl(var(--topo-rawMeter-border))',    text: 'hsl(var(--topo-rawMeter-text))',    accent: 'hsl(var(--topo-rawMeter-border))',    lane: 'hsl(var(--topo-rawMeter-lane))' },
+  rawTank:     { bg: 'hsl(var(--topo-rawTank-bg))',     border: 'hsl(var(--topo-rawTank-border))',     text: 'hsl(var(--topo-rawTank-text))',     accent: 'hsl(var(--topo-rawTank-border))',     lane: 'hsl(var(--topo-rawTank-lane))' },
+  rawWaterPump:{ bg: 'hsl(var(--topo-rawWaterPump-bg))',border: 'hsl(var(--topo-rawWaterPump-border))',text: 'hsl(var(--topo-rawWaterPump-text))',accent: 'hsl(var(--topo-rawWaterPump-border))',lane: 'hsl(var(--topo-rawWaterPump-lane))' },
+  mediaFilter: { bg: 'hsl(var(--topo-mediaFilter-bg))', border: 'hsl(var(--topo-mediaFilter-border))', text: 'hsl(var(--topo-mediaFilter-text))', accent: 'hsl(var(--topo-mediaFilter-border))', lane: 'hsl(var(--topo-mediaFilter-lane))' },
+  bagCartridge:{ bg: 'hsl(var(--topo-bagCartridge-bg))',border: 'hsl(var(--topo-bagCartridge-border))',text: 'hsl(var(--topo-bagCartridge-text))',accent: 'hsl(var(--topo-bagCartridge-border))',lane: 'hsl(var(--topo-bagCartridge-lane))' },
+  hpPump:      { bg: 'hsl(var(--topo-hpPump-bg))',      border: 'hsl(var(--topo-hpPump-border))',      text: 'hsl(var(--topo-hpPump-text))',      accent: 'hsl(var(--topo-hpPump-border))',      lane: 'hsl(var(--topo-hpPump-lane))' },
   pretreat:    { bg: 'hsl(var(--topo-pretreat-bg))',    border: 'hsl(var(--topo-pretreat-border))',    text: 'hsl(var(--topo-pretreat-text))',    accent: 'hsl(var(--topo-pretreat-border))',    lane: 'hsl(var(--topo-pretreat-lane))' },
   feedMeter:   { bg: 'hsl(var(--topo-feedMeter-bg))',   border: 'hsl(var(--topo-feedMeter-border))',   text: 'hsl(var(--topo-feedMeter-text))',   accent: 'hsl(var(--topo-feedMeter-border))',   lane: 'hsl(var(--topo-feedMeter-lane))' },
   roTrain:     { bg: 'hsl(var(--topo-roTrain-bg))',     border: 'hsl(var(--topo-roTrain-border))',     text: 'hsl(var(--topo-roTrain-text))',     accent: 'hsl(var(--topo-roTrain-border))',     lane: 'hsl(var(--topo-roTrain-lane))' },
@@ -261,6 +281,8 @@ export const EDITABLE_PAIRS: [NodeType, NodeType][] = [
   ['bulk',       'locator'],
   ['well',       'roTrain'],
   ['roTrain',    'well'],
+  // Which wells feed which train's pre-treatment set (raw meter → raw tank).
+  ['rawMeter',   'rawTank'],
   // A primary train's permeate can feed a secondary (2nd-pass) RO train —
   // e.g. Train 1's permeate -> Potable-RO. See unit_type/feed_source_train_id
   // on ro_trains (20260813_secondary_ro_train_wiring.sql).
@@ -357,6 +379,16 @@ export function getNodeIcon(type: NodeType, variant?: string): React.ComponentTy
       return WellSymbol;
     case 'rawMeter':
       return RawMeterSymbol;
+    case 'rawTank':
+      return RawTankSymbol;
+    case 'rawWaterPump':
+      return RawWaterPumpSymbol;
+    case 'mediaFilter':
+      return MediaFilterSymbol;
+    case 'bagCartridge':
+      return CartridgeFilterSymbol;
+    case 'hpPump':
+      return HPPumpSymbol;
     case 'pretreat':
       return PretreatSymbol;
     case 'feedMeter':
@@ -393,6 +425,16 @@ export function getSymbolDimensions(type: NodeType): { w: number; h: number } {
       return { w: 48, h: 48 };
     case 'rawMeter':
       return { w: 48, h: 48 };
+    case 'rawTank':
+      return { w: 48, h: 56 };
+    case 'rawWaterPump':
+      return { w: 48, h: 48 };
+    case 'mediaFilter':
+      return { w: 48, h: 56 };
+    case 'bagCartridge':
+      return { w: 48, h: 56 };
+    case 'hpPump':
+      return { w: 56, h: 44 };
     case 'pretreat':
       return { w: 48, h: 56 };
     case 'feedMeter':
@@ -446,9 +488,10 @@ export function getStreamType(link: TopoLink, nodes: TopoNode[]): StreamType {
     return 'permeate';
   }
 
-  // Feed flows (well → rawMeter → pretreat → feedMeter → roTrain)
-  if (['well', 'rawMeter', 'pretreat', 'feedMeter'].includes(fromNode.type) ||
-      ['rawMeter', 'pretreat', 'feedMeter', 'roTrain'].includes(toNode.type)) {
+  // Feed flows (well → rawMeter → rawTank → rawWaterPump → mediaFilter →
+  // bagCartridge → hpPump → feedMeter → roTrain)
+  if (['well', 'rawMeter', 'rawTank', 'rawWaterPump', 'mediaFilter', 'bagCartridge', 'hpPump', 'pretreat', 'feedMeter'].includes(fromNode.type) ||
+      ['rawMeter', 'rawTank', 'rawWaterPump', 'mediaFilter', 'bagCartridge', 'hpPump', 'pretreat', 'feedMeter', 'roTrain'].includes(toNode.type)) {
     return 'feed';
   }
 
@@ -610,17 +653,64 @@ export function buildTopology(
     fixedLinks.push({ from: w.id, to: rmId });
   });
 
-  // ── Pre-treatment (one shared node) ──
-  const ptId = `pretreat-${plantId}`;
-  nodes.push({ id: ptId, type: 'pretreat', label: 'Pre-treatment' });
-  wells.forEach((w: any) => { fixedLinks.push({ from: `rawmeter-${w.id}`, to: ptId }); });
+  // ── Pre-treatment chain — one set per primary RO train ──
+  // Each train has its own line: Raw Tank → Raw Water Pump → AFM/MMF →
+  // Bag/Cartridge Filter → High Pressure Pump → (Feed Meter) → RO Train.
+  // Equipment counts/labels come straight from the ro_trains row
+  // (filter_media_type, filter_housing_type, num_* columns). Secondary
+  // (2nd-pass) units are skipped — they're fed by upstream permeate.
+  const trainChainEnd = new Map<string, string>(); // trainId → last chain node feeding the train
+  roTrains.forEach((r: any) => {
+    if (r.unit_type === 'secondary') return;
+    const t = r.train_number;
+    const mediaType   = (r.filter_media_type   ?? 'AFM') as string;
+    const housingType = (r.filter_housing_type ?? 'Cartridge Filter') as string;
+    const housingAbbr = housingType === 'Bag Filter' ? 'BF' : 'CF';
+    const housingLbl  = housingType === 'Bag Filter' ? 'Bag Filter' : 'Cartridge';
+    const em = trainEM.get(r.id) ?? { feed: false, permeate: false, reject: false };
 
-  // ── Feed meter ──
-  const fmId = `feedmeter-${plantId}`;
-  if (hasFeedMeter) {
-    nodes.push({ id: fmId, type: 'feedMeter', label: 'Feed Meter' });
-    fixedLinks.push({ from: ptId, to: fmId });
-  }
+    const tankId = `rawtank-${r.id}`;
+    nodes.push({ id: tankId, type: 'rawTank', label: `Raw Tank T${t}` });
+    const rwpId = `rwp-${r.id}`;
+    nodes.push({
+      id: rwpId, type: 'rawWaterPump', label: `Raw Water Pump T${t}`,
+      detail: `RWP×${r.num_booster_pumps ?? 0}`,
+    });
+    fixedLinks.push({ from: tankId, to: rwpId });
+
+    const mfId = `mf-${r.id}`;
+    nodes.push({
+      id: mfId, type: 'mediaFilter', label: `${mediaType.toUpperCase()} Filter T${t}`,
+      detail: `${mediaType.toUpperCase()}×${r.num_afm ?? 0}`,
+    });
+    fixedLinks.push({ from: rwpId, to: mfId });
+
+    const bcfId = `bcf-${r.id}`;
+    nodes.push({
+      id: bcfId, type: 'bagCartridge', label: `${housingLbl} T${t}`,
+      detail: `${housingAbbr}×${r.num_cartridge_filters ?? 0}`,
+    });
+    fixedLinks.push({ from: mfId, to: bcfId });
+
+    const hppId = `hpp-${r.id}`;
+    nodes.push({
+      id: hppId, type: 'hpPump', label: `HP Pump T${t}`,
+      detail: `HPP×${r.num_hp_pumps ?? 0}`,
+    });
+    fixedLinks.push({ from: bcfId, to: hppId });
+
+    let chainEnd = hppId;
+    if (hasFeedMeter) {
+      const fmId = `feedmeter-${r.id}`;
+      nodes.push({
+        id: fmId, type: 'feedMeter', label: `Feed Meter T${t}`,
+        meterVariant: em.feed ? 'electromagnetic' : 'mechanical',
+      });
+      fixedLinks.push({ from: hppId, to: fmId });
+      chainEnd = fmId;
+    }
+    trainChainEnd.set(r.id, chainEnd);
+  });
 
   // ── RO trains — with equipment detail ──
   roTrains.forEach((r: any) => {
@@ -636,11 +726,13 @@ export function buildTopology(
       group: r.shared_power_meter_group ?? undefined,
       detail,
     });
+    // Primary trains are fed by the tail of their own pre-treatment chain.
     // Secondary units are fed by an upstream train's permeate (an editable
-    // link, seeded as a default below from feed_source_train_id) — not by
-    // the plant's shared feed meter, so skip the usual fixed link for them.
+    // link, seeded as a default below from feed_source_train_id), so they
+    // skip the chain link entirely.
     if (!isSecondary) {
-      fixedLinks.push({ from: hasFeedMeter ? fmId : ptId, to: r.id });
+      const chainEnd = trainChainEnd.get(r.id);
+      if (chainEnd) fixedLinks.push({ from: chainEnd, to: r.id });
     }
   });
 
@@ -710,6 +802,16 @@ export function buildTopology(
   // ── Default editable links ──
   const defaultEditLinks: TopoLink[] = [];
 
+  // Raw meters feed each primary train's raw tank (which wells feed which
+  // train's pre-treatment set is rewirable via Connect mode).
+  roTrains.forEach((r: any) => {
+    if (r.unit_type === 'secondary') return;
+    wells.forEach((w: any) => {
+      if ((w as any).is_blending_well) return;
+      defaultEditLinks.push({ from: `rawmeter-${w.id}`, to: `rawtank-${r.id}`, editable: true });
+    });
+  });
+
   locators.forEach((l: any) => {
     if (l.product_meter_id)
       defaultEditLinks.push({ from: l.product_meter_id, to: l.id, editable: true });
@@ -734,8 +836,17 @@ export function buildTopology(
       defaultEditLinks.push({ from: firstGridMeter, to: r.id, editable: true });
   });
 
-  const editLinks: TopoLink[] = savedLinks.length
-    ? savedLinks.map((s: any) => ({ from: s.from_id, to: s.to_id, editable: true }))
+  // Sanitize saved links against the current node set — drops stale references
+  // (e.g. the retired shared `pretreat-<plantId>` / `feedmeter-<plantId>`
+  // nodes) so old saved topologies don't render dangling pipes. If nothing
+  // survives, fall back to the fresh defaults.
+  const knownIds = new Set(nodes.map((n) => n.id));
+  const sanitizedSaved = savedLinks.filter(
+    (s: any) => knownIds.has(s.from_id) && knownIds.has(s.to_id)
+  );
+
+  const editLinks: TopoLink[] = sanitizedSaved.length
+    ? sanitizedSaved.map((s: any) => ({ from: s.from_id, to: s.to_id, editable: true }))
     : defaultEditLinks;
 
   return { nodes, fixedLinks, editLinks };
@@ -757,16 +868,24 @@ export function layoutNodes(
   nodes.forEach((n) => { (byType[n.type] = byType[n.type] ?? []).push(n); });
 
   const waterTypes: NodeType[] = [
-    'well', 'rawMeter', 'pretreat', 'feedMeter', 'roTrain', 'permeate', 'reject', 'bulk', 'locator',
+    'well', 'rawMeter', 'rawTank', 'rawWaterPump', 'mediaFilter', 'bagCartridge', 'hpPump',
+    'pretreat', 'feedMeter', 'roTrain', 'permeate', 'reject', 'bulk', 'locator',
   ];
+
+  // Per-train chain stages ride on their train's row so each train forms one
+  // horizontal lane (chain node ids are `<stage>-<trainId>`).
+  const chainTypes: NodeType[] = ['rawTank', 'rawWaterPump', 'mediaFilter', 'bagCartridge', 'hpPump'];
+  const trainRowById = new Map<string, number>();
+  (byType['roTrain'] ?? []).forEach((n, i) => trainRowById.set(n.id, i));
 
   waterTypes.forEach((t) => {
     (byType[t] ?? []).forEach((n, i) => {
       const x = colXMap[t] ?? 0;
       let y = START_Y + i * ROW_GAP;
-      // Centre single pre-treat / feed meter vertically against the wells
-      if (t === 'pretreat' || t === 'feedMeter')
-        y = START_Y + Math.floor(((byType['well']?.length ?? 1) - 1) / 2) * ROW_GAP;
+      // Chain stages (and the per-train feed meter) align with their train's row
+      const trainId = n.id.slice(n.id.indexOf('-') + 1);
+      if ((chainTypes.includes(t) || t === 'feedMeter') && trainRowById.has(trainId))
+        y = START_Y + (trainRowById.get(trainId) as number) * ROW_GAP;
       // Reject rows start below permeate rows
       if (t === 'reject')
         y = START_Y + ((byType['permeate']?.length ?? 0) + i) * ROW_GAP;

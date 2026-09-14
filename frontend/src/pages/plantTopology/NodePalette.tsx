@@ -7,8 +7,8 @@ import { CustomNodePaletteSection } from './CustomNodePaletteSection';
 // Draggable chips for creating new nodes on the canvas.
 
 const PALETTE_TYPES: NodeType[] = [
-  'well', 'rawMeter', 'pretreat', 'feedMeter', 'roTrain',
-  'permeate', 'reject', 'bulk', 'locator',
+  'well', 'rawMeter', 'rawTank', 'rawWaterPump', 'mediaFilter', 'bagCartridge', 'hpPump',
+  'pretreat', 'feedMeter', 'roTrain', 'permeate', 'reject', 'bulk', 'locator',
   // 'customNode' handled by CustomNodePaletteSection below
 ];
 
