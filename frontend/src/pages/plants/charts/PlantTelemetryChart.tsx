@@ -2,8 +2,9 @@ import { useState, useMemo } from 'react';
 import { format, subDays, startOfDay } from 'date-fns';
 import {
   ResponsiveContainer,
-  AreaChart,
+  ComposedChart,
   Area,
+  Line,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -11,10 +12,10 @@ import {
   ReferenceLine,
 } from 'recharts';
 import { Card } from '@/components/ui/card';
-import { TrendingUp } from 'lucide-react';
+import { TrendingUp, Droplets } from 'lucide-react';
 import { fmtNum, fmtVol } from '@/lib/format';
 import { ModernChartLegend } from '@/components/dashboard/TrendChartLegend';
-import { C_PRODUCTION, C_CONSUMPTION, INSTRUMENT_TOOLTIP_STYLE } from '@/lib/chartColors';
+import { C_PRODUCTION, C_CONSUMPTION, C_PERMEATE, INSTRUMENT_TOOLTIP_STYLE } from '@/lib/chartColors';
 import { cn } from '@/lib/utils';
 import { useTrendChartQueries } from '@/components/dashboard/useTrendChartQueries';
 import { useTrendChartData } from '@/components/dashboard/useTrendChartData';
@@ -33,6 +34,7 @@ export function PlantTelemetryChart({
   plantName,
 }: PlantTelemetryChartProps) {
   const [range, setRange] = useState<TimeRange>('30d');
+  const [showPermeate, setShowPermeate] = useState(true);
 
   const daysBack = range === '7d' ? 7 : range === '90d' ? 90 : 30;
   const plantIds = useMemo(() => (plantId ? [plantId] : []), [plantId]);
@@ -119,6 +121,7 @@ export function PlantTelemetryChart({
       isoDate: r.isoDate,
       production: +(r.production ?? 0).toFixed(1),
       consumption: +(r.consumption ?? 0).toFixed(1),
+      permeate: +(r.permeate ?? 0).toFixed(1),
     }));
   }, [rawTrendData]);
 
@@ -158,6 +161,26 @@ export function PlantTelemetryChart({
             </div>
           )}
 
+          {/* Permeate Output toggle — defaults to ON */}
+          <button
+            type="button"
+            onClick={() => setShowPermeate((v) => !v)}
+            title="Toggle Permeate Output (RO train) line"
+            aria-pressed={showPermeate}
+            style={showPermeate ? {
+              borderColor: C_PERMEATE,
+              color: C_PERMEATE,
+              backgroundColor: 'hsl(var(--metric-permeate) / 0.12)',
+            } : undefined}
+            className={cn(
+              'flex items-center gap-1 px-2.5 py-1 text-2xs font-semibold rounded-lg border transition-all',
+              !showPermeate && 'bg-muted/60 text-muted-foreground border-border/50 hover:text-foreground'
+            )}
+          >
+            <Droplets className="h-3 w-3" />
+            Permeate
+          </button>
+
           {/* Range Selector */}
           <div className="flex items-center bg-muted/60 p-0.5 rounded-lg border border-border/50">
             {(['7d', '30d', '90d'] as const).map((r) => (
@@ -191,7 +214,7 @@ export function PlantTelemetryChart({
           </div>
         ) : (
           <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={chartData} margin={{ top: 8, right: 12, left: -10, bottom: 0 }}>
+            <ComposedChart data={chartData} margin={{ top: 8, right: 12, left: -10, bottom: 0 }}>
               <defs>
                 <linearGradient id="plantProdFill" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor={C_PRODUCTION} stopOpacity={0.35} />
@@ -219,7 +242,10 @@ export function PlantTelemetryChart({
                 contentStyle={INSTRUMENT_TOOLTIP_STYLE}
                 formatter={(val: any, name: string) => [
                   `${fmtVol(+val)}`,
-                  name === 'production' ? 'Production' : name === 'consumption' ? 'Consumption' : name,
+                  name === 'production' ? 'Production'
+                    : name === 'consumption' ? 'Consumption'
+                    : name === 'permeate' ? 'Permeate Output'
+                    : name,
                 ]}
               />
               {dailyCapacityM3 != null && (
@@ -254,7 +280,19 @@ export function PlantTelemetryChart({
                 fill="url(#plantProdFill)"
                 dot={false}
               />
-            </AreaChart>
+              {showPermeate && (
+                <Line
+                  type="monotone"
+                  dataKey="permeate"
+                  name="permeate"
+                  stroke={C_PERMEATE}
+                  strokeWidth={2}
+                  strokeDasharray="5 3"
+                  dot={false}
+                  activeDot={{ r: 3.5, fill: C_PERMEATE, strokeWidth: 0 }}
+                />
+              )}
+            </ComposedChart>
           </ResponsiveContainer>
         )}
       </div>
@@ -265,6 +303,7 @@ export function PlantTelemetryChart({
           items={[
             { color: C_PRODUCTION, label: 'Production (m³)', shape: 'area' },
             { color: C_CONSUMPTION, label: 'Consumption (m³)', shape: 'area' },
+            ...(showPermeate ? [{ color: C_PERMEATE, label: 'Permeate Output (m³)', shape: 'line' as const }] : []),
             ...(dailyCapacityM3 != null ? [{ color: '#f59e0b', label: 'Design Capacity Limit', shape: 'line' as const }] : []),
           ]}
         />

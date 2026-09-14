@@ -21,11 +21,11 @@ import { buildTariffsLookup, processPowerReadingsForTrend } from './TrendChart/p
 
 const TREND_FIELD_AGG: Record<string, TrendFieldConfig> = {
   production: {
-    production: 'sum', consumption: 'sum',
+    production: 'sum', consumption: 'sum', permeate: 'sum',
     _meterReplacements: 'union', _permeateSourceNames: 'union',
   },
   nrw: {
-    production: 'sum', consumption: 'sum',
+    production: 'sum', consumption: 'sum', permeate: 'sum',
     _meterReplacements: 'union', _permeateSourceNames: 'union',
   },
   rawwater: { rawwater: 'sum', _meterReplacements: 'union' },
@@ -82,7 +82,7 @@ export function useTrendChartData({
     const ensure = (d: string, sortKey: number) =>
       byDay.get(d) ?? byDay.set(d, {
         date: d, sortKey, isoDate: new Date(sortKey).toISOString(),
-        production: 0, consumption: 0, rawwater: 0,
+        production: 0, consumption: 0, rawwater: 0, permeate: 0,
         recovery: 0, recoverySamples: 0,
         tds: 0, tdsSamples: 0, kwh: 0, solarKwh: 0,
         // Cost accumulators (raw ₱ amounts, divided by production at the end)
@@ -152,14 +152,25 @@ export function useTrendChartData({
       }
     });
 
-    // Step 2: accumulate permeate meter deltas for plants where permeate_is_production = true.
+    // Step 2: accumulate permeate meter deltas — ALWAYS, for every RO train on
+    // the selected plant(s), regardless of the permeate_is_production flag.
+    //
+    // `row.permeate` is a standalone "how much permeate did the RO train(s)
+    // make today" series — always populated when RO train readings exist, so
+    // it can be charted on its own (e.g. the Facility Telemetry Trend card's
+    // Permeate Output toggle) even for plants whose `production` number comes
+    // from a separate dedicated product meter.
+    //
+    // `row.production` additionally receives this same delta ONLY for plants
+    // where permeate_is_production = true — that routing behavior (and its
+    // meter-replacement / fallback handling) is unchanged from before.
     //
     // Uses permeate_meter_delta (pre-saved curr−prev) and reading_datetime for
     // date bucketing. The permeate_production_date / 00:20 cutoff rule has been
     // removed — a reading recorded on May 1 at any time counts as May 1 production,
     // consistent with the DataSummaryModal's Production and Prod vs Consum tabs.
     // Falls back to computeEntityDeltas when columns not yet populated (NULL).
-    if (permeateIsProductionPlants && permeateIsProductionPlants.size > 0) {
+    {
       const hasSavedDelta = (roReadings ?? []).some(
         (r: any) => r.permeate_meter_delta != null && +r.permeate_meter_delta > 0,
       );
@@ -168,7 +179,7 @@ export function useTrendChartData({
         // ── PRIMARY PATH ─────────────────────────────────────────────────────
         (roReadings ?? []).forEach((r: any) => {
           const plantId = _trainPlantMap.get(r.train_id);
-          if (!plantId || !permeateIsProductionPlants.has(plantId)) return;
+          if (!plantId) return;
           if (_trainUnitTypeMap.get(r.train_id) === 'secondary') return;
 
           // Skip replacement rows first — their saved delta is the old-meter→new-meter
@@ -191,9 +202,12 @@ export function useTrendChartData({
           const prodDt = new Date(prodDateStr + 'T12:00:00'); // noon for stable sorting
           const key = format(prodDt, 'MMM d');
           const row = ensure(key, prodDt.getTime());
-          row.production += delta;
-          if (!row._permeateSourcePlants) row._permeateSourcePlants = new Set<string>();
-          row._permeateSourcePlants.add(plantId);
+          row.permeate += delta;
+          if (permeateIsProductionPlants?.has(plantId)) {
+            row.production += delta;
+            if (!row._permeateSourcePlants) row._permeateSourcePlants = new Set<string>();
+            row._permeateSourcePlants.add(plantId);
+          }
         });
       } else {
         // ── FALLBACK PATH (permeate_meter_delta columns still NULL) ──────────
@@ -213,7 +227,7 @@ export function useTrendChartData({
         const permeateRoReadings = (roReadings ?? [])
           .filter((r: any) => {
             const plantId = _trainPlantMap.get(r.train_id);
-            return plantId && permeateIsProductionPlants.has(plantId)
+            return plantId
               && _trainUnitTypeMap.get(r.train_id) !== 'secondary'
               && r.permeate_meter != null;
             // NOTE: is_meter_replacement rows are intentionally kept here
@@ -228,9 +242,12 @@ export function useTrendChartData({
           const dt = new Date(r.reading_datetime);
           const key = format(dt, 'MMM d');
           const row = ensure(key, dt.getTime());
-          row.production += delta;
-          if (!row._permeateSourcePlants) row._permeateSourcePlants = new Set<string>();
-          row._permeateSourcePlants.add(plantId);
+          row.permeate += delta;
+          if (permeateIsProductionPlants?.has(plantId)) {
+            row.production += delta;
+            if (!row._permeateSourcePlants) row._permeateSourcePlants = new Set<string>();
+            row._permeateSourcePlants.add(plantId);
+          }
         });
       }
     }
@@ -383,7 +400,7 @@ export function useTrendChartData({
       return {
         date: format(dt, 'MMM d'),
         isoDate: dt.toISOString(),
-        production: 0, consumption: 0, rawwater: 0,
+        production: 0, consumption: 0, rawwater: 0, permeate: 0,
         recovery: null, tds: null, kwh: null, solarKwh: null,
         nrw: 0, powerCost: null, chemCost: null, totalCost: null,
         _meterReplacements: [], _permeateSourceNames: [],
