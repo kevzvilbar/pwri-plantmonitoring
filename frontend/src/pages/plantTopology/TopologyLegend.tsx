@@ -65,9 +65,9 @@ export function TopologyLegend() {
                     {IconComp ? (
                       <span
                         className="shrink-0 flex items-center justify-center"
-                        style={{ width: 14, height: 14, color: c.accent }}
+                        style={{ width: 20, height: 20, color: c.accent }}
                       >
-                        {React.createElement(IconComp, { size: 12 })}
+                        {React.createElement(IconComp, { size: 18 })}
                       </span>
                     ) : (
                       <div

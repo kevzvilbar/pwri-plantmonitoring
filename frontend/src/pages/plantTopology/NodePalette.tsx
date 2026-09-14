@@ -1,5 +1,6 @@
+import React from 'react';
 import { GripVertical, Move } from 'lucide-react';
-import { NodeType, DragItem, PaletteItem, NODE_LABELS, COLORS, withAlpha } from './shared';
+import { NodeType, DragItem, PaletteItem, NODE_LABELS, COLORS, withAlpha, getNodeIcon } from './shared';
 import { CustomNodePaletteSection } from './CustomNodePaletteSection';
 
 // ─── Node Palette ─────────────────────────────────────────────────────────────
@@ -28,17 +29,23 @@ export function NodePalette({ onDragStart, paletteItems, onAddPaletteItem, onRen
       </div>
       {PALETTE_TYPES.map((type) => {
         const c = COLORS[type];
+        const IconComp = getNodeIcon(type);
         return (
           <div
             key={type}
-            className="flex items-center gap-1 px-2 py-1 rounded-md border cursor-grab active:cursor-grabbing select-none shrink-0 transition-all hover:shadow-sm hover:-translate-y-0.5"
+            className="flex items-center gap-1.5 px-2 py-1.5 rounded-md border cursor-grab active:cursor-grabbing select-none shrink-0 transition-all hover:shadow-sm hover:-translate-y-0.5"
             style={{ background: c.bg, borderColor: withAlpha(c.border, 0.5) }}
             onPointerDown={(e) => {
               e.currentTarget.setPointerCapture(e.pointerId);
               onDragStart({ nodeType: type, label: NODE_LABELS[type] }, e);
             }}
           >
-            <GripVertical className="h-2.5 w-2.5 opacity-40" style={{ color: c.accent }} />
+            <GripVertical className="h-2.5 w-2.5 opacity-40 shrink-0" style={{ color: c.accent }} />
+            {IconComp && (
+              <span className="shrink-0" style={{ color: c.accent, width: 16, height: 16, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                {React.createElement(IconComp, { size: 14 })}
+              </span>
+            )}
             <span className="text-3xs font-mono font-bold tracking-wide" style={{ color: c.text }}>
               {NODE_LABELS[type]}
             </span>

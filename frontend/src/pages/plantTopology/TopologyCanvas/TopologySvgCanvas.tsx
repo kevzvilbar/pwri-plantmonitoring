@@ -1,7 +1,7 @@
 import React, { useRef, useCallback } from 'react';
 import { useAppStore } from '@/store/appStore';
 import { NodeType, NODE_W, NODE_H, START_Y, ROW_GAP, POWER_COLS,
-  COLORS, COL_GAP, ColSlot, cubicPath,
+  COLORS, COL_GAP, ColSlot, cubicPath, getSymbolDimensions,
 } from '../shared';
 import { NodePalette } from '../NodePalette';
 import { TopologyHeader } from './TopologyHeader';
@@ -171,11 +171,14 @@ export function TopologySvgCanvas({
                   const laneColor = slot.isCustom
                     ? COLORS.customNode.lane
                     : COLORS[slot.type!].lane;
+                  // Use symbol width for lane width (with padding)
+                  const symW = slot.isCustom ? 48 : getSymbolDimensions(slot.type!).w;
+                  const laneW = Math.max(symW + 24, 64);
                   return (
                     <rect
                       key={`lane-${slot.key}`}
                       x={x - 10} y={24}
-                      width={NODE_W + 20}
+                      width={laneW}
                       height={maxWaterY - 10}
                       rx={6}
                       fill={laneColor}

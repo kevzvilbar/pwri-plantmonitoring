@@ -18,6 +18,21 @@ import {
   WaterMeterIcon,
   WaterMeterElectromagIcon,
 } from '@/components/icons/water-icons';
+import {
+  WellSymbol,
+  RawMeterSymbol,
+  FeedMeterSymbol,
+  PretreatSymbol,
+  ROTrainSymbol,
+  PermeateSymbol,
+  RejectSymbol,
+  BulkMeterSymbol,
+  TankSymbol,
+  SolarSymbol,
+  GridSymbol,
+  PowerMeterSymbol,
+  LocatorSymbol,
+} from '@/components/icons/topology-symbols';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -148,12 +163,13 @@ export const POS_OVERRIDES_KEY = (pid: string) => `plant_topology_pos_${pid}`;
 export const PALETTE_ITEMS_KEY = (pid: string) => `plant_topology_palette_${pid}`;
 export const COL_WIDTHS_KEY    = (pid: string) => `plant_topology_colwidths_${pid}`;
 
-// ── Node dimensions (larger for readability) ──
-export const NODE_W  = 148;
-export const NODE_H  = 62;
-export const ROW_GAP = 90;   // vertical gap between rows
+// ── Node dimensions (for symbol-based layout) ──
+// These are fallback values; actual sizes come from getSymbolDimensions()
+export const NODE_W  = 64;   // average symbol width
+export const NODE_H  = 56;   // average symbol height
+export const ROW_GAP = 100;  // vertical gap between rows (increased for label tags)
 export const START_Y = 52;
-export const COL_GAP = 164;  // horizontal gap between column centers
+export const COL_GAP = 120;  // horizontal gap between column centers (adjusted for symbols)
 
 // ── Typography constants ──
 export const TOPO_FONT_SANS = "var(--font-sans, 'Inter', system-ui, sans-serif)";
@@ -330,41 +346,77 @@ export function saveColWidths(plantId: string, widths: Record<string, number>) {
 
 // ─── Icon imports and node → icon mapping ───────────────────────────────────
 
-/** Maps each NodeType to its domain icon component.
- *  Returns null for custom nodes (no icon — rendered as text badge).
+/** Maps each NodeType to its P&ID symbol component.
+ *  Returns null for custom nodes (no symbol — rendered as text badge).
  *  Meter nodes accept a `variant` prop ('mechanical' | 'electromagnetic')
  *  resolved from train EM config.
  */
 export function getNodeIcon(type: NodeType, variant?: string): React.ComponentType<any> | null {
   switch (type) {
     case 'well':
+      return WellSymbol;
     case 'rawMeter':
-      return RawWaterIcon;
+      return RawMeterSymbol;
     case 'pretreat':
-      // Pretreat could be media filter or cartridge filter — show filter icon
-      return MediaFilterIcon;
+      return PretreatSymbol;
     case 'feedMeter':
-      return MeterOdometerIcon;
+      return FeedMeterSymbol;
     case 'roTrain':
-      return ROTrainIcon;
+      return ROTrainSymbol;
     case 'permeate':
-      return variant === 'tank' ? TankIcon : PermeateIcon;
+      return variant === 'tank' ? TankSymbol : PermeateSymbol;
     case 'reject':
-      return RejectIcon;
+      return RejectSymbol;
     case 'bulk':
-      return variant === 'tank' ? TankIcon : MeterOdometerIcon;
+      return variant === 'tank' ? TankSymbol : BulkMeterSymbol;
     case 'locator':
-      return MeterOdometerIcon;
+      return LocatorSymbol;
     case 'solarSource':
-      return SolarPanelIcon;
+      return SolarSymbol;
     case 'solarMeter':
     case 'gridMeter':
-      return PowerMeterIcon;
+      return PowerMeterSymbol;
     case 'gridSource':
-      return GridPylonIcon;
+      return GridSymbol;
     case 'customNode':
     default:
       return null;
+  }
+}
+
+/** Returns the natural dimensions for each node type's symbol.
+ *  Used for layout calculations and lane widths.
+ */
+export function getSymbolDimensions(type: NodeType): { w: number; h: number } {
+  switch (type) {
+    case 'well':
+      return { w: 48, h: 48 };
+    case 'rawMeter':
+      return { w: 48, h: 48 };
+    case 'pretreat':
+      return { w: 48, h: 56 };
+    case 'feedMeter':
+      return { w: 56, h: 40 };
+    case 'roTrain':
+      return { w: 80, h: 44 };
+    case 'permeate':
+      return { w: 48, h: 48 };
+    case 'reject':
+      return { w: 48, h: 48 };
+    case 'bulk':
+      return { w: 48, h: 48 };
+    case 'locator':
+      return { w: 48, h: 48 };
+    case 'solarSource':
+      return { w: 56, h: 44 };
+    case 'gridSource':
+      return { w: 40, h: 52 };
+    case 'solarMeter':
+    case 'gridMeter':
+      return { w: 48, h: 48 };
+    case 'customNode':
+    default:
+      return { w: 48, h: 48 };
   }
 }
 
