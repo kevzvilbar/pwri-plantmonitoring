@@ -1,6 +1,6 @@
 import React from 'react';
 import type { TopoNode, TopoLink } from '../shared';
-import { NODE_H, COLORS, cubicPath } from '../shared';
+import { NODE_H, COLORS, cubicPath, getStreamType, STREAM_COLORS } from '../shared';
 import type { NodePositionOverride } from '../shared';
 
 export interface LinkRendererProps {
@@ -24,7 +24,14 @@ export function TopoLinkRenderer({ link, idx, topoState, positions, hoveredLink,
 
   const x1 = f.x, y1 = f.y + fh / 2;
   const x2 = t.x, y2 = t.y + th / 2;
-  const color = fromNode ? COLORS[fromNode.type].accent : 'hsl(var(--muted-foreground))';
+
+  // Determine stream type for pipe coloring
+  const streamType = getStreamType(link, topoState.nodes);
+  const streamColor = STREAM_COLORS[streamType];
+  // Fallback to source node accent if stream type is general
+  const fallbackColor = fromNode ? COLORS[fromNode.type].accent : 'hsl(var(--muted-foreground))';
+  const color = streamType === 'general' ? fallbackColor : streamColor;
+
   const isHov = hoveredLink === idx;
   const markerId = `arrow-${idx}`;
 
@@ -45,10 +52,10 @@ export function TopoLinkRenderer({ link, idx, topoState, positions, hoveredLink,
       <path
         d={cubicPath(x1, y1, x2, y2)}
         fill="none"
-        stroke={isHov ? color : 'hsl(var(--muted-foreground))'}
+        stroke={isHov ? color : streamColor}
         strokeWidth={isHov ? 2.5 : link.editable ? 1.5 : 2}
         strokeDasharray={link.editable ? (isHov ? '9,4' : '6,3') : undefined}
-        opacity={isHov ? 0.9 : 0.45}
+        opacity={isHov ? 0.95 : 0.6}
         markerEnd={`url(#${markerId})`}
         style={{ transition: 'stroke 0.15s, opacity 0.15s' }}
       />

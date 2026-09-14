@@ -25,6 +25,7 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/useAuth';
 import { usePermission } from '@/hooks/usePermission';
@@ -32,8 +33,8 @@ import { usePlants } from '@/hooks/usePlants';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useAppStore } from '@/store/appStore';
 import { toast } from 'sonner';
-import { 
-  NodeType, CustomColumn, buildColSequence, buildColXMap, TopoNode, TopoLink, NodePositionOverride, DragItem, PaletteItem, TopologyState, 
+import {
+  NodeType, CustomColumn, buildColSequence, buildColXMap, TopoNode, TopoLink, NodePositionOverride, DragItem, PaletteItem, TopologyState,
   loadCustomNodes, saveCustomNodes, loadCustomColumns, saveCustomColumns, loadPosOverrides, savePosOverrides, loadPaletteItems, savePaletteItems, loadColWidths, saveColWidths,
   NODE_LABELS, CANVAS_REF, NODE_W, NODE_H, ROW_GAP, START_Y, COL_GAP, canConnect, buildTopology,
 } from './plantTopology/shared';
@@ -50,13 +51,17 @@ export default function PlantTopology() {
   const isMobile = useIsMobile();
   const { selectedPlantId } = useAppStore();
   const qc = useQueryClient();
+  const [searchParams] = useSearchParams();
 
   const { data: plants = [] } = usePlants();
   const [activePlantId, setActivePlantId] = useState<string | null>(null);
-  const effectivePlantId = activePlantId ?? selectedPlantId ?? plants[0]?.id ?? null;
+
+  // Support ?plant=<id> deep-link from Plants.tsx hero banner "View Topology" button
+  const urlPlantId = searchParams.get('plant');
+  const effectivePlantId = activePlantId ?? urlPlantId ?? selectedPlantId ?? plants[0]?.id ?? null;
 
   const [wbrRange, setWbrRange] = useState<RangeKey>('7D');
-  const [overlayMode, setOverlayMode] = useState<'schematic' | 'waterBalance'>('waterBalance');
+  const [overlayMode, setOverlayMode] = useState<'schematic' | 'waterBalance'>('schematic');
   const [ledgerOpen, setLedgerOpen] = useState(false);
 
   const { summary: wbrSummary, isLoading: wbrLoading, window: wbrWindow } = useWaterBalanceReconciliation({

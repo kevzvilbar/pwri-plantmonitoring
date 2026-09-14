@@ -13,6 +13,7 @@ export interface TopoWell {
   name: string;
   status: string;
   has_power_meter: boolean;
+  is_blending_well: boolean;
 }
 
 /** RO train data for topology */
@@ -35,6 +36,11 @@ export interface TopoRoTrain {
   has_feed_meter: boolean;
   has_permeate_meter: boolean;
   has_reject_meter: boolean;
+  uses_em_meter: boolean;
+  em_all_streams: boolean;
+  em_stream_feed: boolean;
+  em_stream_permeate: boolean;
+  em_stream_reject: boolean;
 }
 
 /** Locator data for topology */
@@ -88,13 +94,14 @@ export async function fetchTopologyData(plantId: string): Promise<TopologyData> 
   if (!plantId) throw new Error('Plant ID required');
 
   const [wellsRes, roRes, locRes, prodRes, powerCfgRes, meterCfgRes] = await Promise.all([
-    supabase.from('wells').select('id,name,status,has_power_meter').eq('plant_id', plantId).order('name'),
+    supabase.from('wells').select('id,name,status,has_power_meter,is_blending_well').eq('plant_id', plantId).order('name'),
     supabase.from('ro_trains').select(
       'id,train_number,name,status,shared_power_meter_group,' +
       'num_afm,num_booster_pumps,num_hp_pumps,num_cartridge_filters,num_controllers,' +
       'filter_media_type,filter_housing_type,' +
       'unit_type,feed_source_train_id,reject_routing,' +
-      'has_feed_meter,has_permeate_meter,has_reject_meter'
+      'has_feed_meter,has_permeate_meter,has_reject_meter,' +
+      'uses_em_meter,em_all_streams,em_stream_feed,em_stream_permeate,em_stream_reject'
     ).eq('plant_id', plantId).order('train_number'),
     supabase.from('locators').select('id,name,status,product_meter_id').eq('plant_id', plantId).order('name'),
     supabase.from('product_meters').select('id,name,status').eq('plant_id', plantId).order('name'),
@@ -145,7 +152,7 @@ export async function fetchTopologyLinks(plantId: string): Promise<TopoLink[]> {
 
 /** Fetch individual components for fine-grained caching */
 export async function fetchWellsForTopology(plantId: string): Promise<TopoWell[]> {
-  const { data, error } = await supabase.from('wells').select('id,name,status,has_power_meter').eq('plant_id', plantId).order('name');
+  const { data, error } = await supabase.from('wells').select('id,name,status,has_power_meter,is_blending_well').eq('plant_id', plantId).order('name');
   if (error) throw error;
   return (data ?? []) as unknown as TopoWell[];
 }
@@ -156,7 +163,8 @@ export async function fetchRoTrainsForTopology(plantId: string): Promise<TopoRoT
     'num_afm,num_booster_pumps,num_hp_pumps,num_cartridge_filters,num_controllers,' +
     'filter_media_type,filter_housing_type,' +
     'unit_type,feed_source_train_id,reject_routing,' +
-    'has_feed_meter,has_permeate_meter,has_reject_meter'
+    'has_feed_meter,has_permeate_meter,has_reject_meter,' +
+    'uses_em_meter,em_all_streams,em_stream_feed,em_stream_permeate,em_stream_reject'
   ).eq('plant_id', plantId).order('train_number');
   if (error) throw error;
   return (data ?? []) as unknown as TopoRoTrain[];

@@ -170,7 +170,7 @@ export default function Operations() {
             variant="ghost"
             size="sm"
             className="h-7 px-2 text-2xs font-semibold hover:bg-background"
-            onClick={() => navigate('/topology')}
+            onClick={() => navigate(selectedPlantId ? `/topology?plant=${selectedPlantId}` : '/topology')}
           >
             <Layers className="h-3.5 w-3.5 mr-1 text-kpi-ro" />
             Plant Topology &rarr;

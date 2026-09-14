@@ -1,5 +1,23 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import {
+  RawWaterIcon,
+  MediaFilterIcon,
+  CartridgeFilterIcon,
+  BoosterPumpIcon,
+  HighPressurePumpIcon,
+  ROTrainIcon,
+  MembranePerformanceIcon,
+  PermeateIcon,
+  RejectIcon,
+  TankIcon,
+  PowerMeterIcon,
+  SolarPanelIcon,
+  GridPylonIcon,
+  MeterOdometerIcon,
+  WaterMeterIcon,
+  WaterMeterElectromagIcon,
+} from '@/components/icons/water-icons';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -8,6 +26,8 @@ export type NodeType =
   | 'roTrain' | 'permeate' | 'reject' | 'bulk' | 'locator'
   | 'solarSource' | 'gridSource' | 'solarMeter' | 'gridMeter'
   | 'customNode';
+
+export type StreamType = 'feed' | 'permeate' | 'reject' | 'power' | 'general';
 
 export interface CustomColumn {
   id: string;
@@ -83,12 +103,16 @@ export interface TopoNode {
   custom?: boolean;
   /** custom column id this node belongs to */
   colId?: string;
+  /** For meter nodes tied to a train: 'mechanical' or 'electromagnetic' — resolved from train EM config */
+  meterVariant?: 'mechanical' | 'electromagnetic';
 }
 
 export interface TopoLink {
   from: string;
   to: string;
   editable?: boolean;
+  /** Blending-well bypass: links directly to product line, skips RO */
+  bypass?: boolean;
 }
 
 export interface NodePositionOverride {
@@ -304,7 +328,123 @@ export function saveColWidths(plantId: string, widths: Record<string, number>) {
   try { localStorage.setItem(COL_WIDTHS_KEY(plantId), JSON.stringify(widths)); } catch { /**/ }
 }
 
-// ─── Data hook ──────────────────────────────────────────────────────────────────
+// ─── Icon imports and node → icon mapping ───────────────────────────────────
+
+import {
+  RawWaterIcon,
+  MediaFilterIcon,
+  CartridgeFilterIcon,
+  BoosterPumpIcon,
+  HighPressurePumpIcon,
+  ROTrainIcon,
+  MembranePerformanceIcon,
+  PermeateIcon,
+  RejectIcon,
+  TankIcon,
+  PowerMeterIcon,
+  SolarPanelIcon,
+  GridPylonIcon,
+  MeterOdometerIcon,
+  WaterMeterIcon,
+  WaterMeterElectromagIcon,
+} from '@/components/icons/water-icons';
+
+/** Maps each NodeType to its domain icon component.
+ *  Returns null for custom nodes (no icon — rendered as text badge).
+ *  Meter nodes accept a `variant` prop ('mechanical' | 'electromagnetic')
+ *  resolved from train EM config.
+ */
+export function getNodeIcon(type: NodeType, variant?: string): React.ComponentType<any> | null {
+  switch (type) {
+    case 'well':
+    case 'rawMeter':
+      return RawWaterIcon;
+    case 'pretreat':
+      // Pretreat could be media filter or cartridge filter — show filter icon
+      return MediaFilterIcon;
+    case 'feedMeter':
+      return MeterOdometerIcon;
+    case 'roTrain':
+      return ROTrainIcon;
+    case 'permeate':
+      return variant === 'tank' ? TankIcon : PermeateIcon;
+    case 'reject':
+      return RejectIcon;
+    case 'bulk':
+      return variant === 'tank' ? TankIcon : MeterOdometerIcon;
+    case 'locator':
+      return MeterOdometerIcon;
+    case 'solarSource':
+      return SolarPanelIcon;
+    case 'solarMeter':
+    case 'gridMeter':
+      return PowerMeterIcon;
+    case 'gridSource':
+      return GridPylonIcon;
+    case 'customNode':
+    default:
+      return null;
+  }
+}
+
+// ─── Stream type determination for links ───────────────────────────────────
+
+/** Determines the stream type of a link based on its endpoint node types.
+ *  Used to color pipes appropriately (feed=blue, permeate=green, reject=orange, power=yellow).
+ */
+export function getStreamType(link: TopoLink, nodes: TopoNode[]): StreamType {
+  const fromNode = nodes.find((n) => n.id === link.from);
+  const toNode = nodes.find((n) => n.id === link.to);
+  if (!fromNode || !toNode) return 'general';
+
+  // Power links
+  if (['solarSource', 'gridSource', 'solarMeter', 'gridMeter'].includes(fromNode.type) ||
+      ['solarSource', 'gridSource', 'solarMeter', 'gridMeter'].includes(toNode.type)) {
+    return 'power';
+  }
+
+  // Reject flows
+  if (toNode.type === 'reject' || fromNode.type === 'reject') {
+    return 'reject';
+  }
+
+  // Permeate flows (permeate → bulk/locator/roTrain)
+  if (fromNode.type === 'permeate') {
+    return 'permeate';
+  }
+
+  // Feed flows (well → rawMeter → pretreat → feedMeter → roTrain)
+  if (['well', 'rawMeter', 'pretreat', 'feedMeter'].includes(fromNode.type) ||
+      ['rawMeter', 'pretreat', 'feedMeter', 'roTrain'].includes(toNode.type)) {
+    return 'feed';
+  }
+
+  return 'general';
+}
+
+/** Stream colors for link/pipe rendering — uses HSL tokens.
+ *  feed      = blue accent   (raw water / feed to RO)
+ *  permeate  = green accent  (product water)
+ *  reject    = orange/warn   (waste concentrate)
+ *  power     = yellow/warn   (electrical)
+ *  general   = muted         (unclassified)
+ */
+export const STREAM_COLORS: Record<StreamType, string> = {
+  feed:      'hsl(var(--primary))',
+  permeate:  'hsl(142 70% 45%)',   // green
+  reject:    'hsl(var(--warn))',   // orange
+  power:     'hsl(45 95% 55%)',   // yellow/gold
+  general:   'hsl(var(--muted-foreground))',
+};
+
+/** Stream type labels for legend */
+export const STREAM_LABELS: Record<StreamType, string> = {
+  feed:      'Feed / Raw Water',
+  permeate:  'Permeate (Product)',
+  reject:    'Reject / Concentrate',
+  power:     'Power / Electrical',
+  general:   'General Connection',
+};───
 
 export function useTopologyData(plantId: string | null) {
   return useQuery({
@@ -374,6 +514,7 @@ export function buildTrainDetail(t: any): string {
   if ((t.num_hp_pumps ?? 0) > 0)          parts.push(`HPP×${t.num_hp_pumps}`);
   if ((t.num_cartridge_filters ?? 0) > 0) parts.push(`${filterLabel}×${t.num_cartridge_filters}`);
   if ((t.num_controllers ?? 0) > 0)       parts.push(`Ctrl×${t.num_controllers}`);
+  if (t.uses_em_meter !== false) parts.push('EM');
   return parts.join('  ');
 }
 
@@ -401,9 +542,36 @@ export function buildTopology(
   const solarNames: string[] = powerCfg?.solar_meter_names ?? Array.from({ length: solarCount }, (_: any, i: number) => `Solar Meter ${i + 1}`);
   const gridNames:  string[] = powerCfg?.grid_meter_names  ?? Array.from({ length: gridCount  }, (_: any, i: number) => `Grid Meter ${i + 1}`);
 
+  // Per-train EM-meter resolution: which streams on this train use electromagnetic
+  // magmeters instead of mechanical register meters. Drawn from the ro_trains EM
+  // fields directly; the config-level `em_all_streams` acts as a blanket override
+  // only for trains that have NO per-stream EM flags set at all.
+  const trainEM = new Map<string, { feed: boolean; permeate: boolean; reject: boolean }>();
+  roTrains.forEach((r: any) => {
+    const hasAny = !!(r.em_stream_feed || r.em_stream_permeate || r.em_stream_reject);
+    if (hasAny) {
+      trainEM.set(r.id, {
+        feed:    !!r.em_stream_feed,
+        permeate:!!r.em_stream_permeate,
+        reject:  !!r.em_stream_reject,
+      });
+    } else if (r.em_all_streams) {
+      trainEM.set(r.id, { feed: true, permeate: true, reject: true });
+    }
+  });
+
   // ── Wells ──
+  // Blending wells inject directly into the Product Water line (bypass RO).
+  // They skip rawMeter + pretreat entirely, with a distinct bypass visual on the link.
   wells.forEach((w: any) => {
     nodes.push({ id: w.id, type: 'well', label: w.name, status: w.status });
+    if ((w as any).is_blending_well) {
+      // Blending well injects directly into Product Water line (bypasses RO)
+      const bulkTarget = productMeters[0] ? `bulk-${productMeters[0].id}` : null;
+      const blTarget = bulkTarget ?? `locator-${plantId}-product-line`;
+      fixedLinks.push({ from: w.id, to: blTarget, bypass: true });
+      return;
+    }
     const rmId = `rawmeter-${w.id}`;
     nodes.push({ id: rmId, type: 'rawMeter', label: `Raw ${w.name}` });
     fixedLinks.push({ from: w.id, to: rmId });
@@ -445,14 +613,26 @@ export function buildTopology(
 
   // ── Permeate / Reject — one per train ──
   roTrains.forEach((r: any) => {
+    const em = trainEM.get(r.id) ?? { feed: false, permeate: false, reject: false };
+
     if (hasPermeate) {
       const pmId = `permeate-${r.id}`;
-      nodes.push({ id: pmId, type: 'permeate', label: `Perm. T${r.train_number}` });
+      nodes.push({
+        id: pmId,
+        type: 'permeate',
+        label: `Perm. T${r.train_number}`,
+        meterVariant: em.permeate ? 'electromagnetic' : 'mechanical',
+      });
       fixedLinks.push({ from: r.id, to: pmId });
     }
     if (hasReject) {
       const rjId = `reject-${r.id}`;
-      nodes.push({ id: rjId, type: 'reject', label: `Reject T${r.train_number}` });
+      nodes.push({
+        id: rjId,
+        type: 'reject',
+        label: `Reject T${r.train_number}`,
+        meterVariant: em.reject ? 'electromagnetic' : 'mechanical',
+      });
       fixedLinks.push({ from: r.id, to: rjId });
     }
   });
