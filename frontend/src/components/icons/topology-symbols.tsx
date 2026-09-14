@@ -362,6 +362,8 @@ export function LocatorSymbol({ size, className, accent, status }: SymbolProps) 
       <StatusDot status={status} cx={37} cy={8} r={3.5} />
     </svg>
   );
+}
+
 // ─── Per-train pre-treatment chain symbols ───────────────────────────────────
 // Each primary RO train carries its own set: Raw Tank → Raw Water Pump →
 // AFM/MMF → Bag/Cartridge Filter → High Pressure Pump → Feed Meter → Train.
@@ -468,5 +470,4 @@ export function HPPumpSymbol({ size, className, accent, status }: SymbolProps) {
       <StatusDot status={status} cx={36} cy={9} r={3.5} />
     </svg>
   );
-}
 }
