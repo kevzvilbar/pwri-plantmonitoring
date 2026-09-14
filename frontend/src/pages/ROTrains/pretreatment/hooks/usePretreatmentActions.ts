@@ -8,6 +8,7 @@ import { preserveAutoFlagReason } from '@/lib/trainStatusTimeline';
 import { STANDARD_OFFLINE_REASONS, getUnitReasonText } from '../types';
 import { isWasActuallyRunningReason } from '@/lib/trainUptimeExemption';
 import { reportTrainRunningExemption } from '@/hooks/useTrainUptimeExemption';
+import { trainEmFlags } from '@/lib/trainEmMeter';
 
 export interface PretreatmentActionsOptions {
   plantId: string;
@@ -169,9 +170,25 @@ export function usePretreatmentActions(rawOpts: PretreatmentActionsOptions) {
         ];
         const missingDirect = directRequired.filter((f) => f.value === '' || f.value == null);
 
-        const emFilled = [opts.roValues.feed_flow, opts.roValues.permeate_flow, opts.roValues.reject_flow]
-          .filter((v) => v !== '' && v != null).length;
-        const emIncomplete = emFilled < 2;
+        // Only require an EM flow field for a stream that's actually configured
+        // as Electromagnetic (EMF) AND has a meter at all — a Turbine (Common) /
+        // manual-meter stream never shows this field (see EMFlowRow.tsx's
+        // emFeedShown/emPermShown/emRejShown), so counting it against the
+        // operator here used to block every single save on any train that
+        // wasn't in "All Electromagnetic (EMF)" mode. The "any 2 of 3" shortcut
+        // itself only holds when all 3 streams are EM — that's the only case
+        // usePretreatmentCalculations can actually derive the third value by
+        // subtraction; with fewer EM streams shown there's no cross-stream
+        // inference to lean on, so every shown field is required.
+        const emFlags = trainEmFlags(opts.train);
+        const configuredEmFields = [
+          opts.showFeedMeter !== false && emFlags.feedIsEM ? opts.roValues.feed_flow : undefined,
+          opts.showPermeateMeter !== false && emFlags.permIsEM ? opts.roValues.permeate_flow : undefined,
+          opts.showRejectMeter !== false && emFlags.rejIsEM ? opts.roValues.reject_flow : undefined,
+        ].filter((v) => v !== undefined) as string[];
+        const emFilled = configuredEmFields.filter((v) => v !== '' && v != null).length;
+        const emMinRequired = configuredEmFields.length === 3 ? 2 : configuredEmFields.length;
+        const emIncomplete = configuredEmFields.length > 0 && emFilled < emMinRequired;
 
         const configuredMeters = [
           opts.showFeedMeter !== false ? opts.roValues.feed_meter_curr : undefined,
