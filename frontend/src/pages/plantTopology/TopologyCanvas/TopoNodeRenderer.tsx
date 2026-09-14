@@ -1,6 +1,6 @@
 import React from 'react';
 import type { TopoNode, TopoLink, DragItem } from '../shared';
-import { NODE_W, NODE_H, NODE_LABELS, COLORS, TOPO_FONT_SANS, TOPO_FONT_MONO, getNodeStatusInfo } from '../shared';
+import { NODE_W, NODE_H, NODE_LABELS, COLORS, TOPO_FONT_SANS, TOPO_FONT_MONO, getNodeStatusInfo, getNodeIcon, getStreamType, STREAM_COLORS } from '../shared';
 import type { NodeType } from '../shared';
 import { fmtNum } from '@/lib/calculations';
 
@@ -42,6 +42,23 @@ export function TopoNodeRenderer({
   const statusInfo  = getNodeStatusInfo(node.status);
   const isOverlay   = overlayMode === 'waterBalance';
   const h           = (hasDetail ? NODE_H + 18 : NODE_H) + (isOverlay ? 16 : 0);
+
+  // Resolve the domain icon for this node type
+  const iconVariant = node.type === 'bulk' && node.detail?.includes('Tank') ? 'tank' : undefined;
+  const IconComp = getNodeIcon(node.type, iconVariant);
+
+  // Determine stream badge for meter nodes (feed/permeate/reject)
+  const meterTypes = ['rawMeter', 'feedMeter', 'permeate', 'reject', 'bulk', 'locator'];
+  const showStreamBadge = meterTypes.includes(node.type);
+  // Compute stream type from the incoming link to this node
+  const incomingLink = topoState.fixedLinks.concat(topoState.editLinks).find(l => l.to === node.id);
+  const streamType = incomingLink ? getStreamType(incomingLink, topoState.nodes) : null;
+  const streamColor = streamType ? STREAM_COLORS[streamType] : null;
+
+  // Icon sizing: render centered in the upper portion of the node card
+  const iconSize = 18;
+  const iconX = NODE_W / 2 + 4 - iconSize / 2;
+  const iconY = 6;
 
   return (
     <g
@@ -86,32 +103,71 @@ export function TopoNodeRenderer({
         fill={c.accent} opacity={isInactive ? 0.2 : 1}
       />
 
-      <text x={NODE_W / 2 + 4} y={17}
+      {/* ── Domain icon ─────────────────────────────────────────────────── */}
+      {IconComp && (
+        <g transform={`translate(${iconX}, ${iconY})`}>
+          {/* Icon background circle for visual weight */}
+          <circle cx={iconSize / 2} cy={iconSize / 2} r={iconSize / 2 + 1}
+            fill={isInactive ? 'hsl(var(--muted))' : c.accent}
+            opacity={isInactive ? 0.08 : 0.12}
+          />
+          <foreignObject x={0} y={0} width={iconSize} height={iconSize}>
+            <div style={{
+              width: iconSize,
+              height: iconSize,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: isInactive ? 'hsl(var(--muted-foreground))' : c.accent,
+            }}>
+              {React.createElement(IconComp, { size: iconSize - 2 })}
+            </div>
+          </foreignObject>
+        </g>
+      )}
+
+      {/* Node type label (small, above name) */}
+      <text x={NODE_W / 2 + 4} y={hasDetail ? 44 : 42}
         textAnchor="middle" fill={c.accent}
-        fontSize={7.5} fontFamily={TOPO_FONT_MONO}
-        fontWeight={700} letterSpacing={1.2} opacity={0.9}
+        fontSize={6.5} fontFamily={TOPO_FONT_MONO}
+        fontWeight={700} letterSpacing={1.0} opacity={0.7}
       >
         {NODE_LABELS[node.type]}
       </text>
 
-      <text x={NODE_W / 2 + 4} y={35}
+      {/* Stream badge (colored dot + label for meter nodes) */}
+      {showStreamBadge && streamColor && (
+        <g transform={`translate(${NODE_W / 2 + 4}, ${hasDetail ? 51 : 49})`}>
+          <circle cx={-16} cy={0} r={2.5} fill={streamColor} opacity={0.9} />
+          <text x={-11} y={2}
+            textAnchor="start" fill={streamColor}
+            fontSize={5.5} fontFamily={TOPO_FONT_MONO}
+            fontWeight={700} opacity={0.85}
+          >
+            {streamType?.toUpperCase()}
+          </text>
+        </g>
+      )}
+
+      {/* Node name */}
+      <text x={NODE_W / 2 + 4} y={hasDetail ? 60 : 56}
         textAnchor="middle"
         fill={isInactive ? 'hsl(var(--muted-foreground))' : c.text}
-        fontSize={11.5} fontFamily={TOPO_FONT_SANS}
+        fontSize={10.5} fontFamily={TOPO_FONT_SANS}
         fontWeight={600}
       >
-        {node.label.length > 16 ? node.label.slice(0, 15) + '…' : node.label}
+        {node.label.length > 18 ? node.label.slice(0, 17) + '…' : node.label}
       </text>
 
       {hasDetail && (
-        <text x={NODE_W / 2 + 4} y={50}
+        <text x={NODE_W / 2 + 4} y={74}
           textAnchor="middle"
           fill={isInactive ? 'hsl(var(--muted-foreground))' : c.accent}
-          fontSize={8.5}
+          fontSize={7.5}
           fontFamily={TOPO_FONT_MONO}
-          opacity={0.85}
+          opacity={0.75}
         >
-          {(node.detail ?? '').length > 22 ? (node.detail ?? '').slice(0, 21) + '…' : node.detail}
+          {(node.detail ?? '').length > 24 ? (node.detail ?? '').slice(0, 23) + '…' : node.detail}
         </text>
       )}
 

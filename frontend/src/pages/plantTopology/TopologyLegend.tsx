@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ChevronDown, ChevronUp, Layers, Activity, GitCommit } from 'lucide-react';
-import { NodeType, NODE_LABELS, COLORS } from './shared';
+import { NodeType, NODE_LABELS, COLORS, getNodeIcon, STREAM_COLORS, STREAM_LABELS } from './shared';
+import type { StreamType } from './shared';
 
 export function TopologyLegend() {
   const [expanded, setExpanded] = useState(false);
@@ -47,46 +48,65 @@ export function TopologyLegend() {
       {/* Expanded 3-section grouped panel */}
       {expanded && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 p-3 mt-2 rounded-lg bg-card/80 border border-border/60 text-xs animate-in fade-in duration-150">
-          {/* 1. Node Types */}
+          {/* 1. Node Types (with icon previews) */}
           <div className="space-y-1.5 md:col-span-2">
             <div className="flex items-center gap-1.5 text-3xs font-mono font-bold uppercase tracking-wider text-muted-foreground">
               <Layers className="h-3 w-3 text-primary" />
               <span>Node Taxonomy</span>
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-1.5">
-              {nodeTypes.map(([type, c]) => (
-                <div
-                  key={type}
-                  className="flex items-center gap-1.5 p-1 rounded bg-muted/30 border border-border/40"
-                >
+              {nodeTypes.map(([type, c]) => {
+                const IconComp = getNodeIcon(type);
+                return (
                   <div
-                    className="w-3 h-3 rounded-xs shrink-0 border"
-                    style={{ backgroundColor: c.bg, borderColor: c.border }}
-                  />
-                  <span className="text-3xs font-mono text-foreground truncate">
-                    {NODE_LABELS[type]}
-                  </span>
-                </div>
-              ))}
+                    key={type}
+                    className="flex items-center gap-1.5 p-1 rounded bg-muted/30 border border-border/40"
+                  >
+                    {IconComp ? (
+                      <span
+                        className="shrink-0 flex items-center justify-center"
+                        style={{ width: 14, height: 14, color: c.accent }}
+                      >
+                        {React.createElement(IconComp, { size: 12 })}
+                      </span>
+                    ) : (
+                      <div
+                        className="w-3 h-3 rounded-xs shrink-0 border"
+                        style={{ backgroundColor: c.bg, borderColor: c.border }}
+                      />
+                    )}
+                    <span className="text-3xs font-mono text-foreground truncate">
+                      {NODE_LABELS[type]}
+                    </span>
+                  </div>
+                );
+              })}
             </div>
           </div>
 
-          {/* 2. Connections & 3. Status Indicators */}
+          {/* 2. Stream Types + 3. Status Indicators */}
           <div className="space-y-3">
-            {/* Connections */}
+            {/* Stream Types (pipe colors) */}
             <div className="space-y-1.5">
               <div className="flex items-center gap-1.5 text-3xs font-mono font-bold uppercase tracking-wider text-muted-foreground">
                 <GitCommit className="h-3 w-3 text-primary" />
-                <span>Pipelines &amp; Wiring</span>
+                <span>Pipe Streams</span>
               </div>
-              <div className="space-y-1 text-2xs font-mono text-muted-foreground">
+              <div className="space-y-1 text-2xs font-mono">
+                {(Object.entries(STREAM_LABELS) as [StreamType, string][])
+                  .filter(([key]) => key !== 'general')
+                  .map(([key, label]) => (
+                    <div key={key} className="flex items-center gap-2">
+                      <div
+                        className="w-6 border-t-2"
+                        style={{ borderColor: STREAM_COLORS[key] }}
+                      />
+                      <span className="text-foreground">{label}</span>
+                    </div>
+                  ))}
                 <div className="flex items-center gap-2">
                   <div className="w-6 border-t-2 border-dashed border-primary" />
                   <span className="text-foreground">Editable Routing (Click to rewire)</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-6 border-t-2 border-border" />
-                  <span>Fixed P&amp;ID Pipeline</span>
                 </div>
               </div>
             </div>
