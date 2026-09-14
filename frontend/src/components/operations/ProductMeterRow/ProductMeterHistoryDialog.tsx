@@ -28,7 +28,7 @@ import { isReasonComplete, resolveReason } from '@/lib/correctionReasons';
 import { reasonCategoryLabel } from '@/lib/reasonCodes';
 import { logReadingEdit, diffFields, canEditEntry } from '@/pages/ro-trains/helpers';
 import { logProductionCalc, invalidateProductMeterDash } from '@/pages/operations/shared';
-import { Gauge, Droplet, Pencil, X, Loader2, AlertCircle } from 'lucide-react';
+import { Gauge, Droplet, Pencil, X, Loader2, AlertCircle, Undo2 } from 'lucide-react';
 
 interface ProductMeterHistoryDialogProps {
   meter: any;
@@ -357,11 +357,18 @@ export function ProductMeterHistoryDialog({ meter, plantId, onClose }: ProductMe
                   const isToggling = togglingId === r.id;
                   const isMeterReplacement = !!r.is_meter_replacement;
                   const isEstimated = !!r.is_estimated;
+                  // Retracted readings are excluded from Data Summary's daily totals
+                  // (see sanitizeReadingsForEntity) but this dialog queries every row
+                  // with no norm_status filter, so without this flag a retracted row
+                  // rendered indistinguishably from a valid one — showing a plausible
+                  // "Production" number for a reading the reports never actually count.
+                  const isRetracted = r.norm_status === 'retracted';
                   const rowEditable = canEditEntry(r, hasFullAccess, activeOperatorId);
                   return (
                     <tr key={r.id ?? i} className={[
                       'border-t',
                       isEditing            ? 'bg-primary-soft/60'
+                      : isRetracted        ? 'bg-muted/60 text-muted-foreground'
                       : isMeterReplacement ? 'bg-kpi-solar/40'
                       : isEstimated        ? 'bg-warn-soft/20'
                       : 'hover:bg-muted/40',
@@ -369,6 +376,11 @@ export function ProductMeterHistoryDialog({ meter, plantId, onClose }: ProductMe
                       <td className="px-3 py-1.5 whitespace-nowrap text-muted-foreground">
                         <span className="flex items-center gap-1.5">
                           {r.reading_datetime ? format(new Date(r.reading_datetime), 'MMM d, yyyy HH:mm') : '—'}
+                          {isRetracted && (
+                            <span className="inline-flex items-center gap-0.5 text-3xs font-semibold uppercase tracking-wide text-muted-foreground bg-muted px-1 py-0.5 rounded leading-none border border-border" title="Retracted — excluded from Data Summary totals; that day's volume rolls into the next valid reading">
+                              <Undo2 className="h-2.5 w-2.5" /> Retracted
+                            </span>
+                          )}
                           {isEstimated && (
                             <span className="text-3xs font-semibold uppercase tracking-wide text-warn bg-warn-soft/40 px-1 py-0.5 rounded leading-none border border-warn/40" title="Auto-backfilled reading">
                               Est.
@@ -382,16 +394,29 @@ export function ProductMeterHistoryDialog({ meter, plantId, onClose }: ProductMe
                         </span>
                       </td>
                       {meter.is_derived ? (
-                        <td className={cn('px-3 py-1.5 text-right font-mono-num', (r.daily_volume ?? r.current_reading) < 0 ? 'text-destructive font-semibold' : 'text-primary')}>
+                        <td
+                          className={cn(
+                            'px-3 py-1.5 text-right font-mono-num',
+                            isRetracted ? 'text-muted-foreground line-through decoration-1'
+                              : (r.daily_volume ?? r.current_reading) < 0 ? 'text-destructive font-semibold' : 'text-primary',
+                          )}
+                          title={isRetracted ? 'Retracted — excluded from Data Summary totals' : undefined}
+                        >
                           {fmtNum(r.daily_volume ?? r.current_reading, 2)}
                         </td>
                       ) : (
                         <>
-                          <td className="px-3 py-1.5 text-right font-mono-num">{fmtNum(r.current_reading, 2)}</td>
+                          <td className={cn('px-3 py-1.5 text-right font-mono-num', isRetracted && 'text-muted-foreground')}>
+                            {fmtNum(r.current_reading, 2)}
+                          </td>
                           <td className="px-3 py-1.5 text-right font-mono-num text-primary">
                             {isMeterReplacement
                               ? <span className="text-kpi-solar font-medium">0.00</span>
-                              : vol != null ? <span className={vol < 0 ? 'text-destructive font-semibold' : ''}>{fmtNum(vol, 2)}</span> : '—'
+                              : isRetracted
+                                ? <span className="text-muted-foreground line-through decoration-1" title="Retracted — excluded from Data Summary totals; that day's volume rolls into the next valid reading">
+                                    {vol != null ? fmtNum(vol, 2) : '—'}
+                                  </span>
+                                : vol != null ? <span className={vol < 0 ? 'text-destructive font-semibold' : ''}>{fmtNum(vol, 2)}</span> : '—'
                             }
                           </td>
                         </>
