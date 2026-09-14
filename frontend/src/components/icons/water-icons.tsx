@@ -453,27 +453,3 @@ export const WaterMeterIcon = ({ size, variant = 'mechanical', ...props }: Water
       </svg>
     );
 
-/** Electromagnetic Flow Meter — wedge/splitter flow tube with "E" badge.
- *
- * Used when `meterVariant === 'electromagnetic'` on a meter node (e.g. a train
- * whose permeate or reject meter is an EM magmeter rather than a mechanical
- * register meter). One icon; the E badge distinguishes it from the mechanical
- * WaterMeterIcon at a glance.
- */
-export const WaterMeterElectromagIcon = ({ size, ...props }: WaterIconProps) => (
-  <svg {...baseProps(size, props)}>
-    {/* Flow tube / wedge body */}
-    <path d="M3 10 h12 a3 3 0 0 1 3 3 v2 a3 3 0 0 1 -3 3 h-12 z" fill="currentColor" opacity={0.06} />
-    <path d="M3 10 H18 V14 H3 Z" fill="none" />
-    {/* Splitter / electrode plate */}
-    <path d="M12 9 V15" strokeDasharray="2 2" opacity={0.5} />
-    {/* Flow direction arrow */}
-    <path d="M3 12 H1 M3 12 L-1 10 M3 12 L-1 14" strokeLinecap="round" opacity={0.6} />
-    {/* E badge */}
-    <circle cx="14.5" cy="12" r="1.6" fill="currentColor" opacity={0.15} />
-    <circle cx="14.5" cy="12" r="1.6" fill="none" stroke="currentColor" strokeWidth={1} opacity={0.6} />
-    <text x="14.5" y="13" textAnchor="middle" fontSize={5} fontWeight={700} fontFamily="monospace" fill="currentColor">
-      E
-    </text>
-  </svg>
-);
