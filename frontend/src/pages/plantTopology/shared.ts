@@ -330,25 +330,6 @@ export function saveColWidths(plantId: string, widths: Record<string, number>) {
 
 // ─── Icon imports and node → icon mapping ───────────────────────────────────
 
-import {
-  RawWaterIcon,
-  MediaFilterIcon,
-  CartridgeFilterIcon,
-  BoosterPumpIcon,
-  HighPressurePumpIcon,
-  ROTrainIcon,
-  MembranePerformanceIcon,
-  PermeateIcon,
-  RejectIcon,
-  TankIcon,
-  PowerMeterIcon,
-  SolarPanelIcon,
-  GridPylonIcon,
-  MeterOdometerIcon,
-  WaterMeterIcon,
-  WaterMeterElectromagIcon,
-} from '@/components/icons/water-icons';
-
 /** Maps each NodeType to its domain icon component.
  *  Returns null for custom nodes (no icon — rendered as text badge).
  *  Meter nodes accept a `variant` prop ('mechanical' | 'electromagnetic')
@@ -444,7 +425,7 @@ export const STREAM_LABELS: Record<StreamType, string> = {
   reject:    'Reject / Concentrate',
   power:     'Power / Electrical',
   general:   'General Connection',
-};───
+};
 
 export function useTopologyData(plantId: string | null) {
   return useQuery({

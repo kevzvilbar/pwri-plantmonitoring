@@ -64,48 +64,6 @@ export const ChangeMeterIcon = ({ size, ...props }: WaterIconProps) => (
   </svg>
 );
 
-/** Power Meter — kWh meter face for grid / solar meters. One icon, used for both;
- *  the node label already distinguishes "Grid kWh" from "Solar kWh". */
-export const PowerMeterIcon = ({ size, ...props }: WaterIconProps) => (
-  <svg {...baseProps(size, props)}>
-    {/* Meter body */}
-    <rect x="3" y="5" width="16" height="13" rx="2.2" className="fill-info/15" />
-    <rect x="3" y="5" width="16" height="13" rx="2.2" />
-    {/* kWh label slot */}
-    <text x="11" y="11.5" textAnchor="middle" fontSize={5.6} fontFamily="monospace" fontWeight={700} fill="currentColor" opacity={0.5}>
-      kW·h
-    </text>
-    {/* Needle */}
-    <path d="M11 11 L14 9" strokeLinecap="round" />
-    <circle cx="11" cy="11" r="0.8" fill="currentColor" stroke="none" />
-    {/* Digital segment hint */}
-    <path d="M5 17.5 h14" strokeDasharray="1.2 1.2" opacity={0.55} />
-  </svg>
-);
-
-/** Solar Panel Array — multi-cell PV array symbol (6-cell module). */
-export const SolarPanelIcon = ({ size, ...props }: WaterIconProps) => (
-  <svg {...baseProps(size, props)}>
-    {/* Frame */}
-    <rect x="3" y="4" width="18" height="14" rx="1.5" />
-    {/* 6 cells (2×3 grid) */}
-    <rect x="4.5" y="5.5" width="7" height="5" rx="0.8" className="fill-info/20" />
-    <rect x="12.5" y="5.5" width="7" height="5" rx="0.8" className="fill-info/20" />
-    <rect x="4.5" y="11" width="7" height="4" rx="0.8" className="fill-info/20" />
-    <rect x="12.5" y="11" width="7" height="4" rx="0.8" className="fill-info/20" />
-    {/* Cell separators */}
-    <path d="M11.5 5.5 V16M4.5 9 V9.01" />
-    {/* Mounted on rack / rails */}
-    <path d="M7 4 V2 M12 4 V2 M17 4 V2" />
-    <path d="M3 4 H20" strokeLinecap="round" />
-  </svg>
-);
-
-/** Tank — horizontal vessel with liquid fill level and manway/roof detail. Used as the tank-equivalent node
-*  on the product / reject side (no separate tanks table exists in the schema, so this is a visual treatment,
-*  not a new graph NodeType). Accepts a variant to set product vs. reject tone. */
-export const TankIcon
-
 /** Multi-stage RO train — linked membrane blocks. Used for RO Train tab /
  * headers where "Droplet" or "Gauge" were previously standing in generically. */
 export const ROTrainIcon = ({ size, ...props }: WaterIconProps) => (
@@ -425,31 +383,4 @@ export const WaterMeterElectromagIcon = ({ size, ...props }: WaterIconProps) => 
     </text>
   </svg>
 );
-
-/** Water Meter — circular register meter (mechanical-style) with flow arrow.
- *
- * This is the default "water meter" symbol used for feed, permeate, reject,
- * raw, and bulk meters (i.e. m³/H₂O flow meters, not power kWh meters).
- * Pass `variant="electromagnetic"` to render the EM magmeter symbol instead.
- */
-export const WaterMeterIcon = ({ size, variant = 'mechanical', ...props }: WaterIconProps & { variant?: 'mechanical' | 'electromagnetic' }) =>
-  variant === 'electromagnetic'
-    ? <WaterMeterElectromagIcon size={size} {...props} />
-    : (
-      <svg {...baseProps(size, props)}>
-        {/* Meter body / register disc */}
-        <circle cx="9" cy="12" r="5" fill="currentColor" opacity={0.08} />
-        <circle cx="9" cy="12" r="5" />
-        {/* Register ticks (odometer hints) */}
-        <path d="M7 9.5h4M7 12h4M7 14.5h4" strokeLinecap="round" opacity={0.4} />
-        {/* Flow arrow (inlet left → exit right) */}
-        <path d="M15 12 H19 M19 12 L21 10 M19 12 L21 14" strokeLinecap="round" />
-        {/* Center pivot */}
-        <circle cx="9" cy="12" r="0.7" fill="currentColor" stroke="none" />
-        {/* "W" hint to distinguish from PowerMeter kWh icon at a glance */}
-        <text x="9" y="14" textAnchor="middle" fontSize={5.4} fontWeight={700} fontFamily="monospace" fill="currentColor" opacity={0.55}>
-          W
-        </text>
-      </svg>
-    );
 
