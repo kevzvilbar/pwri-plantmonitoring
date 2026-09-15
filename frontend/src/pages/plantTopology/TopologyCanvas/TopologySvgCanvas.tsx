@@ -2,7 +2,7 @@ import React, { useRef, useCallback } from 'react';
 import { useAppStore } from '@/store/appStore';
 import { NodeType, NODE_W, NODE_H, START_Y, ROW_GAP, POWER_COLS,
   COLORS, COL_GAP, ColSlot, cubicPath, getSymbolDimensions,
-  STAGE_ZONES, getNodeStatusInfo,
+  STAGE_ZONES, getNodeStatusInfo, TOPO_FONT_MONO,
 } from '../shared';
 import type { StageZone } from '../shared';
 import { NodePalette } from '../NodePalette';
