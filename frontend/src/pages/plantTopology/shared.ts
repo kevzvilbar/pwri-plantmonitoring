@@ -278,6 +278,10 @@ export function withAlpha(hslColor: string, alpha: number): string {
 
 export const EDITABLE_PAIRS: [NodeType, NodeType][] = [
   ['permeate',   'bulk'],
+  // Plants where permeate IS a production source (e.g. Mambaling: 'both'
+  // mode — permeate + product meter summed) can also feed locators directly
+  // off the permeate line, alongside their product meter.
+  ['permeate',   'locator'],
   ['bulk',       'locator'],
   ['well',       'roTrain'],
   ['roTrain',    'well'],
@@ -801,6 +805,21 @@ export function buildTopology(
 
   // ── Default editable links ──
   const defaultEditLinks: TopoLink[] = [];
+
+  // Plants where permeate IS a production source (permeate_is_production on
+  // plant_meter_config; e.g. Mambaling runs 'both' mode — permeate + product
+  // meter summed) draw their locator supply directly off the permeate line as
+  // well as via the product meter, so seed permeate → locator defaults.
+  const permeateIsProduction =
+    (meterCfg as any)?.permeate_is_production === true || cfg?.permeate_is_production === true;
+  if (permeateIsProduction && hasPermeate) {
+    roTrains.forEach((r: any) => {
+      if (r.unit_type === 'secondary') return;
+      locators.forEach((l: any) => {
+        defaultEditLinks.push({ from: `permeate-${r.id}`, to: l.id, editable: true });
+      });
+    });
+  }
 
   // Raw meters feed each primary train's raw tank (which wells feed which
   // train's pre-treatment set is rewirable via Connect mode).
