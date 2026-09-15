@@ -35,10 +35,6 @@ export function TopoLinkRenderer({ link, idx, topoState, positions, hoveredLink,
   const isHov = hoveredLink === idx;
   const markerId = `arrow-${idx}`;
 
-  // Calculate bezier control points for cubic path
-  const midX = (x1 + x2) / 2;
-  const dist = Math.abs(x2 - x1);
-
   return (
     <g key={`link-${idx}`}>
       {/* Invisible larger hit area for easier interaction */}
@@ -72,26 +68,6 @@ export function TopoLinkRenderer({ link, idx, topoState, positions, hoveredLink,
         opacity={isHov ? 1 : 0.75}
         style={{ transition: 'stroke 0.2s, stroke-width 0.2s, opacity 0.2s' }}
       />
-
-      {/* Flow direction chevrons for horizontal pipes */}
-      {dist > 80 && (
-        <g opacity={isHov ? 0.8 : 0.5} style={{ transition: 'opacity 0.2s' }}>
-          {/* Calculate positions for chevrons along the path */}
-          {[0.25, 0.5, 0.75].map((t) => {
-            const px = midX + (x2 - x1) * t - (x2 - x1) * 0.08;
-            const py = y1 + (y2 - y1) * t;
-            const dir = x2 > x1 ? 1 : -1;
-            return (
-              <path
-                key={t}
-                d={`M${px - dir * 6},${py} L${px},${py - 3} L${px},${py + 3} Z`}
-                fill={color}
-                transform={`scale(${dir}, 1) translate(${-px * dir + px}, 0)`}
-              />
-            );
-          })}
-        </g>
-      )}
 
       {/* Arrow marker definition.
           markerUnits defaults to "strokeWidth", which scales the marker by
