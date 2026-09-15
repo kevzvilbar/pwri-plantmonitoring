@@ -365,8 +365,9 @@ export function LocatorSymbol({ size, className, accent, status }: SymbolProps) 
 }
 
 // ─── Per-train pre-treatment chain symbols ───────────────────────────────────
-// Each primary RO train carries its own set: Raw Tank → Raw Water Pump →
-// AFM/MMF → Bag/Cartridge Filter → High Pressure Pump → Feed Meter → Train.
+// One shared raw tank feeds every primary train; each train then carries its
+// own set: Raw Water Pump → AFM/MMF → Bag/Cartridge Filter →
+// High Pressure Pump → Feed Meter → Train.
 
 export function RawTankSymbol({ size, className, accent, status }: SymbolProps) {
   return (

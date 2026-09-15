@@ -295,7 +295,9 @@ export const EDITABLE_PAIRS: [NodeType, NodeType][] = [
   ['bulk',       'locator'],
   ['well',       'roTrain'],
   ['roTrain',    'well'],
-  // Which wells feed which train's pre-treatment set (raw meter → raw tank).
+  // Which wells feed the shared raw tank (raw meter → raw tank).
+  // By default every well feeds the single shared tank; kept connectable
+  // so custom / rewired topologies can still attach to it in Connect mode.
   ['rawMeter',   'rawTank'],
   // A primary train's permeate can feed a secondary (2nd-pass) RO train —
   // e.g. Train 1's permeate -> Potable-RO. See unit_type/feed_source_train_id
@@ -647,6 +649,13 @@ export function buildTopology(
   // standard plant set-up, so it is always drawn.
   const productTankId = `producttank-${plantId}`;
 
+  // ── Shared Raw Tank ──
+  // A single raw-water storage tank feeds every primary RO train's pre-
+  // treatment set (Raw Water Pump → AFM/MMF → Bag/CF → HPP → Feed Meter →
+  // RO Train). All wells' raw meters discharge into this one tank, which
+  // in turn supplies the first stage of each train's line.
+  const rawTankId = `rawtank-${plantId}`;
+
   const solarCount = powerCfg?.solar_meter_count ?? 1;
   const gridCount  = powerCfg?.grid_meter_count  ?? 1;
   const solarNames: string[] = powerCfg?.solar_meter_names ?? Array.from({ length: solarCount }, (_: any, i: number) => `Solar Meter ${i + 1}`);
@@ -673,6 +682,10 @@ export function buildTopology(
   // ── Wells ──
   // Blending wells inject directly into the Product Water line (bypass RO).
   // They skip rawMeter + pretreat entirely, with a distinct bypass visual on the link.
+
+  // Create the single shared raw-water tank once (feeds all primary trains below).
+  nodes.push({ id: rawTankId, type: 'rawTank', label: 'Raw Tank', detail: `${roTrains.filter((r: any) => r.unit_type !== 'secondary').length} outlets` });
+
   wells.forEach((w: any) => {
     nodes.push({ id: w.id, type: 'well', label: w.name, status: w.status });
     if ((w as any).is_blending_well) {
@@ -686,14 +699,16 @@ export function buildTopology(
     const rmId = `rawmeter-${w.id}`;
     nodes.push({ id: rmId, type: 'rawMeter', label: `Raw ${w.name}` });
     fixedLinks.push({ from: w.id, to: rmId });
+    // All wells' raw meters discharge into the single shared raw tank.
+    fixedLinks.push({ from: rmId, to: rawTankId });
   });
 
   // ── Pre-treatment chain — one set per primary RO train ──
-  // Each train has its own line: Raw Tank → Raw Water Pump → AFM/MMF →
-  // Bag/Cartridge Filter → High Pressure Pump → (Feed Meter) → RO Train.
-  // Equipment counts/labels come straight from the ro_trains row
-  // (filter_media_type, filter_housing_type, num_* columns). Secondary
-  // (2nd-pass) units are skipped — they're fed by upstream permeate.
+  // All trains share ONE raw tank; each train then has its own line:
+  // Raw Water Pump → AFM/MMF → Bag/Cartridge Filter → High Pressure Pump
+  // → (Feed Meter) → RO Train. Equipment counts/labels come straight from
+  // the ro_trains row (filter_media_type, filter_housing_type, num_* columns).
+  // Secondary (2nd-pass) units are skipped — they're fed by upstream permeate.
   const trainChainEnd = new Map<string, string>(); // trainId → last chain node feeding the train
   roTrains.forEach((r: any) => {
     if (r.unit_type === 'secondary') return;
@@ -704,14 +719,13 @@ export function buildTopology(
     const housingLbl  = housingType === 'Bag Filter' ? 'Bag Filter' : 'Cartridge';
     const em = trainEM.get(r.id) ?? { feed: false, permeate: false, reject: false };
 
-    const tankId = `rawtank-${r.id}`;
-    nodes.push({ id: tankId, type: 'rawTank', label: `Raw Tank T${t}` });
     const rwpId = `rwp-${r.id}`;
     nodes.push({
       id: rwpId, type: 'rawWaterPump', label: `Raw Water Pump T${t}`,
       detail: `RWP×${r.num_booster_pumps ?? 0}`,
     });
-    fixedLinks.push({ from: tankId, to: rwpId });
+    // All trains draw feed water from the single shared raw tank.
+    fixedLinks.push({ from: rawTankId, to: rwpId });
 
     const mfId = `mf-${r.id}`;
     nodes.push({
@@ -871,15 +885,12 @@ export function buildTopology(
     });
   }
 
-  // Raw meters feed each primary train's raw tank (which wells feed which
-  // train's pre-treatment set is rewirable via Connect mode).
-  roTrains.forEach((r: any) => {
-    if (r.unit_type === 'secondary') return;
-    wells.forEach((w: any) => {
-      if ((w as any).is_blending_well) return;
-      defaultEditLinks.push({ from: `rawmeter-${w.id}`, to: `rawtank-${r.id}`, editable: true });
-    });
-  });
+  // Raw meters discharge into the single shared raw tank via fixedLinks above
+  // (hard-wired — every well feeds this one tank, which supplies all trains).
+  // No default editable duplicate here: emitting the same pair in both
+  // fixedLinks and editLinks would render the pipe twice. The
+  // ['rawMeter','rawTank'] pair stays connectable in Connect mode for
+  // custom rewiring.
 
   locators.forEach((l: any) => {
     if (l.product_meter_id)
@@ -916,12 +927,21 @@ export function buildTopology(
   });
 
   // Sanitize saved links against the current node set — drops stale references
-  // (e.g. the retired shared `pretreat-<plantId>` / `feedmeter-<plantId>`
-  // nodes) so old saved topologies don't render dangling pipes. If nothing
-  // survives, fall back to the fresh defaults.
+  // (e.g. the retired shared `pretreat-<plantId>` / `feedmeter-<plantId>` nodes
+  // and the old per-train `rawtank-<trainId>` nodes) so old saved topologies
+  // don't render dangling pipes. If nothing survives, fall back to the
+  // fresh defaults.
   const knownIds = new Set(nodes.map((n) => n.id));
   const sanitizedSaved = savedLinks.filter(
-    (s: any) => knownIds.has(s.from_id) && knownIds.has(s.to_id)
+    (s: any) => {
+      if (!knownIds.has(s.from_id) || !knownIds.has(s.to_id)) return false;
+      // Old per-train raw-tank links are stale under the single shared tank —
+      // their target no longer exists (knownIds already drops them), and any
+      // rawMeter → shared-rawTank pair duplicates a fixedLink, which would
+      // double-render. Filter those out so fresh defaults win for that pair.
+      if (s.from_id.startsWith('rawmeter-') && s.to_id === rawTankId) return false;
+      return true;
+    }
   );
 
   const editLinks: TopoLink[] = sanitizedSaved.length
@@ -951,9 +971,10 @@ export function layoutNodes(
     'pretreat', 'feedMeter', 'roTrain', 'permeate', 'reject', 'productTank', 'bulk', 'locator',
   ];
 
-  // Per-train chain stages ride on their train's row so each train forms one
-  // horizontal lane (chain node ids are `<stage>-<trainId>`).
-  const chainTypes: NodeType[] = ['rawTank', 'rawWaterPump', 'mediaFilter', 'bagCartridge', 'hpPump'];
+  // Per-train chain stages (rwp / mediaFilter / bagCartridge / hpPump + the
+  // per-train feed meter) ride on their train's row so each train forms one
+  // horizontal lane (ids are `<stage>-<trainId>`).
+  const chainTypes: NodeType[] = ['rawWaterPump', 'mediaFilter', 'bagCartridge', 'hpPump'];
   const trainRowById = new Map<string, number>();
   (byType['roTrain'] ?? []).forEach((n, i) => trainRowById.set(n.id, i));
 
@@ -965,10 +986,10 @@ export function layoutNodes(
       const trainId = n.id.slice(n.id.indexOf('-') + 1);
       if ((chainTypes.includes(t) || t === 'feedMeter') && trainRowById.has(trainId))
         y = START_Y + (trainRowById.get(trainId) as number) * ROW_GAP;
-      // The single plant-wide product tank centres vertically against the
-      // train rows (same convention as the old shared pre-treat node), so it
-      // reads as the common collector for every train's permeate.
-      if (t === 'productTank')
+      // The single plant-wide product tank (and the single shared raw tank)
+      // centre vertically against the train rows so they read as the common
+      // collector/supply for every train.
+      if (t === 'productTank' || t === 'rawTank')
         y = START_Y + Math.floor(Math.max(0, (byType['roTrain']?.length ?? 1) - 1) / 2) * ROW_GAP;
       // Reject rows start below permeate rows
       if (t === 'reject')
