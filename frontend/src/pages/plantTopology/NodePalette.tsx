@@ -8,7 +8,7 @@ import { CustomNodePaletteSection } from './CustomNodePaletteSection';
 
 const PALETTE_TYPES: NodeType[] = [
   'well', 'rawMeter', 'rawTank', 'rawWaterPump', 'mediaFilter', 'bagCartridge', 'hpPump',
-  'pretreat', 'feedMeter', 'roTrain', 'permeate', 'reject', 'bulk', 'locator',
+  'pretreat', 'feedMeter', 'roTrain', 'permeate', 'reject', 'productTank', 'bulk', 'locator',
   // 'customNode' handled by CustomNodePaletteSection below
 ];
 

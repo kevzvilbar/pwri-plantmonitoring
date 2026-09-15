@@ -471,3 +471,28 @@ export function HPPumpSymbol({ size, className, accent, status }: SymbolProps) {
     </svg>
   );
 }
+// ─── Product water storage ───────────────────────────────────────────────────
+
+export function ProductTankSymbol({ size, className, accent, status }: SymbolProps) {
+  return (
+    <svg {...baseProps({ size, className })} viewBox="0 0 48 48">
+      {/* Atmospheric product-water storage tank with domed roof */}
+      <path d="M13 12 Q24 4 35 12 L35 38 Q24 43 13 38 Z" opacity={0.12} />
+      <path d="M13 12 Q24 4 35 12 L35 38 Q24 43 13 38 Z" />
+      {/* Stored product water level (finished water sits high in the tank) */}
+      <path d="M13 22 Q24 26 35 22 L35 38 Q24 43 13 38 Z" opacity={0.18} />
+      <line x1="13" y1="22" x2="35" y2="22" opacity={0.45} />
+      <line x1="13" y1="28" x2="35" y2="28" opacity={0.2} />
+      <line x1="13" y1="33" x2="35" y2="33" opacity={0.2} />
+      {/* Vent on the roof */}
+      <line x1="24" y1="7" x2="24" y2="3" opacity={0.4} />
+      {/* Inlet manifold (top left, arrow in) + outlet header (bottom right) */}
+      <line x1="4" y1="15" x2="13" y2="15" />
+      <polyline points="9,12 13,15 9,18" />
+      <line x1="35" y1="36" x2="44" y2="36" />
+      <polyline points="41,33 44,36 41,39" />
+      <text x="24" y="34" textAnchor="middle" fontSize="5" fontWeight={700} fontFamily="monospace" fill="currentColor" opacity={0.5}>P</text>
+      <StatusDot status={status} cx={38} cy={8} r={3.5} />
+    </svg>
+  );
+}

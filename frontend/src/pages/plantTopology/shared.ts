@@ -37,6 +37,7 @@ import {
   MediaFilterSymbol,
   CartridgeFilterSymbol,
   HPPumpSymbol,
+  ProductTankSymbol,
 } from '@/components/icons/topology-symbols';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
@@ -44,7 +45,7 @@ import {
 export type NodeType =
   | 'well' | 'rawMeter' | 'rawTank' | 'rawWaterPump' | 'mediaFilter'
   | 'bagCartridge' | 'hpPump' | 'pretreat' | 'feedMeter'
-  | 'roTrain' | 'permeate' | 'reject' | 'bulk' | 'locator'
+  | 'roTrain' | 'permeate' | 'reject' | 'productTank' | 'bulk' | 'locator'
   | 'solarSource' | 'gridSource' | 'solarMeter' | 'gridMeter'
   | 'customNode';
 
@@ -76,6 +77,7 @@ export const BASE_COL_SLOTS: BaseColSlot[] = [
   { key: 'feedMeter',    label: 'FEED',         type: 'feedMeter' },
   { key: 'roTrain',      label: 'RO TRAINS',    type: 'roTrain' },
   { key: 'permeate',     label: 'PERMEATE / REJECT', type: 'permeate' },
+  { key: 'productTank',  label: 'PRODUCT TANK', type: 'productTank' },
   { key: 'bulk',         label: 'BULK METERS',  type: 'bulk' },
   { key: 'locator',      label: 'LOCATORS',     type: 'locator' },
 ];
@@ -231,6 +233,7 @@ export const NODE_LABELS: Record<NodeType, string> = {
   roTrain:     'RO TRAIN',
   permeate:    'PERMEATE',
   reject:      'REJECT',
+  productTank: 'PRODUCT TANK',
   bulk:        'BULK METER',
   locator:     'LOCATOR',
   solarSource: 'SOLAR',
@@ -257,6 +260,7 @@ export const COLORS: Record<NodeType, { bg: string; border: string; text: string
   roTrain:     { bg: 'hsl(var(--topo-roTrain-bg))',     border: 'hsl(var(--topo-roTrain-border))',     text: 'hsl(var(--topo-roTrain-text))',     accent: 'hsl(var(--topo-roTrain-border))',     lane: 'hsl(var(--topo-roTrain-lane))' },
   permeate:    { bg: 'hsl(var(--topo-permeate-bg))',    border: 'hsl(var(--topo-permeate-border))',    text: 'hsl(var(--topo-permeate-text))',    accent: 'hsl(var(--topo-permeate-border))',    lane: 'hsl(var(--topo-permeate-lane))' },
   reject:      { bg: 'hsl(var(--topo-reject-bg))',      border: 'hsl(var(--topo-reject-border))',      text: 'hsl(var(--topo-reject-text))',      accent: 'hsl(var(--topo-reject-border))',      lane: 'hsl(var(--topo-reject-lane))' },
+  productTank: { bg: 'hsl(var(--topo-productTank-bg))', border: 'hsl(var(--topo-productTank-border))', text: 'hsl(var(--topo-productTank-text))', accent: 'hsl(var(--topo-productTank-border))', lane: 'hsl(var(--topo-productTank-lane))' },
   bulk:        { bg: 'hsl(var(--topo-bulk-bg))',        border: 'hsl(var(--topo-bulk-border))',        text: 'hsl(var(--topo-bulk-text))',        accent: 'hsl(var(--topo-bulk-border))',        lane: 'hsl(var(--topo-bulk-lane))' },
   locator:     { bg: 'hsl(var(--topo-locator-bg))',     border: 'hsl(var(--topo-locator-border))',     text: 'hsl(var(--topo-locator-text))',     accent: 'hsl(var(--topo-locator-border))',     lane: 'hsl(var(--topo-locator-lane))' },
   solarSource: { bg: 'hsl(var(--topo-solarSource-bg))', border: 'hsl(var(--topo-solarSource-border))', text: 'hsl(var(--topo-solarSource-text))', accent: 'hsl(var(--topo-solarSource-border))', lane: 'hsl(var(--topo-solarSource-lane))' },
@@ -282,6 +286,12 @@ export const EDITABLE_PAIRS: [NodeType, NodeType][] = [
   // mode — permeate + product meter summed) can also feed locators directly
   // off the permeate line, alongside their product meter.
   ['permeate',   'locator'],
+  // The product tank is fed by permeate and discharges to the product/bulk
+  // meters, so it can be rewired against either side (plus the locators where
+  // it feeds distribution directly).
+  ['permeate',   'productTank'],
+  ['productTank','bulk'],
+  ['productTank','locator'],
   ['bulk',       'locator'],
   ['well',       'roTrain'],
   ['roTrain',    'well'],
@@ -403,6 +413,8 @@ export function getNodeIcon(type: NodeType, variant?: string): React.ComponentTy
       return variant === 'tank' ? TankSymbol : PermeateSymbol;
     case 'reject':
       return RejectSymbol;
+    case 'productTank':
+      return ProductTankSymbol;
     case 'bulk':
       return variant === 'tank' ? TankSymbol : BulkMeterSymbol;
     case 'locator':
@@ -449,6 +461,8 @@ export function getSymbolDimensions(type: NodeType): { w: number; h: number } {
       return { w: 48, h: 48 };
     case 'reject':
       return { w: 48, h: 48 };
+    case 'productTank':
+      return { w: 48, h: 56 };
     case 'bulk':
       return { w: 48, h: 48 };
     case 'locator':
@@ -487,8 +501,11 @@ export function getStreamType(link: TopoLink, nodes: TopoNode[]): StreamType {
     return 'reject';
   }
 
-  // Permeate flows (permeate → bulk/locator/roTrain)
-  if (fromNode.type === 'permeate') {
+  // Permeate flows (permeate/productTank → bulk/locator/roTrain) — the
+  // product tank sits on the permeate/product water line, so pipes touching
+  // it render in permeate green.
+  if (fromNode.type === 'permeate' || fromNode.type === 'productTank' ||
+      toNode.type === 'productTank') {
     return 'permeate';
   }
 
@@ -617,6 +634,19 @@ export function buildTopology(
   const hasPermeate  = cfg?.ro_has_permeate_meter ?? true;
   const hasReject    = cfg?.ro_has_reject_meter   ?? true;
 
+  // Plants where permeate IS a production source (permeate_is_production on
+  // plant_meter_config; e.g. Mambaling runs 'both' mode — permeate + product
+  // meter summed). Drives the permeate → locator default routings further down.
+  const permeateIsProduction =
+    (meterCfg as any)?.permeate_is_production === true || cfg?.permeate_is_production === true;
+
+  // ── Product tank ──
+  // The product tank sits on the product-water line between PERMEATE and BULK
+  // METERS: it collects each train's permeate (plus any blending-well water)
+  // and feeds the plant's product meters out to the locators. It is part of the
+  // standard plant set-up, so it is always drawn.
+  const productTankId = `producttank-${plantId}`;
+
   const solarCount = powerCfg?.solar_meter_count ?? 1;
   const gridCount  = powerCfg?.grid_meter_count  ?? 1;
   const solarNames: string[] = powerCfg?.solar_meter_names ?? Array.from({ length: solarCount }, (_: any, i: number) => `Solar Meter ${i + 1}`);
@@ -646,10 +676,11 @@ export function buildTopology(
   wells.forEach((w: any) => {
     nodes.push({ id: w.id, type: 'well', label: w.name, status: w.status });
     if ((w as any).is_blending_well) {
-      // Blending well injects directly into Product Water line (bypasses RO)
-      const bulkTarget = productMeters[0] ? `bulk-${productMeters[0].id}` : null;
-      const blTarget = bulkTarget ?? `locator-${plantId}-product-line`;
-      fixedLinks.push({ from: w.id, to: blTarget, bypass: true });
+      // Blending well injects directly into the Product Water line (bypasses
+      // RO) — into the plant's product tank. Node ids are the raw
+      // product_meters / locators row ids, so the old `bulk-`/
+      // `locator-<plant>-product-line` prefixes produced dangling links.
+      fixedLinks.push({ from: w.id, to: productTankId, bypass: true });
       return;
     }
     const rmId = `rawmeter-${w.id}`;
@@ -766,6 +797,28 @@ export function buildTopology(
     }
   });
 
+  // ── Product tank — plant product-water storage on the permeate line ──
+  // Collects every primary train's permeate (or the train itself where no
+  // permeate meter is configured) plus any blending-well water, and feeds the
+  // plant's product meters. Always present as part of the standard set-up, so
+  // the product line is never left dangling.
+  nodes.push({
+    id: productTankId,
+    type: 'productTank',
+    label: 'Product Tank',
+    detail: `${roTrains.filter((r: any) => r.unit_type !== 'secondary').length} in`
+      + (productMeters.length ? ` · ${productMeters.length} out` : ''),
+  });
+  roTrains.forEach((r: any) => {
+    if (r.unit_type === 'secondary') return;
+    fixedLinks.push({ from: hasPermeate ? `permeate-${r.id}` : r.id, to: productTankId });
+  });
+  // Product tank → each configured product meter; those meters then feed
+  // their locators via the existing editable `product_meter_id` links.
+  productMeters.forEach((m: any) => {
+    fixedLinks.push({ from: productTankId, to: m.id });
+  });
+
   // ── Bulk meters (product_meters from DB — exactly as configured in Plants) ──
   productMeters.forEach((m: any) => {
     nodes.push({ id: m.id, type: 'bulk', label: m.name, status: m.status });
@@ -806,12 +859,9 @@ export function buildTopology(
   // ── Default editable links ──
   const defaultEditLinks: TopoLink[] = [];
 
-  // Plants where permeate IS a production source (permeate_is_production on
-  // plant_meter_config; e.g. Mambaling runs 'both' mode — permeate + product
-  // meter summed) draw their locator supply directly off the permeate line as
-  // well as via the product meter, so seed permeate → locator defaults.
-  const permeateIsProduction =
-    (meterCfg as any)?.permeate_is_production === true || cfg?.permeate_is_production === true;
+  // Plants where permeate IS a production source (see permeateIsProduction
+  // above) draw their locator supply directly off the permeate line as well as
+  // via the product tank/meter, so seed permeate → locator defaults.
   if (permeateIsProduction && hasPermeate) {
     roTrains.forEach((r: any) => {
       if (r.unit_type === 'secondary') return;
@@ -835,6 +885,16 @@ export function buildTopology(
     if (l.product_meter_id)
       defaultEditLinks.push({ from: l.product_meter_id, to: l.id, editable: true });
   });
+
+  // Product-tank outlets. Where the plant has product meters, the fixed
+  // tank → meter → locator chain already covers distribution; with no product
+  // meter configured the tank feeds the locators directly (rewirable in
+  // Connect mode).
+  if (productMeters.length === 0) {
+    locators.forEach((l: any) => {
+      defaultEditLinks.push({ from: productTankId, to: l.id, editable: true });
+    });
+  }
 
   roTrains.forEach((r: any) => {
     if (r.unit_type === 'secondary' && r.feed_source_train_id) {
@@ -888,7 +948,7 @@ export function layoutNodes(
 
   const waterTypes: NodeType[] = [
     'well', 'rawMeter', 'rawTank', 'rawWaterPump', 'mediaFilter', 'bagCartridge', 'hpPump',
-    'pretreat', 'feedMeter', 'roTrain', 'permeate', 'reject', 'bulk', 'locator',
+    'pretreat', 'feedMeter', 'roTrain', 'permeate', 'reject', 'productTank', 'bulk', 'locator',
   ];
 
   // Per-train chain stages ride on their train's row so each train forms one
@@ -905,6 +965,11 @@ export function layoutNodes(
       const trainId = n.id.slice(n.id.indexOf('-') + 1);
       if ((chainTypes.includes(t) || t === 'feedMeter') && trainRowById.has(trainId))
         y = START_Y + (trainRowById.get(trainId) as number) * ROW_GAP;
+      // The single plant-wide product tank centres vertically against the
+      // train rows (same convention as the old shared pre-treat node), so it
+      // reads as the common collector for every train's permeate.
+      if (t === 'productTank')
+        y = START_Y + Math.floor(Math.max(0, (byType['roTrain']?.length ?? 1) - 1) / 2) * ROW_GAP;
       // Reject rows start below permeate rows
       if (t === 'reject')
         y = START_Y + ((byType['permeate']?.length ?? 0) + i) * ROW_GAP;

@@ -82,6 +82,7 @@ export function NodeInspector({
       case 'permeate':
       case 'reject':
       case 'bulk':
+      case 'productTank':
         return { label: 'Open in Operations (Meters)', path: `/operations${plantId ? `?plant=${plantId}` : ''}` };
       case 'rawTank':
       case 'rawWaterPump':

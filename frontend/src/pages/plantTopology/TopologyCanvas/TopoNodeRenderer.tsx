@@ -46,8 +46,9 @@ export function TopoNodeRenderer({
   const iconVariant = node.type === 'bulk' && node.detail?.includes('Tank') ? 'tank' : undefined;
   const SymbolComp = getNodeIcon(node.type, iconVariant);
 
-  // Determine stream badge for meter nodes (feed/permeate/reject)
-  const meterTypes = ['rawMeter', 'feedMeter', 'permeate', 'reject', 'bulk', 'locator'];
+  // Determine stream badge for meter/single-stream nodes (feed/permeate/reject)
+  // — the product tank rides the permeate/product line, so it carries one too.
+  const meterTypes = ['rawMeter', 'feedMeter', 'permeate', 'reject', 'productTank', 'bulk', 'locator'];
   const showStreamBadge = meterTypes.includes(node.type);
   const incomingLink = topoState.fixedLinks.concat(topoState.editLinks).find(l => l.to === node.id);
   const streamType = incomingLink ? getStreamType(incomingLink, topoState.nodes) : null;

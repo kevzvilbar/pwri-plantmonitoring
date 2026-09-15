@@ -167,6 +167,11 @@
     --topo-permeate-text:      196 64% 24%;
     --topo-permeate-lane:      183 100% 96%;
 
+    --topo-productTank-bg:     199 88% 91%;
+    --topo-productTank-border: 200 82% 34%;
+    --topo-productTank-text:   201 60% 21%;
+    --topo-productTank-lane:   199 100% 96%;
+
     --topo-reject-bg:          0 93% 94%;
     --topo-reject-border:      0 72% 51%;
     --topo-reject-text:        0 63% 31%;
@@ -499,6 +504,11 @@
     --topo-permeate-border:    192 81% 50%;
     --topo-permeate-text:      192 35% 88%;
     --topo-permeate-lane:      192 40% 12%;
+
+    --topo-productTank-bg:     200 45% 18%;
+    --topo-productTank-border: 199 76% 50%;
+    --topo-productTank-text:   200 35% 88%;
+    --topo-productTank-lane:   200 40% 12%;
 
     --topo-reject-bg:          0 45% 18%;
     --topo-reject-border:      0 62% 58%;

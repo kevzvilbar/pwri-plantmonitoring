@@ -6,10 +6,14 @@
  *  WATER FLOW (left → right)
  *    Well → Raw Meter → Raw Tank → Raw Water Pump → AFM/MMF → Bag/CF Filter
  *        → High Pressure Pump → Feed Meter → RO Train
- *        → Permeate Meter → Bulk/Mother Meter → Locator
+ *        → Permeate Meter → Product Tank → Bulk/Mother Meter → Locator
  *        → Reject Meter
  *    (each primary RO train carries its own pre-treatment set; secondary
  *    2nd-pass units are fed directly by an upstream train's permeate)
+ *
+ *    The product tank collects permeate from every primary train (plus any
+ *    blending-well water) and feeds the plant product meters out to the
+ *    locators.
  *
  *  POWER LAYER (below water flow)
  *    Solar Array → Solar Meter(s) ─┐
