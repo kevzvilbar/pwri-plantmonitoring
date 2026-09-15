@@ -10,6 +10,7 @@ import {
   saveLinks, loadCustomNodes, saveCustomNodes, loadCustomColumns, saveCustomColumns,
   loadPosOverrides, savePosOverrides, loadPaletteItems, savePaletteItems,
   loadColWidths, saveColWidths, useTopologyData, buildTopology, Zone,
+  resolveStages, buildStageZones,
   layoutNodes, cubicPath, TOPO_FONT_SANS, TOPO_FONT_MONO, getNodeStatusInfo,
 } from './shared';
 import { NodePalette } from './NodePalette';
@@ -153,9 +154,13 @@ export default function PlantTopologyContent({
     );
   }
 
-  const colSequence = buildColSequence(customColumns);
-  const colXMap = buildColXMap(customColumns, colWidths);
-  const positions  = layoutNodes(topoState.nodes, customColumns, posOverrides, colWidths);
+  // The plant's process line shape. A plant with no `plant_process_stages`
+  // rows resolves to DEFAULT_PROCESS_STAGES, i.e. the legacy column order.
+  const stages = resolveStages((rawData as any)?.processStages);
+  const stageZones = buildStageZones(stages);
+  const colSequence = buildColSequence(customColumns, stages);
+  const colXMap = buildColXMap(customColumns, colWidths, stages);
+  const positions  = layoutNodes(topoState.nodes, customColumns, posOverrides, colWidths, stages);
   const allLinks   = [...topoState.fixedLinks, ...topoState.editLinks];
 
   let maxX = 0, maxY = 0;
@@ -205,6 +210,7 @@ export default function PlantTopologyContent({
     activeLinksCount,
     colSequence,
     colXMap,
+    stageZones,
     maxX, maxY, maxWaterY, powerDividerY,
     linkCounts,
     dragItem,

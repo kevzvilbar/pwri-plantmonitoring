@@ -497,3 +497,122 @@ export function ProductTankSymbol({ size, className, accent, status }: SymbolPro
     </svg>
   );
 }
+
+export function DegasifierSymbol({ size, className, accent, status }: SymbolProps) {
+  return (
+    <svg {...baseProps({ size, className })} viewBox="0 0 48 48">
+      {/* Atmospheric degasifier / decarbonator tower with pitched vent roof */}
+      <path d="M14 14 L24 6 L34 14 Z" opacity={0.12} />
+      <path d="M14 14 L24 6 L34 14 Z" />
+      <rect x="14" y="14" width="20" height="26" rx="1.5" opacity={0.1} />
+      <rect x="14" y="14" width="20" height="26" rx="1.5" />
+      {/* Packing media band */}
+      <line x1="14" y1="20" x2="34" y2="20" opacity={0.35} />
+      <line x1="14" y1="34" x2="34" y2="34" opacity={0.35} />
+      <line x1="18" y1="23" x2="21" y2="31" opacity={0.3} />
+      <line x1="23" y1="23" x2="26" y2="31" opacity={0.3} />
+      <line x1="28" y1="23" x2="31" y2="31" opacity={0.3} />
+      {/* CO2 vent to atmosphere */}
+      <path d="M24 6 L24 2" opacity={0.5} />
+      <path d="M21 3 Q24 0 27 3" opacity={0.35} />
+      {/* Spray inlet (top left) and gravity discharge (bottom right) */}
+      <line x1="4" y1="17" x2="14" y2="17" />
+      <polyline points="10,14 14,17 10,20" />
+      <line x1="34" y1="38" x2="44" y2="38" />
+      <polyline points="41,35 44,38 41,41" />
+      <StatusDot status={status} cx={38} cy={10} r={3.5} />
+    </svg>
+  );
+}
+
+export function BagFilterBankSymbol({ size, className, accent, status }: SymbolProps) {
+  return (
+    <svg {...baseProps({ size, className })} viewBox="0 0 48 48">
+      {/* Parallel bag-filter housings on a common inlet/outlet header —
+          distinguishes a multi-housing bank from a single cartridge filter. */}
+      <line x1="4" y1="12" x2="44" y2="12" />
+      <line x1="4" y1="36" x2="44" y2="36" />
+      {[11, 22, 33].map((x) => (
+        <g key={x}>
+          <rect x={x - 4} y="15" width="8" height="18" rx="1.5" opacity={0.12} />
+          <rect x={x - 4} y="15" width="8" height="18" rx="1.5" />
+          <line x1={x} y1="12" x2={x} y2="15" />
+          <line x1={x} y1="33" x2={x} y2="36" />
+          <line x1={x - 2} y1="19" x2={x + 2} y2="19" opacity={0.4} />
+          <line x1={x - 2} y1="24" x2={x + 2} y2="24" opacity={0.4} />
+          <line x1={x - 2} y1="29" x2={x + 2} y2="29" opacity={0.4} />
+        </g>
+      ))}
+      <polyline points="8,9 4,12 8,15" opacity={0.6} />
+      <polyline points="40,33 44,36 40,39" opacity={0.6} />
+      <StatusDot status={status} cx={41} cy={8} r={3.5} />
+    </svg>
+  );
+}
+
+export function DosingPumpSymbol({ size, className, accent, status }: SymbolProps) {
+  return (
+    <svg {...baseProps({ size, className })} viewBox="0 0 48 48">
+      {/* Chemical day tank over a metering pump, injecting into the process line */}
+      <rect x="13" y="6" width="16" height="14" rx="1.5" opacity={0.12} />
+      <rect x="13" y="6" width="16" height="14" rx="1.5" />
+      <line x1="13" y1="11" x2="29" y2="11" opacity={0.35} />
+      {/* Metering pump head */}
+      <line x1="21" y1="20" x2="21" y2="25" />
+      <rect x="14" y="25" width="14" height="11" rx="2" opacity={0.12} />
+      <rect x="14" y="25" width="14" height="11" rx="2" />
+      <path d="M17 31 L20 28 L23 34 L26 31" opacity={0.6} />
+      {/* Injection quill into the header */}
+      <line x1="28" y1="30" x2="40" y2="30" strokeDasharray="3,2" />
+      <polyline points="37,27 40,30 37,33" />
+      <line x1="40" y1="24" x2="40" y2="42" opacity={0.45} />
+      <StatusDot status={status} cx={33} cy={9} r={3.5} />
+    </svg>
+  );
+}
+
+export function RefillStationSymbol({ size, className, accent, status }: SymbolProps) {
+  return (
+    <svg {...baseProps({ size, className })} viewBox="0 0 48 48">
+      {/* Tanker refilling bay: fill arm over a road tanker */}
+      <line x1="10" y1="8" x2="10" y2="20" />
+      <line x1="10" y1="8" x2="26" y2="8" />
+      <line x1="26" y1="8" x2="26" y2="16" strokeDasharray="3,2" />
+      <polyline points="23,13 26,16 29,13" opacity={0.6} />
+      {/* Tanker barrel + cab */}
+      <rect x="14" y="22" width="22" height="12" rx="6" opacity={0.12} />
+      <rect x="14" y="22" width="22" height="12" rx="6" />
+      <line x1="21" y1="22" x2="21" y2="34" opacity={0.3} />
+      <line x1="29" y1="22" x2="29" y2="34" opacity={0.3} />
+      <path d="M8 34 L8 27 L14 27" opacity={0.7} />
+      <circle cx="16" cy="38" r="3" />
+      <circle cx="32" cy="38" r="3" />
+      <line x1="4" y1="41" x2="44" y2="41" opacity={0.35} />
+      <StatusDot status={status} cx={40} cy={20} r={3.5} />
+    </svg>
+  );
+}
+
+export function TransferPumpSymbol({ size, className, accent, status }: SymbolProps) {
+  return (
+    <svg {...baseProps({ size, className })} viewBox="0 0 48 48">
+      {/* Horizontal transfer / torpedo pump on a skid, with local starter */}
+      <circle cx="22" cy="24" r="11" opacity={0.12} />
+      <circle cx="22" cy="24" r="11" />
+      <path d="M22 13 A11 11 0 0 1 33 24 L22 24 Z" opacity={0.25} />
+      <line x1="4" y1="24" x2="11" y2="24" />
+      <polyline points="8,21 11,24 8,27" />
+      <line x1="33" y1="18" x2="42" y2="18" />
+      <polyline points="39,15 42,18 39,21" />
+      {/* Skid base */}
+      <line x1="11" y1="37" x2="33" y2="37" />
+      <line x1="16" y1="35" x2="16" y2="37" />
+      <line x1="28" y1="35" x2="28" y2="37" />
+      {/* Local starter (ES) */}
+      <rect x="36" y="28" width="8" height="8" rx="1" opacity={0.15} />
+      <rect x="36" y="28" width="8" height="8" rx="1" />
+      <text x="40" y="34" textAnchor="middle" fontSize="5" fontWeight={700} fontFamily="monospace" fill="currentColor" opacity={0.6}>ES</text>
+      <StatusDot status={status} cx={33} cy={10} r={3.5} />
+    </svg>
+  );
+}

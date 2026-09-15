@@ -89,7 +89,15 @@ export function NodeInspector({
       case 'mediaFilter':
       case 'bagCartridge':
       case 'hpPump':
+      case 'degasifier':
         return { label: 'Open in Operations (RO Trains)', path: `/operations${plantId ? `?plant=${plantId}` : ''}` };
+      case 'dosingPump':
+        // Dosing pumps log against chemical_dosing_logs, which the RO Trains
+        // → Chemical Dosing screen owns.
+        return { label: 'Open in Chemical Dosing', path: `/ro-trains${plantId ? `?plant=${plantId}` : ''}` };
+      case 'refillStation':
+      case 'transferPump':
+        return { label: 'Open in Operations (Meters)', path: `/operations${plantId ? `?plant=${plantId}` : ''}` };
       case 'solarSource':
       case 'gridSource':
       case 'solarMeter':
@@ -138,6 +146,16 @@ export function NodeInspector({
             <h3 className="font-bold text-sm text-foreground break-words mt-1 leading-snug">
               {node.label}
             </h3>
+            {node.detail && (
+              <div className="text-3xs font-mono text-muted-foreground mt-0.5 break-words">
+                {node.detail}
+              </div>
+            )}
+            {node.type === 'dosingPump' && node.attachStage && (
+              <div className="text-3xs font-mono text-muted-foreground mt-0.5">
+                Injects into: {node.attachStage}
+              </div>
+            )}
           </div>
         </div>
 

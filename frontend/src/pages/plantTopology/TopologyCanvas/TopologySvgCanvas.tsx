@@ -4,6 +4,7 @@ import { NodeType, NODE_W, NODE_H, START_Y, ROW_GAP, POWER_COLS,
   COLORS, COL_GAP, ColSlot, cubicPath, getSymbolDimensions,
   STAGE_ZONES, getNodeStatusInfo,
 } from '../shared';
+import type { StageZone } from '../shared';
 import { NodePalette } from '../NodePalette';
 import { TopologyHeader } from './TopologyHeader';
 import { TopoNodeRenderer, type NodeRendererProps } from './TopoNodeRenderer';
@@ -27,6 +28,9 @@ export interface TopologySvgCanvasProps {
   activeLinksCount: number;
   colSequence: ColSlot[];
   colXMap: Record<string, number>;
+  /** zone bands for the plant's active process template; defaults to the
+   *  legacy bands when a caller doesn't supply them */
+  stageZones?: StageZone[];
   maxX: number;
   maxY: number;
   maxWaterY: number;
@@ -59,7 +63,7 @@ export interface TopologySvgCanvasProps {
 
 export function TopologySvgCanvas({
   props, activePlant, hasPowerNodes, positions, allLinks, waterNodesCount,
-  powerNodesCount, activeLinksCount, colSequence, colXMap, maxX, maxY,
+  powerNodesCount, activeLinksCount, colSequence, colXMap, stageZones, maxX, maxY,
   maxWaterY, powerDividerY, linkCounts, dragItem, snapTarget, hoveredLink,
   inspectNode, colWidths, resizingCol, hoveredLaneResizer, zoom, topoState,
   effectivePlantId, isMobile, canEdit, panelOpen, saving, showHelp,
@@ -189,7 +193,7 @@ export function TopologySvgCanvas({
                 })}
 
 				{/* ── Stage zone backgrounds ── */}
-				{STAGE_ZONES.map((zone) => {
+				{(stageZones ?? STAGE_ZONES).map((zone) => {
 					const startX = colXMap[zone.startCol];
 					const endX = colXMap[zone.endCol];
 					if (startX === undefined || endX === undefined) return null;

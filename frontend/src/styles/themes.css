@@ -172,6 +172,26 @@
     --topo-productTank-text:   201 60% 21%;
     --topo-productTank-lane:   199 100% 96%;
 
+    --topo-degasifier-bg:      174 84% 92%;
+    --topo-degasifier-border:  173 80% 30%;
+    --topo-degasifier-text:    175 60% 20%;
+    --topo-degasifier-lane:    174 90% 96%;
+
+    --topo-dosingPump-bg:      292 84% 94%;
+    --topo-dosingPump-border:  291 64% 42%;
+    --topo-dosingPump-text:    292 58% 26%;
+    --topo-dosingPump-lane:    292 90% 97%;
+
+    --topo-refillStation-bg:      40 92% 93%;
+    --topo-refillStation-border:  32 85% 40%;
+    --topo-refillStation-text:    30 60% 24%;
+    --topo-refillStation-lane:    40 96% 97%;
+
+    --topo-transferPump-bg:      214 95% 93%;
+    --topo-transferPump-border:  217 76% 44%;
+    --topo-transferPump-text:    221 55% 26%;
+    --topo-transferPump-lane:    214 100% 97%;
+
     --topo-reject-bg:          0 93% 94%;
     --topo-reject-border:      0 72% 51%;
     --topo-reject-text:        0 63% 31%;
@@ -509,6 +529,26 @@
     --topo-productTank-border: 199 76% 50%;
     --topo-productTank-text:   200 35% 88%;
     --topo-productTank-lane:   200 40% 12%;
+
+    --topo-degasifier-bg:      173 45% 18%;
+    --topo-degasifier-border:  173 70% 46%;
+    --topo-degasifier-text:    173 35% 88%;
+    --topo-degasifier-lane:    173 40% 12%;
+
+    --topo-dosingPump-bg:      291 45% 18%;
+    --topo-dosingPump-border:  291 62% 58%;
+    --topo-dosingPump-text:    291 35% 88%;
+    --topo-dosingPump-lane:    291 40% 12%;
+
+    --topo-refillStation-bg:      32 45% 18%;
+    --topo-refillStation-border:  32 78% 52%;
+    --topo-refillStation-text:    32 35% 88%;
+    --topo-refillStation-lane:    32 40% 12%;
+
+    --topo-transferPump-bg:      217 45% 18%;
+    --topo-transferPump-border:  217 70% 58%;
+    --topo-transferPump-text:    217 32% 88%;
+    --topo-transferPump-lane:    217 40% 12%;
 
     --topo-reject-bg:          0 45% 18%;
     --topo-reject-border:      0 62% 58%;

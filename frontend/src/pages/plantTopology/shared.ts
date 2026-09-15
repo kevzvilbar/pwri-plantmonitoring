@@ -38,6 +38,11 @@ import {
   CartridgeFilterSymbol,
   HPPumpSymbol,
   ProductTankSymbol,
+  DegasifierSymbol,
+  BagFilterBankSymbol,
+  DosingPumpSymbol,
+  RefillStationSymbol,
+  TransferPumpSymbol,
 } from '@/components/icons/topology-symbols';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
@@ -46,10 +51,11 @@ export type NodeType =
   | 'well' | 'rawMeter' | 'rawTank' | 'rawWaterPump' | 'mediaFilter'
   | 'bagCartridge' | 'hpPump' | 'pretreat' | 'feedMeter'
   | 'roTrain' | 'permeate' | 'reject' | 'productTank' | 'bulk' | 'locator'
+  | 'degasifier' | 'dosingPump' | 'refillStation' | 'transferPump'
   | 'solarSource' | 'gridSource' | 'solarMeter' | 'gridMeter'
   | 'customNode';
 
-export type StreamType = 'feed' | 'permeate' | 'reject' | 'power' | 'general';
+export type StreamType = 'feed' | 'permeate' | 'reject' | 'chemical' | 'power' | 'general';
 
 export interface CustomColumn {
   id: string;
@@ -82,44 +88,145 @@ export const BASE_COL_SLOTS: BaseColSlot[] = [
   { key: 'locator',      label: 'LOCATORS',     type: 'locator' },
 ];
 
-// ─── Stage zone definitions for visual grouping ────────────────────────────────────
-// These define colored background bands that group related process stages together
-// for a more professional P&ID-style layout.
+// ─── Process stage template ─────────────────────────────────────────────────
+// A plant's process line is an ordered list of stages. `scope` decides whether
+// a stage is one shared unit on the plant intake line ('plant') or replicated
+// once per primary RO train ('train').
+//
+// Not every line has the same shape. A plant can sit its media filter and a
+// first bag-filter bank UPSTREAM of the raw tank, run a degasifier between
+// them, and carry a second bank on the tank discharge — none of which the old
+// single hard-coded order could express. Templates live in
+// `plant_process_stages`; a plant with no rows falls back to
+// DEFAULT_PROCESS_STAGES, which reproduces the previous behaviour exactly.
 
-export const STAGE_ZONES = [
-  {
-    id: 'raw-water-intake',
-    label: 'RAW WATER INTAKE',
-    startCol: 'well',
-    endCol: 'rawTank',
-    color: 'hsl(var(--topo-well-lane))',
-    yOffset: -6,
-  },
-  {
-    id: 'pretreatment',
-    label: 'PRE-TREATMENT',
-    startCol: 'rawWaterPump',
-    endCol: 'feedMeter',
-    color: 'hsl(var(--topo-pretreat-lane))',
-    yOffset: -6,
-  },
-  {
-    id: 'ro-system',
-    label: 'RO SYSTEM',
-    startCol: 'roTrain',
-    endCol: 'roTrain',
-    color: 'hsl(var(--topo-roTrain-lane))',
-    yOffset: -6,
-  },
-  {
-    id: 'post-treatment',
-    label: 'PRODUCT WATER & DISTRIBUTION',
-    startCol: 'permeate',
-    endCol: 'locator',
-    color: 'hsl(var(--topo-permeate-lane))',
-    yOffset: -6,
-  },
-] as const;
+export interface ProcessStage {
+  key: string;
+  label: string;
+  type: NodeType;
+  /** 'plant' = one shared unit; 'train' = one per primary RO train */
+  scope: 'plant' | 'train';
+  /** render this stage's nodes as a grid N wide instead of one per row */
+  wrapCols?: number;
+  /** equipment detail line for plant-scope stages */
+  detail?: string;
+}
+
+/** The legacy order — every plant without a template keeps exactly this. */
+export const DEFAULT_PROCESS_STAGES: ProcessStage[] = [
+  { key: 'well',         label: 'WELLS',             type: 'well',         scope: 'plant' },
+  { key: 'rawMeter',     label: 'RAW METERS',        type: 'rawMeter',     scope: 'plant' },
+  { key: 'rawTank',      label: 'RAW TANK',          type: 'rawTank',      scope: 'plant' },
+  { key: 'rawWaterPump', label: 'RAW PUMP',          type: 'rawWaterPump', scope: 'train' },
+  { key: 'mediaFilter',  label: 'AFM / MMF',         type: 'mediaFilter',  scope: 'train' },
+  { key: 'bagCartridge', label: 'BAG / CF',          type: 'bagCartridge', scope: 'train' },
+  { key: 'hpPump',       label: 'HPP',               type: 'hpPump',       scope: 'train' },
+  { key: 'feedMeter',    label: 'FEED',              type: 'feedMeter',    scope: 'train' },
+  { key: 'roTrain',      label: 'RO TRAINS',         type: 'roTrain',      scope: 'train' },
+  { key: 'permeate',     label: 'PERMEATE / REJECT', type: 'permeate',     scope: 'train' },
+  { key: 'productTank',  label: 'PRODUCT TANK',      type: 'productTank',  scope: 'plant' },
+  { key: 'bulk',         label: 'BULK METERS',       type: 'bulk',         scope: 'plant' },
+  { key: 'locator',      label: 'LOCATORS',          type: 'locator',      scope: 'plant' },
+];
+
+/** Stage types that form the feed chain between the raw meters and the RO. */
+export const CHAIN_STAGE_TYPES: NodeType[] = [
+  'rawTank', 'rawWaterPump', 'mediaFilter', 'bagCartridge',
+  'degasifier', 'pretreat', 'hpPump', 'feedMeter',
+];
+
+/** Rows from `plant_process_stages` → ProcessStage[], falling back to default. */
+export function resolveStages(rows?: any[] | null): ProcessStage[] {
+  if (!rows?.length) return DEFAULT_PROCESS_STAGES;
+  const mapped = rows
+    .slice()
+    .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
+    .map((r) => ({
+      key:      r.stage_key as string,
+      label:    r.label as string,
+      type:     r.node_type as NodeType,
+      scope:    (r.scope === 'plant' ? 'plant' : 'train') as 'plant' | 'train',
+      wrapCols: r.wrap_cols ?? undefined,
+      detail:   r.detail ?? undefined,
+    }))
+    .filter((s) => s.key && s.type);
+  // A template that never reaches the RO would strand every train, so treat a
+  // malformed template as "not configured" rather than rendering a broken line.
+  return mapped.some((s) => s.type === 'roTrain') ? mapped : DEFAULT_PROCESS_STAGES;
+}
+
+// ─── Stage zone definitions for visual grouping ────────────────────────────────────
+// Colored background bands grouping related process stages, P&ID style. Zones
+// are derived from the active template so a reordered line still bands
+// correctly; STAGE_ZONES is the default-template result.
+
+export interface StageZone {
+  id: string;
+  label: string;
+  startCol: string;
+  endCol: string;
+  color: string;
+  yOffset: number;
+}
+
+/** Which zone each stage type belongs to — drives buildStageZones(). */
+const ZONE_OF_TYPE: Partial<Record<NodeType, 'intake' | 'pretreat' | 'ro' | 'product'>> = {
+  well: 'intake', rawMeter: 'intake', rawTank: 'intake',
+  rawWaterPump: 'pretreat', mediaFilter: 'pretreat', bagCartridge: 'pretreat',
+  degasifier: 'pretreat', pretreat: 'pretreat', hpPump: 'pretreat',
+  feedMeter: 'pretreat', dosingPump: 'pretreat',
+  roTrain: 'ro',
+  permeate: 'product', reject: 'product', productTank: 'product',
+  refillStation: 'product', transferPump: 'product', bulk: 'product', locator: 'product',
+};
+
+const ZONE_META = {
+  intake:   { id: 'raw-water-intake', label: 'RAW WATER INTAKE',              color: 'hsl(var(--topo-well-lane))' },
+  pretreat: { id: 'pretreatment',     label: 'PRE-TREATMENT',                 color: 'hsl(var(--topo-pretreat-lane))' },
+  ro:       { id: 'ro-system',        label: 'RO SYSTEM',                     color: 'hsl(var(--topo-roTrain-lane))' },
+  product:  { id: 'post-treatment',   label: 'PRODUCT WATER & DISTRIBUTION',  color: 'hsl(var(--topo-permeate-lane))' },
+} as const;
+
+/** Builds contiguous zone bands for a template. A stage type that moves to the
+ *  other side of the line (e.g. a media filter ahead of the raw tank) moves its
+ *  band with it instead of leaving a zone straddling unrelated columns. */
+export function buildStageZones(stages: ProcessStage[] = DEFAULT_PROCESS_STAGES): StageZone[] {
+  const zones: StageZone[] = [];
+  const counts: Record<string, number> = {};
+  let runKind: keyof typeof ZONE_META | null = null;
+  let runStart = '';
+  let runEnd = '';
+
+  const flush = () => {
+    if (!runKind) return;
+    const meta = ZONE_META[runKind];
+    const n = counts[runKind] ?? 0;
+    counts[runKind] = n + 1;
+    zones.push({
+      id: `${meta.id}${n > 0 ? `-${n + 1}` : ''}`,
+      label: n > 0 ? `${meta.label} ${n + 1}` : meta.label,
+      startCol: runStart,
+      endCol: runEnd,
+      color: meta.color,
+      yOffset: -6,
+    });
+  };
+
+  stages.forEach((s) => {
+    const kind = ZONE_OF_TYPE[s.type];
+    if (!kind) return;
+    if (kind !== runKind) {
+      flush();
+      runKind = kind;
+      runStart = s.key;
+    }
+    runEnd = s.key;
+  });
+  flush();
+  return zones;
+}
+
+export const STAGE_ZONES: StageZone[] = buildStageZones(DEFAULT_PROCESS_STAGES);
 
 export interface ColSlot {
   key: string;
@@ -129,10 +236,14 @@ export interface ColSlot {
   isCustom: boolean;
 }
 
-/** Builds the full ordered column sequence, interleaving custom cols into base cols. */
-export function buildColSequence(customColumns: CustomColumn[]): ColSlot[] {
+/** Builds the full ordered column sequence, interleaving custom cols into the
+ *  active template's stages. */
+export function buildColSequence(
+  customColumns: CustomColumn[],
+  stages: ProcessStage[] = DEFAULT_PROCESS_STAGES,
+): ColSlot[] {
   const result: ColSlot[] = [];
-  for (const base of BASE_COL_SLOTS) {
+  for (const base of stages) {
     result.push({ key: base.key, label: base.label, type: base.type, isCustom: false });
     customColumns
       .filter((c) => c.insertAfter === base.key)
@@ -147,24 +258,40 @@ export function buildColSequence(customColumns: CustomColumn[]): ColSlot[] {
  * Returns the stage zone that contains the given column key.
  * Used for rendering zone backgrounds and labels.
  */
-export function getStageZoneForColumn(colKey: string): (typeof STAGE_ZONES)[number] | undefined {
-  return STAGE_ZONES.find((zone) => {
-    const startIdx = BASE_COL_SLOTS.findIndex((s) => s.key === zone.startCol);
-    const endIdx = BASE_COL_SLOTS.findIndex((s) => s.key === zone.endCol);
-    const colIdx = BASE_COL_SLOTS.findIndex((s) => s.key === colKey);
+export function getStageZoneForColumn(
+  colKey: string,
+  stages: ProcessStage[] = DEFAULT_PROCESS_STAGES,
+): StageZone | undefined {
+  const zones = stages === DEFAULT_PROCESS_STAGES ? STAGE_ZONES : buildStageZones(stages);
+  return zones.find((zone) => {
+    const startIdx = stages.findIndex((s) => s.key === zone.startCol);
+    const endIdx = stages.findIndex((s) => s.key === zone.endCol);
+    const colIdx = stages.findIndex((s) => s.key === colKey);
     if (startIdx === -1 || endIdx === -1 || colIdx === -1) return false;
     return colIdx >= startIdx && colIdx <= endIdx;
   });
 }
 
+/** Natural width of a column: wrapped stages (e.g. a bank of six product
+ *  tanks drawn 3×2) need room for `wrapCols` symbols side by side. */
+export function stageColWidth(stage?: ProcessStage): number {
+  if (stage?.wrapCols && stage.wrapCols > 1) return stage.wrapCols * WRAP_COL_GAP;
+  return COL_GAP;
+}
+
 /** Returns a map of column key → x position based on the ordered sequence + per-column widths. */
-export function buildColXMap(customColumns: CustomColumn[], colWidths: Record<string, number> = {}): Record<string, number> {
-  const seq = buildColSequence(customColumns);
+export function buildColXMap(
+  customColumns: CustomColumn[],
+  colWidths: Record<string, number> = {},
+  stages: ProcessStage[] = DEFAULT_PROCESS_STAGES,
+): Record<string, number> {
+  const seq = buildColSequence(customColumns, stages);
+  const stageByKey = new Map(stages.map((s) => [s.key, s]));
   const map: Record<string, number> = {};
   let cursor = 28;
   seq.forEach((slot) => {
     map[slot.key] = cursor;
-    cursor += colWidths[slot.key] ?? COL_GAP;
+    cursor += colWidths[slot.key] ?? stageColWidth(stageByKey.get(slot.key));
   });
   // reject shares same x as permeate
   if (map['permeate'] !== undefined) map['reject'] = map['permeate'];
@@ -185,6 +312,17 @@ export interface TopoNode {
   colId?: string;
   /** For meter nodes tied to a train: 'mechanical' or 'electromagnetic' — resolved from train EM config */
   meterVariant?: 'mechanical' | 'electromagnetic';
+  /** process-stage key this node occupies — lets two stages share a NodeType
+   *  (e.g. a bag-filter bank each side of the raw tank) without colliding */
+  stageKey?: string;
+  /** dosing pumps only: the stage key this pump injects into */
+  attachStage?: string;
+  /** picks an alternate symbol for the same NodeType (e.g. 'bank' renders a
+   *  multi-housing bag-filter bank rather than one cartridge housing) */
+  symbolVariant?: string;
+  /** explicit stream override for nodes whose colour can't be inferred from
+   *  their own type (a refilling bay fed off the reject line, say) */
+  stream?: StreamType;
 }
 
 export interface TopoLink {
@@ -235,6 +373,7 @@ export const NODE_H  = 56;   // average symbol height
 export const ROW_GAP = 100;  // vertical gap between rows (increased for label tags)
 export const START_Y = 52;
 export const COL_GAP = 120;  // horizontal gap between column centers (adjusted for symbols)
+export const WRAP_COL_GAP = 96;  // horizontal gap inside a wrapped stage (tank banks)
 
 // ── Typography constants ──
 export const TOPO_FONT_SANS = "var(--font-sans, 'Inter', system-ui, sans-serif)";
@@ -289,6 +428,10 @@ export const NODE_LABELS: Record<NodeType, string> = {
   productTank: 'PRODUCT TANK',
   bulk:        'BULK METER',
   locator:     'LOCATOR',
+  degasifier:  'DEGASIFIER',
+  dosingPump:  'DOSING PUMP',
+  refillStation: 'REFILLING',
+  transferPump:  'TRANSFER PUMP',
   solarSource: 'SOLAR',
   gridSource:  'GRID',
   solarMeter:  'SOLAR METER',
@@ -316,6 +459,10 @@ export const COLORS: Record<NodeType, { bg: string; border: string; text: string
   productTank: { bg: 'hsl(var(--topo-productTank-bg))', border: 'hsl(var(--topo-productTank-border))', text: 'hsl(var(--topo-productTank-text))', accent: 'hsl(var(--topo-productTank-border))', lane: 'hsl(var(--topo-productTank-lane))' },
   bulk:        { bg: 'hsl(var(--topo-bulk-bg))',        border: 'hsl(var(--topo-bulk-border))',        text: 'hsl(var(--topo-bulk-text))',        accent: 'hsl(var(--topo-bulk-border))',        lane: 'hsl(var(--topo-bulk-lane))' },
   locator:     { bg: 'hsl(var(--topo-locator-bg))',     border: 'hsl(var(--topo-locator-border))',     text: 'hsl(var(--topo-locator-text))',     accent: 'hsl(var(--topo-locator-border))',     lane: 'hsl(var(--topo-locator-lane))' },
+  degasifier:  { bg: 'hsl(var(--topo-degasifier-bg))',  border: 'hsl(var(--topo-degasifier-border))',  text: 'hsl(var(--topo-degasifier-text))',  accent: 'hsl(var(--topo-degasifier-border))',  lane: 'hsl(var(--topo-degasifier-lane))' },
+  dosingPump:  { bg: 'hsl(var(--topo-dosingPump-bg))',  border: 'hsl(var(--topo-dosingPump-border))',  text: 'hsl(var(--topo-dosingPump-text))',  accent: 'hsl(var(--topo-dosingPump-border))',  lane: 'hsl(var(--topo-dosingPump-lane))' },
+  refillStation:{ bg: 'hsl(var(--topo-refillStation-bg))', border: 'hsl(var(--topo-refillStation-border))', text: 'hsl(var(--topo-refillStation-text))', accent: 'hsl(var(--topo-refillStation-border))', lane: 'hsl(var(--topo-refillStation-lane))' },
+  transferPump:{ bg: 'hsl(var(--topo-transferPump-bg))', border: 'hsl(var(--topo-transferPump-border))', text: 'hsl(var(--topo-transferPump-text))', accent: 'hsl(var(--topo-transferPump-border))', lane: 'hsl(var(--topo-transferPump-lane))' },
   solarSource: { bg: 'hsl(var(--topo-solarSource-bg))', border: 'hsl(var(--topo-solarSource-border))', text: 'hsl(var(--topo-solarSource-text))', accent: 'hsl(var(--topo-solarSource-border))', lane: 'hsl(var(--topo-solarSource-lane))' },
   gridSource:  { bg: 'hsl(var(--topo-gridSource-bg))',  border: 'hsl(var(--topo-gridSource-border))',  text: 'hsl(var(--topo-gridSource-text))',  accent: 'hsl(var(--topo-gridSource-border))',  lane: 'hsl(var(--topo-gridSource-lane))' },
   solarMeter:  { bg: 'hsl(var(--topo-solarMeter-bg))',  border: 'hsl(var(--topo-solarMeter-border))',  text: 'hsl(var(--topo-solarMeter-text))',  accent: 'hsl(var(--topo-solarMeter-border))',  lane: 'hsl(var(--topo-solarMeter-lane))' },
@@ -364,6 +511,34 @@ export const EDITABLE_PAIRS: [NodeType, NodeType][] = [
   // ro_trains — a recirculate reject was already counted once inside the
   // upstream train's own permeate meter and must never be double-counted.
   ['reject',     'permeate'],
+  // A reject line reused for tanker refilling: reject → bay → transfer pump →
+  // load-out meters. This water leaves the plant but was never permeate, so it
+  // is kept on the reject stream (see getStreamType) and must not be counted
+  // as production.
+  ['reject',        'refillStation'],
+  ['refillStation', 'transferPump'],
+  ['transferPump',  'bulk'],
+  ['transferPump',  'locator'],
+  ['productTank',   'refillStation'],
+  // Tank banks sitting on a common header can be cross-connected.
+  ['productTank',   'productTank'],
+  // Dosing pumps inject into the line rather than carrying flow, but the
+  // injection point is rewirable.
+  ['dosingPump',    'hpPump'],
+  ['dosingPump',    'bagCartridge'],
+  ['dosingPump',    'mediaFilter'],
+  ['dosingPump',    'degasifier'],
+  ['dosingPump',    'rawTank'],
+  ['dosingPump',    'roTrain'],
+  ['dosingPump',    'bulk'],
+  ['dosingPump',    'productTank'],
+  // Stages that can now sit either side of the raw tank.
+  ['rawMeter',      'mediaFilter'],
+  ['mediaFilter',   'bagCartridge'],
+  ['bagCartridge',  'degasifier'],
+  ['degasifier',    'rawTank'],
+  ['rawTank',       'bagCartridge'],
+  ['bagCartridge',  'hpPump'],
   ['solarMeter', 'well'],   ['solarMeter', 'roTrain'],
   ['gridMeter',  'well'],   ['gridMeter',  'roTrain'],
 ];
@@ -458,7 +633,7 @@ export function getNodeIcon(type: NodeType, variant?: string): React.ComponentTy
     case 'mediaFilter':
       return MediaFilterSymbol;
     case 'bagCartridge':
-      return CartridgeFilterSymbol;
+      return variant === 'bank' ? BagFilterBankSymbol : CartridgeFilterSymbol;
     case 'hpPump':
       return HPPumpSymbol;
     case 'pretreat':
@@ -477,6 +652,14 @@ export function getNodeIcon(type: NodeType, variant?: string): React.ComponentTy
       return variant === 'tank' ? TankSymbol : BulkMeterSymbol;
     case 'locator':
       return LocatorSymbol;
+    case 'degasifier':
+      return DegasifierSymbol;
+    case 'dosingPump':
+      return DosingPumpSymbol;
+    case 'refillStation':
+      return RefillStationSymbol;
+    case 'transferPump':
+      return TransferPumpSymbol;
     case 'solarSource':
       return SolarSymbol;
     case 'solarMeter':
@@ -525,6 +708,14 @@ export function getSymbolDimensions(type: NodeType): { w: number; h: number } {
       return { w: 48, h: 48 };
     case 'locator':
       return { w: 48, h: 48 };
+    case 'degasifier':
+      return { w: 48, h: 56 };
+    case 'dosingPump':
+      return { w: 48, h: 52 };
+    case 'refillStation':
+      return { w: 56, h: 48 };
+    case 'transferPump':
+      return { w: 56, h: 44 };
     case 'solarSource':
       return { w: 56, h: 44 };
     case 'gridSource':
@@ -547,6 +738,17 @@ export function getStreamType(link: TopoLink, nodes: TopoNode[]): StreamType {
   const fromNode = nodes.find((n) => n.id === link.from);
   const toNode = nodes.find((n) => n.id === link.to);
   if (!fromNode || !toNode) return 'general';
+
+  // Chemical injection — a dosing pump adds reagent to a line, it does not
+  // carry process water, so it never colours as feed or permeate.
+  if (fromNode.type === 'dosingPump' || toNode.type === 'dosingPump') {
+    return 'chemical';
+  }
+
+  // Explicit stream override — used by the reject-fed refilling bay and its
+  // transfer pump, whose own types say nothing about which stream they sit on.
+  if (fromNode.stream) return fromNode.stream;
+  if (toNode.stream)   return toNode.stream;
 
   // Power links
   if (['solarSource', 'gridSource', 'solarMeter', 'gridMeter'].includes(fromNode.type) ||
@@ -588,6 +790,7 @@ export const STREAM_COLORS: Record<StreamType, string> = {
   feed:      'hsl(var(--primary))',
   permeate:  'hsl(142 70% 45%)',   // green
   reject:    'hsl(var(--warn))',   // orange
+  chemical:  'hsl(291 64% 52%)',   // magenta — dosing / injection lines
   power:     'hsl(45 95% 55%)',   // yellow/gold
   general:   'hsl(var(--muted-foreground))',
 };
@@ -597,6 +800,7 @@ export const STREAM_LABELS: Record<StreamType, string> = {
   feed:      'Feed / Raw Water',
   permeate:  'Permeate (Product)',
   reject:    'Reject / Concentrate',
+  chemical:  'Chemical Dosing',
   power:     'Power / Electrical',
   general:   'General Connection',
 };
@@ -609,7 +813,8 @@ export function useTopologyData(plantId: string | null) {
     queryFn: async () => {
       if (!plantId) return null;
 
-      const [wellsRes, roRes, locRes, prodRes, powerCfgRes, meterCfgRes] = await Promise.all([
+      const [wellsRes, roRes, locRes, prodRes, powerCfgRes, meterCfgRes,
+             stagesRes, tanksRes, dosingRes] = await Promise.all([
         supabase.from('wells').select('id,name,status,has_power_meter,is_blending_well').eq('plant_id', plantId).order('name'),
         supabase.from('ro_trains').select(
           'id,train_number,name,status,shared_power_meter_group,' +
@@ -625,6 +830,21 @@ export function useTopologyData(plantId: string | null) {
         (supabase.from('plant_meter_config' as any) as any)
           .select('config,permeate_is_production')
           .eq('plant_id', plantId).maybeSingle(),
+        // Optional topology extensions — a plant with none of these rows keeps
+        // the legacy line shape untouched (see resolveStages / buildTopology).
+        // Wrapped so a project that hasn't run 20260916000001 yet still loads.
+        (supabase.from('plant_process_stages' as any) as any)
+          .select('stage_key,label,node_type,scope,sort_order,detail,wrap_cols')
+          .eq('plant_id', plantId).order('sort_order')
+          .then((r: any) => r, () => ({ data: null })),
+        (supabase.from('product_tanks' as any) as any)
+          .select('id,name,tank_number,status,capacity_m3,product_meter_id')
+          .eq('plant_id', plantId).order('tank_number')
+          .then((r: any) => r, () => ({ data: null })),
+        (supabase.from('dosing_points' as any) as any)
+          .select('id,chemical,label,injects_into_stage_key,pump_hp,status')
+          .eq('plant_id', plantId)
+          .then((r: any) => r, () => ({ data: null })),
       ]);
 
       let savedLinks: { from_id: string; to_id: string }[] = [];
@@ -650,6 +870,9 @@ export function useTopologyData(plantId: string | null) {
         productMeters: (prodRes.data  ?? []) as any[],
         powerCfg:      powerCfgRes.data as any,
         meterCfg:      meterCfgRes.data as any,
+        processStages: (stagesRes?.data ?? null) as any[] | null,
+        productTanks:  (tanksRes?.data  ?? []) as any[],
+        dosingPoints:  (dosingRes?.data ?? []) as any[],
         savedLinks,
       };
     },
@@ -664,6 +887,14 @@ export function buildTrainDetail(t: any): string {
   const filterLabel = filterType === 'Bag Filter' ? 'BF' : 'CF';
 
   const parts: string[] = [];
+  // A single-array unit is described by its vessel geometry ("15 vessels
+  // 6 elements") rather than by filter counts. 0 = not configured, so existing
+  // trains render exactly as before.
+  if ((t.num_vessels ?? 0) > 0) {
+    parts.push((t.elements_per_vessel ?? 0) > 0
+      ? `${t.num_vessels}V×${t.elements_per_vessel}E`
+      : `${t.num_vessels}V`);
+  }
   if ((t.num_afm ?? 0) > 0)               parts.push(`${mediaType}×${t.num_afm}`);
   if ((t.num_booster_pumps ?? 0) > 0)     parts.push(`BP×${t.num_booster_pumps}`);
   if ((t.num_hp_pumps ?? 0) > 0)          parts.push(`HPP×${t.num_hp_pumps}`);
@@ -684,6 +915,9 @@ export function buildTopology(
   const fixedLinks: TopoLink[] = [];
 
   const { wells, roTrains, locators, productMeters, powerCfg, meterCfg, savedLinks } = data;
+  const productTankRows = ((data as any).productTanks ?? []) as any[];
+  const dosingRows      = ((data as any).dosingPoints ?? []) as any[];
+  const stages          = resolveStages((data as any).processStages);
 
   const cfg = (meterCfg?.config ?? meterCfg ?? {}) as any;
   const hasSolar     = cfg?.has_solar ?? false;
@@ -692,25 +926,11 @@ export function buildTopology(
   const hasPermeate  = cfg?.ro_has_permeate_meter ?? true;
   const hasReject    = cfg?.ro_has_reject_meter   ?? true;
 
-  // Plants where permeate IS a production source (permeate_is_production on
-  // plant_meter_config; e.g. Mambaling runs 'both' mode — permeate + product
-  // meter summed). Drives the permeate → locator default routings further down.
   const permeateIsProduction =
     (meterCfg as any)?.permeate_is_production === true || cfg?.permeate_is_production === true;
 
-  // ── Product tank ──
-  // The product tank sits on the product-water line between PERMEATE and BULK
-  // METERS: it collects each train's permeate (plus any blending-well water)
-  // and feeds the plant's product meters out to the locators. It is part of the
-  // standard plant set-up, so it is always drawn.
   const productTankId = `producttank-${plantId}`;
-
-  // ── Shared Raw Tank ──
-  // A single raw-water storage tank feeds every primary RO train's pre-
-  // treatment set (Raw Water Pump → AFM/MMF → Bag/CF → HPP → Feed Meter →
-  // RO Train). All wells' raw meters discharge into this one tank, which
-  // in turn supplies the first stage of each train's line.
-  const rawTankId = `rawtank-${plantId}`;
+  const rawTankId     = `rawtank-${plantId}`;
 
   const solarCount = powerCfg?.solar_meter_count ?? 1;
   const gridCount  = powerCfg?.grid_meter_count  ?? 1;
@@ -735,90 +955,143 @@ export function buildTopology(
     }
   });
 
-  // ── Wells ──
-  // Blending wells keep their raw meter (blending volumes are meter deltas)
-  // but that meter discharges straight into the product tank — a metered
-  // bypass from the raw side to the product line, skipping raw tank / RO.
+  const primaryTrains = roTrains.filter((r: any) => r.unit_type !== 'secondary');
 
-  // Create the single shared raw-water tank once (feeds all primary trains below).
-  nodes.push({ id: rawTankId, type: 'rawTank', label: 'Raw Tank', detail: `${roTrains.filter((r: any) => r.unit_type !== 'secondary').length} outlets` });
+  // ── Feed chain stages ──
+  // Everything the template places between the raw meters and the RO. A stage
+  // scoped 'plant' is one shared unit on the intake line; a stage scoped
+  // 'train' is replicated per primary train, which is what every plant on the
+  // default template gets.
+  const roStageIdx       = stages.findIndex((s) => s.type === 'roTrain');
+  const rawMeterStageIdx = stages.findIndex((s) => s.type === 'rawMeter');
+  const chainStages = stages.filter((s, i) =>
+    CHAIN_STAGE_TYPES.includes(s.type) &&
+    (rawMeterStageIdx === -1 || i > rawMeterStageIdx) &&
+    (roStageIdx === -1 || i < roStageIdx) &&
+    (s.type !== 'feedMeter' || hasFeedMeter)
+  );
 
-  wells.forEach((w: any) => {
-    nodes.push({ id: w.id, type: 'well', label: w.name, status: w.status });
-    if ((w as any).is_blending_well) {
-      // Blending-well exemption: metered bypass from the raw side straight
-      // into the product line. The well keeps its raw meter (blending volumes
-      // are meter deltas), and that meter discharges directly into the
-      // plant's product tank, skipping the raw tank / RO entirely.
-      const rmId = `rawmeter-${w.id}`;
-      nodes.push({ id: rmId, type: 'rawMeter', label: `Raw ${w.name}` });
-      fixedLinks.push({ from: w.id, to: rmId });
-      fixedLinks.push({ from: rmId, to: productTankId, bypass: true });
-      return;
+  // Legacy node-id prefixes. Kept so saved plant_topology_links and position
+  // overrides survive: a plant on the default template produces exactly the
+  // same ids it produced before templates existed. A template that uses a type
+  // twice (two bag-filter banks, say) falls back to the stage key instead.
+  const LEGACY_PREFIX: Partial<Record<NodeType, string>> = {
+    rawWaterPump: 'rwp', mediaFilter: 'mf', bagCartridge: 'bcf',
+    hpPump: 'hpp', feedMeter: 'feedmeter', pretreat: 'pretreat',
+  };
+  const typeUses = new Map<NodeType, number>();
+  stages.forEach((s) => typeUses.set(s.type, (typeUses.get(s.type) ?? 0) + 1));
+  const stagePrefix = (stage: ProcessStage): string =>
+    (typeUses.get(stage.type) === 1 && LEGACY_PREFIX[stage.type]) || stage.key;
+
+  const plantStageNodeId = (stage: ProcessStage): string =>
+    stage.type === 'rawTank' ? rawTankId : `stage-${stage.key}-${plantId}`;
+  const trainStageNodeId = (stage: ProcessStage, trainId: string): string =>
+    `${stagePrefix(stage)}-${trainId}`;
+
+  /** Label + detail for a chain node, preserving the pre-template strings. */
+  function chainNodeMeta(stage: ProcessStage, r?: any): Partial<TopoNode> {
+    if (!r) {
+      return {
+        label: stage.label,
+        detail: stage.detail,
+        symbolVariant: stage.type === 'bagCartridge' ? 'bank' : undefined,
+      };
     }
-    const rmId = `rawmeter-${w.id}`;
-    nodes.push({ id: rmId, type: 'rawMeter', label: `Raw ${w.name}` });
-    fixedLinks.push({ from: w.id, to: rmId });
-    // All wells' raw meters discharge into the single shared raw tank.
-    fixedLinks.push({ from: rmId, to: rawTankId });
-  });
-
-  // ── Pre-treatment chain — one set per primary RO train ──
-  // All trains share ONE raw tank; each train then has its own line:
-  // Raw Water Pump → AFM/MMF → Bag/Cartridge Filter → High Pressure Pump
-  // → (Feed Meter) → RO Train. Equipment counts/labels come straight from
-  // the ro_trains row (filter_media_type, filter_housing_type, num_* columns).
-  // Secondary (2nd-pass) units are skipped — they're fed by upstream permeate.
-  const trainChainEnd = new Map<string, string>(); // trainId → last chain node feeding the train
-  roTrains.forEach((r: any) => {
-    if (r.unit_type === 'secondary') return;
     const t = r.train_number;
     const mediaType   = (r.filter_media_type   ?? 'AFM') as string;
     const housingType = (r.filter_housing_type ?? 'Cartridge Filter') as string;
     const housingAbbr = housingType === 'Bag Filter' ? 'BF' : 'CF';
     const housingLbl  = housingType === 'Bag Filter' ? 'Bag Filter' : 'Cartridge';
     const em = trainEM.get(r.id) ?? { feed: false, permeate: false, reject: false };
-
-    const rwpId = `rwp-${r.id}`;
-    nodes.push({
-      id: rwpId, type: 'rawWaterPump', label: `Raw Water Pump T${t}`,
-      detail: `RWP×${r.num_booster_pumps ?? 0}`,
-    });
-    // All trains draw feed water from the single shared raw tank.
-    fixedLinks.push({ from: rawTankId, to: rwpId });
-
-    const mfId = `mf-${r.id}`;
-    nodes.push({
-      id: mfId, type: 'mediaFilter', label: `${mediaType.toUpperCase()} Filter T${t}`,
-      detail: `${mediaType.toUpperCase()}×${r.num_afm ?? 0}`,
-    });
-    fixedLinks.push({ from: rwpId, to: mfId });
-
-    const bcfId = `bcf-${r.id}`;
-    nodes.push({
-      id: bcfId, type: 'bagCartridge', label: `${housingLbl} T${t}`,
-      detail: `${housingAbbr}×${r.num_cartridge_filters ?? 0}`,
-    });
-    fixedLinks.push({ from: mfId, to: bcfId });
-
-    const hppId = `hpp-${r.id}`;
-    nodes.push({
-      id: hppId, type: 'hpPump', label: `HP Pump T${t}`,
-      detail: `HPP×${r.num_hp_pumps ?? 0}`,
-    });
-    fixedLinks.push({ from: bcfId, to: hppId });
-
-    let chainEnd = hppId;
-    if (hasFeedMeter) {
-      const fmId = `feedmeter-${r.id}`;
-      nodes.push({
-        id: fmId, type: 'feedMeter', label: `Feed Meter T${t}`,
-        meterVariant: em.feed ? 'electromagnetic' : 'mechanical',
-      });
-      fixedLinks.push({ from: hppId, to: fmId });
-      chainEnd = fmId;
+    switch (stage.type) {
+      case 'rawWaterPump':
+        return { label: `Raw Water Pump T${t}`, detail: `RWP×${r.num_booster_pumps ?? 0}` };
+      case 'mediaFilter':
+        return { label: `${mediaType.toUpperCase()} Filter T${t}`, detail: `${mediaType.toUpperCase()}×${r.num_afm ?? 0}` };
+      case 'bagCartridge':
+        return {
+          label: `${housingLbl} T${t}`,
+          detail: `${housingAbbr}×${r.num_cartridge_filters ?? 0}`,
+          symbolVariant: (r.num_cartridge_filters ?? 0) > 1 ? 'bank' : undefined,
+        };
+      case 'hpPump':
+        return { label: `HP Pump T${t}`, detail: `HPP×${r.num_hp_pumps ?? 0}` };
+      case 'feedMeter':
+        return { label: `Feed Meter T${t}`, meterVariant: em.feed ? 'electromagnetic' : 'mechanical' };
+      case 'rawTank':
+        return { label: `Raw Tank T${t}` };
+      default:
+        return { label: `${stage.label} T${t}` };
     }
-    trainChainEnd.set(r.id, chainEnd);
+  }
+
+  // ── Plant-scope chain ──
+  const plantChainIds: string[] = [];
+  const plantStageIdByKey = new Map<string, string>();
+  chainStages.filter((s) => s.scope === 'plant').forEach((stage) => {
+    const id = plantStageNodeId(stage);
+    const meta = chainNodeMeta(stage);
+    nodes.push({
+      id,
+      type: stage.type,
+      stageKey: stage.key,
+      label: stage.type === 'rawTank' ? 'Raw Tank' : (meta.label ?? stage.label),
+      detail: stage.type === 'rawTank'
+        ? `${primaryTrains.length} outlets`
+        : meta.detail,
+      symbolVariant: meta.symbolVariant,
+    });
+    const prev = plantChainIds[plantChainIds.length - 1];
+    if (prev) fixedLinks.push({ from: prev, to: id });
+    plantChainIds.push(id);
+    plantStageIdByKey.set(stage.key, id);
+  });
+  const plantChainStart = plantChainIds[0] ?? null;
+  const plantChainEnd   = plantChainIds[plantChainIds.length - 1] ?? null;
+
+  // ── Wells ──
+  // Blending wells keep their raw meter (blending volumes are meter deltas)
+  // but that meter discharges straight into the product line — a metered
+  // bypass from the raw side, skipping the intake chain and the RO.
+  wells.forEach((w: any) => {
+    nodes.push({ id: w.id, type: 'well', stageKey: 'well', label: w.name, status: w.status });
+    const rmId = `rawmeter-${w.id}`;
+    nodes.push({ id: rmId, type: 'rawMeter', stageKey: 'rawMeter', label: `Raw ${w.name}` });
+    fixedLinks.push({ from: w.id, to: rmId });
+    if ((w as any).is_blending_well) {
+      fixedLinks.push({ from: rmId, to: productTankId, bypass: true });
+      return;
+    }
+    // Every well discharges into the head of the shared intake chain (the raw
+    // tank on the default template; whatever the template puts first otherwise).
+    if (plantChainStart) fixedLinks.push({ from: rmId, to: plantChainStart });
+  });
+
+  // ── Train-scope chain, one set per primary RO train ──
+  const trainChainEnd = new Map<string, string>();
+  const trainStageIdsByKey = new Map<string, string[]>();
+  primaryTrains.forEach((r: any) => {
+    let prev: string | null = plantChainEnd;
+    chainStages.filter((s) => s.scope === 'train').forEach((stage) => {
+      const id = trainStageNodeId(stage, r.id);
+      const meta = chainNodeMeta(stage, r);
+      nodes.push({
+        id,
+        type: stage.type,
+        stageKey: stage.key,
+        label: meta.label ?? stage.label,
+        detail: meta.detail,
+        meterVariant: meta.meterVariant,
+        symbolVariant: meta.symbolVariant,
+      });
+      if (prev) fixedLinks.push({ from: prev, to: id });
+      prev = id;
+      const list = trainStageIdsByKey.get(stage.key) ?? [];
+      list.push(id);
+      trainStageIdsByKey.set(stage.key, list);
+    });
+    if (prev) trainChainEnd.set(r.id, prev);
   });
 
   // ── RO trains — with equipment detail ──
@@ -830,17 +1103,18 @@ export function buildTopology(
     nodes.push({
       id: r.id,
       type: 'roTrain',
+      stageKey: 'roTrain',
       label: trainLabel,
       status: r.status,
       group: r.shared_power_meter_group ?? undefined,
       detail,
     });
-    // Primary trains are fed by the tail of their own pre-treatment chain.
-    // Secondary units are fed by an upstream train's permeate (an editable
-    // link, seeded as a default below from feed_source_train_id), so they
-    // skip the chain link entirely.
+    // Primary trains are fed by the tail of their own chain (or straight off
+    // the shared intake chain when the template has no train-scoped stages).
+    // Secondary units are fed by an upstream train's permeate via an editable
+    // link seeded below from feed_source_train_id.
     if (!isSecondary) {
-      const chainEnd = trainChainEnd.get(r.id);
+      const chainEnd = trainChainEnd.get(r.id) ?? plantChainEnd;
       if (chainEnd) fixedLinks.push({ from: chainEnd, to: r.id });
     }
   });
@@ -854,7 +1128,9 @@ export function buildTopology(
       nodes.push({
         id: pmId,
         type: 'permeate',
+        stageKey: 'permeate',
         label: `Perm. T${r.train_number}`,
+        detail: r.permeate_meter_size ? `${r.permeate_meter_size}` : undefined,
         meterVariant: em.permeate ? 'electromagnetic' : 'mechanical',
       });
       fixedLinks.push({ from: r.id, to: pmId });
@@ -865,42 +1141,123 @@ export function buildTopology(
         id: rjId,
         type: 'reject',
         label: `Reject T${r.train_number}`,
+        detail: r.reject_meter_size ? `${r.reject_meter_size}` : undefined,
         meterVariant: em.reject ? 'electromagnetic' : 'mechanical',
       });
       fixedLinks.push({ from: r.id, to: rjId });
     }
   });
 
-  // ── Product tank — plant product-water storage on the permeate line ──
-  // Collects every primary train's permeate (or the train itself where no
-  // permeate meter is configured) plus any blending-well water, and feeds the
-  // plant's product meters. Always present as part of the standard set-up, so
-  // the product line is never left dangling.
-  nodes.push({
-    id: productTankId,
-    type: 'productTank',
-    label: 'Product Tank',
-    detail: `${roTrains.filter((r: any) => r.unit_type !== 'secondary').length} in`
-      + (productMeters.length ? ` · ${productMeters.length} out` : ''),
-  });
-  roTrains.forEach((r: any) => {
-    if (r.unit_type === 'secondary') return;
-    fixedLinks.push({ from: hasPermeate ? `permeate-${r.id}` : r.id, to: productTankId });
-  });
-  // Product tank → each configured product meter; those meters then feed
-  // their locators via the existing editable `product_meter_id` links.
-  productMeters.forEach((m: any) => {
-    fixedLinks.push({ from: productTankId, to: m.id });
+  // ── Product tanks ──
+  // A configured bank of tanks replaces the synthetic single tank. Every
+  // primary train's permeate discharges into the bank (common inlet header, as
+  // drawn); on the outlet side a tank goes to its own product meter where one
+  // is assigned, otherwise to the first meter — and any meter left unfed is
+  // picked up by the last tank so no meter dangles.
+  const tankIds: string[] = [];
+  if (productTankRows.length) {
+    productTankRows.forEach((t: any) => {
+      nodes.push({
+        id: t.id,
+        type: 'productTank',
+        stageKey: 'productTank',
+        label: t.name,
+        status: t.status,
+        detail: t.capacity_m3 ? `${t.capacity_m3} m³` : undefined,
+      });
+      tankIds.push(t.id);
+    });
+  } else {
+    nodes.push({
+      id: productTankId,
+      type: 'productTank',
+      stageKey: 'productTank',
+      label: 'Product Tank',
+      detail: `${primaryTrains.length} in`
+        + (productMeters.length ? ` · ${productMeters.length} out` : ''),
+    });
+    tankIds.push(productTankId);
+  }
+
+  primaryTrains.forEach((r: any) => {
+    const src = hasPermeate ? `permeate-${r.id}` : r.id;
+    tankIds.forEach((tid) => fixedLinks.push({ from: src, to: tid }));
   });
 
   // ── Bulk meters (product_meters from DB — exactly as configured in Plants) ──
   productMeters.forEach((m: any) => {
-    nodes.push({ id: m.id, type: 'bulk', label: m.name, status: m.status });
+    nodes.push({ id: m.id, type: 'bulk', stageKey: 'bulk', label: m.name, status: m.status });
   });
+
+  if (productMeters.length) {
+    const fedMeters = new Set<string>();
+    if (productTankRows.length) {
+      productTankRows.forEach((t: any) => {
+        const target = t.product_meter_id && productMeters.some((m: any) => m.id === t.product_meter_id)
+          ? t.product_meter_id
+          : productMeters[0].id;
+        fixedLinks.push({ from: t.id, to: target });
+        fedMeters.add(target);
+      });
+      const lastTank = tankIds[tankIds.length - 1];
+      productMeters
+        .filter((m: any) => !fedMeters.has(m.id))
+        .forEach((m: any) => fixedLinks.push({ from: lastTank, to: m.id }));
+    } else {
+      productMeters.forEach((m: any) => fixedLinks.push({ from: productTankId, to: m.id }));
+    }
+  }
 
   // ── Locators (exactly as configured in Plants) ──
   locators.forEach((l: any) => {
-    nodes.push({ id: l.id, type: 'locator', label: l.name, status: l.status ?? 'Active' });
+    nodes.push({ id: l.id, type: 'locator', stageKey: 'locator', label: l.name, status: l.status ?? 'Active' });
+  });
+
+  // ── Reject reuse: tanker refilling bay ──
+  // A train with reject_routing = 'reuse' sends its concentrate to a refilling
+  // bay rather than to drain. That water leaves the plant but was never
+  // permeate, so the bay and its transfer pump carry an explicit `reject`
+  // stream and must never be counted as production.
+  const reuseTrains = roTrains.filter((r: any) => r.reject_routing === 'reuse');
+  if (reuseTrains.length && hasReject) {
+    const bayId  = `refill-${plantId}`;
+    const pumpId = `transferpump-${plantId}`;
+    nodes.push({
+      id: bayId, type: 'refillStation', stageKey: 'refillStation',
+      label: 'R.O. Refilling', stream: 'reject',
+      detail: `${reuseTrains.length} reject in`,
+    });
+    nodes.push({
+      id: pumpId, type: 'transferPump', stageKey: 'refillStation',
+      label: 'Transfer Pump', stream: 'reject',
+    });
+    reuseTrains.forEach((r: any) => fixedLinks.push({ from: `reject-${r.id}`, to: bayId }));
+    fixedLinks.push({ from: bayId, to: pumpId });
+  }
+
+  // ── Chemical dosing points ──
+  // A dosing pump injects into a stage rather than carrying process flow. The
+  // link is drawn on its own `chemical` stream so it never reads as water.
+  dosingRows.forEach((d: any) => {
+    const stageKey = d.injects_into_stage_key as string;
+    const id = `dosing-${d.id}`;
+    nodes.push({
+      id,
+      type: 'dosingPump',
+      stageKey: 'dosingPump',
+      attachStage: stageKey,
+      label: d.label ?? `${d.chemical} Dosing`,
+      status: d.status,
+      detail: d.pump_hp ? `${d.chemical} · ${d.pump_hp} HP` : d.chemical,
+    });
+
+    const targets: string[] = [];
+    if (plantStageIdByKey.has(stageKey)) targets.push(plantStageIdByKey.get(stageKey)!);
+    else if (trainStageIdsByKey.has(stageKey)) targets.push(...trainStageIdsByKey.get(stageKey)!);
+    else if (stageKey === 'roTrain') targets.push(...primaryTrains.map((r: any) => r.id));
+    else if (stageKey === 'bulk') targets.push(...productMeters.map((m: any) => m.id));
+    else if (stageKey === 'productTank') targets.push(...tankIds);
+    targets.forEach((t) => fixedLinks.push({ from: id, to: t }));
   });
 
   // ── Custom nodes ──
@@ -937,20 +1294,12 @@ export function buildTopology(
   // above) draw their locator supply directly off the permeate line as well as
   // via the product tank/meter, so seed permeate → locator defaults.
   if (permeateIsProduction && hasPermeate) {
-    roTrains.forEach((r: any) => {
-      if (r.unit_type === 'secondary') return;
+    primaryTrains.forEach((r: any) => {
       locators.forEach((l: any) => {
         defaultEditLinks.push({ from: `permeate-${r.id}`, to: l.id, editable: true });
       });
     });
   }
-
-  // Raw meters discharge into the single shared raw tank via fixedLinks above
-  // (hard-wired — every well feeds this one tank, which supplies all trains).
-  // No default editable duplicate here: emitting the same pair in both
-  // fixedLinks and editLinks would render the pipe twice. The
-  // ['rawMeter','rawTank'] pair stays connectable in Connect mode for
-  // custom rewiring.
 
   locators.forEach((l: any) => {
     if (l.product_meter_id)
@@ -963,7 +1312,7 @@ export function buildTopology(
   // Connect mode).
   if (productMeters.length === 0) {
     locators.forEach((l: any) => {
-      defaultEditLinks.push({ from: productTankId, to: l.id, editable: true });
+      tankIds.forEach((tid) => defaultEditLinks.push({ from: tid, to: l.id, editable: true }));
     });
   }
 
@@ -987,15 +1336,11 @@ export function buildTopology(
   });
 
   // Sanitize saved links against the current node set — drops stale references
-  // (e.g. the retired shared `pretreat-<plantId>` / `feedmeter-<plantId>` nodes
-  // and the old per-train `rawtank-<trainId>` nodes) so old saved topologies
-  // don't render dangling pipes. If nothing survives, fall back to the
-  // fresh defaults.
+  // (e.g. retired shared pretreat/feedmeter nodes, per-train raw tanks, or a
+  // stage removed from the plant's template) so old saved topologies don't
+  // render dangling pipes. If nothing survives, fall back to fresh defaults.
   const knownIds = new Set(nodes.map((n) => n.id));
-  // A saved link duplicating a fixedLink pair would render the pipe twice,
-  // so filter those out and let fresh defaults win for that pair. This covers
-  // the hard-wired rawMeter → shared-rawTank pairs and the blending-well
-  // rawMeter → productTank bypass above.
+  // A saved link duplicating a fixedLink pair would render the pipe twice.
   const fixedPairs = new Set(fixedLinks.map((l) => `${l.from}→${l.to}`));
   const sanitizedSaved = savedLinks.filter(
     (s: any) => {
@@ -1021,54 +1366,110 @@ export function layoutNodes(
   customColumns: CustomColumn[] = [],
   posOverrides: Record<string, NodePositionOverride> = {},
   colWidths: Record<string, number> = {},
+  stages: ProcessStage[] = DEFAULT_PROCESS_STAGES,
 ): Map<string, { x: number; y: number; zone: Zone }> {
-  const colXMap = buildColXMap(customColumns, colWidths);
+  const colXMap = buildColXMap(customColumns, colWidths, stages);
   const positions = new Map<string, { x: number; y: number; zone: Zone }>();
-  const byType: Record<string, TopoNode[]> = {};
-  nodes.forEach((n) => { (byType[n.type] = byType[n.type] ?? []).push(n); });
+  const stageByKey = new Map(stages.map((s) => [s.key, s]));
 
-  const waterTypes: NodeType[] = [
-    'well', 'rawMeter', 'rawTank', 'rawWaterPump', 'mediaFilter', 'bagCartridge', 'hpPump',
-    'pretreat', 'feedMeter', 'roTrain', 'permeate', 'reject', 'productTank', 'bulk', 'locator',
-  ];
+  const POWER_TYPES: NodeType[] = ['solarSource', 'gridSource', 'solarMeter', 'gridMeter'];
 
-  // Per-train chain stages (rwp / mediaFilter / bagCartridge / hpPump + the
-  // per-train feed meter) ride on their train's row so each train forms one
-  // horizontal lane (ids are `<stage>-<trainId>`).
-  const chainTypes: NodeType[] = ['rawWaterPump', 'mediaFilter', 'bagCartridge', 'hpPump'];
+  // Which column a node sits in. An explicit stageKey wins so two stages can
+  // share a NodeType (a bag-filter bank each side of the raw tank); otherwise
+  // fall back to the type, which is what every pre-template node used.
+  const colKeyOf = (n: TopoNode): string => n.colId ?? n.stageKey ?? n.type;
+
+  const waterNodes = nodes.filter(
+    (n) => !POWER_TYPES.includes(n.type) && n.type !== 'dosingPump' && !n.colId
+  );
+
+  const byCol: Record<string, TopoNode[]> = {};
+  waterNodes.forEach((n) => {
+    const k = colKeyOf(n);
+    (byCol[k] = byCol[k] ?? []).push(n);
+  });
+
+  // Per-train chain stages ride on their train's row so each train forms one
+  // horizontal lane (ids are `<prefix>-<trainId>`).
+  const chainTypes: NodeType[] = ['rawWaterPump', 'mediaFilter', 'bagCartridge', 'hpPump', 'degasifier', 'pretreat'];
   const trainRowById = new Map<string, number>();
-  (byType['roTrain'] ?? []).forEach((n, i) => trainRowById.set(n.id, i));
+  (byCol['roTrain'] ?? []).forEach((n, i) => trainRowById.set(n.id, i));
 
-  waterTypes.forEach((t) => {
-    (byType[t] ?? []).forEach((n, i) => {
-      const x = colXMap[t] ?? 0;
+  const trainCount = Math.max(1, byCol['roTrain']?.length ?? 1);
+  const permeateCount = byCol['permeate']?.length ?? 0;
+
+  Object.entries(byCol).forEach(([colKey, list]) => {
+    const stage = stageByKey.get(colKey);
+    const x = colXMap[colKey] ?? 0;
+    const wrap = stage?.wrapCols && stage.wrapCols > 1 ? stage.wrapCols : 0;
+
+    list.forEach((n, i) => {
+      let nx = x;
       let y = START_Y + i * ROW_GAP;
-      // Chain stages (and the per-train feed meter) align with their train's row
-      const trainId = n.id.slice(n.id.indexOf('-') + 1);
-      if ((chainTypes.includes(t) || t === 'feedMeter') && trainRowById.has(trainId))
-        y = START_Y + (trainRowById.get(trainId) as number) * ROW_GAP;
-      // The single plant-wide product tank (and the single shared raw tank)
-      // centre vertically against the train rows so they read as the common
-      // collector/supply for every train.
-      if (t === 'productTank' || t === 'rawTank')
-        y = START_Y + Math.floor(Math.max(0, (byType['roTrain']?.length ?? 1) - 1) / 2) * ROW_GAP;
-      // Reject rows start below permeate rows
-      if (t === 'reject')
-        y = START_Y + ((byType['permeate']?.length ?? 0) + i) * ROW_GAP;
-      positions.set(n.id, { x, y, zone: 'water' });
+
+      if (wrap) {
+        // Tank banks and similar render as a grid rather than one tall column.
+        nx = x + (i % wrap) * WRAP_COL_GAP;
+        y  = START_Y + Math.floor(i / wrap) * ROW_GAP;
+      } else if (chainTypes.includes(n.type) || n.type === 'feedMeter') {
+        const trainId = n.id.slice(n.id.indexOf('-') + 1);
+        if (trainRowById.has(trainId)) y = START_Y + (trainRowById.get(trainId) as number) * ROW_GAP;
+      }
+
+      // A single shared unit on the intake or product line (raw tank, product
+      // tank, degasifier…) centres against the train rows so it reads as the
+      // common collector/supply for every train.
+      if (!wrap && list.length === 1 && stage?.scope === 'plant' &&
+          (CHAIN_STAGE_TYPES.includes(n.type) || n.type === 'productTank')) {
+        y = START_Y + Math.floor(Math.max(0, trainCount - 1) / 2) * ROW_GAP;
+      }
+
+      // Reject rows start below permeate rows (they share the permeate column).
+      if (colKey === 'reject') y = START_Y + (permeateCount + i) * ROW_GAP;
+
+      positions.set(n.id, { x: nx, y, zone: 'water' });
     });
   });
 
-  const waterRows = Math.max(
-    byType['well']?.length ?? 0,
-    byType['roTrain']?.length ?? 0,
-    (byType['permeate']?.length ?? 0) + (byType['reject']?.length ?? 0),
-    byType['bulk']?.length ?? 0,
-    byType['locator']?.length ?? 0,
-  );
+  const wrappedRows = (colKey: string) => {
+    const stage = stageByKey.get(colKey);
+    const n = byCol[colKey]?.length ?? 0;
+    if (stage?.wrapCols && stage.wrapCols > 1) return Math.ceil(n / stage.wrapCols);
+    return n;
+  };
+
+  let waterRows = 0;
+  Object.keys(byCol).forEach((k) => {
+    const rows = k === 'reject'
+      ? permeateCount + (byCol['reject']?.length ?? 0)
+      : wrappedRows(k);
+    waterRows = Math.max(waterRows, rows);
+  });
+  waterRows = Math.max(waterRows, 1);
+
+  // ── Dosing risers ──
+  // A dosing pump injects into a stage rather than occupying a lane, so it
+  // sits under its injection point on a band of its own.
+  const dosingNodes = nodes.filter((n) => n.type === 'dosingPump' && !n.colId);
+  if (dosingNodes.length) {
+    const dosingY = START_Y + waterRows * ROW_GAP;
+    const perColumn: Record<string, number> = {};
+    dosingNodes.forEach((n) => {
+      const key = n.attachStage ?? 'hpPump';
+      const x = colXMap[key] ?? colXMap[colKeyOf(n)] ?? 0;
+      const slot = perColumn[key] ?? 0;
+      perColumn[key] = slot + 1;
+      positions.set(n.id, { x, y: dosingY + slot * ROW_GAP, zone: 'water' });
+    });
+    waterRows += Math.max(...Object.values(perColumn));
+  }
+
   const POWER_OFFSET_Y = START_Y + waterRows * ROW_GAP + 80;
 
   // Solar source + meters
+  const byType: Record<string, TopoNode[]> = {};
+  nodes.forEach((n) => { (byType[n.type] = byType[n.type] ?? []).push(n); });
+
   let solarRow = 0, gridRow = 0;
   (byType['solarSource'] ?? []).forEach((n) => {
     positions.set(n.id, { x: POWER_COLS.solarSource, y: POWER_OFFSET_Y + solarRow++ * ROW_GAP, zone: 'power' });

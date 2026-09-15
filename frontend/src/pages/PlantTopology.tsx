@@ -44,6 +44,7 @@ import {
   NodeType, CustomColumn, buildColSequence, buildColXMap, TopoNode, TopoLink, NodePositionOverride, DragItem, PaletteItem, TopologyState,
   loadCustomNodes, saveCustomNodes, loadCustomColumns, saveCustomColumns, loadPosOverrides, savePosOverrides, loadPaletteItems, savePaletteItems, loadColWidths, saveColWidths,
   NODE_LABELS, CANVAS_REF, NODE_W, NODE_H, ROW_GAP, START_Y, COL_GAP, canConnect, buildTopology,
+  resolveStages,
 } from './plantTopology/shared';
 import { useTopologyData, useSaveTopologyLinks } from '@/data/hooks/usePlantTopology';
 import PlantTopologyContent from './plantTopology/TopologyCanvas';
@@ -78,6 +79,11 @@ export default function PlantTopology() {
 
   const { data: rawData, isLoading, refetch } = useTopologyData(effectivePlantId);
   const saveLinksMutation = useSaveTopologyLinks();
+
+  // Process line shape for this plant — drives column order for drag snapping
+  // exactly as it drives rendering, so a dropped node lands in the lane the
+  // operator aimed at rather than in the legacy lane of the same index.
+  const stages = useMemo(() => resolveStages((rawData as any)?.processStages), [rawData]);
 
   // Blending wells are the only ones allowed to bypass raw tank → product tank
   const blendingWellIds = useMemo(() => {
@@ -231,7 +237,7 @@ export default function PlantTopology() {
     if (clientX < rect.left || clientX > rect.right || clientY < rect.top || clientY > rect.bottom) return null;
     const canvasX = (clientX - rect.left + el.scrollLeft) / zoom;
     const canvasY = (clientY - rect.top  + el.scrollTop)  / zoom;
-    const xMap = buildColXMap(customColumns, colWidths);
+    const xMap = buildColXMap(customColumns, colWidths, stages);
     const entries = Object.entries(xMap).filter(([k]) => k !== 'reject');
     let nearestKey = entries[0]?.[0] ?? 'well';
     let minDist = Infinity;
@@ -241,11 +247,11 @@ export default function PlantTopology() {
     }
     const rowIdx = Math.max(0, Math.round((canvasY - 0) / ROW_GAP));
     return { colKey: nearestKey, rowIdx };
-  }, [zoom, customColumns]);
+  }, [zoom, customColumns, colWidths, stages]);
 
   const handleDropNode = useCallback((item: DragItem, snap: { colKey: string; rowIdx: number }) => {
     if (!effectivePlantId) return;
-    const colSeq = buildColSequence(customColumns);
+    const colSeq = buildColSequence(customColumns, stages);
     const colSlot = colSeq.find((s) => s.key === snap.colKey);
 
     if (item.nodeId) {
