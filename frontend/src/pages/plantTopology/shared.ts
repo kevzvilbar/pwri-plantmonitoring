@@ -82,6 +82,45 @@ export const BASE_COL_SLOTS: BaseColSlot[] = [
   { key: 'locator',      label: 'LOCATORS',     type: 'locator' },
 ];
 
+// ─── Stage zone definitions for visual grouping ────────────────────────────────────
+// These define colored background bands that group related process stages together
+// for a more professional P&ID-style layout.
+
+export const STAGE_ZONES = [
+  {
+    id: 'raw-water-intake',
+    label: 'RAW WATER INTAKE',
+    startCol: 'well',
+    endCol: 'rawTank',
+    color: 'hsl(var(--topo-well-lane))',
+    yOffset: -6,
+  },
+  {
+    id: 'pretreatment',
+    label: 'PRE-TREATMENT',
+    startCol: 'rawWaterPump',
+    endCol: 'feedMeter',
+    color: 'hsl(var(--topo-pretreat-lane))',
+    yOffset: -6,
+  },
+  {
+    id: 'ro-system',
+    label: 'RO SYSTEM',
+    startCol: 'roTrain',
+    endCol: 'roTrain',
+    color: 'hsl(var(--topo-roTrain-lane))',
+    yOffset: -6,
+  },
+  {
+    id: 'post-treatment',
+    label: 'PRODUCT WATER & DISTRIBUTION',
+    startCol: 'permeate',
+    endCol: 'locator',
+    color: 'hsl(var(--topo-permeate-lane))',
+    yOffset: -6,
+  },
+] as const;
+
 export interface ColSlot {
   key: string;
   label: string;
@@ -102,6 +141,20 @@ export function buildColSequence(customColumns: CustomColumn[]): ColSlot[] {
       );
   }
   return result;
+}
+
+/**
+ * Returns the stage zone that contains the given column key.
+ * Used for rendering zone backgrounds and labels.
+ */
+export function getStageZoneForColumn(colKey: string): (typeof STAGE_ZONES)[number] | undefined {
+  return STAGE_ZONES.find((zone) => {
+    const startIdx = BASE_COL_SLOTS.findIndex((s) => s.key === zone.startCol);
+    const endIdx = BASE_COL_SLOTS.findIndex((s) => s.key === zone.endCol);
+    const colIdx = BASE_COL_SLOTS.findIndex((s) => s.key === colKey);
+    if (startIdx === -1 || endIdx === -1 || colIdx === -1) return false;
+    return colIdx >= startIdx && colIdx <= endIdx;
+  });
 }
 
 /** Returns a map of column key → x position based on the ordered sequence + per-column widths. */

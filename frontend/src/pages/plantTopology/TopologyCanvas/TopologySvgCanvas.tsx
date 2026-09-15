@@ -2,6 +2,7 @@ import React, { useRef, useCallback } from 'react';
 import { useAppStore } from '@/store/appStore';
 import { NodeType, NODE_W, NODE_H, START_Y, ROW_GAP, POWER_COLS,
   COLORS, COL_GAP, ColSlot, cubicPath, getSymbolDimensions,
+  STAGE_ZONES, getNodeStatusInfo,
 } from '../shared';
 import { NodePalette } from '../NodePalette';
 import { TopologyHeader } from './TopologyHeader';
@@ -187,7 +188,50 @@ export function TopologySvgCanvas({
                   );
                 })}
 
-                {colSequence.map((slot) => {
+				{/* ── Stage zone backgrounds ── */}
+				{STAGE_ZONES.map((zone) => {
+					const startX = colXMap[zone.startCol];
+					const endX = colXMap[zone.endCol];
+					if (startX === undefined || endX === undefined) return null;
+					const zoneStartX = Math.min(startX, endX) - 10;
+					const zoneEndX = Math.max(startX, endX) + NODE_W + 10;
+					const zoneW = zoneEndX - zoneStartX;
+					const color = zone.color;
+
+					return (
+						<g key={`zone-${zone.id}`}>
+							<rect
+								x={zoneStartX}
+								y={START_Y + zone.yOffset}
+								width={zoneW}
+								height={maxWaterY - START_Y - zone.yOffset + 20}
+								rx={10}
+								fill={color}
+								opacity={0.07}
+								stroke={color}
+								strokeWidth={1}
+								strokeDasharray="6,4"
+								style={{ pointerEvents: 'none' }}
+							/>
+							<text
+								x={zoneStartX + zoneW / 2}
+								y={START_Y + zone.yOffset - 8}
+								textAnchor="middle"
+								fill={color}
+								fontSize={9}
+								fontFamily={TOPO_FONT_MONO}
+								fontWeight={700}
+								letterSpacing={1.8}
+								opacity={0.8}
+								style={{ pointerEvents: 'none' }}
+							>
+								{zone.label}
+							</text>
+						</g>
+					);
+				})}
+
+				{colSequence.map((slot) => {
                   const x = colXMap[slot.key];
                   if (x === undefined) return null;
                   const slotW = colWidths[slot.key] ?? COL_GAP;
