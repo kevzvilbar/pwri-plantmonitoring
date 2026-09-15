@@ -89,11 +89,27 @@ export interface TopologyData {
   savedLinks: TopoLink[];
 }
 
+/**
+ * Wells are tagged as blending via the `blending_wells` table (see
+ * Plants → Wells → "Blending" toggle, WellsList/useWellsList.ts:toggleBlending)
+ * — NOT via the `wells.is_blending_well` column, which no UI has ever written
+ * to (it reads false for every well in the database). buildTopology() decides
+ * the raw-tank-bypass link purely off `TopoWell.is_blending_well`, so both
+ * fetchers below resolve it from the real tag table and fold it onto the
+ * well rows, rather than trusting the dead column.
+ */
+async function fetchBlendingWellIds(plantId: string): Promise<Set<string>> {
+  const { data, error } = await (supabase.from('blending_wells' as any) as any)
+    .select('well_id').eq('plant_id', plantId);
+  if (error) return new Set(); // table/RLS hiccup — fall back to no blending wells rather than throw
+  return new Set((data ?? []).map((r: any) => r.well_id));
+}
+
 /** Fetch all topology data for a plant */
 export async function fetchTopologyData(plantId: string): Promise<TopologyData> {
   if (!plantId) throw new Error('Plant ID required');
 
-  const [wellsRes, roRes, locRes, prodRes, powerCfgRes, meterCfgRes] = await Promise.all([
+  const [wellsRes, roRes, locRes, prodRes, powerCfgRes, meterCfgRes, blendingIds] = await Promise.all([
     supabase.from('wells').select('id,name,status,has_power_meter,is_blending_well').eq('plant_id', plantId).order('name'),
     supabase.from('ro_trains').select(
       'id,train_number,name,status,shared_power_meter_group,' +
@@ -111,6 +127,7 @@ export async function fetchTopologyData(plantId: string): Promise<TopologyData> 
     supabase.from('plant_meter_config')
       .select('config,permeate_is_production')
       .eq('plant_id', plantId).maybeSingle(),
+    fetchBlendingWellIds(plantId),
   ]);
 
   // Check for errors
@@ -131,8 +148,13 @@ export async function fetchTopologyData(plantId: string): Promise<TopologyData> 
     // Links are optional, continue without them
   }
 
+  const wells = ((wellsRes.data ?? []) as unknown as TopoWell[]).map((w) => ({
+    ...w,
+    is_blending_well: w.is_blending_well || blendingIds.has(w.id),
+  }));
+
   return {
-    wells:         (wellsRes.data ?? []) as unknown as TopoWell[],
+    wells,
     roTrains:      (roRes.data    ?? []) as unknown as TopoRoTrain[],
     locators:      (locRes.data   ?? []) as unknown as TopoLocator[],
     productMeters: (prodRes.data  ?? []) as unknown as TopoProductMeter[],
@@ -152,9 +174,15 @@ export async function fetchTopologyLinks(plantId: string): Promise<TopoLink[]> {
 
 /** Fetch individual components for fine-grained caching */
 export async function fetchWellsForTopology(plantId: string): Promise<TopoWell[]> {
-  const { data, error } = await supabase.from('wells').select('id,name,status,has_power_meter,is_blending_well').eq('plant_id', plantId).order('name');
+  const [{ data, error }, blendingIds] = await Promise.all([
+    supabase.from('wells').select('id,name,status,has_power_meter,is_blending_well').eq('plant_id', plantId).order('name'),
+    fetchBlendingWellIds(plantId),
+  ]);
   if (error) throw error;
-  return (data ?? []) as unknown as TopoWell[];
+  return ((data ?? []) as unknown as TopoWell[]).map((w) => ({
+    ...w,
+    is_blending_well: w.is_blending_well || blendingIds.has(w.id),
+  }));
 }
 
 export async function fetchRoTrainsForTopology(plantId: string): Promise<TopoRoTrain[]> {
