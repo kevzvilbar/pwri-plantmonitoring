@@ -93,13 +93,23 @@ export function TopoLinkRenderer({ link, idx, topoState, positions, hoveredLink,
         </g>
       )}
 
-      {/* Arrow marker definition */}
+      {/* Arrow marker definition.
+          markerUnits defaults to "strokeWidth", which scales the marker by
+          the stroke-width of whatever element references it via marker-end —
+          here that's the invisible strokeWidth={20} hit-path below, not the
+          ~3px visible pipe. That mismatch is what blew the arrowheads up to
+          several times the pipe width. markerUnits="userSpaceOnUse" plus an
+          explicit viewBox decouples the two, so markerWidth/markerHeight are
+          the actual rendered size regardless of which path's marker-end
+          triggers them. */}
       <defs>
         <marker
           id={markerId}
-          markerWidth={isHov ? 10 : 8}
-          markerHeight={isHov ? 10 : 8}
-          refX={isHov ? 7 : 5}
+          markerUnits="userSpaceOnUse"
+          markerWidth={isHov ? 8 : 6.5}
+          markerHeight={isHov ? 8 : 6.5}
+          viewBox="0 0 10 10"
+          refX={7}
           refY={5}
           orient="auto"
         >
@@ -111,12 +121,14 @@ export function TopoLinkRenderer({ link, idx, topoState, positions, hoveredLink,
         </marker>
       </defs>
 
-      {/* End arrow marker */}
+      {/* End arrow marker — drawn on its own thin path (matching the visible
+          pipe width) rather than the fat invisible hit-path, now that marker
+          sizing no longer depends on which one it's attached to. */}
       <path
         d={cubicPath(x1, y1, x2, y2)}
         fill="none"
         stroke="transparent"
-        strokeWidth={12}
+        strokeWidth={3}
         markerEnd={`url(#${markerId})`}
       />
 
