@@ -292,6 +292,9 @@ export const EDITABLE_PAIRS: [NodeType, NodeType][] = [
   ['permeate',   'productTank'],
   ['productTank','bulk'],
   ['productTank','locator'],
+  // Blending bypass: a blending well's raw meter injects straight into the
+  // product-water line (product tank), skipping the raw tank / RO entirely.
+  ['rawMeter',   'productTank'],
   ['bulk',       'locator'],
   ['well',       'roTrain'],
   ['roTrain',    'well'],
@@ -554,7 +557,7 @@ export function useTopologyData(plantId: string | null) {
       if (!plantId) return null;
 
       const [wellsRes, roRes, locRes, prodRes, powerCfgRes, meterCfgRes] = await Promise.all([
-        supabase.from('wells').select('id,name,status,has_power_meter').eq('plant_id', plantId).order('name'),
+        supabase.from('wells').select('id,name,status,has_power_meter,is_blending_well').eq('plant_id', plantId).order('name'),
         supabase.from('ro_trains').select(
           'id,train_number,name,status,shared_power_meter_group,' +
           'num_afm,num_booster_pumps,num_hp_pumps,num_cartridge_filters,num_controllers,' +
@@ -680,8 +683,9 @@ export function buildTopology(
   });
 
   // ── Wells ──
-  // Blending wells inject directly into the Product Water line (bypass RO).
-  // They skip rawMeter + pretreat entirely, with a distinct bypass visual on the link.
+  // Blending wells keep their raw meter (blending volumes are meter deltas)
+  // but that meter discharges straight into the product tank — a metered
+  // bypass from the raw side to the product line, skipping raw tank / RO.
 
   // Create the single shared raw-water tank once (feeds all primary trains below).
   nodes.push({ id: rawTankId, type: 'rawTank', label: 'Raw Tank', detail: `${roTrains.filter((r: any) => r.unit_type !== 'secondary').length} outlets` });
@@ -689,11 +693,14 @@ export function buildTopology(
   wells.forEach((w: any) => {
     nodes.push({ id: w.id, type: 'well', label: w.name, status: w.status });
     if ((w as any).is_blending_well) {
-      // Blending well injects directly into the Product Water line (bypasses
-      // RO) — into the plant's product tank. Node ids are the raw
-      // product_meters / locators row ids, so the old `bulk-`/
-      // `locator-<plant>-product-line` prefixes produced dangling links.
-      fixedLinks.push({ from: w.id, to: productTankId, bypass: true });
+      // Blending-well exemption: metered bypass from the raw side straight
+      // into the product line. The well keeps its raw meter (blending volumes
+      // are meter deltas), and that meter discharges directly into the
+      // plant's product tank, skipping the raw tank / RO entirely.
+      const rmId = `rawmeter-${w.id}`;
+      nodes.push({ id: rmId, type: 'rawMeter', label: `Raw ${w.name}` });
+      fixedLinks.push({ from: w.id, to: rmId });
+      fixedLinks.push({ from: rmId, to: productTankId, bypass: true });
       return;
     }
     const rmId = `rawmeter-${w.id}`;
@@ -932,14 +939,15 @@ export function buildTopology(
   // don't render dangling pipes. If nothing survives, fall back to the
   // fresh defaults.
   const knownIds = new Set(nodes.map((n) => n.id));
+  // A saved link duplicating a fixedLink pair would render the pipe twice,
+  // so filter those out and let fresh defaults win for that pair. This covers
+  // the hard-wired rawMeter → shared-rawTank pairs and the blending-well
+  // rawMeter → productTank bypass above.
+  const fixedPairs = new Set(fixedLinks.map((l) => `${l.from}→${l.to}`));
   const sanitizedSaved = savedLinks.filter(
     (s: any) => {
       if (!knownIds.has(s.from_id) || !knownIds.has(s.to_id)) return false;
-      // Old per-train raw-tank links are stale under the single shared tank —
-      // their target no longer exists (knownIds already drops them), and any
-      // rawMeter → shared-rawTank pair duplicates a fixedLink, which would
-      // double-render. Filter those out so fresh defaults win for that pair.
-      if (s.from_id.startsWith('rawmeter-') && s.to_id === rawTankId) return false;
+      if (fixedPairs.has(`${s.from_id}→${s.to_id}`)) return false;
       return true;
     }
   );

@@ -31,7 +31,7 @@
  * • Column headers now reference correct lane labels including SOLAR / GRID.
  */
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/useAuth';
@@ -78,6 +78,12 @@ export default function PlantTopology() {
 
   const { data: rawData, isLoading, refetch } = useTopologyData(effectivePlantId);
   const saveLinksMutation = useSaveTopologyLinks();
+
+  // Blending wells are the only ones allowed to bypass raw tank → product tank
+  const blendingWellIds = useMemo(() => {
+    if (!rawData?.wells) return new Set<string>();
+    return new Set((rawData.wells as any[]).filter((w: any) => w.is_blending_well).map((w: any) => w.id));
+  }, [rawData?.wells]);
 
   const [editMode, setEditMode]       = useState<'connect' | 'disconnect' | null>(null);
   const [pendingFrom, setPendingFrom] = useState<{ id: string; type: NodeType } | null>(null);
@@ -320,6 +326,18 @@ export default function PlantTopology() {
         toast.error(`Cannot ${editMode} ${NODE_LABELS[pendingFrom.type]} ↔ ${NODE_LABELS[type]}`);
         setPendingFrom(null);
         return;
+      }
+      // Blending-well bypass: rawMeter → productTank is only allowed when the
+      // raw meter belongs to a blending well (skips raw tank / RO entirely).
+      const isBypass = pendingFrom.type === 'rawMeter' && type === 'productTank' ||
+                        type === 'rawMeter' && pendingFrom.type === 'productTank';
+      if (isBypass) {
+        const rmId = pendingFrom.type === 'rawMeter' ? pendingFrom.id : id;
+        if (!blendingWellIds.has(rmId.replace('rawmeter-', ''))) {
+          toast.error(`Cannot ${editMode} RAW METER ↔ PRODUCT TANK — only blending wells may bypass the raw tank`);
+          setPendingFrom(null);
+          return;
+        }
       }
       const newLinks = [...topoState.editLinks];
       if (editMode === 'connect') {
