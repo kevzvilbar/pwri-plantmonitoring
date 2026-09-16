@@ -31,7 +31,7 @@ export interface FlaggedGap {
    * - 'orange': Applied only when a 1-hour gap is detected (missedHours === 1).
    * - 'offline': Applied when gaps exceed 2 hours (missedHours >= 2).
    */
-  tier: 'orange' | 'offline';
+  tier?: 'orange' | 'offline';
 }
 
 /** HH:59 + 30min = HH+1:29, i.e. 89 minutes after the bucket opens. */

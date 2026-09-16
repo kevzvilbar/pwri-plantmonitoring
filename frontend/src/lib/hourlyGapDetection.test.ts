@@ -183,7 +183,7 @@ describe('mergeGapsForDisplay', () => {
     { kind: 'reading', row: { id: 'r2', reading_datetime: '2026-08-26T09:05:00Z' } },
   ];
   const gap: FlaggedGap = {
-    gapStartAt: '2026-08-26T11:00:00Z', gapEndAt: '2026-08-26T13:00:00Z', missedHours: 2,
+    gapStartAt: '2026-08-26T11:00:00Z', gapEndAt: '2026-08-26T13:00:00Z', missedHours: 2, tier: 'offline',
   };
 
   it('places the gap badge between the readings that bracket it', () => {
