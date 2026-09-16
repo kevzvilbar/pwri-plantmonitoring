@@ -65,6 +65,9 @@ export function TrainLogModal({ trainId, trainLabel, plantId, onClose, initialTa
   const qc = useQueryClient();
   const { isManager, isDataAnalyst, activeOperator, user } = useAuth();
   const hasFullAccess = isManager || isDataAnalyst;
+  const actorLabel = () =>
+    `${activeOperator?.first_name ?? ''} ${activeOperator?.last_name ?? ''}`.trim()
+    || activeOperator?.username || null;
 
   const [page, setPage]               = useState(0);
   const [togglingId, setTogglingId]   = useState<string | null>(null);
