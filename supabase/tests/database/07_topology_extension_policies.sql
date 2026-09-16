@@ -22,8 +22,11 @@ SELECT plan(20);
 
 -- ── RLS is enabled ──────────────────────────────────────────────────────────
 SELECT ok(
-    (SELECT relrowsecurity FROM pg_class
-      WHERE oid = ('public.' || t)::regclass),
+    COALESCE(
+      (SELECT relrowsecurity FROM pg_class
+        WHERE oid = to_regclass('public.' || t)),
+      false
+    ),
     format('RLS is enabled on public.%s', t)
 )
 FROM unnest(ARRAY['plant_process_stages', 'product_tanks', 'dosing_points', 'plant_topology_config']) AS t;

@@ -137,7 +137,6 @@ export default function PlantTopologyContent({
   const isMobile = useIsMobile();
   const { selectedPlantId } = useAppStore();
   const { isAdmin, isManager } = useAuth();
-
   const [animatedFlow, setAnimatedFlow] = useState<boolean>(() => {
     try {
       return localStorage.getItem('topo_animated_flow') !== 'false';
