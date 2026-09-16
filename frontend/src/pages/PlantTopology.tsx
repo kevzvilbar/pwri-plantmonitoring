@@ -46,7 +46,7 @@ import {
   NODE_LABELS, CANVAS_REF, NODE_W, NODE_H, ROW_GAP, START_Y, COL_GAP, canConnect, buildTopology,
   resolveStages,
 } from './plantTopology/shared';
-import { useTopologyData, useSaveTopologyLinks } from '@/data/hooks/usePlantTopology';
+import { useTopologyData, useSaveTopologyLinks, useSaveTopologyConfig } from '@/data/hooks/usePlantTopology';
 import PlantTopologyContent from './plantTopology/TopologyCanvas';
 import { SidePanel } from './plantTopology/SidePanel';
 import { useWaterBalanceReconciliation } from '@/data/hooks/useWaterBalanceReconciliation';
@@ -79,6 +79,7 @@ export default function PlantTopology() {
 
   const { data: rawData, isLoading, refetch } = useTopologyData(effectivePlantId);
   const saveLinksMutation = useSaveTopologyLinks();
+  const saveTopologyConfigMutation = useSaveTopologyConfig();
 
   // Process line shape for this plant — drives column order for drag snapping
   // exactly as it drives rendering, so a dropped node lands in the lane the
@@ -121,12 +122,27 @@ export default function PlantTopology() {
 
   useEffect(() => {
     if (!effectivePlantId) return;
-    setCustomNodes(loadCustomNodes(effectivePlantId));
-    setCustomColumns(loadCustomColumns(effectivePlantId));
-    setPosOverrides(loadPosOverrides(effectivePlantId));
-    setPaletteItems(loadPaletteItems(effectivePlantId));
-    setColWidths(loadColWidths(effectivePlantId));
-  }, [effectivePlantId]);
+    if (rawData?.topologyConfig) {
+      const cfg = rawData.topologyConfig;
+      setCustomNodes(cfg.customNodes ?? []);
+      setCustomColumns(cfg.customColumns ?? []);
+      setPosOverrides(cfg.positionOverrides ?? {});
+      setPaletteItems(cfg.paletteItems ?? []);
+      setColWidths(cfg.columnWidths ?? {});
+      // Synchronize to offline cache
+      saveCustomNodes(effectivePlantId, cfg.customNodes ?? []);
+      saveCustomColumns(effectivePlantId, cfg.customColumns ?? []);
+      savePosOverrides(effectivePlantId, cfg.positionOverrides ?? {});
+      savePaletteItems(effectivePlantId, cfg.paletteItems ?? []);
+      saveColWidths(effectivePlantId, cfg.columnWidths ?? {});
+    } else {
+      setCustomNodes(loadCustomNodes(effectivePlantId));
+      setCustomColumns(loadCustomColumns(effectivePlantId));
+      setPosOverrides(loadPosOverrides(effectivePlantId));
+      setPaletteItems(loadPaletteItems(effectivePlantId));
+      setColWidths(loadColWidths(effectivePlantId));
+    }
+  }, [effectivePlantId, rawData?.topologyConfig]);
 
   useEffect(() => {
     if (!rawData || !effectivePlantId) return;
@@ -367,10 +383,27 @@ export default function PlantTopology() {
     if (!topoState || !effectivePlantId) return;
     setSaving(true);
     try {
-      await saveLinksMutation.mutateAsync({
-        plantId: effectivePlantId,
-        links: topoState.editLinks.map((l) => ({ from_id: l.from, to_id: l.to })),
-      });
+      await Promise.all([
+        saveLinksMutation.mutateAsync({
+          plantId: effectivePlantId,
+          links: topoState.editLinks.map((l) => ({ from_id: l.from, to_id: l.to })),
+        }),
+        saveTopologyConfigMutation.mutateAsync({
+          plantId: effectivePlantId,
+          payload: {
+            customNodes,
+            customColumns,
+            positionOverrides: posOverrides,
+            columnWidths: colWidths,
+            paletteItems,
+          },
+        }),
+      ]);
+      saveCustomNodes(effectivePlantId, customNodes);
+      saveCustomColumns(effectivePlantId, customColumns);
+      savePosOverrides(effectivePlantId, posOverrides);
+      saveColWidths(effectivePlantId, colWidths);
+      savePaletteItems(effectivePlantId, paletteItems);
       qc.invalidateQueries({ queryKey: ['topology-data', effectivePlantId] });
       toast.success('Topology saved');
     } catch {

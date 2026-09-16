@@ -1,7 +1,9 @@
-import React, { useRef, useCallback, type MutableRefObject } from 'react';
+import React, { useRef, useCallback, useState, type MutableRefObject } from 'react';
+import { toast } from 'sonner';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useAppStore } from '@/store/appStore';
 import { useAuth } from '@/hooks/useAuth';
+import { exportTopologyAsSvg, exportTopologyAsPng } from './exportTopology';
 import { Droplet, RefreshCw, HelpCircle, PanelRightOpen, PanelRightClose, ZoomIn, ZoomOut, Maximize2, Move, Layers, Plug, Unplug, Save } from 'lucide-react';
 import {
   NodeType, CustomColumn, buildColSequence, buildColXMap, TopoNode, TopoLink,
@@ -187,6 +189,57 @@ export default function PlantTopologyContent({
   const powerNodesCount = topoState.nodes.filter(n => ['solarSource', 'gridSource', 'solarMeter', 'gridMeter'].includes(n.type)).length;
   const activeLinksCount = topoState.editLinks.length;
 
+  const [animatedFlow, setAnimatedFlow] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('topo_animated_flow') !== 'false';
+    } catch {
+      return true;
+    }
+  });
+
+  const handleSetAnimatedFlow = useCallback((v: boolean) => {
+    setAnimatedFlow(v);
+    try {
+      localStorage.setItem('topo_animated_flow', String(v));
+    } catch {}
+  }, []);
+
+  const handleExportSvg = useCallback(() => {
+    const svg = document.getElementById('plant-topology-svg') as SVGSVGElement | null;
+    if (!svg) {
+      toast.error('Could not find topology canvas to export');
+      return;
+    }
+    exportTopologyAsSvg({
+      svgElement: svg,
+      plantName: activePlant?.name ?? 'Plant',
+      maxX,
+      maxY,
+    });
+    toast.success('Topology SVG exported');
+  }, [activePlant?.name, maxX, maxY]);
+
+  const handleExportPng = useCallback(async () => {
+    const svg = document.getElementById('plant-topology-svg') as SVGSVGElement | null;
+    if (!svg) {
+      toast.error('Could not find topology canvas to export');
+      return;
+    }
+    try {
+      toast.loading('Generating high-resolution PNG…', { id: 'export-png' });
+      await exportTopologyAsPng({
+        svgElement: svg,
+        plantName: activePlant?.name ?? 'Plant',
+        maxX,
+        maxY,
+        scale: 2,
+      });
+      toast.success('Topology PNG exported', { id: 'export-png' });
+    } catch (err) {
+      toast.error('Failed to export PNG', { id: 'export-png' });
+    }
+  }, [activePlant?.name, maxX, maxY]);
+
   const svgCanvasProps: TopologySvgCanvasProps = {
     props: {
       plants, effectivePlantId, setActivePlantId, canEdit, isLoading, rawData, topoState,
@@ -211,7 +264,10 @@ export default function PlantTopologyContent({
     colSequence,
     colXMap,
     stageZones,
-    maxX, maxY, maxWaterY, powerDividerY,
+    maxX,
+    maxY,
+    maxWaterY,
+    powerDividerY,
     linkCounts,
     dragItem,
     snapTarget,
@@ -222,7 +278,7 @@ export default function PlantTopologyContent({
     resizingCol,
     hoveredLaneResizer,
     zoom,
-    topoState: topoState!,
+    topoState,
     effectivePlantId,
     isMobile,
     canEdit,
@@ -236,6 +292,7 @@ export default function PlantTopologyContent({
     nodeVolumes: wbrSummary?.nodeVolumes,
     overlayMode,
     setOverlayMode,
+    animatedFlow,
   };
 
   return (
@@ -262,6 +319,10 @@ export default function PlantTopologyContent({
         powerNodesCount={powerNodesCount}
         activeLinksCount={activeLinksCount}
         isMobile={isMobile}
+        animatedFlow={animatedFlow}
+        setAnimatedFlow={handleSetAnimatedFlow}
+        onExportSvg={handleExportSvg}
+        onExportPng={handleExportPng}
       />
 
       {/* ── Water Balance & Permeate Reconciliation HUD ── */}

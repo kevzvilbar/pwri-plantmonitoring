@@ -1,7 +1,13 @@
 import React from 'react';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { Droplet, RefreshCw, HelpCircle, PanelRightOpen, PanelRightClose, Plug, Unplug, Save } from 'lucide-react';
+import { Droplet, RefreshCw, HelpCircle, PanelRightOpen, PanelRightClose, Plug, Unplug, Save, Download, FileImage, FileCode, Activity } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from '@/components/ui/dropdown-menu';
 
 export interface TopologyHeaderProps {
   activePlant: { name: string } | undefined;
@@ -24,13 +30,17 @@ export interface TopologyHeaderProps {
   powerNodesCount: number;
   activeLinksCount: number;
   isMobile: ReturnType<typeof useIsMobile>;
+  animatedFlow?: boolean;
+  setAnimatedFlow?: (v: boolean) => void;
+  onExportSvg?: () => void;
+  onExportPng?: () => void;
 }
 
 export function TopologyHeader({
   activePlant, plants, effectivePlantId, setActivePlantId, showHelp, setShowHelp,
   refetch, setPanelOpen, panelOpen, canEdit, saving, handleSave, setEditMode,
   setPendingFrom, editMode, pendingFrom, waterNodesCount, powerNodesCount,
-  activeLinksCount, isMobile,
+  activeLinksCount, isMobile, animatedFlow = true, setAnimatedFlow, onExportSvg, onExportPng,
 }: TopologyHeaderProps) {
   return (
     <>
@@ -81,6 +91,51 @@ export function TopologyHeader({
           </div>
 
           <div className="flex items-center gap-1.5 border-l border-border pl-2">
+            {/* Flow Animation Toggle */}
+            <button
+              onClick={() => setAnimatedFlow?.(!animatedFlow)}
+              className={`flex items-center gap-1 px-2 py-1 rounded-md text-2xs font-semibold border transition-all ${
+                animatedFlow
+                  ? 'border-primary/50 bg-primary-soft text-primary shadow-2xs'
+                  : 'border-border text-muted-foreground hover:text-foreground hover:border-border/80'
+              }`}
+              title={animatedFlow ? 'Pause stream animation' : 'Start fluid flow animation'}
+              aria-label="Toggle fluid flow animation"
+            >
+              <Activity className={`h-3.5 w-3.5 ${animatedFlow ? 'animate-pulse text-primary' : ''}`} />
+              <span className="hidden sm:inline">{animatedFlow ? 'Flowing' : 'Static'}</span>
+            </button>
+
+            {/* Export Schematic Dropdown */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  className="flex items-center gap-1 px-2 py-1 rounded-md text-2xs font-semibold border border-border text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors"
+                  title="Export schematic diagram"
+                  aria-label="Export schematic"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">Export</span>
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-52">
+                <DropdownMenuItem onClick={onExportSvg} className="cursor-pointer">
+                  <FileCode className="h-4 w-4 mr-2 text-primary" />
+                  <div className="flex flex-col">
+                    <span className="text-xs font-semibold">Export Vector (SVG)</span>
+                    <span className="text-3xs text-muted-foreground">Lossless CAD / P&amp;ID document</span>
+                  </div>
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={onExportPng} className="cursor-pointer">
+                  <FileImage className="h-4 w-4 mr-2 text-primary" />
+                  <div className="flex flex-col">
+                    <span className="text-xs font-semibold">Export Image (PNG)</span>
+                    <span className="text-3xs text-muted-foreground">High-DPI raster image for slides</span>
+                  </div>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
             <button
               onClick={() => setShowHelp(!showHelp)}
               aria-label={showHelp ? 'Hide help' : 'Show help'}
@@ -139,7 +194,7 @@ export function TopologyHeader({
             <strong className="text-primary">Navigate:</strong>{' '}
             {isMobile
               ? 'Drag / scroll to pan · Use floating +/− to zoom · Tap any node to inspect'
-              : 'Scroll to pan (H+V) · Alt+drag / middle-click · Ctrl+scroll to zoom · Click node to inspect'}
+              : 'Scroll or Space/Alt+drag to pan · Ctrl+scroll to zoom (+/−/0 hotkeys) · Click node to inspect'}
           </span>
         </div>
       )}

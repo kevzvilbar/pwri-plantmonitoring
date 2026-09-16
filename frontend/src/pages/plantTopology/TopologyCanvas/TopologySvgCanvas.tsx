@@ -1,10 +1,11 @@
-import React, { useRef, useCallback } from 'react';
+import React, { useRef, useCallback, useState, useEffect } from 'react';
 import { useAppStore } from '@/store/appStore';
 import { NodeType, NODE_W, NODE_H, START_Y, ROW_GAP, POWER_COLS,
   COLORS, COL_GAP, ColSlot, cubicPath, getSymbolDimensions,
   STAGE_ZONES, getNodeStatusInfo, TOPO_FONT_MONO,
+  STREAM_COLORS, CANVAS_REF,
 } from '../shared';
-import type { StageZone } from '../shared';
+import type { StageZone, StreamType } from '../shared';
 import { NodePalette } from '../NodePalette';
 import { TopologyHeader } from './TopologyHeader';
 import { TopoNodeRenderer, type NodeRendererProps } from './TopoNodeRenderer';
@@ -59,6 +60,7 @@ export interface TopologySvgCanvasProps {
   nodeVolumes?: Record<string, number>;
   overlayMode?: 'schematic' | 'waterBalance';
   setOverlayMode?: (m: 'schematic' | 'waterBalance') => void;
+  animatedFlow?: boolean;
 }
 
 export function TopologySvgCanvas({
@@ -68,28 +70,147 @@ export function TopologySvgCanvas({
   inspectNode, colWidths, resizingCol, hoveredLaneResizer, zoom, topoState,
   effectivePlantId, isMobile, canEdit, panelOpen, saving, showHelp,
   editMode, pendingFrom, hovered, isPanning, lastPan,
-  nodeVolumes, overlayMode = 'schematic', setOverlayMode,
+  nodeVolumes, overlayMode = 'schematic', setOverlayMode, animatedFlow = true,
 }: TopologySvgCanvasProps) {
   const canvasRef = useRef<HTMLDivElement>(null);
   const { selectedPlantId } = useAppStore();
 
-  const handleWheel = useCallback((e: React.WheelEvent) => {
-    e.preventDefault();
-    props.setZoom((z: number) => Math.min(2.5, Math.max(0.3, z - e.deltaY * 0.001)));
+  // Spacebar pan state and drag refs
+  const [isSpacePressed, setIsSpacePressed] = useState(false);
+  const [isDraggingCanvas, setIsDraggingCanvas] = useState(false);
+  const lastPointer = useRef({ x: 0, y: 0 });
+
+  // Keyboard navigation & zoom shortcuts (+, -, 0, Space, Arrows, Escape)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+        return;
+      }
+      if (e.code === 'Space' && !e.repeat) {
+        setIsSpacePressed(true);
+      }
+      if (e.key === '+' || e.key === '=') {
+        props.setZoom((z) => Math.min(2.5, +(z + 0.15).toFixed(2)));
+      }
+      if (e.key === '-' || e.key === '_') {
+        props.setZoom((z) => Math.max(0.3, +(z - 0.15).toFixed(2)));
+      }
+      if (e.key === '0' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        props.setZoom(1);
+        if (canvasRef.current) {
+          canvasRef.current.scrollLeft = 0;
+          canvasRef.current.scrollTop = 0;
+        }
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (canvasRef.current) canvasRef.current.scrollTop -= 60;
+      }
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        if (canvasRef.current) canvasRef.current.scrollTop += 60;
+      }
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        if (canvasRef.current) canvasRef.current.scrollLeft -= 60;
+      }
+      if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        if (canvasRef.current) canvasRef.current.scrollLeft += 60;
+      }
+      if (e.key === 'Escape') {
+        if (inspectNode) props.setInspectNode(null);
+        if (editMode) {
+          props.setEditMode(null);
+          props.setPendingFrom(null);
+        }
+      }
+    };
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.code === 'Space') {
+        setIsSpacePressed(false);
+        setIsDraggingCanvas(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
   }, [props.setZoom]);
 
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    if (e.button !== 1 && !(e.button === 0 && e.altKey)) return;
-    isPanning.current = true;
-    lastPan.current = { x: e.clientX - props.pan.x, y: e.clientY - props.pan.y };
-  }, [props.pan, isPanning, lastPan]);
+  // Cursor-anchored wheel zooming: zooms directly into point under mouse cursor on Ctrl+wheel or pinch
+  const handleWheel = useCallback((e: React.WheelEvent) => {
+    const el = canvasRef.current;
+    if (!el) return;
 
-  const handleMouseMove = useCallback((e: React.MouseEvent) => {
-    if (!isPanning.current) return;
-    props.setPan({ x: e.clientX - lastPan.current.x, y: e.clientY - lastPan.current.y });
-  }, [props.setPan, isPanning, lastPan]);
+    if (e.ctrlKey || e.metaKey) {
+      e.preventDefault();
+      const rect = el.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
 
-  const handleMouseUp = useCallback(() => { isPanning.current = false; }, [isPanning]);
+      const oldZoom = zoom;
+      const zoomDelta = -e.deltaY * 0.0015;
+      const newZoom = Math.min(2.5, Math.max(0.3, +(oldZoom + zoomDelta).toFixed(3)));
+
+      if (newZoom !== oldZoom) {
+        const canvasX = (mouseX + el.scrollLeft) / oldZoom;
+        const canvasY = (mouseY + el.scrollTop) / oldZoom;
+        props.setZoom(newZoom);
+        requestAnimationFrame(() => {
+          if (canvasRef.current) {
+            canvasRef.current.scrollLeft = canvasX * newZoom - mouseX;
+            canvasRef.current.scrollTop = canvasY * newZoom - mouseY;
+          }
+        });
+      }
+    }
+    // Without Ctrl/Cmd, standard wheel/touchpad gesture scrolls natively.
+  }, [zoom, props.setZoom]);
+
+  // Pointer panning handlers (Middle-click, Space+drag, or Alt+drag)
+  const handlePointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.button === 1 || (e.button === 0 && (isSpacePressed || e.altKey))) {
+      setIsDraggingCanvas(true);
+      lastPointer.current = { x: e.clientX, y: e.clientY };
+      e.currentTarget.setPointerCapture(e.pointerId);
+      e.preventDefault();
+    }
+  }, [isSpacePressed]);
+
+  const handlePointerMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isDraggingCanvas || !canvasRef.current) return;
+    const dx = e.clientX - lastPointer.current.x;
+    const dy = e.clientY - lastPointer.current.y;
+    canvasRef.current.scrollLeft -= dx;
+    canvasRef.current.scrollTop -= dy;
+    lastPointer.current = { x: e.clientX, y: e.clientY };
+  }, [isDraggingCanvas]);
+
+  const handlePointerUp = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (isDraggingCanvas) {
+      setIsDraggingCanvas(false);
+      try {
+        e.currentTarget.releasePointerCapture(e.pointerId);
+      } catch {
+        /* ignore */
+      }
+    }
+  }, [isDraggingCanvas]);
+
+  const canvasCursor = dragItem
+    ? snapTarget ? 'copy' : 'not-allowed'
+    : isDraggingCanvas
+      ? 'grabbing'
+      : isSpacePressed
+        ? 'grab'
+        : undefined;
 
   return (
     <div className="flex-1 flex flex-col min-h-0 relative">
@@ -133,37 +254,86 @@ export function TopologySvgCanvas({
             <span className="text-3xs text-muted-foreground font-mono hidden md:inline">
               {dragItem
                 ? '📌 Drop on any column to place node'
-                : isMobile ? 'Tap node to inspect · +/− to zoom' : 'Click node to inspect · Scroll / Alt+drag · Ctrl+scroll'}
+                : isMobile ? 'Tap node to inspect · +/− to zoom' : 'Click node to inspect · Space/Alt+drag to pan · Ctrl+scroll to zoom'}
             </span>
           </div>
         </div>
 
         <div className="flex-1 min-h-0 relative overflow-hidden flex flex-col">
           <div
-            ref={canvasRef}
-            className={`flex-1 min-h-0 rounded-xl border bg-card shadow-sm transition-colors ${
+            ref={(el) => {
+              (canvasRef as any).current = el;
+              CANVAS_REF.current = el;
+            }}
+            className={`flex-1 min-h-0 rounded-xl border bg-card shadow-sm transition-colors select-none ${
               dragItem && snapTarget ? 'border-primary/60 ring-2 ring-primary/20' : 'border-border'
             }`}
             style={{
               overflow: 'auto',
               scrollbarWidth: 'thin',
               scrollbarColor: 'hsl(var(--border)) hsl(var(--muted))',
-              cursor: dragItem ? (snapTarget ? 'copy' : 'not-allowed') : undefined,
+              cursor: canvasCursor,
             }}
             onWheel={handleWheel}
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerUp}
+            onPointerCancel={handlePointerUp}
           >
             <svg
+              id="plant-topology-svg"
               width={Math.max(maxX * zoom, 200)}
               height={Math.max((maxY + 24) * zoom, 200)}
               style={{ display: 'block' }}
             >
               <defs>
-                <marker id="arrow-main" markerWidth="7" markerHeight="7" refX="5" refY="3.5" orient="auto">
-                  <path d="M0,0 L0,7 L7,3.5 z" fill="hsl(var(--muted-foreground))" />
-                </marker>
+                <style>{`
+                  @keyframes topo-dash-flow {
+                    from { stroke-dashoffset: 28; }
+                    to { stroke-dashoffset: 0; }
+                  }
+                `}</style>
                 <pattern id="dot-grid" width="24" height="24" patternUnits="userSpaceOnUse">
                   <circle cx={1} cy={1} r={1} fill="hsl(var(--border))" />
                 </pattern>
+
+                {/* Consolidated stream arrow markers */}
+                {(Object.entries(STREAM_COLORS) as [StreamType, string][]).map(([st, color]) => (
+                  <React.Fragment key={`marker-${st}`}>
+                    <marker
+                      id={`topo-arrow-${st}`}
+                      markerUnits="userSpaceOnUse"
+                      markerWidth={6.5}
+                      markerHeight={6.5}
+                      viewBox="0 0 10 10"
+                      refX={7}
+                      refY={5}
+                      orient="auto"
+                    >
+                      <path
+                        d="M0,0 L0,10 L10,5 Z"
+                        fill="hsl(var(--muted-foreground))"
+                        opacity={0.85}
+                      />
+                    </marker>
+                    <marker
+                      id={`topo-arrow-${st}-hover`}
+                      markerUnits="userSpaceOnUse"
+                      markerWidth={8}
+                      markerHeight={8}
+                      viewBox="0 0 10 10"
+                      refX={7}
+                      refY={5}
+                      orient="auto"
+                    >
+                      <path
+                        d="M0,0 L0,10 L10,5 Z"
+                        fill={color}
+                        opacity={1}
+                      />
+                    </marker>
+                  </React.Fragment>
+                ))}
               </defs>
 
               <g transform={`scale(${zoom})`}>
@@ -377,6 +547,7 @@ export function TopologySvgCanvas({
                       positions={positions}
                       hoveredLink={hoveredLink}
                       setHoveredLink={props.setHoveredLink}
+                      animatedFlow={animatedFlow}
                     />
                   ))}
                 </g>
@@ -410,7 +581,13 @@ export function TopologySvgCanvas({
           <ZoomControls
             zoom={zoom}
             setZoom={props.setZoom}
-            resetView={() => { props.setZoom(1); props.setPan({ x: 0, y: 0 }); }}
+            resetView={() => {
+              props.setZoom(1);
+              if (canvasRef.current) {
+                canvasRef.current.scrollLeft = 0;
+                canvasRef.current.scrollTop = 0;
+              }
+            }}
           />
 
           {inspectNode && (

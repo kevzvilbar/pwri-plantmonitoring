@@ -6,6 +6,7 @@
  * Components wrap them with React Query via the hooks in src/data/hooks/.
  */
 import { supabase } from '@/integrations/supabase/client';
+import type { TopologyConfigPayload } from '../mutations/plantTopology';
 
 /** Well data for topology */
 export interface TopoWell {
@@ -125,6 +126,7 @@ export interface TopologyData {
   productTanks: TopoProductTank[];
   dosingPoints: TopoDosingPoint[];
   savedLinks: TopoLink[];
+  topologyConfig: TopologyConfigPayload | null;
 }
 
 /**
@@ -166,7 +168,7 @@ export async function fetchTopologyData(plantId: string): Promise<TopologyData> 
   if (!plantId) throw new Error('Plant ID required');
 
   const [wellsRes, roRes, locRes, prodRes, powerCfgRes, meterCfgRes, blendingIds,
-         processStages, productTanks, dosingPoints, vesselRows] = await Promise.all([
+         processStages, productTanks, dosingPoints, vesselRows, topologyConfig] = await Promise.all([
     supabase.from('wells').select('id,name,status,has_power_meter,is_blending_well').eq('plant_id', plantId).order('name'),
     supabase.from('ro_trains').select(
       'id,train_number,name,status,shared_power_meter_group,' +
@@ -207,6 +209,25 @@ export async function fetchTopologyData(plantId: string): Promise<TopologyData> 
       () => (supabase.from('ro_trains' as any) as any)
         .select('id,num_vessels,elements_per_vessel').eq('plant_id', plantId),
       []),
+    fetchOptional<TopologyConfigPayload | null>(
+      async () => {
+        const { data, error } = await (supabase.from('plant_topology_config' as any) as any)
+          .select('custom_nodes,custom_columns,position_overrides,column_widths,palette_items')
+          .eq('plant_id', plantId)
+          .maybeSingle();
+        if (error || !data) return { data: null, error };
+        return {
+          data: {
+            customNodes: data.custom_nodes ?? [],
+            customColumns: data.custom_columns ?? [],
+            positionOverrides: data.position_overrides ?? {},
+            columnWidths: data.column_widths ?? {},
+            paletteItems: data.palette_items ?? [],
+          },
+          error: null,
+        };
+      },
+      null),
   ]);
 
   // Check for errors
@@ -250,6 +271,7 @@ export async function fetchTopologyData(plantId: string): Promise<TopologyData> 
     productTanks,
     dosingPoints,
     savedLinks,
+    topologyConfig,
   };
 }
 

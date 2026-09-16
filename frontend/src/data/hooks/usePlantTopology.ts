@@ -23,7 +23,7 @@ import {
   type TopoPowerConfig,
   type TopoMeterConfig,
 } from '@/data/queries/plantTopology';
-import { saveTopologyLinks, deleteTopologyLink } from '@/data/mutations/plantTopology';
+import { saveTopologyLinks, deleteTopologyLink, saveTopologyConfig, type TopologyConfigPayload } from '@/data/mutations/plantTopology';
 
 /** Fetch all topology data for a plant */
 export function useTopologyData(plantId: string | null) {
@@ -125,4 +125,16 @@ export function useDeleteTopologyLink() {
   });
 }
 
-export type { TopologyData, TopoLink, TopoWell, TopoRoTrain, TopoLocator, TopoProductMeter, TopoPowerConfig, TopoMeterConfig };
+export function useSaveTopologyConfig() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ plantId, payload }: { plantId: string; payload: TopologyConfigPayload }) =>
+      saveTopologyConfig(plantId, payload),
+    onSuccess: (_data, { plantId }) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.plantTopology.data(plantId) });
+      queryClient.invalidateQueries({ queryKey: ['topology-data', plantId] });
+    },
+  });
+}
+
+export type { TopologyData, TopoLink, TopoWell, TopoRoTrain, TopoLocator, TopoProductMeter, TopoPowerConfig, TopoMeterConfig, TopologyConfigPayload };

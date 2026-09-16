@@ -18,7 +18,7 @@
 BEGIN;
 SET search_path = public, extensions;
 
-SELECT plan(15);
+SELECT plan(20);
 
 -- ── RLS is enabled ──────────────────────────────────────────────────────────
 SELECT ok(
@@ -26,7 +26,7 @@ SELECT ok(
       WHERE oid = ('public.' || t)::regclass),
     format('RLS is enabled on public.%s', t)
 )
-FROM unnest(ARRAY['plant_process_stages', 'product_tanks', 'dosing_points']) AS t;
+FROM unnest(ARRAY['plant_process_stages', 'product_tanks', 'dosing_points', 'plant_topology_config']) AS t;
 
 -- ── One policy per command on each table ────────────────────────────────────
 SELECT ok(
@@ -38,7 +38,7 @@ SELECT ok(
     ),
     format('public.%s has a %s policy', t, c)
 )
-FROM unnest(ARRAY['plant_process_stages', 'product_tanks', 'dosing_points']) AS t
+FROM unnest(ARRAY['plant_process_stages', 'product_tanks', 'dosing_points', 'plant_topology_config']) AS t
 CROSS JOIN unnest(ARRAY['SELECT', 'INSERT', 'UPDATE', 'DELETE']) AS c;
 
 SELECT * FROM finish();

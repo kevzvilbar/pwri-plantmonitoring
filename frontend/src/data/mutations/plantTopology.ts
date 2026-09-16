@@ -31,6 +31,31 @@ export async function deleteTopologyLink(plantId: string, fromId: string, toId: 
   if (error) throw error;
 }
 
+export interface TopologyConfigPayload {
+  customNodes: any[];
+  customColumns: any[];
+  positionOverrides: Record<string, any>;
+  columnWidths: Record<string, number>;
+  paletteItems: any[];
+}
+
+/** Save topology layout configuration (custom nodes, custom columns, column widths, overrides) to database */
+export async function saveTopologyConfig(plantId: string, payload: TopologyConfigPayload): Promise<void> {
+  const row = {
+    plant_id: plantId,
+    custom_nodes: payload.customNodes,
+    custom_columns: payload.customColumns,
+    position_overrides: payload.positionOverrides,
+    column_widths: payload.columnWidths,
+    palette_items: payload.paletteItems,
+    updated_at: new Date().toISOString(),
+  };
+
+  const { error } = await (supabase.from('plant_topology_config' as any) as any)
+    .upsert(row, { onConflict: 'plant_id' });
+  if (error) throw error;
+}
+
 /** Save custom node (placeholder for future DB table) */
 export async function saveCustomNode(node: any): Promise<void> {
   // Currently stored in localStorage, but could be moved to DB

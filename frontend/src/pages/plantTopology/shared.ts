@@ -814,7 +814,7 @@ export function useTopologyData(plantId: string | null) {
       if (!plantId) return null;
 
       const [wellsRes, roRes, locRes, prodRes, powerCfgRes, meterCfgRes,
-             stagesRes, tanksRes, dosingRes] = await Promise.all([
+             stagesRes, tanksRes, dosingRes, configRes] = await Promise.all([
         supabase.from('wells').select('id,name,status,has_power_meter,is_blending_well').eq('plant_id', plantId).order('name'),
         supabase.from('ro_trains').select(
           'id,train_number,name,status,shared_power_meter_group,' +
@@ -845,6 +845,10 @@ export function useTopologyData(plantId: string | null) {
           .select('id,chemical,label,injects_into_stage_key,pump_hp,status')
           .eq('plant_id', plantId)
           .then((r: any) => r, () => ({ data: null })),
+        (supabase.from('plant_topology_config' as any) as any)
+          .select('custom_nodes,custom_columns,position_overrides,column_widths,palette_items')
+          .eq('plant_id', plantId).maybeSingle()
+          .then((r: any) => r, () => ({ data: null })),
       ]);
 
       let savedLinks: { from_id: string; to_id: string }[] = [];
@@ -863,6 +867,14 @@ export function useTopologyData(plantId: string | null) {
         } catch { /**/ }
       }
 
+      const topologyConfig = configRes?.data ? {
+        customNodes: configRes.data.custom_nodes ?? [],
+        customColumns: configRes.data.custom_columns ?? [],
+        positionOverrides: configRes.data.position_overrides ?? {},
+        columnWidths: configRes.data.column_widths ?? {},
+        paletteItems: configRes.data.palette_items ?? [],
+      } : null;
+
       return {
         wells:         (wellsRes.data ?? []) as any[],
         roTrains:      (roRes.data    ?? []) as any[],
@@ -874,6 +886,7 @@ export function useTopologyData(plantId: string | null) {
         productTanks:  (tanksRes?.data  ?? []) as any[],
         dosingPoints:  (dosingRes?.data ?? []) as any[],
         savedLinks,
+        topologyConfig,
       };
     },
   });

@@ -1,6 +1,6 @@
 import React from 'react';
 import type { TopoNode, TopoLink } from '../shared';
-import { NODE_H, COLORS, cubicPath, getStreamType, STREAM_COLORS } from '../shared';
+import { NODE_W, NODE_H, COLORS, cubicPath, getStreamType, STREAM_COLORS, getSymbolDimensions } from '../shared';
 import type { NodePositionOverride } from '../shared';
 
 export interface LinkRendererProps {
@@ -10,9 +10,10 @@ export interface LinkRendererProps {
   positions: Map<string, { x: number; y: number; zone: string }>;
   hoveredLink: number | null;
   setHoveredLink: (idx: number | null) => void;
+  animatedFlow?: boolean;
 }
 
-export function TopoLinkRenderer({ link, idx, topoState, positions, hoveredLink, setHoveredLink }: LinkRendererProps) {
+export function TopoLinkRenderer({ link, idx, topoState, positions, hoveredLink, setHoveredLink, animatedFlow = true }: LinkRendererProps) {
   const f = positions.get(link.from);
   const t = positions.get(link.to);
   if (!f || !t) return null;
@@ -22,8 +23,31 @@ export function TopoLinkRenderer({ link, idx, topoState, positions, hoveredLink,
   const fh = fromNode?.detail ? NODE_H + 18 : NODE_H;
   const th = toNode?.detail   ? NODE_H + 18 : NODE_H;
 
-  const x1 = f.x, y1 = f.y + fh / 2;
-  const x2 = t.x, y2 = t.y + th / 2;
+  const fromDims = fromNode ? getSymbolDimensions(fromNode.type) : { w: NODE_W, h: NODE_H };
+  const toDims   = toNode   ? getSymbolDimensions(toNode.type)   : { w: NODE_W, h: NODE_H };
+
+  // Calculate clean port coordinates so links start at source connection port and end at target port
+  let x1: number, y1: number, x2: number, y2: number;
+
+  if (t.x >= f.x + fromDims.w) {
+    // Normal forward flow (left to right): from source right port to target left port
+    x1 = f.x + fromDims.w;
+    y1 = f.y + fh / 2;
+    x2 = t.x;
+    y2 = t.y + th / 2;
+  } else if (t.x + toDims.w <= f.x) {
+    // Backward flow (recycle/bypass): from source left port to target right port
+    x1 = f.x;
+    y1 = f.y + fh / 2;
+    x2 = t.x + toDims.w;
+    y2 = t.y + th / 2;
+  } else {
+    // Same column / vertical flow
+    x1 = f.x + fromDims.w / 2;
+    y1 = f.y < t.y ? f.y + fh : f.y;
+    x2 = t.x + toDims.w / 2;
+    y2 = f.y < t.y ? t.y : t.y + th;
+  }
 
   // Determine stream type for pipe coloring
   const streamType = getStreamType(link, topoState.nodes);
@@ -33,7 +57,12 @@ export function TopoLinkRenderer({ link, idx, topoState, positions, hoveredLink,
   const color = streamType === 'general' ? fallbackColor : streamColor;
 
   const isHov = hoveredLink === idx;
-  const markerId = `arrow-${idx}`;
+  const markerId = isHov ? `topo-arrow-${streamType}-hover` : `topo-arrow-${streamType}`;
+
+  // Check if either end of the link is explicitly offline
+  const fromStatus = fromNode?.status?.toLowerCase() || '';
+  const toStatus = toNode?.status?.toLowerCase() || '';
+  const isOffline = fromStatus === 'offline' || fromStatus === 'inactive' || toStatus === 'offline' || toStatus === 'inactive';
 
   return (
     <g key={`link-${idx}`}>
@@ -69,37 +98,23 @@ export function TopoLinkRenderer({ link, idx, topoState, positions, hoveredLink,
         style={{ transition: 'stroke 0.2s, stroke-width 0.2s, opacity 0.2s' }}
       />
 
-      {/* Arrow marker definition.
-          markerUnits defaults to "strokeWidth", which scales the marker by
-          the stroke-width of whatever element references it via marker-end —
-          here that's the invisible strokeWidth={20} hit-path below, not the
-          ~3px visible pipe. That mismatch is what blew the arrowheads up to
-          several times the pipe width. markerUnits="userSpaceOnUse" plus an
-          explicit viewBox decouples the two, so markerWidth/markerHeight are
-          the actual rendered size regardless of which path's marker-end
-          triggers them. */}
-      <defs>
-        <marker
-          id={markerId}
-          markerUnits="userSpaceOnUse"
-          markerWidth={isHov ? 8 : 6.5}
-          markerHeight={isHov ? 8 : 6.5}
-          viewBox="0 0 10 10"
-          refX={7}
-          refY={5}
-          orient="auto"
-        >
-          <path
-            d="M0,0 L0,10 L10,5 Z"
-            fill={isHov ? color : 'hsl(var(--muted-foreground))'}
-            opacity={isHov ? 1 : 0.85}
-          />
-        </marker>
-      </defs>
+      {/* Animated fluid flow pulses for active process streams */}
+      {animatedFlow && !isOffline && (
+        <path
+          d={cubicPath(x1, y1, x2, y2)}
+          fill="none"
+          stroke={color}
+          strokeWidth={link.editable ? 2 : 2.5}
+          strokeDasharray="6,8"
+          style={{
+            animation: 'topo-dash-flow 1.8s linear infinite',
+            opacity: isHov ? 0.95 : 0.65,
+            pointerEvents: 'none',
+          }}
+        />
+      )}
 
-      {/* End arrow marker — drawn on its own thin path (matching the visible
-          pipe width) rather than the fat invisible hit-path, now that marker
-          sizing no longer depends on which one it's attached to. */}
+      {/* End arrow marker referencing consolidated marker in root SVG defs */}
       <path
         d={cubicPath(x1, y1, x2, y2)}
         fill="none"
@@ -123,3 +138,4 @@ export function TopoLinkRenderer({ link, idx, topoState, positions, hoveredLink,
     </g>
   );
 }
+
