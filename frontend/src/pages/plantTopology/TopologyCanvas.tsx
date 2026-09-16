@@ -161,7 +161,7 @@ export default function PlantTopologyContent({
   const colSequence = useMemo(() => buildColSequence(customColumns, stages), [customColumns, stages]);
   const colXMap = useMemo(() => buildColXMap(customColumns, colWidths, stages), [customColumns, colWidths, stages]);
   const positions = useMemo(() => {
-    if (!topoState) return [];
+    if (!topoState) return new Map<string, { x: number; y: number; zone: Zone }>();
     return layoutNodes(topoState.nodes, customColumns, posOverrides, colWidths, stages);
   }, [topoState, customColumns, posOverrides, colWidths, stages]);
 
