@@ -333,7 +333,7 @@ export default function PlantTopologyContent({
 
       {/* ── Water Balance & Permeate Reconciliation HUD ── */}
       {effectivePlantId && (
-        <div className="px-5 pt-2 shrink-0">
+        <div className="px-2.5 sm:px-5 pt-1.5 sm:pt-2 shrink-0">
           <WaterBalanceHud
             summary={wbrSummary ?? null}
             isLoading={!!wbrLoading}

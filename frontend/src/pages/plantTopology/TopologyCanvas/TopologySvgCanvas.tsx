@@ -214,16 +214,16 @@ export function TopologySvgCanvas({
 
   return (
     <div className="flex-1 flex flex-col min-h-0 relative">
-      <div className="flex-1 flex flex-col min-h-0 p-4 overflow-hidden">
-        <div className="flex items-center gap-2 mb-3 shrink-0 flex-wrap justify-between">
-          <div className="flex items-center gap-2">
-            <Droplet className="h-3.5 w-3.5 text-primary" />
-            <span className="text-2xs tracking-widest text-primary font-mono uppercase font-semibold">
+      <div className="flex-1 flex flex-col min-h-0 p-2 sm:p-4 overflow-hidden">
+        <div className="flex items-center gap-2 mb-1.5 sm:mb-3 shrink-0 flex-wrap justify-between">
+          <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
+            <Droplet className="h-3.5 w-3.5 text-primary shrink-0" />
+            <span className="text-2xs tracking-widest text-primary font-mono uppercase font-semibold truncate">
               {activePlant?.name} — Water Treatment Flow
             </span>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
             {/* View Mode: Schematic vs Water Balance Overlay */}
             <div className="flex items-center gap-0.5 bg-muted/40 p-0.5 rounded-lg border border-border/40">
               <button
@@ -270,6 +270,8 @@ export function TopologySvgCanvas({
             }`}
             style={{
               overflow: 'auto',
+              WebkitOverflowScrolling: 'touch',
+              touchAction: 'pan-x pan-y',
               scrollbarWidth: 'thin',
               scrollbarColor: 'hsl(var(--border)) hsl(var(--muted))',
               cursor: canvasCursor,

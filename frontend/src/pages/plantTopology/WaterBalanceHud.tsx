@@ -11,6 +11,8 @@ import {
   Calendar,
   AlertTriangle,
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import type { PlantWaterBalanceSummary } from '@/lib/waterBalanceReconciliation';
 import type { RangeKey } from '@/components/dashboard/types';
@@ -42,28 +44,49 @@ export function WaterBalanceHud({
   const variancePct = rec?.variancePct;
   const status = rec?.status ?? 'balanced';
 
+  // Default to collapsed on mobile screens (<768px) so topology diagram gets maximum vertical viewport
+  const [collapsed, setCollapsed] = React.useState<boolean>(() => {
+    return typeof window !== 'undefined' ? window.innerWidth < 768 : false;
+  });
+
   return (
     <div
       className={cn(
-        'rounded-xl border border-border/50 bg-card p-2 sm:p-2.5 space-y-2 shadow-xs',
+        'rounded-xl border border-border/50 bg-card p-2 sm:p-2.5 space-y-2 shadow-xs transition-all',
         className
       )}
     >
-      {/* Top Header Row: Section Label + Date Range Segmented Controls + Audit Button */}
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/40 pb-1.5">
-        <div className="flex items-center gap-2">
-          <Scale className="h-3.5 w-3.5 text-primary" />
-          <span className="text-xs font-bold uppercase tracking-wider text-foreground font-mono">
-            Water Balance & Permeate Reconciliation
+      {/* Top Header Row: Section Label + Status Summary + Date Range + Expand/Collapse Button */}
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <Scale className="h-3.5 w-3.5 text-primary shrink-0" />
+          <span className="text-2xs sm:text-xs font-bold uppercase tracking-wider text-foreground font-mono truncate">
+            Water Balance
+            <span className="hidden sm:inline"> &amp; Permeate Reconciliation</span>
           </span>
-          {isLoading && (
-            <span className="text-3xs font-mono text-muted-foreground animate-pulse">
-              Syncing telemetry…
+          {isLoading ? (
+            <span className="text-3xs font-mono text-muted-foreground animate-pulse hidden sm:inline">
+              Syncing…
             </span>
-          )}
+          ) : variancePct !== undefined ? (
+            <span
+              className={cn(
+                'px-1.5 py-0.5 rounded text-3xs font-mono font-bold tracking-tight inline-flex items-center gap-0.5 shrink-0',
+                status === 'alert'
+                  ? 'bg-danger/15 text-danger border border-danger/30'
+                  : status === 'marginal'
+                  ? 'bg-amber-500/15 text-amber-500 border border-amber-500/30'
+                  : 'bg-emerald-500/15 text-emerald-500 border border-emerald-500/30'
+              )}
+            >
+              {status === 'alert' && <AlertTriangle className="h-2.5 w-2.5" />}
+              {status === 'balanced' && <CheckCircle2 className="h-2.5 w-2.5" />}
+              <span>{variancePct > 0 ? `+${fmtNum(variancePct, 1)}%` : `${fmtNum(variancePct, 1)}%`}</span>
+            </span>
+          ) : null}
         </div>
 
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5 shrink-0">
           {/* Range Controls */}
           <div className="flex items-center gap-0.5 bg-muted/40 p-0.5 rounded-lg border border-border/40">
             {RANGES.map(({ key, label }) => {
@@ -73,7 +96,7 @@ export function WaterBalanceHud({
                   key={key}
                   onClick={() => onRangeChange(key)}
                   className={cn(
-                    'px-2 py-0.5 rounded text-3xs font-medium transition-all cursor-pointer',
+                    'px-1.5 sm:px-2 py-0.5 rounded text-3xs font-medium transition-all cursor-pointer',
                     isActive
                       ? 'bg-background text-foreground shadow-2xs border border-border/50 font-bold'
                       : 'text-muted-foreground hover:text-foreground hover:bg-muted/40'
@@ -85,146 +108,172 @@ export function WaterBalanceHud({
             })}
           </div>
 
-          {/* Audit Ledger Trigger */}
+          {/* Audit Ledger Trigger on desktop */}
           <button
             onClick={onOpenLedger}
             title="Inspect train-by-train permeate and product meter reconciliation ledger"
-            className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-3xs font-semibold bg-primary/10 hover:bg-primary/15 text-primary border border-primary/20 transition-all cursor-pointer"
+            className="hidden sm:inline-flex items-center gap-1 px-2 py-1 rounded-md text-3xs font-semibold bg-primary/10 hover:bg-primary/15 text-primary border border-primary/20 transition-all cursor-pointer"
           >
             <span>Reconciliation Ledger</span>
             <ArrowRight className="h-3 w-3" />
+          </button>
+
+          {/* Collapse / Expand Toggle Button */}
+          <button
+            onClick={() => setCollapsed(!collapsed)}
+            aria-label={collapsed ? 'Expand telemetry cards' : 'Collapse telemetry cards'}
+            title={collapsed ? 'Expand telemetry cards' : 'Collapse telemetry cards'}
+            className="flex items-center gap-1 px-1.5 py-1 rounded-md text-3xs font-semibold bg-muted/40 hover:bg-muted text-muted-foreground hover:text-foreground border border-border/40 transition-all cursor-pointer"
+          >
+            <span className="hidden sm:inline">{collapsed ? 'Details' : 'Collapse'}</span>
+            {collapsed ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronUp className="h-3.5 w-3.5" />}
           </button>
         </div>
       </div>
 
       {/* Main SCADA Telemetry Strip: Horizontal Pipeline Flow */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
-        {/* 1. Raw Water In */}
-        <div className="rounded-lg bg-muted/20 border border-border/30 p-2 space-y-0.5">
-          <div className="flex items-center justify-between text-3xs uppercase tracking-wider font-semibold text-muted-foreground">
-            <span>Raw Water In</span>
-            <Droplets className="h-3 w-3 text-sky-500" />
-          </div>
-          <div className="text-sm font-bold font-mono-num text-foreground">
-            {summary && summary.rawWaterIn > 0 ? `${fmtNum(summary.rawWaterIn, 0)} m³` : '—'}
-          </div>
-          <div className="text-3xs text-muted-foreground">Deep well extraction</div>
-        </div>
+      {!collapsed && (
+        <div className="space-y-2 pt-1.5 border-t border-border/20">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+            {/* 1. Raw Water In */}
+            <div className="rounded-lg bg-muted/20 border border-border/30 p-2 space-y-0.5">
+              <div className="flex items-center justify-between text-3xs uppercase tracking-wider font-semibold text-muted-foreground">
+                <span>Raw Water In</span>
+                <Droplets className="h-3 w-3 text-sky-500" />
+              </div>
+              <div className="text-sm font-bold font-mono-num text-foreground">
+                {summary && summary.rawWaterIn > 0 ? `${fmtNum(summary.rawWaterIn, 0)} m³` : '—'}
+              </div>
+              <div className="text-3xs text-muted-foreground">Deep well extraction</div>
+            </div>
 
-        {/* 2. RO Permeate Produced */}
-        <div className="rounded-lg bg-muted/20 border border-border/30 p-2 space-y-0.5">
-          <div className="flex items-center justify-between text-3xs uppercase tracking-wider font-semibold text-muted-foreground">
-            <span>RO Permeate</span>
-            <Waves className="h-3 w-3 text-cyan-500" />
-          </div>
-          <div className="text-sm font-bold font-mono-num text-cyan-500">
-            {summary && summary.roPermeate > 0 ? `${fmtNum(summary.roPermeate, 0)} m³` : '—'}
-          </div>
-          <div className="text-3xs text-muted-foreground">Σ Train permeate meters</div>
-        </div>
+            {/* 2. RO Permeate Produced */}
+            <div className="rounded-lg bg-muted/20 border border-border/30 p-2 space-y-0.5">
+              <div className="flex items-center justify-between text-3xs uppercase tracking-wider font-semibold text-muted-foreground">
+                <span>RO Permeate</span>
+                <Waves className="h-3 w-3 text-cyan-500" />
+              </div>
+              <div className="text-sm font-bold font-mono-num text-cyan-500">
+                {summary && summary.roPermeate > 0 ? `${fmtNum(summary.roPermeate, 0)} m³` : '—'}
+              </div>
+              <div className="text-3xs text-muted-foreground">Σ Train permeate meters</div>
+            </div>
 
-        {/* 3. Bulk Product Metered */}
-        <div className="rounded-lg bg-muted/20 border border-border/30 p-2 space-y-0.5">
-          <div className="flex items-center justify-between text-3xs uppercase tracking-wider font-semibold text-muted-foreground">
-            <span>Product Metered</span>
-            <Droplets className="h-3 w-3 text-blue-500" />
-          </div>
-          <div className="text-sm font-bold font-mono-num text-blue-500">
-            {summary && summary.productMetered > 0 ? `${fmtNum(summary.productMetered, 0)} m³` : '—'}
-          </div>
-          <div className="text-3xs text-muted-foreground">Σ Bulk product meters</div>
-        </div>
+            {/* 3. Bulk Product Metered */}
+            <div className="rounded-lg bg-muted/20 border border-border/30 p-2 space-y-0.5">
+              <div className="flex items-center justify-between text-3xs uppercase tracking-wider font-semibold text-muted-foreground">
+                <span>Product Metered</span>
+                <Droplets className="h-3 w-3 text-blue-500" />
+              </div>
+              <div className="text-sm font-bold font-mono-num text-blue-500">
+                {summary && summary.productMetered > 0 ? `${fmtNum(summary.productMetered, 0)} m³` : '—'}
+              </div>
+              <div className="text-3xs text-muted-foreground">Σ Bulk product meters</div>
+            </div>
 
-        {/* 4. Permeate Reconciliation Discrepancy */}
-        <div
-          onClick={onOpenLedger}
-          className={cn(
-            'rounded-lg border p-2 space-y-0.5 cursor-pointer transition-all',
-            status === 'alert'
-              ? 'bg-danger/10 border-danger/40 hover:bg-danger/15'
-              : status === 'marginal'
-              ? 'bg-amber-500/10 border-amber-500/40 hover:bg-amber-500/15'
-              : 'bg-emerald-500/10 border-emerald-500/30 hover:bg-emerald-500/15'
-          )}
-        >
-          <div className="flex items-center justify-between text-3xs uppercase tracking-wider font-bold">
-            <span
-              className={
+            {/* 4. Permeate Reconciliation Discrepancy */}
+            <div
+              onClick={onOpenLedger}
+              className={cn(
+                'rounded-lg border p-2 space-y-0.5 cursor-pointer transition-all',
                 status === 'alert'
-                  ? 'text-danger'
+                  ? 'bg-danger/10 border-danger/40 hover:bg-danger/15'
                   : status === 'marginal'
-                  ? 'text-amber-600 dark:text-amber-400'
-                  : 'text-emerald-600 dark:text-emerald-400'
-              }
+                  ? 'bg-amber-500/10 border-amber-500/40 hover:bg-amber-500/15'
+                  : 'bg-emerald-500/10 border-emerald-500/30 hover:bg-emerald-500/15'
+              )}
             >
-              Reconciliation
-            </span>
-            {status === 'alert' ? (
-              <AlertTriangle className="h-3 w-3 text-danger" />
-            ) : (
-              <CheckCircle2 className="h-3 w-3 text-emerald-500" />
-            )}
-          </div>
-          <div className="text-sm font-bold font-mono-num flex items-baseline gap-1">
-            <span
-              className={
-                status === 'alert'
-                  ? 'text-danger'
+              <div className="flex items-center justify-between text-3xs uppercase tracking-wider font-bold">
+                <span
+                  className={
+                    status === 'alert'
+                      ? 'text-danger'
+                      : status === 'marginal'
+                      ? 'text-amber-600 dark:text-amber-400'
+                      : 'text-emerald-600 dark:text-emerald-400'
+                  }
+                >
+                  Reconciliation
+                </span>
+                {status === 'alert' ? (
+                  <AlertTriangle className="h-3 w-3 text-danger" />
+                ) : (
+                  <CheckCircle2 className="h-3 w-3 text-emerald-500" />
+                )}
+              </div>
+              <div className="text-sm font-bold font-mono-num flex items-baseline gap-1">
+                <span
+                  className={
+                    status === 'alert'
+                      ? 'text-danger'
+                      : status === 'marginal'
+                      ? 'text-amber-600 dark:text-amber-400'
+                      : 'text-emerald-600 dark:text-emerald-400'
+                  }
+                >
+                  {variancePct != null ? `${fmtNum(variancePct, 1)}%` : '0.0%'}
+                </span>
+                <span className="text-3xs font-mono opacity-80 text-muted-foreground">
+                  {rec && rec.deltaVariance !== 0
+                    ? `(${rec.deltaVariance > 0 ? '+' : ''}${fmtNum(rec.deltaVariance, 0)} m³)`
+                    : ''}
+                </span>
+              </div>
+              <div className="text-3xs text-muted-foreground truncate">
+                {status === 'alert'
+                  ? 'Variance > 5% (Check)'
                   : status === 'marginal'
-                  ? 'text-amber-600 dark:text-amber-400'
-                  : 'text-emerald-600 dark:text-emerald-400'
-              }
+                  ? 'Marginal (2–5%)'
+                  : 'In tolerance (≤2%)'}
+              </div>
+            </div>
+
+            {/* 5. Locator Consumption */}
+            <div className="rounded-lg bg-muted/20 border border-border/30 p-2 space-y-0.5">
+              <div className="flex items-center justify-between text-3xs uppercase tracking-wider font-semibold text-muted-foreground">
+                <span>Locators</span>
+                <Droplets className="h-3 w-3 text-indigo-500" />
+              </div>
+              <div className="text-sm font-bold font-mono-num text-foreground">
+                {summary && summary.locatorConsumption > 0
+                  ? `${fmtNum(summary.locatorConsumption, 0)} m³`
+                  : '—'}
+              </div>
+              <div className="text-3xs text-muted-foreground">Billed consumption</div>
+            </div>
+
+            {/* 6. Non-Revenue Water / Loss */}
+            <div className="rounded-lg bg-muted/20 border border-border/30 p-2 space-y-0.5">
+              <div className="flex items-center justify-between text-3xs uppercase tracking-wider font-semibold text-muted-foreground">
+                <span>Distribution NRW</span>
+                <TrendingDown className="h-3 w-3 text-rose-500" />
+              </div>
+              <div className="text-sm font-bold font-mono-num text-rose-500 flex items-baseline gap-1">
+                <span>
+                  {summary && summary.nrwVolume > 0 ? `${fmtNum(summary.nrwVolume, 0)} m³` : '0 m³'}
+                </span>
+                {summary?.nrwPct != null && (
+                  <span className="text-3xs font-mono opacity-80">
+                    ({fmtNum(summary.nrwPct, 1)}%)
+                  </span>
+                )}
+              </div>
+              <div className="text-3xs text-muted-foreground">Apparent & real loss</div>
+            </div>
+          </div>
+
+          {/* Mobile Reconciliation Ledger Link */}
+          <div className="flex sm:hidden justify-end pt-0.5">
+            <button
+              onClick={onOpenLedger}
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-3xs font-semibold bg-primary/10 hover:bg-primary/15 text-primary border border-primary/20 transition-all cursor-pointer"
             >
-              {variancePct != null ? `${fmtNum(variancePct, 1)}%` : '0.0%'}
-            </span>
-            <span className="text-3xs font-mono opacity-80 text-muted-foreground">
-              {rec && rec.deltaVariance !== 0
-                ? `(${rec.deltaVariance > 0 ? '+' : ''}${fmtNum(rec.deltaVariance, 0)} m³)`
-                : ''}
-            </span>
-          </div>
-          <div className="text-3xs text-muted-foreground truncate">
-            {status === 'alert'
-              ? 'Variance > 5% (Check)'
-              : status === 'marginal'
-              ? 'Marginal (2–5%)'
-              : 'In tolerance (≤2%)'}
+              <span>View Reconciliation Ledger</span>
+              <ArrowRight className="h-3 w-3" />
+            </button>
           </div>
         </div>
-
-        {/* 5. Locator Consumption */}
-        <div className="rounded-lg bg-muted/20 border border-border/30 p-2 space-y-0.5">
-          <div className="flex items-center justify-between text-3xs uppercase tracking-wider font-semibold text-muted-foreground">
-            <span>Locators</span>
-            <Droplets className="h-3 w-3 text-indigo-500" />
-          </div>
-          <div className="text-sm font-bold font-mono-num text-foreground">
-            {summary && summary.locatorConsumption > 0
-              ? `${fmtNum(summary.locatorConsumption, 0)} m³`
-              : '—'}
-          </div>
-          <div className="text-3xs text-muted-foreground">Billed consumption</div>
-        </div>
-
-        {/* 6. Non-Revenue Water / Loss */}
-        <div className="rounded-lg bg-muted/20 border border-border/30 p-2 space-y-0.5">
-          <div className="flex items-center justify-between text-3xs uppercase tracking-wider font-semibold text-muted-foreground">
-            <span>Distribution NRW</span>
-            <TrendingDown className="h-3 w-3 text-rose-500" />
-          </div>
-          <div className="text-sm font-bold font-mono-num text-rose-500 flex items-baseline gap-1">
-            <span>
-              {summary && summary.nrwVolume > 0 ? `${fmtNum(summary.nrwVolume, 0)} m³` : '0 m³'}
-            </span>
-            {summary?.nrwPct != null && (
-              <span className="text-3xs font-mono opacity-80">
-                ({fmtNum(summary.nrwPct, 1)}%)
-              </span>
-            )}
-          </div>
-          <div className="text-3xs text-muted-foreground">Apparent & real loss</div>
-        </div>
-      </div>
+      )}
     </div>
   );
 }

@@ -42,9 +42,130 @@ export function TopologyHeader({
   setPendingFrom, editMode, pendingFrom, waterNodesCount, powerNodesCount,
   activeLinksCount, isMobile, animatedFlow = true, setAnimatedFlow, onExportSvg, onExportPng,
 }: TopologyHeaderProps) {
+  // Action buttons component to share between desktop and mobile headers
+  const renderActionButtons = (compact = false) => (
+    <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+      {/* Flow Animation Toggle */}
+      <button
+        onClick={() => setAnimatedFlow?.(!animatedFlow)}
+        className={`flex items-center gap-1 px-1.5 sm:px-2 py-1 rounded-md text-2xs font-semibold border transition-all ${
+          animatedFlow
+            ? 'border-primary/50 bg-primary-soft text-primary shadow-2xs'
+            : 'border-border text-muted-foreground hover:text-foreground hover:border-border/80'
+        }`}
+        title={animatedFlow ? 'Pause stream animation' : 'Start fluid flow animation'}
+        aria-label="Toggle fluid flow animation"
+      >
+        <Activity className={`h-3.5 w-3.5 ${animatedFlow ? 'animate-pulse text-primary' : ''}`} />
+        <span className="hidden sm:inline">{animatedFlow ? 'Flowing' : 'Static'}</span>
+      </button>
+
+      {/* Export Schematic Dropdown */}
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button
+            className="flex items-center gap-1 px-1.5 sm:px-2 py-1 rounded-md text-2xs font-semibold border border-border text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors"
+            title="Export schematic diagram"
+            aria-label="Export schematic"
+          >
+            <Download className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Export</span>
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-52">
+          <DropdownMenuItem onClick={onExportSvg} className="cursor-pointer">
+            <FileCode className="h-4 w-4 mr-2 text-primary" />
+            <div className="flex flex-col">
+              <span className="text-xs font-semibold">Export Vector (SVG)</span>
+              <span className="text-3xs text-muted-foreground">Lossless CAD / P&amp;ID document</span>
+            </div>
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={onExportPng} className="cursor-pointer">
+            <FileImage className="h-4 w-4 mr-2 text-primary" />
+            <div className="flex flex-col">
+              <span className="text-xs font-semibold">Export Image (PNG)</span>
+              <span className="text-3xs text-muted-foreground">High-DPI raster image for slides</span>
+            </div>
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      <button
+        onClick={() => setShowHelp(!showHelp)}
+        aria-label={showHelp ? 'Hide help' : 'Show help'}
+        className={`p-1.5 rounded-md border transition-colors ${
+          showHelp
+            ? 'border-primary/50 bg-primary-soft text-primary'
+            : 'border-border text-muted-foreground hover:text-foreground hover:border-primary/40'
+        }`}
+        title="Help & Keybindings"
+      >
+        <HelpCircle className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+      </button>
+      <button
+        onClick={() => refetch()}
+        className="p-1.5 rounded-md border border-border text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors"
+        title="Refresh"
+        aria-label="Refresh"
+      >
+        <RefreshCw className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+      </button>
+      <button
+        onClick={() => setPanelOpen(!panelOpen)}
+        className={`p-1.5 rounded-md border transition-colors ${
+          panelOpen
+            ? 'border-primary/50 bg-primary-soft text-primary'
+            : 'border-border text-muted-foreground hover:text-foreground hover:border-primary/40'
+        }`}
+        title="Toggle node panel"
+        aria-label="Toggle node panel"
+      >
+        {panelOpen ? <PanelRightClose className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> : <PanelRightOpen className="h-3.5 w-3.5 sm:h-4 sm:w-4" />}
+      </button>
+    </div>
+  );
+
+  // Plant switcher tabs
+  const renderPlantTabs = (fullWidth = false) => (
+    <div className={`flex items-center gap-1 p-1 rounded-lg bg-muted/60 border border-border overflow-x-auto ${fullWidth ? 'w-full scrollbar-none' : 'shrink-0 flex-nowrap'}`}>
+      {plants.map((p) => {
+        const isActive = effectivePlantId === p.id;
+        return (
+          <button
+            key={p.id}
+            onClick={() => { setActivePlantId(p.id); setPendingFrom(null); setEditMode(null); }}
+            className={`px-3 py-1 rounded-md text-xs font-semibold whitespace-nowrap transition-all ${
+              isActive
+                ? 'bg-primary text-primary-foreground shadow-xs font-bold'
+                : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+            }`}
+          >
+            {p.name}
+          </button>
+        );
+      })}
+    </div>
+  );
+
   return (
     <>
-      <div className="flex items-center justify-between gap-4 px-5 py-2.5 border-b border-border bg-card shrink-0">
+      {/* ── Mobile Layout (< md): 2 Rows to prevent plant tabs & action icons collision ── */}
+      <div className="flex md:hidden flex-col gap-2 px-3 py-2 border-b border-border bg-card shrink-0">
+        <div className="flex items-center justify-between gap-2">
+          <div className="min-w-0">
+            <h1 className="text-sm font-bold tracking-tight text-foreground leading-tight truncate">
+              Network Topology
+            </h1>
+          </div>
+          {renderActionButtons(true)}
+        </div>
+        <div>
+          {renderPlantTabs(true)}
+        </div>
+      </div>
+
+      {/* ── Desktop Layout (>= md): Single Row ── */}
+      <div className="hidden md:flex items-center justify-between gap-4 px-5 py-2.5 border-b border-border bg-card shrink-0">
         <div className="flex items-center gap-3.5 min-w-0">
           <div className="shrink-0 space-y-0.5">
             <h1 className="text-base font-bold tracking-tight text-foreground leading-tight">Network Topology</h1>
@@ -55,24 +176,7 @@ export function TopologyHeader({
 
           <div className="h-5 w-px bg-border/80 hidden sm:block shrink-0" />
 
-          <div className="flex items-center gap-1 p-1 rounded-lg bg-muted/60 border border-border shrink-0 flex-nowrap overflow-x-auto">
-            {plants.map((p) => {
-              const isActive = effectivePlantId === p.id;
-              return (
-                <button
-                  key={p.id}
-                  onClick={() => { setActivePlantId(p.id); setPendingFrom(null); setEditMode(null); }}
-                  className={`px-3 py-1 rounded-md text-xs font-semibold whitespace-nowrap transition-all ${
-                    isActive
-                      ? 'bg-primary text-primary-foreground shadow-xs font-bold'
-                      : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
-                  }`}
-                >
-                  {p.name}
-                </button>
-              );
-            })}
-          </div>
+          {renderPlantTabs(false)}
         </div>
 
         <div className="flex items-center gap-3 shrink-0">
@@ -90,90 +194,14 @@ export function TopologyHeader({
             </span>
           </div>
 
-          <div className="flex items-center gap-1.5 border-l border-border pl-2">
-            {/* Flow Animation Toggle */}
-            <button
-              onClick={() => setAnimatedFlow?.(!animatedFlow)}
-              className={`flex items-center gap-1 px-2 py-1 rounded-md text-2xs font-semibold border transition-all ${
-                animatedFlow
-                  ? 'border-primary/50 bg-primary-soft text-primary shadow-2xs'
-                  : 'border-border text-muted-foreground hover:text-foreground hover:border-border/80'
-              }`}
-              title={animatedFlow ? 'Pause stream animation' : 'Start fluid flow animation'}
-              aria-label="Toggle fluid flow animation"
-            >
-              <Activity className={`h-3.5 w-3.5 ${animatedFlow ? 'animate-pulse text-primary' : ''}`} />
-              <span className="hidden sm:inline">{animatedFlow ? 'Flowing' : 'Static'}</span>
-            </button>
-
-            {/* Export Schematic Dropdown */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button
-                  className="flex items-center gap-1 px-2 py-1 rounded-md text-2xs font-semibold border border-border text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors"
-                  title="Export schematic diagram"
-                  aria-label="Export schematic"
-                >
-                  <Download className="h-3.5 w-3.5" />
-                  <span className="hidden sm:inline">Export</span>
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-52">
-                <DropdownMenuItem onClick={onExportSvg} className="cursor-pointer">
-                  <FileCode className="h-4 w-4 mr-2 text-primary" />
-                  <div className="flex flex-col">
-                    <span className="text-xs font-semibold">Export Vector (SVG)</span>
-                    <span className="text-3xs text-muted-foreground">Lossless CAD / P&amp;ID document</span>
-                  </div>
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={onExportPng} className="cursor-pointer">
-                  <FileImage className="h-4 w-4 mr-2 text-primary" />
-                  <div className="flex flex-col">
-                    <span className="text-xs font-semibold">Export Image (PNG)</span>
-                    <span className="text-3xs text-muted-foreground">High-DPI raster image for slides</span>
-                  </div>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-
-            <button
-              onClick={() => setShowHelp(!showHelp)}
-              aria-label={showHelp ? 'Hide help' : 'Show help'}
-              className={`p-1.5 rounded-md border transition-colors ${
-                showHelp
-                  ? 'border-primary/50 bg-primary-soft text-primary'
-                  : 'border-border text-muted-foreground hover:text-foreground hover:border-primary/40'
-              }`}
-              title="Help & Keybindings"
-            >
-              <HelpCircle className="h-4 w-4" />
-            </button>
-            <button
-              onClick={() => refetch()}
-              className="p-1.5 rounded-md border border-border text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors"
-              title="Refresh"
-              aria-label="Refresh"
-            >
-              <RefreshCw className="h-4 w-4" />
-            </button>
-            <button
-              onClick={() => setPanelOpen(!panelOpen)}
-              className={`p-1.5 rounded-md border transition-colors ${
-                panelOpen
-                  ? 'border-primary/50 bg-primary-soft text-primary'
-                  : 'border-border text-muted-foreground hover:text-foreground hover:border-primary/40'
-              }`}
-              title="Toggle node panel"
-              aria-label="Toggle node panel"
-            >
-              {panelOpen ? <PanelRightClose className="h-4 w-4" /> : <PanelRightOpen className="h-4 w-4" />}
-            </button>
+          <div className="border-l border-border pl-2">
+            {renderActionButtons(false)}
           </div>
         </div>
       </div>
 
       {showHelp && (
-        <div className="px-5 py-2.5 bg-primary/5 border-b border-primary/20 text-xs text-muted-foreground flex flex-wrap gap-x-6 gap-y-1 shrink-0">
+        <div className="px-3 sm:px-5 py-2 sm:py-2.5 bg-primary/5 border-b border-primary/20 text-xs text-muted-foreground flex flex-wrap gap-x-6 gap-y-1 shrink-0">
           <span>
             <strong className="text-primary">Water flow:</strong>{' '}
             Well → Raw Meter → Pre-treatment → Feed Meter → RO Train → Permeate / Reject → Bulk Meter → Locator
@@ -200,29 +228,29 @@ export function TopologyHeader({
       )}
 
       {canEdit && (
-        <div className="flex items-center gap-2 px-5 py-2 border-b border-border bg-muted/20 shrink-0 flex-wrap">
+        <div className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-5 py-1.5 sm:py-2 border-b border-border bg-muted/20 shrink-0 flex-wrap">
           <span className="text-2xs font-mono tracking-widest text-muted-foreground uppercase mr-1">Edit Links:</span>
           <button
             onClick={() => { setEditMode(editMode === 'connect' ? null : 'connect'); setPendingFrom(null); }}
-            className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium border transition-all ${
+            className={`flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1 rounded-md text-xs font-medium border transition-all ${
               editMode === 'connect'
                 ? 'bg-accent-soft border-accent text-accent shadow-2xs'
                 : 'border-border text-muted-foreground hover:border-accent/60 hover:text-accent/90'
             }`}
           >
             <Plug className="h-3.5 w-3.5" />
-            {editMode === 'connect' ? (pendingFrom ? 'Pick 2nd node…' : 'Pick node…') : 'Connect'}
+            <span>{editMode === 'connect' ? (pendingFrom ? 'Pick 2nd…' : 'Pick…') : 'Connect'}</span>
           </button>
           <button
             onClick={() => { setEditMode(editMode === 'disconnect' ? null : 'disconnect'); setPendingFrom(null); }}
-            className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium border transition-all ${
+            className={`flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1 rounded-md text-xs font-medium border transition-all ${
               editMode === 'disconnect'
                 ? 'bg-danger-soft border-danger text-danger shadow-2xs'
                 : 'border-border text-muted-foreground hover:border-danger/60 hover:text-danger/90'
             }`}
           >
             <Unplug className="h-3.5 w-3.5" />
-            {editMode === 'disconnect' ? (pendingFrom ? 'Pick 2nd node…' : 'Pick node…') : 'Disconnect'}
+            <span>{editMode === 'disconnect' ? (pendingFrom ? 'Pick 2nd…' : 'Pick…') : 'Disconnect'}</span>
           </button>
 
           <Button
@@ -235,7 +263,7 @@ export function TopologyHeader({
             {saving
               ? <RefreshCw className="h-3 w-3 animate-spin mr-1" />
               : <Save className="h-3 w-3 mr-1" />}
-            Save Topology
+            <span>Save<span className="hidden sm:inline"> Topology</span></span>
           </Button>
         </div>
       )}
