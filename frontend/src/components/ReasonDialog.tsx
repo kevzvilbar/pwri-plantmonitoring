@@ -7,12 +7,22 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { REASON_CATEGORIES } from '@/lib/reasonCodes';
+import { MIN_CUSTOM_REASON_LENGTH, isReasonComplete } from '@/lib/correctionReasons';
 
 // Shared "why" dialog used by:
 //  - marking a Well/Locator/RO Train Offline or Inactive (category required)
 //  - logging a "no reading today" gap for an entity that's still Active/Running
 // Both write a (category, detail) pair — category from a fixed preset list,
 // detail an optional free-text elaboration.
+//
+// The detail really is optional for those status/gap lists (their catch-all is
+// lowercase 'other', which isReasonComplete() doesn't branch on), but callers
+// that pass a CORRECTION_REASONS-style list — e.g. TrainLogModal's "move
+// readings out of the Offline window" dialog, whose 'Other' option is the same
+// literal every reading edit uses — get the shared requirement: picking
+// 'Other' without describing it leaves Confirm disabled instead of letting a
+// bare, unexplained "Other" through. That mirrors the check those same callers
+// already re-run inside their onConfirm handler.
 
 export function ReasonDialog({
   open, onOpenChange, title, description, confirmLabel = 'Confirm', busy, onConfirm,
@@ -35,6 +45,13 @@ export function ReasonDialog({
   const [detail, setDetail] = useState('');
 
   const reset = () => { setCategory(''); setDetail(''); };
+
+  // Shared rule (correctionReasons.ts) — same gate the reading-edit dialogs use,
+  // so this one can't confirm an unexplained 'Other' either.
+  const canConfirm = isReasonComplete(category, detail);
+  // Only surface the hint when it is what's actually blocking Confirm — status/
+  // gap lists keep an optional detail, so they never render this.
+  const needsOtherDetail = !!category && !canConfirm;
 
   return (
     <AlertDialog
@@ -75,16 +92,23 @@ export function ReasonDialog({
               rows={2}
               data-testid="reason-detail-textarea"
             id="reasondialog-details-optional"/>
+            {needsOtherDetail && (
+              <p className="text-2xs text-destructive" data-testid="reason-detail-error">
+                {detail.trim()
+                  ? `Say a bit more — at least ${MIN_CUSTOM_REASON_LENGTH} characters, including a word.`
+                  : 'Describe the reason — required when "Other" is selected.'}
+              </p>
+            )}
           </div>
         </div>
 
         <AlertDialogFooter>
           <AlertDialogCancel disabled={busy}>Cancel</AlertDialogCancel>
           <AlertDialogAction
-            disabled={busy || !category}
+            disabled={busy || !canConfirm}
             onClick={async (e) => {
               e.preventDefault();
-              if (!category) return;
+              if (!canConfirm) return;
               await onConfirm(category, detail.trim());
               reset();
             }}

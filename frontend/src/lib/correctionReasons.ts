@@ -55,7 +55,40 @@ export function resolveReason(reason: string, customReason: string): string {
 // re-deriving the same check inline.
 export const MIN_CUSTOM_REASON_LENGTH = 5;
 
-export function isReasonComplete(reason: string, customReason: string): boolean {
-  if (!reason) return false;
-  return reason === 'Other' ? customReason.trim().length >= MIN_CUSTOM_REASON_LENGTH : true;
+// A reason is complete when it is long enough and actually contains words
+// another person can interpret. Numbers and punctuation are fine on their
+// own, but a reason that is digits/symbols only is not useful as an
+// explanation, so isReasonComplete now also requires at least one letter.
+export const MIN_FINGERPRINT_LETTERS = 1;
+
+function countLetters(reason: string): number {
+  const matches = reason.match(/[a-zA-Z]/g);
+  return matches ? matches.length : 0;
+}
+
+function hasMinimumFingerprint(reason: string): boolean {
+  return countLetters(reason) >= MIN_FINGERPRINT_LETTERS;
+}
+
+export function isReasonComplete(
+  reason: string,
+  customReason: string,
+): boolean {
+  if (!reason) {
+    return false;
+  }
+  if (!hasMinimumFingerprint(reason)) {
+    return false;
+  }
+  if (reason === 'Other') {
+    const detail = customReason.trim();
+    if (detail.length < MIN_CUSTOM_REASON_LENGTH) {
+      return false;
+    }
+    if (!hasMinimumFingerprint(detail)) {
+      return false;
+    }
+    return true;
+  }
+  return true;
 }

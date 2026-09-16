@@ -16,7 +16,7 @@ import { Input } from '@/components/ui/input';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import { CORRECTION_REASONS, MIN_CUSTOM_REASON_LENGTH } from '@/lib/correctionReasons';
+import { CORRECTION_REASONS, MIN_CUSTOM_REASON_LENGTH, isReasonComplete } from '@/lib/correctionReasons';
 
 interface Props {
   reason: string;
@@ -52,10 +52,10 @@ export function CorrectionReasonField({
             value={customReason}
             onChange={(e) => onCustomReasonChange(e.target.value)}
           />
-          {customReason.trim().length < MIN_CUSTOM_REASON_LENGTH && (
-            <p className="text-2xs text-destructive">
+          {!isReasonComplete('Other', customReason) && (
+            <p className="text-2xs text-destructive" data-testid="correction-reason-error">
               {customReason.trim()
-                ? `Say a bit more — at least ${MIN_CUSTOM_REASON_LENGTH} characters needed.`
+                ? `Say a bit more — at least ${MIN_CUSTOM_REASON_LENGTH} characters, including a word.`
                 : 'Describe the reason — this is required for "Other".'}
             </p>
           )}
