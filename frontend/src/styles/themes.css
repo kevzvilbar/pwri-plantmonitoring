@@ -1050,6 +1050,7 @@
 
   --highlight:          38  85% 58%;
   --highlight-foreground: 206 77% 11%;
+  --highlight-soft:     38  50% 16%;
 
   --background:         206 50% 5%;
   --card:               206 40% 9%;
@@ -1090,6 +1091,7 @@
 
   --highlight:          30  98% 55%;
   --highlight-foreground: 0 0% 0%;
+  --highlight-soft:     30  60% 16%;
 
   --background:         235 50% 4%;
   --card:               235 40% 8.5%;
@@ -1130,6 +1132,7 @@
 
   --highlight:          38  85% 55%;
   --highlight-foreground: 188 90% 4%;
+  --highlight-soft:     38  50% 16%;
 
   --background:         180 40% 4%;
   --card:               180 30% 8.5%;
@@ -1170,6 +1173,7 @@
 
   --highlight:          35  99% 58%;
   --highlight-foreground: 10 14% 7%;
+  --highlight-soft:     35  60% 18%;
 
   --background:         10  15% 5%;
   --card:               10  15% 9.5%;
@@ -1210,6 +1214,7 @@
 
   --highlight:          191 95% 55%;
   --highlight-foreground: 226 93% 6%;
+  --highlight-soft:     191 50% 15%;
 
   --background:         225 50% 4.5%;
   --card:               225 40% 8.5%;
@@ -1250,6 +1255,7 @@
 
   --highlight:          210 90% 60%;
   --highlight-foreground: 224 80% 10%;
+  --highlight-soft:     210 50% 16%;
 
   --background:         225 50% 5%;
   --card:               225 40% 9.5%;
@@ -1290,6 +1296,7 @@
 
   --highlight:          38  92% 54%;
   --highlight-foreground: 222 47% 8%;
+  --highlight-soft:     38  40% 16%;
 
   --background:         222 35% 4.5%;
   --card:               222 30% 9%;
@@ -1330,6 +1337,7 @@
 
   --highlight:          160 84% 50%;
   --highlight-foreground: 198 80% 6%;
+  --highlight-soft:     160 40% 16%;
 
   --background:         198 60% 4%;
   --card:               198 45% 8.5%;
@@ -1370,6 +1378,7 @@
 
   --highlight:          347 85% 62%;
   --highlight-foreground: 240 10% 4%;
+  --highlight-soft:     347 40% 16%;
 
   --background:         240 10% 3.5%;
   --card:               240 10% 8%;
@@ -1410,6 +1419,7 @@
 
   --highlight:          48  96% 53%;
   --highlight-foreground: 0 0%  0%;
+  --highlight-soft:     48  40% 16%;
 
   --background:         0   0%  2%;
   --card:               0   0%  6.5%;
