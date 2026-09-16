@@ -76,8 +76,16 @@ export function MeterColumn({
       <div>
         <Label htmlFor={currentId} className="text-xs text-muted-foreground">
           {label} Meter Reading{required && <span className="text-destructive font-bold ml-1" title="Required input">*</span>}
+          {!required && <span className="text-info text-2xs ml-1 font-normal">(auto-inferred)</span>}
         </Label>
-        <Input type="number" step="any" {...currentOnChange} placeholder={`Input current ${stream} reading${required ? ' (required)' : ''}`} className={inputClass} id={currentId}/>
+        <Input
+          type="number"
+          step="any"
+          {...currentOnChange}
+          placeholder={inferred ? `Inferred from water balance (or enter reading)` : `Input current ${stream} reading${required ? ' (required)' : ' (optional)'}`}
+          className={inputClass}
+          id={currentId}
+        />
         {negWarn && (
           <p className="text-xs text-danger flex items-center gap-1 mt-1">
             <AlertTriangle className="h-3 w-3 shrink-0" />

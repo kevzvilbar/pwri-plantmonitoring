@@ -296,17 +296,30 @@ export function TrainLogModal({ trainId, trainLabel, plantId, onClose, initialTa
             lastRejMeter.set(trainId, +r.reject_meter);
           }
 
-          // Fallback inference for reject delta if physical reject was not logged/metered
-          const effFeedDelta = r._computed_feed_delta ?? (r.feed_meter_delta != null ? +r.feed_meter_delta : null);
-          const effPermDelta = r._computed_delta ?? (r.permeate_meter_delta != null ? +r.permeate_meter_delta : null);
-          const effRejDelta  = r._computed_rej_delta ?? (r.reject_meter_delta != null ? +r.reject_meter_delta : null);
+          // Auto-calculation for whichever stream is inferred:
+          let effFeedDelta = r._computed_feed_delta ?? (r.feed_meter_delta != null ? +r.feed_meter_delta : null);
+          let effPermDelta = r._computed_delta ?? (r.permeate_meter_delta != null ? +r.permeate_meter_delta : null);
+          let effRejDelta  = r._computed_rej_delta ?? (r.reject_meter_delta != null ? +r.reject_meter_delta : null);
 
-          if (effRejDelta == null) {
-            if (effFeedDelta != null && effPermDelta != null) {
-              r._inferred_rej_delta = Math.max(0, +(effFeedDelta - effPermDelta).toFixed(2));
-            } else if (effPermDelta != null && r.recovery_pct != null && +r.recovery_pct > 0 && +r.recovery_pct < 100) {
-              r._inferred_rej_delta = Math.max(0, +(effPermDelta * (100 - +r.recovery_pct) / +r.recovery_pct).toFixed(2));
-            }
+          // 1. If reject is inferred: Reject = Feed - Permeate
+          if (effRejDelta == null && effFeedDelta != null && effPermDelta != null) {
+            effRejDelta = Math.max(0, +(effFeedDelta - effPermDelta).toFixed(2));
+            r._inferred_rej_delta = effRejDelta;
+          } else if (effRejDelta == null && effPermDelta != null && r.recovery_pct != null && +r.recovery_pct > 0 && +r.recovery_pct < 100) {
+            effRejDelta = Math.max(0, +(effPermDelta * (100 - +r.recovery_pct) / +r.recovery_pct).toFixed(2));
+            r._inferred_rej_delta = effRejDelta;
+          }
+
+          // 2. If feed is inferred: Feed = Permeate + Reject
+          if (effFeedDelta == null && effPermDelta != null && effRejDelta != null) {
+            effFeedDelta = +(effPermDelta + effRejDelta).toFixed(2);
+            r._inferred_feed_delta = effFeedDelta;
+          }
+
+          // 3. If permeate is inferred: Permeate = Feed - Reject
+          if (effPermDelta == null && effFeedDelta != null && effRejDelta != null) {
+            effPermDelta = Math.max(0, +(effFeedDelta - effRejDelta).toFixed(2));
+            r._inferred_perm_delta = effPermDelta;
           }
         });
 

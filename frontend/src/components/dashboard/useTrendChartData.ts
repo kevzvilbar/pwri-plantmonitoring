@@ -196,7 +196,7 @@ export function useTrendChartData({
           // and will be summed in separately below.
           if (r.is_meter_replacement) return;
 
-          const delta = r.permeate_meter_delta != null ? Math.max(0, +r.permeate_meter_delta)
+          let delta = r.permeate_meter_delta != null ? Math.max(0, +r.permeate_meter_delta)
             : r.permeate_meter != null && r.permeate_meter_prev != null
               ? Math.max(0, +r.permeate_meter - +r.permeate_meter_prev)
               : null;
@@ -227,6 +227,13 @@ export function useTrendChartData({
               feedDelta = +(delta + rejectDelta).toFixed(3);
             } else if (delta !== null && r.recovery_pct != null && +r.recovery_pct > 0 && +r.recovery_pct <= 100) {
               feedDelta = +(delta / (+r.recovery_pct / 100)).toFixed(3);
+            }
+          }
+
+          // If permeate is missing but feed & reject are known, infer permeate
+          if (delta === null) {
+            if (feedDelta !== null && rejectDelta !== null && feedDelta >= rejectDelta) {
+              delta = +(feedDelta - rejectDelta).toFixed(3);
             }
           }
 
@@ -397,7 +404,7 @@ export function useTrendChartData({
           ? +(_chemCostPeso  / prodVol).toFixed(4) : null;
         const totalCostPerM3 = (powerCostPerM3 != null || chemCostPerM3 != null)
           ? +((powerCostPerM3 ?? 0) + (chemCostPerM3 ?? 0)).toFixed(4) : null;
-        const perm = +d.permeate.toFixed(2);
+        let perm = +d.permeate.toFixed(2);
         let rej = +d.reject.toFixed(2);
         let feed = +d.feed.toFixed(2);
 
@@ -414,6 +421,11 @@ export function useTrendChartData({
         // If daily feed is 0 but permeate and reject exist, infer feed:
         if (feed === 0 && (perm > 0 || rej > 0)) {
           feed = +(perm + rej).toFixed(2);
+        }
+
+        // If daily permeate is 0 but feed and reject exist, infer permeate:
+        if (perm === 0 && feed > rej && rej > 0) {
+          perm = +(feed - rej).toFixed(2);
         }
 
         const expectedFeed = +(perm + rej).toFixed(2);

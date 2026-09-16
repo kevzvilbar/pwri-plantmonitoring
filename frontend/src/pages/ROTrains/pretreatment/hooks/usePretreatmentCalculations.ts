@@ -110,8 +110,8 @@ export function usePretreatmentCalculations(
     const anyMeterSpike = feedHighWarn || permHighWarn || rejHighWarn;
 
     const feedVol = feedDelta ?? (permDelta !== null && rejDelta !== null ? +(permDelta + rejDelta).toFixed(3) : null);
-    const permVol = permDelta ?? (feedDelta !== null && rejDelta !== null ? +(feedDelta - rejDelta).toFixed(3) : null);
-    const rejVol = rejDelta ?? (feedDelta !== null && permDelta !== null ? +(feedDelta - permDelta).toFixed(3) : null);
+    const permVol = permDelta ?? (feedDelta !== null && rejDelta !== null ? Math.max(0, +(feedDelta - rejDelta).toFixed(3)) : null);
+    const rejVol = rejDelta ?? (feedDelta !== null && permDelta !== null ? Math.max(0, +(feedDelta - permDelta).toFixed(3)) : null);
 
     const feedFlowMeter = feedVol !== null && mDurHr ? +(feedVol / mDurHr).toFixed(2) : null;
     const permFlowMeter = permVol !== null && mDurHr ? +(permVol / mDurHr).toFixed(2) : null;

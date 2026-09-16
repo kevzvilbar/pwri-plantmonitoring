@@ -348,39 +348,54 @@ export async function recalculateTrainDeltas(trainId: string): Promise<void> {
         : null;
 
       // ── Feed delta ────────────────────────────────────────────────────────
-      // Only the granular is_feed_meter_replacement flag zeros the feed delta —
-      // same rationale as the reject branch below (is_meter_replacement alone,
-      // pre-migration, meant a permeate-only swap).
       const isFeedRepl   = !!(row.is_feed_meter_replacement);
       const curFeedMeter = row.feed_meter != null ? +row.feed_meter : null;
       const storedFeed   = row.feed_meter_delta != null ? +row.feed_meter_delta : null;
-      let newFeedDelta: number | null;
-      if (isFeedRepl)                                        { newFeedDelta = 0; }
-      else if (prevFeedMeter != null && curFeedMeter != null) { newFeedDelta = curFeedMeter - prevFeedMeter; }
-      else                                                   { newFeedDelta = null; }
+      let newFeedDelta: number | null = isFeedRepl ? 0 : (prevFeedMeter != null && curFeedMeter != null ? curFeedMeter - prevFeedMeter : null);
       if (curFeedMeter != null) prevFeedMeter = curFeedMeter;
+
+      // ── Permeate delta ────────────────────────────────────────────────────
+      const isPermRepl = !!(row.is_permeate_meter_replacement || row.is_meter_replacement);
+      const curMeter   = row.permeate_meter != null ? +row.permeate_meter : null;
+      const stored     = row.permeate_meter_delta != null ? +row.permeate_meter_delta : null;
+      let newDelta: number | null = isPermRepl ? 0 : (prevMeter != null && curMeter != null ? curMeter - prevMeter : null);
+      if (curMeter != null) prevMeter = curMeter;
+
+      // ── Reject delta ──────────────────────────────────────────────────────
+      const isRejRepl   = !!(row.is_reject_meter_replacement);
+      const curRejMeter = row.reject_meter != null ? +row.reject_meter : null;
+      const storedRej   = row.reject_meter_delta != null ? +row.reject_meter_delta : null;
+      let newRejDelta: number | null = isRejRepl ? 0 : (prevRejMeter != null && curRejMeter != null ? curRejMeter - prevRejMeter : null);
+      if (curRejMeter != null) prevRejMeter = curRejMeter;
+
+      // ── Auto-calculation for inferred streams (mass balance) ──────────────
+      // 1. If reject is inferred: Reject = Feed - Permeate
+      if (newRejDelta === null && newFeedDelta !== null && newDelta !== null) {
+        newRejDelta = Math.max(0, +(newFeedDelta - newDelta).toFixed(3));
+      }
+      // 2. If feed is inferred: Feed = Permeate + Reject
+      if (newFeedDelta === null && newDelta !== null && newRejDelta !== null) {
+        newFeedDelta = +(newDelta + newRejDelta).toFixed(3);
+      }
+      // 3. If permeate is inferred: Permeate = Feed - Reject
+      if (newDelta === null && newFeedDelta !== null && newRejDelta !== null) {
+        newDelta = Math.max(0, +(newFeedDelta - newRejDelta).toFixed(3));
+      }
+
+      // Persist deltas to DB if changed
       if (newFeedDelta !== storedFeed) {
         await (supabase.from('ro_train_readings' as any) as any)
           .update({ feed_meter_delta: newFeedDelta })
           .eq('id', row.id);
       }
-
-      // ── Permeate delta ────────────────────────────────────────────────────
-      // is_permeate_meter_replacement is the granular source of truth as of the
-      // 2026-07-27 migration; is_meter_replacement is kept in sync by a DB
-      // trigger (OR of feed/permeate/reject) but OR'ing both here too so this
-      // still behaves correctly against a DB that hasn't run that migration yet.
-      const isPermRepl = !!(row.is_permeate_meter_replacement || row.is_meter_replacement);
-      const curMeter   = row.permeate_meter != null ? +row.permeate_meter : null;
-      const stored     = row.permeate_meter_delta != null ? +row.permeate_meter_delta : null;
-      let newDelta: number | null;
-      if (isPermRepl)                              { newDelta = 0; }
-      else if (prevMeter != null && curMeter != null) { newDelta = curMeter - prevMeter; }
-      else                                         { newDelta = null; }
-      if (curMeter != null) prevMeter = curMeter;
       if (newDelta !== stored) {
         await (supabase.from('ro_train_readings' as any) as any)
           .update({ permeate_meter_delta: newDelta })
+          .eq('id', row.id);
+      }
+      if (newRejDelta !== storedRej) {
+        await (supabase.from('ro_train_readings' as any) as any)
+          .update({ reject_meter_delta: newRejDelta })
           .eq('id', row.id);
       }
 
@@ -391,25 +406,6 @@ export async function recalculateTrainDeltas(trainId: string): Promise<void> {
         } else {
           deltaCache.invalidate(trainId);
         }
-      }
-
-      // ── Reject delta ──────────────────────────────────────────────────────
-      // Only the granular is_reject_meter_replacement flag zeros the reject
-      // delta.  Pre-migration rows with is_meter_replacement=true but no
-      // granular flag were permeate-only replacements — don't zero reject there.
-      const isRejRepl   = !!(row.is_reject_meter_replacement);
-      const curRejMeter = row.reject_meter != null ? +row.reject_meter : null;
-      const storedRej   = row.reject_meter_delta != null ? +row.reject_meter_delta : null;
-      let newRejDelta: number | null;
-      if (isRejRepl)                                       { newRejDelta = 0; }
-      else if (prevRejMeter != null && curRejMeter != null) { newRejDelta = curRejMeter - prevRejMeter; }
-      else if (newFeedDelta != null && newDelta != null)   { newRejDelta = Math.max(0, +(newFeedDelta - newDelta).toFixed(3)); }
-      else                                                 { newRejDelta = null; }
-      if (curRejMeter != null) prevRejMeter = curRejMeter;
-      if (newRejDelta !== storedRej) {
-        await (supabase.from('ro_train_readings' as any) as any)
-          .update({ reject_meter_delta: newRejDelta })
-          .eq('id', row.id);
       }
     }
   } catch { /* non-critical */ }

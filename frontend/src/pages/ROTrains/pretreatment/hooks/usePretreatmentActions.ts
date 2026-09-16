@@ -195,15 +195,21 @@ export function usePretreatmentActions(rawOpts: PretreatmentActionsOptions) {
           opts.showPermeateMeter !== false && !emFlags.permIsEM ? { key: 'perm', label: 'Permeate Water Meter', val: opts.roValues.permeate_meter_curr } : undefined,
           opts.showRejectMeter !== false && !emFlags.rejIsEM ? { key: 'rej', label: 'Reject Water Meter', val: opts.roValues.reject_meter_curr } : undefined,
         ].filter(Boolean) as { key: string; label: string; val: string }[];
-        const missingMeters = configuredMeters.filter((m) => m.val === '' || m.val == null);
-        const meterIncomplete = missingMeters.length > 0;
+        const filledMeters = configuredMeters.filter((m) => m.val !== '' && m.val != null);
+        // Any 2 of 3 streams are sufficient to auto-calculate the inferred 3rd meter:
+        // - Reject = Feed - Permeate
+        // - Feed = Permeate + Reject
+        // - Permeate = Feed - Reject
+        // Inferred meter is not required for input, but auto-calc is a must.
+        const minMetersRequired = configuredMeters.length === 3 ? 2 : configuredMeters.length;
+        const meterIncomplete = configuredMeters.length > 0 && filledMeters.length < minMetersRequired;
 
         if ((missingDirect.length > 0 || emIncomplete || meterIncomplete) && !opts.roIncompleteReason.trim()) {
           opts.setRoReasonNeeded(true);
           const parts = [
             ...missingDirect.map((f) => f.label),
             ...(emIncomplete ? ['Feed/Permeate/Reject Flow (need at least 2 of 3)'] : []),
-            ...(meterIncomplete ? [`Water Meter (${missingMeters.map((m) => m.label).join(', ')})`] : []),
+            ...(meterIncomplete ? [`Water Meter (need at least ${minMetersRequired} stream${minMetersRequired > 1 ? 's' : ''} to auto-calculate inferred meter)`] : []),
           ];
           toast.error(`Missing: ${parts.join(', ')}. Fill these in, or enter a reason below to proceed with missing values.`);
           return;
