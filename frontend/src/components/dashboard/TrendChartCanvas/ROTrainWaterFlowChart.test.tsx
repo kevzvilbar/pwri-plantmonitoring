@@ -1,7 +1,15 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll } from 'vitest';
 import React from 'react';
 import { render } from '@testing-library/react';
 import { ROTrainWaterFlowChart } from './ROTrainWaterFlowChart';
+
+beforeAll(() => {
+  global.ResizeObserver = class ResizeObserver {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  };
+});
 
 describe('ROTrainWaterFlowChart', () => {
   const mockTrendRows = [

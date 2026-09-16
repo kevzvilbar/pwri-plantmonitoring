@@ -137,7 +137,9 @@ export function useTrainLogActions(options: TrainLogActionsOptions): TrainLogAct
       r.temperature_c ?? '', r.turbidity_ntu ?? '', r.feed_ph ?? '', r.permeate_ph ?? '',
       r.chlorine_residual_mg_l ?? '', r.recovery_pct ?? '',
       r.feed_meter ?? '', r.permeate_meter ?? '', r._computed_delta ?? r.permeate_meter_delta ?? '',
-      r.reject_meter ?? '', r._computed_rej_delta ?? r.reject_meter_delta ?? '', r.remarks ?? '',
+      r.reject_meter ?? (r._inferred_rej_delta != null ? 'Inferred' : ''),
+      r._computed_rej_delta ?? r.reject_meter_delta ?? (r._inferred_rej_delta != null ? `~${r._inferred_rej_delta}` : ''),
+      r.remarks ?? '',
     ].map((v: any) => `"${String(v).replace(/"/g, '""')}"`).join(','));
     const blob = new Blob([[headers.join(','), ...rows2].join('\n')], { type: 'text/csv' });
     const url  = URL.createObjectURL(blob);

@@ -28,6 +28,7 @@ export interface MeterColumnProps {
     ro_production_source?: string;
     permeate_is_production?: boolean;
   };
+  required?: boolean;
 }
 
 export function MeterColumn({
@@ -50,6 +51,7 @@ export function MeterColumn({
   flowrate,
   flowId,
   meterCfg,
+  required = true,
 }: MeterColumnProps) {
   const isPermeate = stream === 'permeate';
 
@@ -72,8 +74,10 @@ export function MeterColumn({
         }
       </div>
       <div>
-        <Label htmlFor={currentId} className="text-xs text-muted-foreground">{label} Meter Reading</Label>
-        <Input type="number" step="any" {...currentOnChange} placeholder={`Input current ${stream} reading`} className={inputClass} id={currentId}/>
+        <Label htmlFor={currentId} className="text-xs text-muted-foreground">
+          {label} Meter Reading{required && <span className="text-destructive font-bold ml-1" title="Required input">*</span>}
+        </Label>
+        <Input type="number" step="any" {...currentOnChange} placeholder={`Input current ${stream} reading${required ? ' (required)' : ''}`} className={inputClass} id={currentId}/>
         {negWarn && (
           <p className="text-xs text-danger flex items-center gap-1 mt-1">
             <AlertTriangle className="h-3 w-3 shrink-0" />

@@ -178,7 +178,9 @@ export function useTrendChartData({
     // Falls back to computeEntityDeltas when columns not yet populated (NULL).
     {
       const hasSavedDelta = (roReadings ?? []).some(
-        (r: any) => r.permeate_meter_delta != null && +r.permeate_meter_delta > 0,
+        (r: any) => (r.permeate_meter_delta != null && +r.permeate_meter_delta > 0) ||
+                    (r.feed_meter_delta != null && +r.feed_meter_delta > 0) ||
+                    (r.reject_meter_delta != null && +r.reject_meter_delta > 0),
       );
 
       if (hasSavedDelta) {
@@ -198,52 +200,69 @@ export function useTrendChartData({
             : r.permeate_meter != null && r.permeate_meter_prev != null
               ? Math.max(0, +r.permeate_meter - +r.permeate_meter_prev)
               : null;
-          // Use === null so a legitimate delta of 0 is still plotted (don't skip it).
-          if (delta === null) return;
 
-          // Date bucketing: attribute each reading to the local calendar day it
-          // was recorded. The old cut-off / production-period logic has been
-          // removed system-wide — consistent with DataSummaryModal.
+          let feedDelta = r.feed_meter_delta != null ? Math.max(0, +r.feed_meter_delta)
+            : r.feed_meter != null && r.feed_meter_prev != null
+              ? Math.max(0, +r.feed_meter - +r.feed_meter_prev)
+              : null;
+
+          let rejectDelta = r.reject_meter_delta != null ? Math.max(0, +r.reject_meter_delta)
+            : r.reject_meter != null && r.reject_meter_prev != null
+              ? Math.max(0, +r.reject_meter - +r.reject_meter_prev)
+              : null;
+
+          // If physical reject meter is missing / unmetered, infer reject from feed - permeate or recovery %
+          if (rejectDelta === null) {
+            if (feedDelta !== null && delta !== null && feedDelta >= delta) {
+              rejectDelta = +(feedDelta - delta).toFixed(3);
+            } else if (delta !== null && r.recovery_pct != null && +r.recovery_pct > 0 && +r.recovery_pct < 100) {
+              const rec = +r.recovery_pct / 100;
+              rejectDelta = +((delta / rec) - delta).toFixed(3);
+            }
+          }
+
+          // If feed is missing but permeate & reject are known, infer feed
+          if (feedDelta === null) {
+            if (delta !== null && rejectDelta !== null) {
+              feedDelta = +(delta + rejectDelta).toFixed(3);
+            } else if (delta !== null && r.recovery_pct != null && +r.recovery_pct > 0 && +r.recovery_pct <= 100) {
+              feedDelta = +(delta / (+r.recovery_pct / 100)).toFixed(3);
+            }
+          }
+
+          // Date bucketing: attribute each reading to the local calendar day it was recorded.
           const prodDateStr = format(new Date(r.reading_datetime as string), 'yyyy-MM-dd');
           const prodDt = new Date(prodDateStr + 'T12:00:00'); // noon for stable sorting
           const key = format(prodDt, 'MMM d');
           const row = ensure(key, prodDt.getTime());
-          row.permeate += delta;
-          if (permeateIsProductionPlants?.has(plantId)) {
-            row.production += delta;
-            if (!row._permeateSourcePlants) row._permeateSourcePlants = new Set<string>();
-            row._permeateSourcePlants.add(plantId);
+          if (delta !== null) {
+            row.permeate += delta;
+            if (permeateIsProductionPlants?.has(plantId)) {
+              row.production += delta;
+              if (!row._permeateSourcePlants) row._permeateSourcePlants = new Set<string>();
+              row._permeateSourcePlants.add(plantId);
+            }
+          }
+          if (feedDelta !== null) {
+            row.feed += feedDelta;
+          }
+          if (rejectDelta !== null) {
+            row.reject += rejectDelta;
           }
         });
       } else {
         // ── FALLBACK PATH (permeate_meter_delta columns still NULL) ──────────
-        // Use computeEntityDeltas on the raw cumulative permeate_meter odometer.
-        //
-        // CRITICAL: do NOT pre-filter out is_meter_replacement rows before
-        // passing to computeEntityDeltas. If removed, lastReading for that train
-        // stays at the old meter value. The next real reading on the new meter
-        // (e.g. 227,368) then diffs against the old value (72,691) producing a
-        // massive false spike (~154K m3).
-        //
-        // Instead, include replacement rows with current_reading = permeate_meter
-        // (the new meter start value). computeEntityDeltas sees isMR=true and
-        // resets lastReading to the new baseline. skipAfterRepl=true means the
-        // immediately following reading diffs against that new baseline normally
-        // (e.g. Mar 5: 228,106 − 227,368 = 737.7) instead of being zeroed.
         const permeateRoReadings = (roReadings ?? [])
           .filter((r: any) => {
             const plantId = _trainPlantMap.get(r.train_id);
             return plantId
               && _trainUnitTypeMap.get(r.train_id) !== 'secondary'
               && r.permeate_meter != null;
-            // NOTE: is_meter_replacement rows are intentionally kept here
           })
           .map((r: any) => ({ ...r, current_reading: +r.permeate_meter }));
 
         computeEntityDeltas(permeateRoReadings, 'train_id', null, { skipAfterRepl: true }).forEach(({ r, delta, isMeterReplacement }) => {
-          // replacement row and first post-replacement row both return delta=0
-          if (delta === 0) return;
-          if (isMeterReplacement) return;
+          if (delta === 0 || isMeterReplacement) return;
           const plantId = _trainPlantMap.get(r.train_id)!;
           const dt = new Date(r.reading_datetime);
           const key = format(dt, 'MMM d');
@@ -254,6 +273,34 @@ export function useTrendChartData({
             if (!row._permeateSourcePlants) row._permeateSourcePlants = new Set<string>();
             row._permeateSourcePlants.add(plantId);
           }
+        });
+
+        const feedRoReadings = (roReadings ?? [])
+          .filter((r: any) => {
+            const plantId = _trainPlantMap.get(r.train_id);
+            return plantId && _trainUnitTypeMap.get(r.train_id) !== 'secondary' && r.feed_meter != null;
+          })
+          .map((r: any) => ({ ...r, current_reading: +r.feed_meter }));
+        computeEntityDeltas(feedRoReadings, 'train_id', null, { skipAfterRepl: true }).forEach(({ delta, isMeterReplacement, r }) => {
+          if (delta === 0 || isMeterReplacement) return;
+          const dt = new Date(r.reading_datetime);
+          const key = format(dt, 'MMM d');
+          const row = ensure(key, dt.getTime());
+          row.feed += delta;
+        });
+
+        const rejectRoReadings = (roReadings ?? [])
+          .filter((r: any) => {
+            const plantId = _trainPlantMap.get(r.train_id);
+            return plantId && _trainUnitTypeMap.get(r.train_id) !== 'secondary' && r.reject_meter != null;
+          })
+          .map((r: any) => ({ ...r, current_reading: +r.reject_meter }));
+        computeEntityDeltas(rejectRoReadings, 'train_id', null, { skipAfterRepl: true }).forEach(({ delta, isMeterReplacement, r }) => {
+          if (delta === 0 || isMeterReplacement) return;
+          const dt = new Date(r.reading_datetime);
+          const key = format(dt, 'MMM d');
+          const row = ensure(key, dt.getTime());
+          row.reject += delta;
         });
       }
     }
@@ -350,8 +397,40 @@ export function useTrendChartData({
           ? +(_chemCostPeso  / prodVol).toFixed(4) : null;
         const totalCostPerM3 = (powerCostPerM3 != null || chemCostPerM3 != null)
           ? +((powerCostPerM3 ?? 0) + (chemCostPerM3 ?? 0)).toFixed(4) : null;
+        const perm = +d.permeate.toFixed(2);
+        let rej = +d.reject.toFixed(2);
+        let feed = +d.feed.toFixed(2);
+
+        // If daily reject is still 0 but feed and permeate exist, infer reject:
+        if (rej === 0 && feed > perm) {
+          rej = +(feed - perm).toFixed(2);
+        } else if (rej === 0 && perm > 0 && recoverySamples && d.recovery != null && d.recovery > 0) {
+          const rec = (d.recovery / recoverySamples) / 100;
+          if (rec > 0 && rec < 1) {
+            rej = +((perm / rec) - perm).toFixed(2);
+          }
+        }
+
+        // If daily feed is 0 but permeate and reject exist, infer feed:
+        if (feed === 0 && (perm > 0 || rej > 0)) {
+          feed = +(perm + rej).toFixed(2);
+        }
+
+        const expectedFeed = +(perm + rej).toFixed(2);
+        const diff = +(feed - expectedFeed).toFixed(2);
+        const pct = feed > 0 ? +((diff / feed) * 100).toFixed(1) : 0;
+        const hasDev = feed > 0 && Math.abs(diff) > 0.5 && Math.abs(diff / feed) > 0.02;
+
         return {
           ...d,
+          permeate: perm,
+          reject: rej,
+          rejectNeg: -rej,
+          feed,
+          expectedFeed,
+          variance: diff,
+          variancePct: pct,
+          hasDeviation: hasDev,
           recovery: recoverySamples ? +(d.recovery / recoverySamples).toFixed(1) : null,
           tds: tdsSamples ? Math.round(d.tds / tdsSamples) : null,
           nrw: calc.nrw(d.production, d.consumption),
@@ -407,6 +486,7 @@ export function useTrendChartData({
         date: format(dt, 'MMM d'),
         isoDate: dt.toISOString(),
         production: 0, consumption: 0, rawwater: 0, permeate: 0,
+        feed: 0, reject: 0, rejectNeg: 0, expectedFeed: 0, variance: 0, variancePct: 0, hasDeviation: false,
         recovery: null, tds: null, kwh: null, solarKwh: null,
         nrw: 0, powerCost: null, chemCost: null, totalCost: null,
         _meterReplacements: [], _permeateSourceNames: [],
@@ -433,6 +513,34 @@ export function useTrendChartData({
     });
     if (metric === 'production' || metric === 'nrw') {
       return bucketed.map((r) => ({ ...r, nrw: calc.nrw((r.production as number) ?? 0, (r.consumption as number) ?? 0) }));
+    }
+    if (metric === 'roFlowBalance') {
+      return bucketed.map((r: any) => {
+        const perm = +(r.permeate ?? 0);
+        let rej = +(r.reject ?? 0);
+        let feed = +(r.feed ?? 0);
+        if (rej === 0 && feed > perm) {
+          rej = +(feed - perm).toFixed(2);
+        }
+        if (feed === 0 && (perm > 0 || rej > 0)) {
+          feed = +(perm + rej).toFixed(2);
+        }
+        const expected = +(perm + rej).toFixed(2);
+        const diff = +(feed - expected).toFixed(2);
+        const pct = feed > 0 ? +((diff / feed) * 100).toFixed(1) : 0;
+        const hasDev = feed > 0 && Math.abs(diff) > 0.5 && Math.abs(diff / feed) > 0.02;
+        return {
+          ...r,
+          permeate: perm,
+          reject: rej,
+          rejectNeg: -rej,
+          feed,
+          expectedFeed: expected,
+          variance: diff,
+          variancePct: pct,
+          hasDeviation: hasDev,
+        };
+      });
     }
     return bucketed;
   }, [chartData, usesSharedGranularity, viewGran, metric, startKey, endKey]);

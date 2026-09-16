@@ -274,7 +274,15 @@ export function RoLogTable({
                   : <span className="text-muted-foreground/30">—</span>}
               </td>
               <td className="px-2 py-2 text-right font-mono tabular-nums whitespace-nowrap text-xs">
-                {r.reject_meter != null ? Number(r.reject_meter).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : <span className="text-muted-foreground/30">—</span>}
+                {r.reject_meter != null ? (
+                  Number(r.reject_meter).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                ) : r._inferred_rej_delta != null ? (
+                  <span className="text-muted-foreground/60 italic text-2xs font-sans" title="Physical reject meter unrecorded or not installed; reject volume inferred from water balance">
+                    Inferred
+                  </span>
+                ) : (
+                  <span className="text-muted-foreground/30">—</span>
+                )}
               </td>
               <td className={cn('px-2 py-2 text-right font-mono tabular-nums whitespace-nowrap text-xs', r.is_reject_meter_replacement && 'text-kpi-solar')}>
                 {(() => {
@@ -282,6 +290,17 @@ export function RoLogTable({
                   const rejDelta  = r._computed_rej_delta ?? (r.reject_meter_delta != null ? +r.reject_meter_delta : null);
                   if (isRejRepl)         return <span className="text-kpi-solar font-semibold">★ 0.00</span>;
                   if (rejDelta != null)   return <span className={+rejDelta < 0 ? 'text-destructive font-semibold' : ''}>{Number(rejDelta).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}<span className="text-muted-foreground/60 ml-0.5 text-3xs">m³</span></span>;
+                  if (r._inferred_rej_delta != null) {
+                    return (
+                      <span
+                        className="text-info font-medium"
+                        title="Inferred reject volume = Feed Delta − Permeate Delta"
+                      >
+                        ~{Number(r._inferred_rej_delta).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        <span className="text-info/70 ml-0.5 text-3xs font-sans">m³ (inf)</span>
+                      </span>
+                    );
+                  }
                   return <span className="text-muted-foreground/30">—</span>;
                 })()}
               </td>

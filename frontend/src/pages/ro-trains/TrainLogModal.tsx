@@ -270,12 +270,18 @@ export function TrainLogModal({ trainId, trainLabel, plantId, onClose, initialTa
         if (!readings?.length) return [];
 
         const ascReadings = [...readings].reverse();
-        const lastMeter    = new Map<string, number>();
-        const lastRejMeter = new Map<string, number>();
+        const lastFeedMeter = new Map<string, number>();
+        const lastMeter     = new Map<string, number>();
+        const lastRejMeter  = new Map<string, number>();
         ascReadings.forEach((r: any) => {
+          if (r.feed_meter != null) {
+            const prev = lastFeedMeter.get(trainId);
+            r._computed_feed_delta = prev != null ? Math.max(0, +r.feed_meter - prev) : null;
+            lastFeedMeter.set(trainId, +r.feed_meter);
+          }
           if (r.permeate_meter != null) {
             const prev = lastMeter.get(trainId);
-            r._computed_delta = prev != null ? +r.permeate_meter - prev : null;
+            r._computed_delta = prev != null ? Math.max(0, +r.permeate_meter - prev) : null;
             lastMeter.set(trainId, +r.permeate_meter);
           }
           if (r.reject_meter != null) {
@@ -283,8 +289,21 @@ export function TrainLogModal({ trainId, trainLabel, plantId, onClose, initialTa
             const prev = lastRejMeter.get(trainId);
             r._computed_rej_delta = isRejRepl
               ? 0
-              : prev != null ? +r.reject_meter - prev : null;
+              : prev != null ? Math.max(0, +r.reject_meter - prev) : null;
             lastRejMeter.set(trainId, +r.reject_meter);
+          }
+
+          // Fallback inference for reject delta if physical reject was not logged/metered
+          const effFeedDelta = r._computed_feed_delta ?? (r.feed_meter_delta != null ? +r.feed_meter_delta : null);
+          const effPermDelta = r._computed_delta ?? (r.permeate_meter_delta != null ? +r.permeate_meter_delta : null);
+          const effRejDelta  = r._computed_rej_delta ?? (r.reject_meter_delta != null ? +r.reject_meter_delta : null);
+
+          if (effRejDelta == null) {
+            if (effFeedDelta != null && effPermDelta != null) {
+              r._inferred_rej_delta = Math.max(0, +(effFeedDelta - effPermDelta).toFixed(2));
+            } else if (effPermDelta != null && r.recovery_pct != null && +r.recovery_pct > 0 && +r.recovery_pct < 100) {
+              r._inferred_rej_delta = Math.max(0, +(effPermDelta * (100 - +r.recovery_pct) / +r.recovery_pct).toFixed(2));
+            }
           }
         });
 

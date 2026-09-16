@@ -92,7 +92,7 @@ export function WaterMeterSection({
       <div className="flex items-center justify-between">
         <p className="text-2xs font-medium uppercase tracking-wider text-muted-foreground/70 px-0.5">Water Meter</p>
         <p className="text-2xs text-muted-foreground/60 italic">
-          {(!showFeedMeter || !showRejectMeter) ? 'Missing meter auto-inferred' : 'Leave one stream blank — it will be inferred'}
+          {(!showFeedMeter || !showRejectMeter) ? 'Unmetered streams auto-inferred from water balance' : 'All configured physical meters are required'}
         </p>
       </div>
       <div className="flex items-center gap-2 mb-1">

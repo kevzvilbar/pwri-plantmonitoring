@@ -191,20 +191,19 @@ export function usePretreatmentActions(rawOpts: PretreatmentActionsOptions) {
         const emIncomplete = configuredEmFields.length > 0 && emFilled < emMinRequired;
 
         const configuredMeters = [
-          opts.showFeedMeter !== false ? opts.roValues.feed_meter_curr : undefined,
-          opts.showPermeateMeter !== false ? opts.roValues.permeate_meter_curr : undefined,
-          opts.showRejectMeter !== false ? opts.roValues.reject_meter_curr : undefined,
-        ].filter((v) => v !== undefined) as string[];
-        const meterFilled = configuredMeters.filter((v) => v !== '' && v != null).length;
-        const meterMinRequired = Math.max(0, configuredMeters.length - 1);
-        const meterIncomplete = configuredMeters.length > 0 && meterFilled < meterMinRequired;
+          opts.showFeedMeter !== false && !emFlags.feedIsEM ? { key: 'feed', label: 'Feed Water Meter', val: opts.roValues.feed_meter_curr } : undefined,
+          opts.showPermeateMeter !== false && !emFlags.permIsEM ? { key: 'perm', label: 'Permeate Water Meter', val: opts.roValues.permeate_meter_curr } : undefined,
+          opts.showRejectMeter !== false && !emFlags.rejIsEM ? { key: 'rej', label: 'Reject Water Meter', val: opts.roValues.reject_meter_curr } : undefined,
+        ].filter(Boolean) as { key: string; label: string; val: string }[];
+        const missingMeters = configuredMeters.filter((m) => m.val === '' || m.val == null);
+        const meterIncomplete = missingMeters.length > 0;
 
         if ((missingDirect.length > 0 || emIncomplete || meterIncomplete) && !opts.roIncompleteReason.trim()) {
           opts.setRoReasonNeeded(true);
           const parts = [
             ...missingDirect.map((f) => f.label),
             ...(emIncomplete ? ['Feed/Permeate/Reject Flow (need at least 2 of 3)'] : []),
-            ...(meterIncomplete ? ['Water Meter reading(s)'] : []),
+            ...(meterIncomplete ? [`Water Meter (${missingMeters.map((m) => m.label).join(', ')})`] : []),
           ];
           toast.error(`Missing: ${parts.join(', ')}. Fill these in, or enter a reason below to proceed with missing values.`);
           return;

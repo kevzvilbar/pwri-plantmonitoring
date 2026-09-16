@@ -403,6 +403,7 @@ export async function recalculateTrainDeltas(trainId: string): Promise<void> {
       let newRejDelta: number | null;
       if (isRejRepl)                                       { newRejDelta = 0; }
       else if (prevRejMeter != null && curRejMeter != null) { newRejDelta = curRejMeter - prevRejMeter; }
+      else if (newFeedDelta != null && newDelta != null)   { newRejDelta = Math.max(0, +(newFeedDelta - newDelta).toFixed(3)); }
       else                                                 { newRejDelta = null; }
       if (curRejMeter != null) prevRejMeter = curRejMeter;
       if (newRejDelta !== storedRej) {

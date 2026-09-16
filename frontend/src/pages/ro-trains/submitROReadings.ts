@@ -160,10 +160,23 @@ export async function insertROTrainReadings(
 
     const num = (k: string) => r[k]?.trim() ? +r[k] : null;
 
+    // Feed meter delta
+    const feedCurr  = (r.feed_meter_curr ?? r.feed_meter)?.trim() ? +(r.feed_meter_curr ?? r.feed_meter) : null;
+    const feedPrev  = (r.feed_meter_prev)?.trim() ? +r.feed_meter_prev : null;
+    const feedDelta = feedCurr !== null && feedPrev !== null ? Math.max(0, feedCurr - feedPrev) : null;
+
     // Permeate meter delta
-    const permCurr  = r.permeate_meter_curr?.trim() ? +r.permeate_meter_curr : null;
-    const permPrev  = r.permeate_meter_prev?.trim() ? +r.permeate_meter_prev : null;
+    const permCurr  = (r.permeate_meter_curr ?? r.permeate_meter)?.trim() ? +(r.permeate_meter_curr ?? r.permeate_meter) : null;
+    const permPrev  = (r.permeate_meter_prev)?.trim() ? +r.permeate_meter_prev : null;
     const permDelta = permCurr !== null && permPrev !== null ? Math.max(0, permCurr - permPrev) : null;
+
+    // Reject meter delta
+    const rejCurr   = (r.reject_meter_curr ?? r.reject_meter)?.trim() ? +(r.reject_meter_curr ?? r.reject_meter) : null;
+    const rejPrev   = (r.reject_meter_prev)?.trim() ? +r.reject_meter_prev : null;
+    let rejDelta    = rejCurr !== null && rejPrev !== null ? Math.max(0, rejCurr - rejPrev) : null;
+    if (rejDelta === null && feedDelta !== null && permDelta !== null) {
+      rejDelta = Math.max(0, +(feedDelta - permDelta).toFixed(3));
+    }
 
     // Core payload — columns confirmed present in the original schema
     const corePayload: Database['public']['Tables']['ro_train_readings']['Insert'] = {
@@ -205,9 +218,15 @@ export async function insertROTrainReadings(
     if (userId)            optionalPayload.recorded_by              = userId;
     const chlorineVal = r.chlorine_residual_mg_l?.trim() ? +r.chlorine_residual_mg_l : null;
     if (chlorineVal !== null) optionalPayload.chlorine_residual_mg_l = chlorineVal;
-    if (permCurr !== null) optionalPayload.permeate_meter           = permCurr;
-    if (permPrev !== null) optionalPayload.permeate_meter_prev      = permPrev;
-    if (permDelta !== null) optionalPayload.permeate_meter_delta    = permDelta;
+    if (feedCurr !== null)    optionalPayload.feed_meter             = feedCurr;
+    if (feedPrev !== null)    optionalPayload.feed_meter_prev        = feedPrev;
+    if (feedDelta !== null)   optionalPayload.feed_meter_delta       = feedDelta;
+    if (permCurr !== null)    optionalPayload.permeate_meter         = permCurr;
+    if (permPrev !== null)    optionalPayload.permeate_meter_prev    = permPrev;
+    if (permDelta !== null)   optionalPayload.permeate_meter_delta   = permDelta;
+    if (rejCurr !== null)     optionalPayload.reject_meter           = rejCurr;
+    if (rejPrev !== null)     optionalPayload.reject_meter_prev      = rejPrev;
+    if (rejDelta !== null)    optionalPayload.reject_meter_delta     = rejDelta;
     if (flaggedRateFields.length) {
       optionalPayload.norm_status = 'pending_review';
       errors.push(
