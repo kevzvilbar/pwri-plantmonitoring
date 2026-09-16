@@ -163,19 +163,32 @@ export async function insertROTrainReadings(
     // Feed meter delta
     const feedCurr  = (r.feed_meter_curr ?? r.feed_meter)?.trim() ? +(r.feed_meter_curr ?? r.feed_meter) : null;
     const feedPrev  = (r.feed_meter_prev)?.trim() ? +r.feed_meter_prev : null;
-    const feedDelta = feedCurr !== null && feedPrev !== null ? Math.max(0, feedCurr - feedPrev) : null;
+    let feedDelta   = feedCurr !== null && feedPrev !== null ? Math.max(0, feedCurr - feedPrev) : null;
 
     // Permeate meter delta
     const permCurr  = (r.permeate_meter_curr ?? r.permeate_meter)?.trim() ? +(r.permeate_meter_curr ?? r.permeate_meter) : null;
     const permPrev  = (r.permeate_meter_prev)?.trim() ? +r.permeate_meter_prev : null;
-    const permDelta = permCurr !== null && permPrev !== null ? Math.max(0, permCurr - permPrev) : null;
+    let permDelta   = permCurr !== null && permPrev !== null ? Math.max(0, permCurr - permPrev) : null;
 
     // Reject meter delta
     const rejCurr   = (r.reject_meter_curr ?? r.reject_meter)?.trim() ? +(r.reject_meter_curr ?? r.reject_meter) : null;
     const rejPrev   = (r.reject_meter_prev)?.trim() ? +r.reject_meter_prev : null;
     let rejDelta    = rejCurr !== null && rejPrev !== null ? Math.max(0, rejCurr - rejPrev) : null;
+
+    // Feed, permeate and reject meters are each required unless they're the
+    // one being inferred from the other two via mass balance. Only ONE of
+    // the three should ever be missing for inference to apply cleanly:
+    // 1. Reject is inferred:   Reject = Feed - Permeate
+    // 2. Feed is inferred:     Feed = Permeate + Reject
+    // 3. Permeate is inferred: Permeate = Feed - Reject
     if (rejDelta === null && feedDelta !== null && permDelta !== null) {
       rejDelta = Math.max(0, +(feedDelta - permDelta).toFixed(3));
+    }
+    if (feedDelta === null && permDelta !== null && rejDelta !== null) {
+      feedDelta = +(permDelta + rejDelta).toFixed(3);
+    }
+    if (permDelta === null && feedDelta !== null && rejDelta !== null) {
+      permDelta = Math.max(0, +(feedDelta - rejDelta).toFixed(3));
     }
 
     // Core payload — columns confirmed present in the original schema
