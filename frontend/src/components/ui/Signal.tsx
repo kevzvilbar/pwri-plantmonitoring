@@ -276,7 +276,7 @@ export function Signal({
               <span className={cn('text-3xs font-mono-num font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border shrink-0', cfg.chipClass)}>
                 {computedTier}
               </span>
-              <h5 className={cn('text-xs font-semibold leading-tight line-clamp-1 break-words', cfg.titleClass)}>
+              <h5 className={cn('text-xs font-semibold leading-tight line-clamp-2 sm:line-clamp-1 break-words', cfg.titleClass)}>
                 {title}
               </h5>
             </div>
@@ -291,7 +291,7 @@ export function Signal({
                   <DropdownMenuTrigger asChild>
                     <button
                       type="button"
-                      className="h-7 w-7 min-h-[28px] min-w-[28px] sm:min-h-[32px] sm:min-w-[32px] rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/80 flex items-center justify-center transition-colors focus-visible:outline-hidden"
+                      className="h-7 w-7 min-h-[32px] min-w-[32px] rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/80 flex items-center justify-center transition-colors focus-visible:outline-hidden"
                       aria-label={`Actions for ${typeof title === 'string' ? title : 'alert'}`}
                     >
                       <MoreVertical className="h-3.5 w-3.5" />
@@ -399,7 +399,7 @@ export function Signal({
                   e.stopPropagation();
                   if (onNavigate) onNavigate(linkPath);
                 }}
-                className="ml-auto text-primary font-semibold hover:underline flex items-center gap-0.5 cursor-pointer"
+                className="ml-auto text-primary font-semibold hover:underline flex items-center gap-0.5 cursor-pointer shrink-0"
               >
                 View
                 <ArrowUpRight className="h-3 w-3" />

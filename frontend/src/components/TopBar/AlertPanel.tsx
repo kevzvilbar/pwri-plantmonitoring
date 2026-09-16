@@ -36,17 +36,19 @@ export function AlertPanel() {
   return (
     <div className="flex flex-col h-full max-h-[82vh] overflow-hidden bg-card text-card-foreground">
       <div className="p-3 bg-muted/40 border-b border-border/60 space-y-2.5">
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <div className="h-6 w-6 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="h-6 w-6 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
               <Bell className="h-3.5 w-3.5" />
             </div>
-            <div>
-              <h4 className="text-xs font-bold text-foreground tracking-tight">Plant Alerts &amp; Activity</h4>
+            <div className="min-w-0">
+              <h4 className="text-xs font-bold text-foreground tracking-tight truncate">
+                Plant Alerts<span className="hidden sm:inline"> &amp; Activity</span>
+              </h4>
             </div>
             {totalBadge > 0 && (
               <span className={cn(
-                'text-3xs font-mono-num font-bold px-1.5 py-0.5 rounded-full border',
+                'text-3xs font-mono-num font-bold px-1.5 py-0.5 rounded-full border shrink-0',
                 hasCritical ? 'bg-danger/15 text-danger border-danger/30' : 'bg-warn/15 text-amber-500 border-warn/30'
               )}>
                 {totalBadge}
@@ -54,7 +56,7 @@ export function AlertPanel() {
             )}
           </div>
 
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1 shrink-0 ml-auto">
             {activeTab === 'active' && sortedAlerts.length > 0 && (
               <>
                 <button
@@ -190,7 +192,7 @@ export function AlertPanel() {
         )}
       </div>
 
-      <div className="overflow-y-auto divide-y divide-border/40 p-2 space-y-1.5 flex-1 min-h-[160px] max-h-[52vh]">
+      <div className="overflow-y-auto divide-y divide-border/40 p-2 space-y-1.5 flex-1 min-h-[160px]">
         {activeTab === 'active' && (
           <>
             {displayedAlerts.map((alert) => {

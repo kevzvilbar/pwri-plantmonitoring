@@ -35,14 +35,14 @@ export function ControlConsole({
   visiblePlants, onSnoozeAll, onClearAll, onMarkAllRead,
 }: ControlConsoleProps) {
   return (
-    <div className="p-3.5 rounded-2xl border-border/80 space-y-3 shadow-xs">
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div className="flex items-center p-1 bg-muted/60 rounded-xl border border-border/70">
+    <div className="bg-card border border-border/80 p-3 sm:p-3.5 rounded-2xl space-y-3 shadow-xs">
+      <div className="flex items-center justify-between gap-2.5 sm:gap-3 flex-wrap">
+        <div className="w-full sm:w-auto flex items-center p-1 bg-muted/60 rounded-xl border border-border/70">
           <button
             type="button"
             onClick={() => setActiveView('active')}
             className={cn(
-              'px-4 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5',
+              'flex-1 sm:flex-initial justify-center px-2.5 sm:px-4 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5',
               activeView === 'active'
                 ? 'bg-card text-foreground shadow-2xs border border-border/60'
                 : 'text-muted-foreground hover:text-foreground',
@@ -55,7 +55,7 @@ export function ControlConsole({
             type="button"
             onClick={() => setActiveView('logs')}
             className={cn(
-              'px-4 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5',
+              'flex-1 sm:flex-initial justify-center px-2.5 sm:px-4 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5',
               activeView === 'logs'
                 ? 'bg-card text-foreground shadow-2xs border border-border/60'
                 : 'text-muted-foreground hover:text-foreground',
@@ -66,14 +66,14 @@ export function ControlConsole({
           </button>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="w-full sm:w-auto flex items-center justify-end sm:justify-start gap-2">
           {activeView === 'active' && plantAlertsLength > 0 && (
             <>
-              <Button size="sm" variant="outline" onClick={onSnoozeAll} className="h-8 gap-1.5 text-xs border-border/80">
+              <Button size="sm" variant="outline" onClick={onSnoozeAll} className="flex-1 sm:flex-initial h-8 gap-1.5 text-xs border-border/80">
                 <BellOff className="h-3.5 w-3.5 text-warn" />
                 <span>Snooze all (1h)</span>
               </Button>
-              <Button size="sm" variant="outline" onClick={onClearAll} className="h-8 gap-1.5 text-xs text-danger hover:bg-danger-soft border-danger/30 hover:border-danger/60">
+              <Button size="sm" variant="outline" onClick={onClearAll} className="flex-1 sm:flex-initial h-8 gap-1.5 text-xs text-danger hover:bg-danger-soft border-danger/30 hover:border-danger/60">
                 <Trash2 className="h-3.5 w-3.5" />
                 <span>Dismiss all</span>
               </Button>
@@ -81,7 +81,7 @@ export function ControlConsole({
           )}
 
           {activeView === 'logs' && unreadLogsCount > 0 && (
-            <Button size="sm" variant="outline" onClick={onMarkAllRead} className="h-8 gap-1.5 text-xs text-accent border-accent/40 hover:bg-accent-soft">
+            <Button size="sm" variant="outline" onClick={onMarkAllRead} className="flex-1 sm:flex-initial h-8 gap-1.5 text-xs text-accent border-accent/40 hover:bg-accent-soft">
               <CheckCheck className="h-3.5 w-3.5" />
               <span>Mark all read</span>
             </Button>
@@ -90,7 +90,7 @@ export function ControlConsole({
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 pt-1 border-t border-border/50">
-        <div className="sm:col-span-4 flex items-center gap-1 overflow-x-auto p-0.5">
+        <div className="sm:col-span-4 flex items-center gap-1 overflow-x-auto p-0.5 scrollbar-none">
           <button type="button" onClick={() => setTierFilter('all')} className={cn('px-2.5 py-1 rounded-lg text-2xs font-semibold transition-all whitespace-nowrap', tierFilter === 'all' ? 'bg-primary text-primary-foreground shadow-2xs' : 'text-muted-foreground hover:bg-muted')}>
             All
           </button>
