@@ -31,6 +31,7 @@ import {
   RawWaterByWellBarChart,
   RawWaterAreaChart,
   TdsAreaChart,
+  ROTrainWaterFlowChart,
   DefaultAreaChart,
 } from './TrendChartCanvas/index';
 import { C_CHEM_COST, C_POWER_COST } from '@/lib/chartColors';
@@ -189,6 +190,11 @@ export function TrendChartCanvas(props: Record<string, any>) {
           trendRows={trendRows}
           formatYAxis={formatYAxis}
           NegativeAwareTooltip={NegativeAwareTooltip}
+        />
+      ) : metric === 'roFlowBalance' ? (
+        <ROTrainWaterFlowChart
+          trendRows={trendRows}
+          formatYAxis={formatYAxis}
         />
       ) : (metric === 'tds' && roDrillMode === 'default') ? (
         <TdsAreaChart

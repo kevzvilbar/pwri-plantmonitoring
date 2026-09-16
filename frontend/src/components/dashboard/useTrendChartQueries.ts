@@ -29,9 +29,8 @@ export function useTrendChartQueries({
   const needsWellReadings = metric === 'nrw' || metric === 'rawwater' || metric === 'pv' || metric === 'productionCost';
   const needsProductMeterReadings = metric === 'production' || metric === 'nrw' || metric === 'pv' || metric === 'productionCost';
   const needsLocReadings = metric === 'production' || metric === 'nrw';
-  const needsRoReadings = metric === 'recovery' || metric === 'tds' || metric === 'plantHealth';
+  const needsRoReadings = metric === 'recovery' || metric === 'tds' || metric === 'plantHealth' || metric === 'roFlowBalance';
   // productionCost also needs power readings (kWh delta × multiplier) and tariffs (₱/kWh).
-  // 'kwh' = Power Consumption & Energy Mix chart (Solar vs Grid stacked bars).
   const needsPowerReadings = metric === 'pv' || metric === 'productionCost' || metric === 'kwh';
   // production_costs stores chem_cost (₱ per day) — still used for chemical side.
   // Power cost is now computed live: daily_kwh × rate_per_kwh / production_m3.
@@ -355,9 +354,9 @@ export function useTrendChartQueries({
       // If the DB hasn't been migrated yet those columns don't exist and Supabase
       // returns a schema-cache error — fall back to the legacy select so the chart
       // never breaks on un-migrated deployments.
-      const FULL_SELECT   = 'train_id,recovery_pct,permeate_tds,permeate_meter,permeate_meter_prev,permeate_meter_delta,reading_datetime,is_meter_replacement';
+      const FULL_SELECT   = 'train_id,recovery_pct,permeate_tds,permeate_meter,permeate_meter_prev,permeate_meter_delta,feed_meter,feed_meter_prev,feed_meter_delta,reject_meter,reject_meter_prev,reject_meter_delta,reading_datetime,is_meter_replacement';
       const LEGACY_SELECT = 'train_id,recovery_pct,permeate_tds,permeate_meter,reading_datetime,is_meter_replacement';
-      const NEW_COLS = ['permeate_meter_prev', 'permeate_meter_delta'];
+      const NEW_COLS = ['permeate_meter_prev', 'permeate_meter_delta', 'feed_meter_delta', 'reject_meter_delta'];
       const isNewColError = (msg: string) => NEW_COLS.some(c => msg.includes(c));
 
       const { data, error } = await supabase.from('ro_train_readings')

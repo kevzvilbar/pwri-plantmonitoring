@@ -71,6 +71,7 @@ export function formatRangeLabel(
 export const TREND_Y_LABEL: Record<string, string> = {
   production: 'Volume (m³)',
   rawwater: 'Raw Water (m³)',
+  roFlowBalance: 'Flow Volume (m³)',
   recovery: 'Recovery (%)',
   tds: 'Permeate TDS (ppm)',
   pv: 'kWh · m³',
@@ -105,9 +106,10 @@ export const TONE_ICON: Record<NonNullable<StatTone>, string> = {
 export type ChartMetric = { metric: string; title: string };
 
 export const OVERVIEW_CHART_METRICS: ChartMetric[] = [
-  { metric: 'production', title: 'Production vs Consumption' },
-  { metric: 'nrw',        title: 'NRW Trend' },
-  { metric: 'rawwater',   title: 'Raw Water (m³)' },
+  { metric: 'production',    title: 'Production vs Consumption' },
+  { metric: 'nrw',           title: 'NRW Trend' },
+  { metric: 'rawwater',      title: 'Raw Water (m³)' },
+  { metric: 'roFlowBalance', title: 'RO Train Water Balance' },
 ];
 
 export const QUALITY_CHART_METRICS: ChartMetric[] = [

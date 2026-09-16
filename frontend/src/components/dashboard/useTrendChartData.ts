@@ -38,6 +38,11 @@ const TREND_FIELD_AGG: Record<string, TrendFieldConfig> = {
   kwh: { kwh: 'sum', solarKwh: 'sum' },
   tds: { tds: { type: 'weighted-avg', weight: 'tdsSamples' } },
   recovery: { recovery: { type: 'weighted-avg', weight: 'recoverySamples' } },
+  roFlowBalance: {
+    permeate: 'sum',
+    reject: 'sum',
+    feed: 'sum',
+  },
 };
 
 export function useTrendChartData({
@@ -83,6 +88,7 @@ export function useTrendChartData({
       byDay.get(d) ?? byDay.set(d, {
         date: d, sortKey, isoDate: new Date(sortKey).toISOString(),
         production: 0, consumption: 0, rawwater: 0, permeate: 0,
+        feed: 0, reject: 0, rejectNeg: 0, variance: 0, variancePct: 0, hasDeviation: false,
         recovery: 0, recoverySamples: 0,
         tds: 0, tdsSamples: 0, kwh: 0, solarKwh: 0,
         // Cost accumulators (raw ₱ amounts, divided by production at the end)

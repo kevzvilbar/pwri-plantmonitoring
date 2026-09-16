@@ -10,5 +10,6 @@ export { PlantHealthChart } from './PlantHealthChart';
 export { RawWaterByWellDailyChart, RawWaterByWellBarChart } from './RawWaterByWellCharts';
 export { RawWaterAreaChart } from './RawWaterAreaChart';
 export { TdsAreaChart } from './TdsAreaChart';
+export { ROTrainWaterFlowChart } from './ROTrainWaterFlowChart';
 export { DefaultAreaChart } from './DefaultAreaChart';
 export * from './chartShell';

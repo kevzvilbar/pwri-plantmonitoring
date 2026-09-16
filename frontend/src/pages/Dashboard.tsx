@@ -9,7 +9,7 @@ import { usePlants } from '@/hooks/usePlants';
 import { format, subDays } from 'date-fns';
 import { CalendarDays } from 'lucide-react';
 import { DowntimeEventsModal } from '@/components/DowntimeEventsModal';
-import { DashboardViewMode, VIEW_MODE_KEY } from '@/components/dashboard/types';
+import { DashboardViewMode, VIEW_MODE_KEY, pctDelta } from '@/components/dashboard/types';
 import { PlantPulseHero } from '@/components/dashboard/PlantPulseHero';
 import { PlantHealthStrip } from '@/components/dashboard/PlantHealthStrip';
 import { RangeAndMonthlyPicker } from '@/components/dashboard/RangeAndMonthlyPicker';
@@ -274,6 +274,8 @@ export default function Dashboard() {
         yNrw={prodStats.yNrw}
         rawWaterVol={prodStats.rawWaterVol}
         dRawWater={prodStats.dRawWater}
+        roFlowVol={prodStats.roPermeateProduction || (prodStats.todayAllPermeate?.reduce((s: number, r: any) => s + (+r.permeate_meter_delta || 0), 0) || null)}
+        dRoFlow={pctDelta(prodStats.roPermeateProduction, prodStats.yRoPermeateProduction)}
         blending={prodStats.blending}
         viewMode={viewMode}
         expandedMetric={expandedMetric}
