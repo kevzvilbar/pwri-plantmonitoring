@@ -3,7 +3,7 @@ import {
   buildStatusTimeline, nonRunningSegmentsInRange, mergeSegmentsForDisplay, formatSegmentDuration,
   reconcileOngoingSegmentWithReadings, flagConflictingClosedSegments, dropBogusOpenAutoFlag,
   collapseNegligibleSegments, NEGLIGIBLE_SEGMENT_MS,
-  preserveAutoFlagReason,
+  preserveAutoFlagReason, planStrayReadingShift,
   type StatusSegment,
 } from './trainStatusTimeline';
 

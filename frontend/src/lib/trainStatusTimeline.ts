@@ -247,7 +247,7 @@ export function planStrayReadingShift(
       id: s.id,
       source_table: s.source_table,
       from: s.reading_datetime,
-      to: new Date(target).toISOString(),
+      to: new Date(target).toISOString().replace('.000Z', 'Z'),
     });
   }
   return shifts;
