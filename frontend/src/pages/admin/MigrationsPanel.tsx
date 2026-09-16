@@ -18,6 +18,7 @@ import {
 import { useMigrationsLogic } from './MigrationsPanel/useMigrationsLogic';
 import { MigrationFileCard } from './MigrationsPanel/MigrationFileCard';
 import { MigrationsUnmarkDialog } from './MigrationsPanel/MigrationsUnmarkDialog';
+import { StorageRetentionCard } from './StorageRetentionCard';
 
 const STATUS_META: Record<string, { label: string; className: string; Icon: any }> = {
   applied:       { label: 'Applied',       className: 'bg-accent/15 text-accent border-accent/40', Icon: CheckCircle2 },
@@ -272,6 +273,12 @@ export function MigrationsPanel() {
           />
         ))}
       </div>
+
+      {/* Phase 0 of the reading-storage work: measured sizes + 7-day growth for
+          the two hourly-written reading tables, plus a schema-wide duplicate
+          index check. Read-only; the duplicate indexes themselves were dropped
+          by migration 20260916000006, not by anything on this screen. */}
+      <StorageRetentionCard />
 
       <MigrationsUnmarkDialog
         unmarkTarget={unmarkTarget}
