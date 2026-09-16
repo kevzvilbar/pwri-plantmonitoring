@@ -23,6 +23,7 @@ import { usePretreatmentCalculations } from './hooks/usePretreatmentCalculations
 import { usePretreatmentActions } from './hooks/usePretreatmentActions';
 import { invalidateAllRoQueries } from './hooks/useRoQueryInvalidation';
 import { isWasActuallyRunningReason, WAS_ACTUALLY_RUNNING_REASON } from '@/lib/trainUptimeExemption';
+import { TWO_HOURS_MS } from '@/lib/autoOfflineThreshold';
 import { trainEmFlags } from '@/lib/trainEmMeter';
 import { trainMeterFlags } from '@/lib/trainMeterPresence';
 
@@ -128,11 +129,13 @@ export function PretreatmentAndROLog() {
       autoInitializedTrainId.current = train.id;
       if (data.isEffectivelyOffline) {
         form.setTrainOnline(false);
-        if (data.lastReadingTime) {
-          form.setOfflineStart(format(new Date(data.lastReadingTime), "yyyy-MM-dd'T'HH:mm"));
-        } else {
-          form.setOfflineStart(dt);
-        }
+        // Requirement: "The start time of the offline period will be set automatically from the auto-flag trigger time."
+        const triggerTime = latestStatusLog?.confirmed_at
+          ? new Date(latestStatusLog.confirmed_at)
+          : data.lastReadingTime
+            ? new Date(new Date(data.lastReadingTime).getTime() + TWO_HOURS_MS)
+            : new Date(dt);
+        form.setOfflineStart(format(triggerTime, "yyyy-MM-dd'T'HH:mm"));
         form.setOfflineEnd('');
         form.setOfflineReason(
           latestStatusLog?.reason && !latestStatusLog.reason.startsWith('Auto-flagged')

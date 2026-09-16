@@ -176,6 +176,44 @@ describe('downtimeRowMerger', () => {
         expect(grouped[0].span.combinedReasonText).toContain('Maintenance');
       }
     });
+
+    it('suppresses duplicate offline-span when a status banner already covers the window', () => {
+      // Reproduces the user's issue where TrainStatusBannerRow and OfflineSpanRow stacked
+      const items = [
+        {
+          kind: 'banner' as const,
+          segment: {
+            status: 'Offline',
+            startAt: '2026-09-16T08:02:00Z',
+            endAt: '2026-09-16T09:06:00Z',
+            reason: 'Auto-flagged: no reading for 2.0h',
+          },
+        },
+        {
+          kind: 'reading' as const,
+          row: {
+            id: 'off-1',
+            reading_datetime: '2026-09-16T08:02:00Z',
+            incomplete_reason: 'Offline: Auto-flagged',
+          },
+        },
+        {
+          kind: 'reading' as const,
+          row: {
+            id: 'off-2',
+            reading_datetime: '2026-09-16T09:03:00Z',
+            incomplete_reason: 'Offline: Auto-flagged',
+          },
+        },
+      ];
+
+      const grouped = groupLogItemsWithOfflineSpans(items as any, 2);
+      // Banner remains, but no duplicate offline-span is created
+      expect(grouped.some((it) => it.kind === 'banner')).toBe(true);
+      expect(grouped.some((it) => it.kind === 'offline-span')).toBe(false);
+      // The 2 offline readings are retained as individual reading items under the banner
+      expect(grouped.filter((it) => it.kind === 'reading')).toHaveLength(2);
+    });
   });
 });
 

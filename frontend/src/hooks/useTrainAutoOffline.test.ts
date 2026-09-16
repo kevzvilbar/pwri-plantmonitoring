@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   AUTO_OFFLINE_THRESHOLD_HOURS,
+  computeAutoOfflineTriggerTime,
   shouldAutoFlagTrainOffline,
   latestReadingByTrain,
   computeTrainGaps,
@@ -37,6 +38,30 @@ describe('useTrainAutoOffline threshold & auto-flagging guards', () => {
     expect(shouldAutoFlagTrainOffline(2.5, 'Offline')).toBe(false);
     expect(shouldAutoFlagTrainOffline(2.0, 'Maintenance')).toBe(false);
     expect(shouldAutoFlagTrainOffline(10.0, 'Maintenance')).toBe(false);
+  });
+
+  describe('computeAutoOfflineTriggerTime', () => {
+    it('sets start time automatically from the auto-flag trigger time (last reading + 2h)', () => {
+      // Last reading at 08:00. Now is 11:00 (3h later).
+      // Trigger time must be 10:00 (08:00 + 2h), not backdated to 08:00 or delayed to 11:00.
+      const lastReading = '2026-09-16T08:00:00Z';
+      const nowMs = new Date('2026-09-16T11:00:00Z').getTime();
+      const triggerTime = computeAutoOfflineTriggerTime(lastReading, nowMs);
+      expect(triggerTime).toBe('2026-09-16T10:00:00Z');
+    });
+
+    it('caps trigger time at nowMs if elapsed time is exactly 2h', () => {
+      const lastReading = '2026-09-16T08:00:00Z';
+      const nowMs = new Date('2026-09-16T10:00:00Z').getTime();
+      const triggerTime = computeAutoOfflineTriggerTime(lastReading, nowMs);
+      expect(triggerTime).toBe('2026-09-16T10:00:00Z');
+    });
+
+    it('defaults to nowMs if last reading timestamp is null', () => {
+      const nowMs = new Date('2026-09-16T10:00:00Z').getTime();
+      const triggerTime = computeAutoOfflineTriggerTime(null, nowMs);
+      expect(triggerTime).toBe('2026-09-16T10:00:00Z');
+    });
   });
 });
 

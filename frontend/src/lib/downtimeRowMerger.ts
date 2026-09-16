@@ -231,19 +231,39 @@ export function groupLogItemsWithOfflineSpans<T extends { id?: string; reading_d
       const firstId = currentOfflineBatch[0]?.id ?? 'start';
       const lastId = currentOfflineBatch[currentOfflineBatch.length - 1]?.id ?? 'end';
 
-      const span: OfflineSpan = {
-        id: `span-${firstId}-${lastId}`,
-        kind: 'offline-span',
-        startAt,
-        endAt,
-        durationMs,
-        rows: currentOfflineBatch,
-        operators: Array.from(opMap.values()),
-        reasons: distinctReasons,
-        combinedReasonText,
-      };
+      // Redundancy Removal:
+      // If an existing status banner in `items` already covers this offline downtime window,
+      // creating an OfflineSpan banner stacks duplicate banners for the same event
+      // (e.g. TrainStatusBannerRow followed immediately by OfflineSpanRow).
+      // In that case, suppress the duplicate OfflineSpan and output individual reading rows under the status banner.
+      const banners = items.filter((it): it is { kind: 'banner'; segment: any } => it.kind === 'banner');
+      const isCoveredByBanner = banners.some((b) => {
+        const seg = b.segment;
+        if (!seg || seg.status === 'Running') return false;
+        const segStartMs = new Date(seg.startAt).getTime() - 15 * 60_000;
+        const segEndMs = (seg.endAt ? new Date(seg.endAt).getTime() : Date.now()) + 15 * 60_000;
+        return minTime >= segStartMs && maxTime <= segEndMs;
+      });
 
-      result.push({ kind: 'offline-span', span });
+      if (isCoveredByBanner) {
+        for (const row of currentOfflineBatch) {
+          result.push({ kind: 'reading', row });
+        }
+      } else {
+        const span: OfflineSpan = {
+          id: `span-${firstId}-${lastId}`,
+          kind: 'offline-span',
+          startAt,
+          endAt,
+          durationMs,
+          rows: currentOfflineBatch,
+          operators: Array.from(opMap.values()),
+          reasons: distinctReasons,
+          combinedReasonText,
+        };
+
+        result.push({ kind: 'offline-span', span });
+      }
     }
 
     currentOfflineBatch = [];

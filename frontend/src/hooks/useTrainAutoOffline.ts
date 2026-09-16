@@ -12,8 +12,28 @@ import { recordTrainStatusTransition } from '@/lib/trainStatusLogWriter';
  * truth — this file's local copy and pages/ro-trains/helpers.tsx's TWO_HOURS_MS
  * drifted to 1h once, fixed 2026-09-12). Re-exported for existing importers.
  */
-export { AUTO_OFFLINE_THRESHOLD_HOURS } from '@/lib/autoOfflineThreshold';
-import { AUTO_OFFLINE_THRESHOLD_HOURS } from '@/lib/autoOfflineThreshold';
+export { AUTO_OFFLINE_THRESHOLD_HOURS, TWO_HOURS_MS } from '@/lib/autoOfflineThreshold';
+import { AUTO_OFFLINE_THRESHOLD_HOURS, TWO_HOURS_MS } from '@/lib/autoOfflineThreshold';
+
+/**
+ * Computes the auto-offline trigger timestamp.
+ * Per the business rules:
+ * "If no reading is recorded for more than 2 hours, the system will auto-flag as Offline.
+ * The start time of the offline period will be set automatically from the auto-flag trigger time."
+ *
+ * If lastReadingAt is present, trigger time = lastReadingAt + 2 hours (capped at now).
+ */
+export function computeAutoOfflineTriggerTime(
+  lastReadingAt: string | null,
+  nowMs: number = Date.now(),
+): string {
+  if (!lastReadingAt) {
+    return new Date(nowMs).toISOString().replace('.000Z', 'Z');
+  }
+  const lastMs = new Date(lastReadingAt).getTime();
+  const triggerMs = Math.min(nowMs, lastMs + TWO_HOURS_MS);
+  return new Date(triggerMs).toISOString().replace('.000Z', 'Z');
+}
 
 /**
  * Train IDs with an auto-flag write currently in flight. Guards against the
@@ -339,15 +359,15 @@ export function useTrainAutoOffline(plantIds: string[]) {
           // Write through the consolidated transition writer: it re-reads the
           // train's actual latest train_status_log row and refuses a
           // duplicate/no-transition row on top of what another writer just
-          // landed. allowBackdated because confirmed_at = last-reading-at is
-          // this flagger's documented semantic ("no production reading since
-          // then"), which can predate the open Running segment's start.
+          // landed. Per the auto-flagging rules:
+          // "The start time of the offline period will be set automatically from the auto-flag trigger time."
+          const triggerTimeIso = computeAutoOfflineTriggerTime(g.last_reading_at);
           const result = await recordTrainStatusTransition(supabase, {
             trainId: g.train_id,
             plantId: g.plant_id,
             status: 'Offline',
             reason: `Auto-flagged: no reading for ${g.hours_gap === Infinity ? '>24' : g.hours_gap.toFixed(1)}h`,
-            confirmedAt: g.last_reading_at ? new Date(g.last_reading_at).toISOString() : new Date().toISOString(),
+            confirmedAt: triggerTimeIso,
             allowBackdated: true,
           });
           if (result.skippedReason === 'error') {

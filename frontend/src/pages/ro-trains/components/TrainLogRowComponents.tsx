@@ -121,34 +121,50 @@ export function GapBadgeRow({ gap, existingReason, onClick, highlighted, rowRef 
   gap: FlaggedGap; existingReason: GapReason | null; onClick: () => void;
   highlighted?: boolean; rowRef?: Ref<HTMLTableRowElement>;
 }) {
-  const label = `${gap.missedHours} hr${gap.missedHours === 1 ? '' : 's'} missing`;
+  const isOrange = gap.tier === 'orange' || gap.missedHours === 1;
+  const label = isOrange
+    ? '1 hr missing'
+    : `${gap.missedHours} hrs unlogged`;
   const timeRange = `${format(new Date(gap.gapStartAt), 'HH:mm')}–${format(new Date(new Date(gap.gapEndAt).getTime() - 1), 'HH:mm')}`;
+
+  const rowBg = highlighted
+    ? 'bg-danger-soft ring-1 ring-inset ring-danger'
+    : existingReason
+    ? 'bg-muted/40 border-l-4 border-l-muted-foreground/40'
+    : isOrange
+    ? 'bg-warn-soft/60 border-l-4 border-l-warn'
+    : 'bg-danger-soft/50 border-l-4 border-l-danger';
+
+  const textColor = existingReason
+    ? 'text-muted-foreground'
+    : isOrange
+    ? 'text-warn'
+    : 'text-danger font-semibold';
+
   return (
     <tr
       ref={rowRef}
-      className={cn(
-        'border-t transition-colors',
-        highlighted ? 'bg-danger-soft ring-1 ring-inset ring-danger' : existingReason ? 'bg-muted/40' : 'bg-warn-soft/60',
-      )}
+      className={cn('border-t transition-colors', rowBg)}
     >
       <td colSpan={30} className="px-3 py-2">
         <button
           type="button"
           onClick={onClick}
-          className={cn(
-            'flex items-center gap-2 text-xs font-medium hover:underline',
-            existingReason ? 'text-muted-foreground' : 'text-warn',
-          )}
+          className={cn('flex items-center gap-2 text-xs font-medium hover:underline', textColor)}
         >
           <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-          <span>{label} ({timeRange})</span>
+          <span>
+            {isOrange ? `Orange Flag: ${label}` : `Offline Flag: ${label}`} ({timeRange})
+          </span>
           {existingReason ? (
             <span className="font-normal">
               — {reasonCategoryLabel(existingReason.reasonCategory)}
               {existingReason.reasonDetail ? `: ${existingReason.reasonDetail}` : ''}
             </span>
           ) : (
-            <span className="font-normal">— log why</span>
+            <span className="font-normal">
+              — {isOrange ? 'log why' : 'resolve downtime'}
+            </span>
           )}
         </button>
       </td>

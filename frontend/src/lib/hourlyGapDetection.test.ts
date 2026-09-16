@@ -31,7 +31,7 @@ describe('detectHourlyGaps', () => {
       now,
     });
     expect(gaps).toEqual([
-      { gapStartAt: new Date('2026-08-26T10:00:00').toISOString(), gapEndAt: new Date('2026-08-26T11:00:00').toISOString(), missedHours: 1 },
+      { gapStartAt: new Date('2026-08-26T10:00:00').toISOString(), gapEndAt: new Date('2026-08-26T11:00:00').toISOString(), missedHours: 1, tier: 'orange' },
     ]);
   });
 
@@ -74,7 +74,7 @@ describe('detectHourlyGaps', () => {
       now,
     });
     expect(gaps).toEqual([
-      { gapStartAt: new Date('2026-08-26T10:00:00').toISOString(), gapEndAt: new Date('2026-08-26T13:00:00').toISOString(), missedHours: 3 },
+      { gapStartAt: new Date('2026-08-26T10:00:00').toISOString(), gapEndAt: new Date('2026-08-26T13:00:00').toISOString(), missedHours: 3, tier: 'offline' },
     ]);
   });
 
@@ -89,7 +89,36 @@ describe('detectHourlyGaps', () => {
     });
     expect(gaps).toHaveLength(2);
     expect(gaps[0].missedHours).toBe(1);
+    expect(gaps[0].tier).toBe('orange');
     expect(gaps[1].missedHours).toBe(1);
+    expect(gaps[1].tier).toBe('orange');
+  });
+
+  it('applies color flagging rules: orange only for 1h gap, offline for >= 2h gaps', () => {
+    const now = new Date('2026-08-26T15:00:00');
+    // 2-hour gap: 10:00, 11:00 missing
+    const gaps2h = detectHourlyGaps({
+      readingTimestamps: ['2026-08-26T09:05:00', '2026-08-26T12:05:00'],
+      statusTimeline: [],
+      rangeStart: new Date('2026-08-26T09:00:00'),
+      rangeEnd: new Date('2026-08-26T13:00:00'),
+      now,
+    });
+    expect(gaps2h).toHaveLength(1);
+    expect(gaps2h[0].missedHours).toBe(2);
+    expect(gaps2h[0].tier).toBe('offline');
+
+    // 1-hour gap: 10:00 missing
+    const gaps1h = detectHourlyGaps({
+      readingTimestamps: ['2026-08-26T09:05:00', '2026-08-26T11:05:00'],
+      statusTimeline: [],
+      rangeStart: new Date('2026-08-26T09:00:00'),
+      rangeEnd: new Date('2026-08-26T12:00:00'),
+      now,
+    });
+    expect(gaps1h).toHaveLength(1);
+    expect(gaps1h[0].missedHours).toBe(1);
+    expect(gaps1h[0].tier).toBe('orange');
   });
 
   it('does not flag hours covered by a shutdown window, even with no reading', () => {

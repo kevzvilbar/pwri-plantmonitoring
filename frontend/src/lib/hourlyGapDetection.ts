@@ -26,6 +26,12 @@ export interface FlaggedGap {
   /** ISO end of the last missing hour bucket in this span (exclusive). */
   gapEndAt: string;
   missedHours: number;
+  /**
+   * Color Flagging Rules:
+   * - 'orange': Applied only when a 1-hour gap is detected (missedHours === 1).
+   * - 'offline': Applied when gaps exceed 2 hours (missedHours >= 2).
+   */
+  tier: 'orange' | 'offline';
 }
 
 /** HH:59 + 30min = HH+1:29, i.e. 89 minutes after the bucket opens. */
@@ -114,8 +120,14 @@ export function detectHourlyGaps(params: {
     if (last && last.gapEndAt === bucket.startISO) {
       last.gapEndAt = bucket.endISO;
       last.missedHours += 1;
+      last.tier = last.missedHours >= 2 ? 'offline' : 'orange';
     } else {
-      gaps.push({ gapStartAt: bucket.startISO, gapEndAt: bucket.endISO, missedHours: 1 });
+      gaps.push({
+        gapStartAt: bucket.startISO,
+        gapEndAt: bucket.endISO,
+        missedHours: 1,
+        tier: 'orange',
+      });
     }
   }
   return gaps;
