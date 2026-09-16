@@ -20,16 +20,20 @@ import {
 } from '@/components/ui/alert-dialog';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
-import { CorrectionRequestDialog } from '@/components/CorrectionRequestDialog';
-import type { CorrectionTarget } from '@/components/CorrectionRequestDialog';
-import { cn } from '@/lib/utils';
-import { canEditEntry, recalculateTrainDeltas } from './helpers';
+import { friendlyError } from '@/lib/supabaseErrors';
+import { isOfflineReadingRow } from '@/lib/hourlyReadingGuard';
+import { planStrayReadingShift, type StrayReadingRef, type StrayReadingShift } from '@/lib/trainStatusTimeline';
+import { CORRECTION_REASONS, isReasonComplete, resolveReason } from '@/lib/correctionReasons';
+import { canEditEntry, logReadingEdit, recalculateTrainDeltas } from './helpers';
 import { ReplaceTrainMeterDialog } from './ReplaceTrainMeterDialog';
 import { EditRoReadingDialog } from './EditRoReadingDialog';
 import { EditPretreatReadingDialog } from './EditPretreatReadingDialog';
 import { ImportROReadingsDialog } from './ImportROReadingsDialog';
 import { ImportPretreatReadingsDialog } from './ImportPretreatReadingsDialog';
 import { ReasonDialog } from '@/components/ReasonDialog';
+import { CorrectionRequestDialog } from '@/components/CorrectionRequestDialog';
+import type { CorrectionTarget } from '@/components/CorrectionRequestDialog';
+import { cn } from '@/lib/utils';
 import { useTrainLogActions } from './hooks/useTrainLogActions';
 import { useReportTrainRunning } from '@/hooks/useTrainUptimeExemption';
 import { UPTIME_EXEMPTION_SUBREASONS } from '@/lib/trainUptimeExemption';
@@ -41,6 +45,9 @@ import { PreTreatLogTable } from './components/PreTreatLogTable';
 
 /** Reason options for the "Report Running — failed to encode" attestation dialog. */
 const UPTIME_REPORT_CATEGORIES = UPTIME_EXEMPTION_SUBREASONS;
+
+/** Reason options for the "fix timings" dialog — same vocabulary as every other reading edit (correctionReasons.ts). */
+const TIMING_FIX_CATEGORIES = CORRECTION_REASONS.map((r) => ({ value: r, label: r }));
 
 interface TrainLogModalProps {
   trainId: string;
@@ -123,6 +130,83 @@ export function TrainLogModal({ trainId, trainLabel, plantId, onClose, initialTa
       toast.error(e?.message ?? 'Failed to report uptime');
     } finally {
       setReportingBanner(false);
+    }
+  };
+
+  // ── One-click "fix timings" for conflicting-readings banners ────────────────
+  // A closed Offline segment flagged with hasConflictingReadings usually means
+  // mistimed entries: readings logged right after the restart but stamped
+  // before it. This moves those strays' timestamps to just after the window's
+  // close (shared offset, collision-safe — see planStrayReadingShift),
+  // recalculates meter deltas, and writes the same reading_edit_audit_log
+  // trail every other reading edit uses. train_status_log is never touched.
+  const [timingFixTarget, setTimingFixTarget] = useState<{ segment: any; plan: StrayReadingShift[] } | null>(null);
+  const [fixingTimings, setFixingTimings] = useState(false);
+
+  const handleFixTimings = (segment: any) => {
+    if (!segment?.endAt) return; // conflicts are only ever flagged on closed segments
+    const startMs = new Date(segment.startAt).getTime();
+    const endMs = new Date(segment.endAt).getTime();
+    const inWindow = (r: any) =>
+      !isOfflineReadingRow(r)
+      && !!r.reading_datetime
+      && new Date(r.reading_datetime).getTime() > startMs
+      && new Date(r.reading_datetime).getTime() < endMs;
+    const strays: StrayReadingRef[] = [
+      ...logs.filter(inWindow).map((r: any) => ({ id: r.id, source_table: 'ro_train_readings' as const, reading_datetime: r.reading_datetime })),
+      ...preLogs.filter(inWindow).map((r: any) => ({ id: r.id, source_table: 'ro_pretreatment_readings' as const, reading_datetime: r.reading_datetime })),
+    ];
+    const strayIds = new Set(strays.map((s) => s.id));
+    const others = [...logs, ...preLogs]
+      .filter((r: any) => !isOfflineReadingRow(r) && !strayIds.has(r.id))
+      .map((r: any) => r.reading_datetime);
+    const plan = planStrayReadingShift(strays, segment.endAt, others);
+    if (!plan.length) {
+      toast.error('No stray readings found inside this window — nothing to move.');
+      return;
+    }
+    setTimingFixTarget({ segment, plan });
+  };
+
+  const submitTimingFix = async (category: string, detail: string) => {
+    if (!timingFixTarget) return;
+    if (!isReasonComplete(category, detail)) {
+      toast.error('Please explain the "Other" reason (at least 5 characters).');
+      return;
+    }
+    setFixingTimings(true);
+    try {
+      const reason = resolveReason(category, detail);
+      const actor = actorLabel();
+      for (const shift of timingFixTarget.plan) {
+        const { error } = await (supabase.from(shift.source_table) as any)
+          .update({ reading_datetime: shift.to })
+          .eq('id', shift.id);
+        if (error) throw error;
+        await logReadingEdit({
+          table_name: shift.source_table,
+          record_id: shift.id,
+          plant_id: plantId,
+          train_id: trainId,
+          action: 'update',
+          actor_user_id: user?.id ?? null,
+          actor_label: actor,
+          changes: { reading_datetime: { old: shift.from, new: shift.to } },
+          reason,
+        });
+      }
+      await recalculateTrainDeltas(trainId);
+      qc.invalidateQueries({ queryKey: queryKey });
+      qc.invalidateQueries({ queryKey: preQueryKey });
+      qc.invalidateQueries({ queryKey: ['train-status-log', trainId] });
+      qc.invalidateQueries({ queryKey: ['train-hourly-gaps'] });
+      qc.invalidateQueries({ queryKey: ['ro-overview'] });
+      toast.success(`Moved ${timingFixTarget.plan.length} reading${timingFixTarget.plan.length === 1 ? '' : 's'} out of the downtime window — meter deltas recalculated.`);
+      setTimingFixTarget(null);
+    } catch (e: any) {
+      toast.error(friendlyError(e) ?? 'Failed to move the readings — nothing was changed. Please try again.');
+    } finally {
+      setFixingTimings(false);
     }
   };
 
@@ -392,6 +476,8 @@ export function TrainLogModal({ trainId, trainLabel, plantId, onClose, initialTa
                 doDeleteReading={actions.doDeleteReading}
                 onReportRunning={handleReportRunning}
                 reportingBanner={reportingBanner}
+                onFixTimings={hasFullAccess ? handleFixTimings : undefined}
+                fixingTimings={fixingTimings}
                 fmtVal={actions.fmtVal}
                 format={format}
               />
@@ -424,6 +510,8 @@ export function TrainLogModal({ trainId, trainLabel, plantId, onClose, initialTa
                 format={format}
                 onReportRunning={handleReportRunning}
                 reportingBanner={reportingBanner}
+                onFixTimings={hasFullAccess ? handleFixTimings : undefined}
+                fixingTimings={fixingTimings}
                 trainLabel={trainLabel}
               />
             )}
@@ -537,6 +625,25 @@ export function TrainLogModal({ trainId, trainLabel, plantId, onClose, initialTa
           busy={reportingBanner}
           categories={UPTIME_REPORT_CATEGORIES}
           onConfirm={submitUptimeReport}
+        />
+      )}
+      {timingFixTarget && (
+        <ReasonDialog
+          open={!!timingFixTarget}
+          onOpenChange={(o) => { if (!o && !fixingTimings) setTimingFixTarget(null); }}
+          title="Move readings out of the Offline window?"
+          description={
+            `${timingFixTarget.plan.length} reading${timingFixTarget.plan.length === 1 ? '' : 's'} will move `
+            + timingFixTarget.plan
+              .map((s) => `${format(new Date(s.from), 'MMM d, HH:mm')} → ${format(new Date(s.to), 'HH:mm')}`)
+              .join(' · ')
+            + `. Meter deltas are recalculated and the move is audit-logged with your reason. `
+            + `The confirmed status log is not changed.`
+          }
+          confirmLabel="Move readings"
+          busy={fixingTimings}
+          categories={TIMING_FIX_CATEGORIES}
+          onConfirm={submitTimingFix}
         />
       )}
       <AlertDialog open={!!pendingDelete} onOpenChange={(o) => !o && setPendingDelete(null)}>

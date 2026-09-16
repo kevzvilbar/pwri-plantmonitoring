@@ -131,9 +131,147 @@ in the sidebar.
 
 ---
 
-## Data Analysis & Review — Feature Overview
+## Step 5 — Train Offline Email Notifications (new)
 
-### Access
+When an RO Train is marked **Offline** in the Operator Log, managers and admins
+assigned to that train's plant receive an email. This is the same audience the
+existing user-presence/activity notification precedent targets.
+
+The notification fires from the database, not from whoever happens to have the
+app open — that matters because the auto-offline flagger runs in browser tabs.
+The consolidated writer (`lib/trainStatusLogWriter.ts`) guarantees every genuine
+transition lands as exactly one `train_status_log` INSERT, so one INSERT = one
+notification. There is no alert/dedupe table — zero added storage.
+
+### What changed
+
+Two new files:
+
+- **SQL migration** — `supabase/migrations/20260916000004_train_offline_email_notify.sql`
+  - Adds `get_offline_alert_recipients(plant_id)` (SQL SECURITY DEFINER; reads
+    `auth.users.email` + `user_profiles.plant_assignments`, filters to Active
+    Manager/Analyst/Admin profiles).
+  - Adds trigger `trg_train_status_log_notify_offline` — fires after every
+    `train_status_log` INSERT whose `status` is `'Offline'`, calling the edge
+    function using the app-scoped DB settings
+    `app.supabase_url` / `app.supabase_service_role_key`.
+- **Edge function** — `supabase/functions/notify-train-offline/index.ts`
+  - Auth: only the service-role key can call it.
+  - Recipients: resolved by `get_offline_alert_recipients` for the train's
+    plant.
+  - Delivery: Resend via `fetch` to `https://api.resend.com/emails`, one email
+    per recipient with the *same* subject/body.
+  - No-op guarantees: `RESEND_API_KEY` unset → 200 `{ skipped: true }`;
+    recipients empty → 200 `{ sent: 0, skipped: true, reason: 'no recipients' }`;
+    any network failure → logged as `failed`, never blocks the status-log write.
+
+No frontend code changed for this feature — the app already writes
+`train_status_log` rows. The confirm-dialog ("Report Running", "Fix timings",
+meter edits, gap reasons) already audit-logs every operator action; this just
+reacts to the resulting Offline rows.
+
+### Required setup (per Supabase project)
+
+This feature is **deliberately off until you configure it** — an unconfigured
+project just silently skips every notification, so there is no half-alert state.
+
+#### 1. Enable the migration
+
+Run the migration in **Supabase Dashboard → SQL Editor** (Step 1 of DEPLOYMENT.md,
+in order):
+
+- `20260916000004_train_offline_email_notify.sql`
+
+#### 2. Set the app-scoped database settings
+
+These are read by the DB trigger (`fn_notify_train_offline`), not by the frontend.
+Run each once per environment:
+
+```
+ALTER DATABASE postgres SET app.supabase_url = 'https://<project-ref>.supabase.co';
+ALTER DATABASE postgres SET app.supabase_service_role_key = '<service_role_key>';
+```
+
+The `service_role_key` is the **service role key** from the Supabase Dashboard
+API settings — not an anon key. It lets the trigger call the project's own edge
+function as an admin. Keep it out of app code; the DB setting is the only place
+that needs it.
+
+#### 3. Set the edge-function secrets
+
+In **Supabase Dashboard → Edge Functions → Settings → Secrets**, add:
+
+- `RESEND_API_KEY` = your Resend API key (starts with `re_`)
+- `NOTIFY_FROM_EMAIL` = the "From" address for the alert emails
+  (defaults to `PWRI Monitoring <onboarding@resend.dev>` if unset, but a real
+  domain is needed for production deliveries)
+
+Resend has a free tier — see https://resend.com. The function sends one email per
+recipient, so alert volume is low (one per genuine Offline transition, per plant,
+per week or less).
+
+#### 4. Install the `pg_net` extension (if not present)
+
+The trigger depends on `pg_net`. It is created `IF NOT EXISTS` inside the
+migration, but Supabase only exposes extensions that have been enabled on the
+project. In **Supabase Dashboard → Database → Extensions**, enable **pg_net**.
+
+### What the email says
+
+**Subject:** `RO Train N — <train name> marked Offline — <plant name>`
+
+Body includes:
+
+- The train label (number + name if present)
+- The plant name
+- When it went offline (confirmed_at, formatted local time — or "just now" if
+  the timestamp is absent)
+- The reason if one was recorded
+- A pointer back to the Operator Log so a manager can confirm the train back
+  online if it was a false positive
+
+### Testing
+
+The function is callable directly via `curl` (or the Supabase dashboard's "Execute
+function" UI) for a smoke test. Example:
+
+```
+curl -X POST \
+  'https://<project-ref>.supabase.co/functions/v1/notify-train-offline' \
+  -H 'Authorization: Bearer <service_role_key>' \
+  -H 'Content-Type: application/json' \
+  -d '{"train_id":"<uuid>","plant_id":"<uuid>","reason":"test alert","confirmed_at":"2026-09-16T10:30:00Z","confirmed_by":"<uuid>","row_id":"<uuid>"}'
+```
+
+A successful run returns `{"sent": <n>, "failed": 0, ...}`. A run without
+`RESEND_API_KEY` set returns `{"skipped": true, "reason": "RESEND_API_KEY not
+configured"}` and does **not** send email.
+
+For a real end-to-end test: mark a test train Offline in the Operator Log
+(wrongly, on a test plant), confirm it back online, and check that:
+
+- the alert arrived (or was skipped, if Resend isn't configured yet)
+- the train's record was not otherwise changed
+
+**Do not** leave a real plant's train in Offline state during testing — the alert
+goes to managers, and it is best to clean up after a smoke test by confirming the
+train back Online so the timeline is accurate.
+
+### Turning it off
+
+Remove the edge-function secrets (`RESEND_API_KEY`, `NOTIFY_FROM_EMAIL`) to stop
+emails while keeping the trigger (`trg_train_status_log_notify_offline`) present
+— the function will return `skipped: true` for every call. To fully remove:
+
+1. Drop the trigger: `DROP TRIGGER trg_train_status_log_notify_offline ON public.train_status_log;`
+2. Drop the helper: `DROP FUNCTION IF EXISTS public.fn_notify_train_offline;`
+3. Drop the recipient function: `DROP FUNCTION IF EXISTS public.get_offline_alert_recipients;`
+4. Remove the migration and edge-function files from the repo (no secret needed
+   once the trigger can't reach the function).
+
+---
+
+
 | Role          | Raw Data | Run Regression | Edit Values | Apply/Retract |
 |---------------|----------|---------------|-------------|---------------|
 | Admin         | ✅       | ✅            | ✅          | ✅            |

@@ -7,6 +7,7 @@ import { OfflineBanner } from './OfflineBanner';
 import { SidebarProvider } from '@/components/ui/sidebar';
 import { useScrollRestore } from '@/hooks/useScrollRestore';
 import { useBackgroundSync } from '@/hooks/useBackgroundSync';
+import { useTrainDataRealtime } from '@/hooks/useTrainDataRealtime';
 import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 import { PullToRefreshIndicator } from './PullToRefresh';
 import { ShiftHandoverModal } from './ShiftHandoverModal';
@@ -25,6 +26,21 @@ function BackgroundSyncMount() {
   useBackgroundSync();
   return null;
 }
+
+/**
+ * TrainRealtimeMount
+ *
+ * Isolated component that owns the Supabase Realtime subscriptions for
+ * ro_train_readings / ro_pretreatment_readings / train_status_log inserts
+ * (hooks/useTrainDataRealtime.ts). Same isolation rationale as
+ * BackgroundSyncMount: it renders nothing, so channel bookkeeping never
+ * re-renders the shell tree.
+ */
+function TrainRealtimeMount() {
+  useTrainDataRealtime();
+  return null;
+}
+
 
 /**
  * PageAnimationWrapper
@@ -93,6 +109,9 @@ export function AppShell() {
 
       {/* Mounts the sync interval; renders nothing itself */}
       <BackgroundSyncMount />
+
+      {/* Realtime INSERT subscriptions for the train tables; renders nothing */}
+      <TrainRealtimeMount />
 
       {/* Global Operator Shift Monitoring & Handover Verification */}
       <ShiftHandoverModal />

@@ -151,6 +151,78 @@ describe('collapseNegligibleSegments', () => {
   });
 });
 
+describe('planStrayReadingShift', () => {
+  it('moves a single stray to just after the segment close', () => {
+    const shifts = planStrayReadingShift(
+      [{ id: 'r1', source_table: 'ro_train_readings', reading_datetime: '2026-08-28T20:39:00Z' }],
+      '2026-08-28T22:39:00Z',
+      [],
+    );
+    expect(shifts).toEqual([
+      { id: 'r1', source_table: 'ro_train_readings', from: '2026-08-28T20:39:00Z', to: '2026-08-28T22:40:00Z' },
+    ]);
+  });
+
+  it('shifts the whole block by one shared offset, preserving spacing', () => {
+    // Strays at 20:39 and 21:39, close at 22:39: earliest → 22:40, the second
+    // keeps its 1h spacing → 23:40. Both end up outside the window.
+    const shifts = planStrayReadingShift(
+      [
+        { id: 'r2', source_table: 'ro_train_readings', reading_datetime: '2026-08-28T21:39:00Z' },
+        { id: 'r1', source_table: 'ro_pretreatment_readings', reading_datetime: '2026-08-28T20:39:00Z' },
+      ],
+      '2026-08-28T22:39:00Z',
+      [],
+    );
+    expect(shifts.map((s) => [s.id, s.to])).toEqual([
+      ['r1', '2026-08-28T22:40:00Z'],
+      ['r2', '2026-08-28T23:40:00Z'],
+    ]);
+  });
+
+  it('bumps a target that would collide with a non-moved reading', () => {
+    // 22:40 is already taken by the restart reading → stray goes to 22:41.
+    const shifts = planStrayReadingShift(
+      [{ id: 'r1', source_table: 'ro_train_readings', reading_datetime: '2026-08-28T20:39:00Z' }],
+      '2026-08-28T22:39:00Z',
+      ['2026-08-28T22:40:00Z'],
+    );
+    expect(shifts[0].to).toBe('2026-08-28T22:41:00Z');
+  });
+
+  it('keeps later strays strictly after earlier assigned slots when bumping', () => {
+    // Two strays 1 min apart; the shared offset lands both on occupied
+    // minutes, so each bumps in turn and stays strictly ordered.
+    const shifts = planStrayReadingShift(
+      [
+        { id: 'r1', source_table: 'ro_train_readings', reading_datetime: '2026-08-28T22:00:00Z' },
+        { id: 'r2', source_table: 'ro_train_readings', reading_datetime: '2026-08-28T22:01:00Z' },
+      ],
+      '2026-08-28T22:02:00Z',
+      ['2026-08-28T22:03:00Z'],
+    );
+    // offset = (22:03) - 22:00 = 3min → targets 22:03 (taken → 22:04), 22:04 (taken → 22:05)
+    expect(shifts.map((s) => s.to)).toEqual([
+      '2026-08-28T22:04:00Z',
+      '2026-08-28T22:05:00Z',
+    ]);
+  });
+
+  it('returns an empty plan for no strays or an invalid close timestamp', () => {
+    expect(planStrayReadingShift([], '2026-08-28T22:39:00Z', [])).toEqual([]);
+    expect(planStrayReadingShift(
+      [{ id: 'r1', source_table: 'ro_train_readings', reading_datetime: '2026-08-28T20:39:00Z' }],
+      'not-a-date',
+      [],
+    )).toEqual([]);
+    expect(planStrayReadingShift(
+      [{ id: 'r1', source_table: 'ro_train_readings', reading_datetime: 'garbage' }],
+      '2026-08-28T22:39:00Z',
+      [],
+    )).toEqual([]);
+  });
+});
+
 describe('mergeSegmentsForDisplay', () => {
   const readings = [
     { id: 'r1', reading_datetime: '2026-08-26T09:03:00Z' },

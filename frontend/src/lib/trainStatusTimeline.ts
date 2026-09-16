@@ -176,6 +176,84 @@ export function collapseNegligibleSegments(
   return out;
 }
 
+/**
+ * One-click "fix timings" plan for the conflicting-readings warning
+ * (RO_TRAIN_ALERT_SYSTEM_RECONCILIATION.md §3 item 3): the most common cause
+ * of a reading sitting strictly inside a *confirmed* Offline window is a
+ * mistimed entry — the reading happened right after the restart but was
+ * stamped before it. The fix moves those stray readings out of the window,
+ * leaving train_status_log (the authoritative record of what was confirmed)
+ * untouched.
+ *
+ * The plan shifts the whole block of strays by ONE shared offset so the
+ * earliest lands just past the segment's close — every stray ends up outside
+ * the window while keeping its spacing to its siblings (they were logged in
+ * sequence; only their stamps were wrong). Any target that would collide
+ * with another (non-moved) reading is bumped in 1-minute steps, and targets
+ * are kept strictly ordered.
+ *
+ * `otherReadingTimestamps` must be the timestamps of all readings NOT being
+ * moved (both tables); the strays' own current slots don't block their new
+ * ones. Pure and unit-testable — the caller applies the returned shifts,
+ * then recalculates meter deltas (inter-reading durations change).
+ */
+export interface StrayReadingRef {
+  id: string;
+  source_table: 'ro_train_readings' | 'ro_pretreatment_readings';
+  reading_datetime: string;
+}
+
+export interface StrayReadingShift {
+  id: string;
+  source_table: 'ro_train_readings' | 'ro_pretreatment_readings';
+  from: string;
+  to: string;
+}
+
+export function planStrayReadingShift(
+  strays: StrayReadingRef[],
+  segmentEndAt: string,
+  otherReadingTimestamps: (string | null | undefined)[],
+): StrayReadingShift[] {
+  const STEP_MS = 60_000;
+  const endMs = new Date(segmentEndAt).getTime();
+  if (Number.isNaN(endMs)) return [];
+
+  const movable = strays
+    .map((s) => ({ ...s, ms: new Date(s.reading_datetime).getTime() }))
+    .filter((s) => !Number.isNaN(s.ms))
+    .sort((a, b) => a.ms - b.ms);
+  if (!movable.length) return [];
+
+  const occupied = new Set<number>(
+    otherReadingTimestamps
+      .filter((t): t is string => !!t)
+      .map((t) => new Date(t).getTime())
+      .filter((ms) => !Number.isNaN(ms)),
+  );
+
+  const baseMs = endMs + STEP_MS;
+  const offset = baseMs - movable[0].ms;
+
+  const shifts: StrayReadingShift[] = [];
+  let prevAssigned = endMs;
+  for (const s of movable) {
+    let target = s.ms + offset;
+    if (target <= prevAssigned) target = prevAssigned + STEP_MS;
+    while (occupied.has(target)) target += STEP_MS;
+    occupied.add(target);
+    prevAssigned = target;
+    shifts.push({
+      id: s.id,
+      source_table: s.source_table,
+      from: s.reading_datetime,
+      to: new Date(target).toISOString(),
+    });
+  }
+  return shifts;
+}
+
+
 
 /**
  * If the timeline's ongoing segment (endAt=null, i.e. no train_status_log

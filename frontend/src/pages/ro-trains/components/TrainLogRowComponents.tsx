@@ -9,7 +9,7 @@ import { type Ref } from 'react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { Calendar, ChevronLeft, ChevronRight, ChevronDown, PowerOff, Wrench, AlertTriangle, Undo2 } from 'lucide-react';
+import { Calendar, ChevronLeft, ChevronRight, ChevronDown, PowerOff, Wrench, AlertTriangle, Undo2, CalendarClock, Loader2 } from 'lucide-react';
 import {
   type StatusSegment,
   formatSegmentDuration,
@@ -24,11 +24,19 @@ import {
 } from '@/lib/downtimeRowMerger';
 import { reasonCategoryLabel } from '@/lib/reasonCodes';
 
-export function TrainStatusBannerRow({ segment, onReportRunning, reporting }: {
+export function TrainStatusBannerRow({ segment, onReportRunning, reporting, onFixTimings, fixingTimings }: {
   segment: StatusSegment;
   /** Shown only for an OPEN auto-flagged Offline segment: files a "Report Running — failed to encode" exemption. */
   onReportRunning?: (segment: StatusSegment) => void;
   reporting?: boolean;
+  /**
+   * One-click "fix timings" for a closed segment flagged with conflicting
+   * readings: shifts the stray readings' timestamps out of the window (the
+   * manager confirms via a reason dialog first). Omitted → no button, the
+   * conflict stays annotation-only.
+   */
+  onFixTimings?: (segment: StatusSegment) => void;
+  fixingTimings?: boolean;
 }) {
   const isMaintenance = segment.status === 'Maintenance';
   const Icon = isMaintenance ? Wrench : PowerOff;
@@ -74,6 +82,18 @@ export function TrainStatusBannerRow({ segment, onReportRunning, reporting }: {
               <AlertTriangle className="h-3 w-3" />
               readings exist in this window — check status log
             </span>
+          )}
+          {segment.hasConflictingReadings && onFixTimings && (
+            <button
+              type="button"
+              disabled={fixingTimings}
+              onClick={() => onFixTimings(segment)}
+              className="ml-1 inline-flex items-center gap-1 rounded border border-current/30 px-1.5 py-0.5 font-normal text-warn hover:bg-current/10 disabled:opacity-50 whitespace-nowrap"
+              title="The readings inside this window are most likely mistimed entries (logged after the restart but stamped before it). This moves their timestamps to just after the window's close — with your reason logged — leaving the confirmed status log untouched."
+            >
+              {fixingTimings ? <Loader2 className="h-3 w-3 animate-spin" /> : <CalendarClock className="h-3 w-3" />}
+              {fixingTimings ? 'moving…' : 'fix timings'}
+            </button>
           )}
           {canReportRunning && (
             <button

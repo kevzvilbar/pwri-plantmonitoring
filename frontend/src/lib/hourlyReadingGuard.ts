@@ -67,3 +67,19 @@ export function isOfflineRORecord(row?: {
   if (row.feed_flow == null && row.permeate_flow == null) return true;
   return false;
 }
+
+/** Whether a reading row from `ro_train_readings` or `ro_pretreatment_readings`
+ * represents an offline placeholder — used by the "fix timings" handler so the
+ * plan only moves real readings and skips offline marker rows. */
+export function isOfflineReadingRow(row: any): boolean {
+  if (!row || !row.source_table) return false;
+  const t = row.source_table;
+  if (t === 'ro_train_readings') {
+    if (row.incomplete_reason && String(row.incomplete_reason).trim().toLowerCase().startsWith('offline')) return true;
+    if (row.feed_flow == null && row.permeate_flow == null) return true;
+  }
+  if (t === 'ro_pretreatment_readings') {
+    if (row.incomplete_reason && String(row.incomplete_reason).trim().toLowerCase().startsWith('offline')) return true;
+  }
+  return false;
+}

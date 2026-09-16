@@ -41,6 +41,9 @@ interface PreTreatLogTableProps {
   /** "was actually running? report" handler for open auto-flagged Offline banners. */
   onReportRunning?: (segment: any) => void;
   reportingBanner?: boolean;
+  /** One-click "fix timings" handler for closed banners flagged with conflicting readings. */
+  onFixTimings?: (segment: any) => void;
+  fixingTimings?: boolean;
   trainLabel: string;
 }
 
@@ -51,7 +54,7 @@ export function PreTreatLogTable({
   gapDialogTarget, setGapDialogTarget, gapDialogBusy, submitGapReason,
   setEditingPretreatRow, setPendingDelete, setCorrectionTarget,
   canEditEntry, hasFullAccess, activeOperator, isManager,
-  editingPretreatRow, fmtVal, format, onReportRunning, reportingBanner, trainLabel,
+  editingPretreatRow, fmtVal, format, onReportRunning, reportingBanner, onFixTimings, fixingTimings, trainLabel,
 }: PreTreatLogTableProps) {
   if (logTab !== 'pretreat') return null;
 
@@ -120,7 +123,7 @@ export function PreTreatLogTable({
       <tbody className="divide-y">
         {pagePreItems.map((item, i) => {
           if (item.kind === 'banner') {
-            return <TrainStatusBannerRow key={`banner-${item.segment.startAt}`} segment={item.segment} onReportRunning={onReportRunning} reporting={reportingBanner} />;
+            return <TrainStatusBannerRow key={`banner-${item.segment.startAt}`} segment={item.segment} onReportRunning={onReportRunning} reporting={reportingBanner} onFixTimings={onFixTimings} fixingTimings={fixingTimings} />;
           }
           if (item.kind === 'gap') {
             const isHighlighted = highlightGapStartAt === item.gap.gapStartAt;

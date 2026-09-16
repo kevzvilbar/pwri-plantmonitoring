@@ -107,7 +107,14 @@ export function useTrainHourlyGaps(plantIds: string[]) {
     // 30s global default, so the app-wide background-sync sweep force-refetched
     // this well before its own interval was due.
     staleTime: 5 * 60_000,
-    refetchInterval: 5 * 60_000,
+    // Realtime (useTrainDataRealtime) invalidates 'train-hourly-gaps' the
+    // moment a reading or status row lands — this query's data comes
+    // exclusively from ro_train_readings / ro_pretreatment_readings /
+    // train_status_log / ro_train_data_gaps, so its 5-min poll is redundant
+    // now. The background-sync sweep remains the fallback for environments
+    // without the realtime publication migration. (useTrainAutoOffline's own
+    // poll stays — it detects the ABSENCE of readings, which no insert event
+    // can ever trigger.)
   });
   return data ?? [];
 }
