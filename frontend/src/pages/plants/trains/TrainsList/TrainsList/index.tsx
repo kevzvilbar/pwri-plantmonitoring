@@ -26,6 +26,7 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { fmtNum } from '@/lib/calculations';
 import { toast } from 'sonner';
 import { friendlyError } from '@/lib/supabaseErrors';
+import { recordTrainStatusTransition } from '@/lib/trainStatusLogWriter';
 import { format } from 'date-fns';
 import { deltaCache } from '@/lib/deltaCache';
 import { reasonCategoryLabel } from '@/lib/reasonCodes';
@@ -109,15 +110,26 @@ export function TrainsList({ plantId }: { plantId: string }) {
   };
 
   const applyTrainStatusChange = async (t: any, newStatus: 'Running' | 'Offline' | 'Maintenance', reasonCategory?: string, reasonDetail?: string) => {
-    const { error } = await supabase.from('ro_trains').update({ status: newStatus }).eq('id', t.id);
-    if (error) { toast.error(friendlyError(error)); return; }
-    try {
-      await supabase.from('train_status_log').insert({
-        train_id: t.id, plant_id: t.plant_id, status: newStatus,
-        reason: reasonCategory ? `${reasonCategoryLabel(reasonCategory)}${reasonDetail ? `: ${reasonDetail}` : ''}` : null,
-        confirmed_by: activeOperator?.id ?? user?.id ?? null,
-      });
-    } catch { /* best-effort */ }
+    // Routed through the consolidated transition writer (this was the one
+    // writer with NO guard: it used to insert into train_status_log
+    // unconditionally, without checking the train's latest logged status —
+    // the root cause of the "Offline X → X · 0m" duplicate banner; see
+    // RO_TRAIN_ALERT_SYSTEM_RECONCILIATION.md). The writer re-reads the
+    // train's actual latest train_status_log row and refuses a
+    // no-transition or non-monotonic row; ro_trains.status is still kept
+    // in sync so a toggle into the already-logged state can't leave the
+    // train's live status diverged from the log.
+    const result = await recordTrainStatusTransition(supabase, {
+      trainId: t.id,
+      plantId: t.plant_id,
+      status: newStatus,
+      reason: reasonCategory ? `${reasonCategoryLabel(reasonCategory)}${reasonDetail ? `: ${reasonDetail}` : ''}` : null,
+      confirmedBy: activeOperator?.id ?? user?.id ?? null,
+    });
+    if (result.skippedReason === 'error') {
+      toast.error(friendlyError(result.error));
+      return;
+    }
     qc.invalidateQueries({ queryKey: ['ro-trains', plantId] });
     qc.invalidateQueries({ queryKey: ['plants-summary-counts'] });
     toast.success(`Train ${t.train_number} → ${newStatus}`);

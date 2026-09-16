@@ -1,13 +1,19 @@
 import { useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { recordTrainStatusTransition } from '@/lib/trainStatusLogWriter';
 
 /**
  * Auto-flag RO trains as Offline when no readings have been logged in >= 2 hours.
  * Checks both RO Train and Pre-Treatment logs for activity.
  * Returns the list of trains needing operator confirmation to remain Running.
+ *
+ * The threshold is imported from lib/autoOfflineThreshold.ts (single source of
+ * truth — this file's local copy and pages/ro-trains/helpers.tsx's TWO_HOURS_MS
+ * drifted to 1h once, fixed 2026-09-12). Re-exported for existing importers.
  */
-export const AUTO_OFFLINE_THRESHOLD_HOURS = 2;
+export { AUTO_OFFLINE_THRESHOLD_HOURS } from '@/lib/autoOfflineThreshold';
+import { AUTO_OFFLINE_THRESHOLD_HOURS } from '@/lib/autoOfflineThreshold';
 
 /**
  * Train IDs with an auto-flag write currently in flight. Guards against the
@@ -330,19 +336,25 @@ export function useTrainAutoOffline(plantIds: string[]) {
             .maybeSingle();
           if (curErr || (cur as any)?.status !== 'Running') continue;
 
-          const { error } = await supabase.from('ro_trains').update({ status: 'Offline' }).eq('id', g.train_id);
-          if (error) {
-            console.warn('[useTrainAutoOffline] Failed to auto-flag train offline', g.train_id, error);
-            continue;
-          }
-          await supabase.from('train_status_log').insert({
-            train_id: g.train_id,
-            plant_id: g.plant_id,
+          // Write through the consolidated transition writer: it re-reads the
+          // train's actual latest train_status_log row and refuses a
+          // duplicate/no-transition row on top of what another writer just
+          // landed. allowBackdated because confirmed_at = last-reading-at is
+          // this flagger's documented semantic ("no production reading since
+          // then"), which can predate the open Running segment's start.
+          const result = await recordTrainStatusTransition(supabase, {
+            trainId: g.train_id,
+            plantId: g.plant_id,
             status: 'Offline',
             reason: `Auto-flagged: no reading for ${g.hours_gap === Infinity ? '>24' : g.hours_gap.toFixed(1)}h`,
-            confirmed_at: g.last_reading_at ? new Date(g.last_reading_at).toISOString() : new Date().toISOString(),
+            confirmedAt: g.last_reading_at ? new Date(g.last_reading_at).toISOString() : new Date().toISOString(),
+            allowBackdated: true,
           });
-          flaggedAny = true;
+          if (result.skippedReason === 'error') {
+            console.warn('[useTrainAutoOffline] Failed to auto-flag train offline', g.train_id, result.error);
+            continue;
+          }
+          flaggedAny = result.statusUpdated || result.logged;
         } finally {
           flagInFlight.delete(g.train_id);
         }

@@ -46,11 +46,15 @@ export function preserveAutoFlagReason(
 }
 
 /**
- * Auto-offline threshold in hours — must match AUTO_OFFLINE_THRESHOLD_HOURS in
- * hooks/useTrainAutoOffline.ts. Imported here instead to avoid a lib→hooks
- * dependency, so keep the two in sync if the business rule changes.
+ * Auto-offline threshold — imported from lib/autoOfflineThreshold.ts, the
+ * single source of truth this constant used to drift away from when it was
+ * hand-copied here and in hooks/useTrainAutoOffline.ts / pages/ro-trains/
+ * helpers.tsx (1h vs 2h, fixed 2026-09-12). Re-exported for compatibility
+ * with existing importers.
  */
-export const AUTO_OFFLINE_THRESHOLD_HOURS = 2;
+export { AUTO_OFFLINE_THRESHOLD_HOURS } from '@/lib/autoOfflineThreshold';
+import { AUTO_OFFLINE_THRESHOLD_HOURS } from '@/lib/autoOfflineThreshold';
+
 
 export interface TrainStatusRow {
   status: string;
@@ -120,6 +124,58 @@ export function nonRunningSegmentsInRange(
     return segStartMs < endMs && segEndMs > startMs;
   });
 }
+
+/**
+ * Segments at or under NEGLIGIBLE_SEGMENT_MS (including zero or — from clock
+ * skew — negative duration) carry no downtime anyone can act on, but every
+ * train_status_log row renders as a full-width banner. Two writers landing on
+ * (or effectively on) the same confirmed_at produced the Train 7 · RO7
+ *   "Offline Aug 19, 08:13 → Aug 19, 08:13 · 0m · back Online At"
+ * banner (RO_TRAIN_ALERT_SYSTEM_RECONCILIATION.md §2 layer 1). The writer and
+ * DB-level fixes stop new duplicates from landing; this is the display-side
+ * cleanup for what's already in the table and for any future slip-through.
+ *
+ * A negligible closed segment is merged into an adjacent segment of the SAME
+ * status when one directly abuts it (the usual duplicate case: the previous
+ * Offline row is closed by the duplicate's timestamp), and dropped outright
+ * otherwise — absorbing it into a differently-statused neighbor would
+ * misstate which state covered the time. Ongoing (endAt === null) segments
+ * are never touched: they have no measured duration to be negligible.
+ */
+export const NEGLIGIBLE_SEGMENT_MS = 60_000;
+
+export function collapseNegligibleSegments(
+  segments: StatusSegment[],
+  maxDurationMs: number = NEGLIGIBLE_SEGMENT_MS,
+): StatusSegment[] {
+  const out: StatusSegment[] = [];
+  for (const seg of segments) {
+    if (seg.endAt === null) {
+      out.push(seg);
+      continue;
+    }
+    const durationMs = new Date(seg.endAt).getTime() - new Date(seg.startAt).getTime();
+    if (durationMs > maxDurationMs) {
+      out.push(seg);
+      continue;
+    }
+    const prev = out[out.length - 1];
+    if (
+      prev
+      && prev.endAt !== null
+      && prev.status === seg.status
+      && new Date(prev.endAt).getTime() === new Date(seg.startAt).getTime()
+    ) {
+      // Absorb into the abutting same-status neighbor; keep the neighbor's
+      // reason unless it's blank and the dropped segment carried one.
+      out[out.length - 1] = { ...prev, endAt: seg.endAt, reason: prev.reason ?? seg.reason };
+      continue;
+    }
+    // No abutting same-status neighbor to merge into — drop the segment.
+  }
+  return out;
+}
+
 
 /**
  * If the timeline's ongoing segment (endAt=null, i.e. no train_status_log

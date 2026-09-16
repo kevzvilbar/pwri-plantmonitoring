@@ -20,6 +20,7 @@ import {
   reconcileOngoingSegmentWithReadings,
   dropBogusOpenAutoFlag,
   flagConflictingClosedSegments,
+  collapseNegligibleSegments,
   type StatusSegment,
 } from '@/lib/trainStatusTimeline';
 import {
@@ -268,6 +269,10 @@ export function useTrainLogActions(options: TrainLogActionsOptions): TrainLogAct
   const bannerSegments = useMemo(() => {
     if (!dateFrom || !untilNextDay) return [];
     const inRange = nonRunningSegmentsInRange(statusTimeline, `${dateFrom}T00:00:00`, `${untilNextDay}T00:00:00`);
+    // Drop/merge zero- and near-zero-duration segments (duplicate writes from
+    // the uncoordinated status writers) BEFORE anything else reads them —
+    // the "Offline X → X · 0m" banner has no information to show.
+    const collapsed = collapseNegligibleSegments(inRange);
     const allReadings = [...logs, ...preLogs];
     const productionReadingTimestamps = allReadings
       .filter((r: any) => !isOfflineReadingRow(r))
@@ -277,7 +282,7 @@ export function useTrainLogActions(options: TrainLogActionsOptions): TrainLogAct
       if (!latest) return at;
       return new Date(at).getTime() > new Date(latest).getTime() ? at : latest;
     }, null);
-    const reconciled = reconcileOngoingSegmentWithReadings(inRange, latestReadingAt);
+    const reconciled = reconcileOngoingSegmentWithReadings(collapsed, latestReadingAt);
     const withoutBogusFlag = dropBogusOpenAutoFlag(reconciled, productionReadingTimestamps);
     return flagConflictingClosedSegments(withoutBogusFlag, productionReadingTimestamps);
   }, [statusTimeline, dateFrom, untilNextDay, logs, preLogs]);

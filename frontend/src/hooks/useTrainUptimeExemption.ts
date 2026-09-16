@@ -34,6 +34,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { friendlyError } from '@/lib/supabaseErrors';
+import { recordTrainStatusTransition } from '@/lib/trainStatusLogWriter';
 
 export type UptimeReportCategory = 'operator_failed_to_encode' | 'system_error' | 'other';
 
@@ -118,18 +119,22 @@ export async function reportTrainRunningExemption(
       .maybeSingle();
     if (curErr) throw new Error(friendlyError(curErr));
     if ((cur as any)?.status === 'Offline') {
-      const { error: updErr } = await supabase
-        .from('ro_trains' as any)
-        .update({ status: 'Running' })
-        .eq('id', opts.trainId);
-      if (updErr) throw new Error(friendlyError(updErr));
-      await supabase.from('train_status_log' as any).insert({
-        train_id: opts.trainId,
-        plant_id: opts.plantId,
+      // Written through the consolidated transition writer (reads the train's
+      // actual latest train_status_log row rather than trusting local state).
+      // allowNoTransition: this "Uptime reported: …" row is the attestation's
+      // audit record — it must land even when the log's latest row is already
+      // Running (the bogus Auto-flagged Offline row was just deleted above),
+      // because TrainStatusBannerRow.canReportRunning and the audit trail
+      // match on exactly this reason text.
+      const result = await recordTrainStatusTransition(supabase, {
+        trainId: opts.trainId,
+        plantId: opts.plantId,
         status: 'Running',
         reason: `Uptime reported: ${opts.category}${opts.detail ? ` — ${opts.detail}` : ''}`,
-        confirmed_at: coveredUntil,
+        confirmedAt: coveredUntil,
+        allowNoTransition: true,
       });
+      if (result.skippedReason === 'error') throw new Error(friendlyError(result.error));
     }
   }
 

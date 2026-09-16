@@ -114,11 +114,14 @@ export function TelemetryGauge({
 // auto-offline flagger (useTrainAutoOffline, AUTO_OFFLINE_THRESHOLD_HOURS)
 // and the business rule are 2 hours — train cards showed "Offline" an hour
 // after a reading even when the DB status was still Running. Both now agree
-// on 2 hours.
+// on 2 hours — enforced by importing both from lib/autoOfflineThreshold.ts,
+// the single source of truth (see autoOfflineThreshold.test.ts, which fails
+// CI if a local literal copy is reintroduced anywhere).
 
-export const ONE_HOUR_MS = 60 * 60 * 1000;
-/** Matches AUTO_OFFLINE_THRESHOLD_HOURS in useTrainAutoOffline. */
-export const TWO_HOURS_MS = 2 * ONE_HOUR_MS;
+// Re-exported for compatibility (pages/ro-trains/index.ts does
+// `export * from './helpers'`); the values come from the shared module.
+import { TWO_HOURS_MS } from '@/lib/autoOfflineThreshold';
+export { ONE_HOUR_MS, TWO_HOURS_MS } from '@/lib/autoOfflineThreshold';
 
 export function deriveTrainStatus(
   train: any,

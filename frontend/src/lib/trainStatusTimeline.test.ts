@@ -2,7 +2,9 @@ import { describe, it, expect } from 'vitest';
 import {
   buildStatusTimeline, nonRunningSegmentsInRange, mergeSegmentsForDisplay, formatSegmentDuration,
   reconcileOngoingSegmentWithReadings, flagConflictingClosedSegments, dropBogusOpenAutoFlag,
+  collapseNegligibleSegments, NEGLIGIBLE_SEGMENT_MS,
   preserveAutoFlagReason,
+  type StatusSegment,
 } from './trainStatusTimeline';
 
 describe('buildStatusTimeline', () => {
@@ -73,6 +75,79 @@ describe('nonRunningSegmentsInRange', () => {
     ]);
     const result = nonRunningSegmentsInRange(ongoing, new Date(Date.now() - 3600_000).toISOString(), new Date(Date.now() + 3600_000).toISOString());
     expect(result).toHaveLength(1);
+  });
+});
+
+describe('collapseNegligibleSegments', () => {
+  it('merges a zero-duration duplicate into the abutting same-status segment (the RO7 0m banner case)', () => {
+    // Exact shape of the Train 7 · RO7 Aug 19 banner: a second Offline row
+    // landed at the same confirmed_at as the "back online" row, so the
+    // duplicate Offline segment ran 08:13 → 08:13 (0m). Built through the
+    // real pipeline steps (build → range filter) to prove the collapse works
+    // on what the caller actually passes.
+    const timeline = buildStatusTimeline([
+      { status: 'Offline', confirmed_at: '2026-08-19T05:10:00Z', reason: 'Operator Shutdown' },
+      { status: 'Offline', confirmed_at: '2026-08-19T08:13:00Z', reason: 'back Online At' },
+      { status: 'Running', confirmed_at: '2026-08-19T08:13:00Z', reason: null },
+    ]);
+    const nonRunning = nonRunningSegmentsInRange(timeline, '2026-08-19T00:00:00Z', '2026-08-20T00:00:00Z');
+    const collapsed = collapseNegligibleSegments(nonRunning);
+    expect(collapsed).toEqual([
+      { status: 'Offline', startAt: '2026-08-19T05:10:00Z', endAt: '2026-08-19T08:13:00Z', reason: 'Operator Shutdown' },
+    ]);
+  });
+
+  it('absorbs a near-zero (≤ threshold) same-status segment into the previous one', () => {
+    const collapsed = collapseNegligibleSegments([
+      { status: 'Offline', startAt: '2026-08-19T05:10:00Z', endAt: '2026-08-19T08:13:00Z', reason: 'Operator Shutdown' },
+      { status: 'Offline', startAt: '2026-08-19T08:13:00Z', endAt: '2026-08-19T08:13:45Z', reason: null },
+    ]);
+    expect(collapsed).toEqual([
+      { status: 'Offline', startAt: '2026-08-19T05:10:00Z', endAt: '2026-08-19T08:13:45Z', reason: 'Operator Shutdown' },
+    ]);
+  });
+
+  it('keeps a segment whose duration exceeds the threshold', () => {
+    const segments = [
+      { status: 'Offline' as const, startAt: '2026-08-19T05:10:00Z', endAt: '2026-08-19T05:10:00Z', reason: null },
+      { status: 'Offline' as const, startAt: '2026-08-19T05:10:00Z', endAt: '2026-08-19T06:15:00Z', reason: 'Long outage' },
+    ];
+    expect(collapseNegligibleSegments(segments)).toEqual([segments[1]]);
+  });
+
+  it('drops a negligible segment when the abutting neighbor has a different status, without mangling the neighbor', () => {
+    const collapsed = collapseNegligibleSegments([
+      { status: 'Maintenance', startAt: '2026-08-19T05:10:00Z', endAt: '2026-08-19T08:13:00Z', reason: 'Scheduled' },
+      { status: 'Offline', startAt: '2026-08-19T08:13:00Z', endAt: '2026-08-19T08:13:00Z', reason: 'back Online At' },
+    ]);
+    expect(collapsed).toEqual([
+      { status: 'Maintenance', startAt: '2026-08-19T05:10:00Z', endAt: '2026-08-19T08:13:00Z', reason: 'Scheduled' },
+    ]);
+  });
+
+  it('collapses a negative-duration segment (clock skew put the close before the start)', () => {
+    const collapsed = collapseNegligibleSegments([
+      { status: 'Offline', startAt: '2026-08-19T08:14:00Z', endAt: '2026-08-19T08:13:00Z', reason: null },
+    ]);
+    expect(collapsed).toEqual([]);
+  });
+
+  it('never touches an ongoing (endAt null) segment', () => {
+    const ongoing: StatusSegment[] = [
+      { status: 'Offline', startAt: '2026-08-19T08:13:00Z', endAt: null, reason: 'Auto-flagged' },
+    ];
+    const result = collapseNegligibleSegments(ongoing);
+    expect(result).toEqual(ongoing);
+    // The ongoing segment object itself passes through untouched (same reference).
+    expect(result[0]).toBe(ongoing[0]);
+  });
+
+  it('is a no-op on an empty list', () => {
+    expect(collapseNegligibleSegments([])).toEqual([]);
+  });
+
+  it('default threshold is 60s', () => {
+    expect(NEGLIGIBLE_SEGMENT_MS).toBe(60_000);
   });
 });
 

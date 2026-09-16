@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { usePlantMeterConfig } from '@/pages/plants/shared';
+import { TWO_HOURS_MS } from '@/lib/autoOfflineThreshold';
 
 export interface PretreatmentData {
   trains?: any[];
@@ -101,7 +102,10 @@ export function usePretreatmentData(
   const autoDurationMin = lastReadingTime
     ? Math.max(0, (Date.now() - new Date(lastReadingTime).getTime()) / 60000)
     : null;
-  const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
+  // Shared 2h staleness threshold (lib/autoOfflineThreshold.ts) — this used
+  // to be an inline two-hour millisecond literal; it must agree with the
+  // auto-offline flagger or the operator sees a locked Offline form while
+  // train cards still read Running (or vice versa).
   const isPastTwoHoursMissing = !lastReadingTime || (Date.now() - new Date(lastReadingTime).getTime() >= TWO_HOURS_MS);
   const isEffectivelyOffline = train
     ? (train.status === 'Offline' || (train.status !== 'Maintenance' && isPastTwoHoursMissing))
