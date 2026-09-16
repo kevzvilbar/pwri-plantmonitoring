@@ -1,4 +1,4 @@
-import React, { useRef, useCallback, useState, type MutableRefObject } from 'react';
+import React, { useRef, useCallback, useState, useMemo, type MutableRefObject } from 'react';
 import { toast } from 'sonner';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useAppStore } from '@/store/appStore';
@@ -138,57 +138,6 @@ export default function PlantTopologyContent({
   const { selectedPlantId } = useAppStore();
   const { isAdmin, isManager } = useAuth();
 
-  const activePlant = plants.find((p) => p.id === effectivePlantId);
-
-  if (!plants.length) {
-    return (
-      <div className="flex h-64 items-center justify-center text-sm text-muted-foreground">
-        No plants found. Create a plant first.
-      </div>
-    );
-  }
-
-  if (isLoading || !topoState) {
-    return (
-      <div className="flex h-64 items-center justify-center gap-2 text-sm text-muted-foreground">
-        <RefreshCw className="h-4 w-4 animate-spin" /> Building topology…
-      </div>
-    );
-  }
-
-  // The plant's process line shape. A plant with no `plant_process_stages`
-  // rows resolves to DEFAULT_PROCESS_STAGES, i.e. the legacy column order.
-  const stages = resolveStages((rawData as any)?.processStages);
-  const stageZones = buildStageZones(stages);
-  const colSequence = buildColSequence(customColumns, stages);
-  const colXMap = buildColXMap(customColumns, colWidths, stages);
-  const positions  = layoutNodes(topoState.nodes, customColumns, posOverrides, colWidths, stages);
-  const allLinks   = [...topoState.fixedLinks, ...topoState.editLinks];
-
-  let maxX = 0, maxY = 0;
-  positions.forEach(({ x, y }) => {
-    maxX = Math.max(maxX, x + NODE_W + 40);
-    maxY = Math.max(maxY, y + NODE_H + 40);
-  });
-  Object.values(colXMap).forEach((x) => { maxX = Math.max(maxX, x + NODE_W + 60); });
-
-  let maxWaterY = 0;
-  positions.forEach(({ y, zone }) => { if (zone === 'water') maxWaterY = Math.max(maxWaterY, y + NODE_H); });
-  const powerDividerY = maxWaterY + 36;
-
-  const linkCounts: Record<string, number> = {};
-  allLinks.forEach((l) => {
-    linkCounts[l.from] = (linkCounts[l.from] ?? 0) + 1;
-    linkCounts[l.to]   = (linkCounts[l.to]   ?? 0) + 1;
-  });
-
-  const hasPowerNodes = topoState.nodes.some((n) =>
-    ['solarSource', 'gridSource', 'solarMeter', 'gridMeter'].includes(n.type)
-  );
-  const waterNodesCount = topoState.nodes.filter(n => !['solarSource', 'gridSource', 'solarMeter', 'gridMeter'].includes(n.type)).length;
-  const powerNodesCount = topoState.nodes.filter(n => ['solarSource', 'gridSource', 'solarMeter', 'gridMeter'].includes(n.type)).length;
-  const activeLinksCount = topoState.editLinks.length;
-
   const [animatedFlow, setAnimatedFlow] = useState<boolean>(() => {
     try {
       return localStorage.getItem('topo_animated_flow') !== 'false';
@@ -203,6 +152,29 @@ export default function PlantTopologyContent({
       localStorage.setItem('topo_animated_flow', String(v));
     } catch {}
   }, []);
+
+  const activePlant = useMemo(() => plants.find((p) => p.id === effectivePlantId), [plants, effectivePlantId]);
+
+  // The plant's process line shape. A plant with no `plant_process_stages`
+  // rows resolves to DEFAULT_PROCESS_STAGES, i.e. the legacy column order.
+  const stages = useMemo(() => resolveStages((rawData as any)?.processStages), [rawData?.processStages]);
+  const stageZones = useMemo(() => buildStageZones(stages), [stages]);
+  const colSequence = useMemo(() => buildColSequence(customColumns, stages), [customColumns, stages]);
+  const colXMap = useMemo(() => buildColXMap(customColumns, colWidths, stages), [customColumns, colWidths, stages]);
+  const positions = useMemo(() => {
+    if (!topoState) return [];
+    return layoutNodes(topoState.nodes, customColumns, posOverrides, colWidths, stages);
+  }, [topoState, customColumns, posOverrides, colWidths, stages]);
+
+  const { maxX, maxY } = useMemo(() => {
+    let mx = 0, my = 0;
+    positions.forEach(({ x, y }) => {
+      mx = Math.max(mx, x + NODE_W + 40);
+      my = Math.max(my, y + NODE_H + 40);
+    });
+    Object.values(colXMap).forEach((x) => { mx = Math.max(mx, x + NODE_W + 60); });
+    return { maxX: mx, maxY: my };
+  }, [positions, colXMap]);
 
   const handleExportSvg = useCallback(() => {
     const svg = document.getElementById('plant-topology-svg') as SVGSVGElement | null;
@@ -239,6 +211,41 @@ export default function PlantTopologyContent({
       toast.error('Failed to export PNG', { id: 'export-png' });
     }
   }, [activePlant?.name, maxX, maxY]);
+
+  if (!plants.length) {
+    return (
+      <div className="flex h-64 items-center justify-center text-sm text-muted-foreground">
+        No plants found. Create a plant first.
+      </div>
+    );
+  }
+
+  if (isLoading || !topoState) {
+    return (
+      <div className="flex h-64 items-center justify-center gap-2 text-sm text-muted-foreground">
+        <RefreshCw className="h-4 w-4 animate-spin" /> Building topology…
+      </div>
+    );
+  }
+
+  const allLinks = [...topoState.fixedLinks, ...topoState.editLinks];
+
+  let maxWaterY = 0;
+  positions.forEach(({ y, zone }) => { if (zone === 'water') maxWaterY = Math.max(maxWaterY, y + NODE_H); });
+  const powerDividerY = maxWaterY + 36;
+
+  const linkCounts: Record<string, number> = {};
+  allLinks.forEach((l) => {
+    linkCounts[l.from] = (linkCounts[l.from] ?? 0) + 1;
+    linkCounts[l.to]   = (linkCounts[l.to]   ?? 0) + 1;
+  });
+
+  const hasPowerNodes = topoState.nodes.some((n) =>
+    ['solarSource', 'gridSource', 'solarMeter', 'gridMeter'].includes(n.type)
+  );
+  const waterNodesCount = topoState.nodes.filter(n => !['solarSource', 'gridSource', 'solarMeter', 'gridMeter'].includes(n.type)).length;
+  const powerNodesCount = topoState.nodes.filter(n => ['solarSource', 'gridSource', 'solarMeter', 'gridMeter'].includes(n.type)).length;
+  const activeLinksCount = topoState.editLinks.length;
 
   const svgCanvasProps: TopologySvgCanvasProps = {
     props: {
