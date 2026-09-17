@@ -335,24 +335,7 @@ export function ROTrainWaterFlowChart({
         </div>
       </div>
 
-      <div className="relative flex-1 w-full min-h-0">
-        {/* Sleek In-Chart Section HUD Indicators */}
-        <div className="absolute top-2 left-14 z-10 pointer-events-none flex items-center gap-1.5 px-2 py-0.5 rounded bg-cyan-950/60 border border-cyan-500/25 shadow-xs backdrop-blur-xs">
-          <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
-          <span className="text-[10px] font-mono font-bold tracking-widest text-cyan-300 uppercase">
-            PERMEATE
-          </span>
-          <span className="text-[9px] font-mono text-cyan-400/80 font-semibold">(+)</span>
-        </div>
-
-        <div className="absolute bottom-8 left-14 z-10 pointer-events-none flex items-center gap-1.5 px-2 py-0.5 rounded bg-rose-950/60 border border-rose-500/25 shadow-xs backdrop-blur-xs">
-          <span className="w-1.5 h-1.5 rounded-full bg-rose-400" />
-          <span className="text-[10px] font-mono font-bold tracking-widest text-rose-300 uppercase">
-            REJECT WATER
-          </span>
-          <span className="text-[9px] font-mono text-rose-400/80 font-semibold">(−)</span>
-        </div>
-
+      <div className="flex-1 w-full min-h-0">
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart
             data={chartData}

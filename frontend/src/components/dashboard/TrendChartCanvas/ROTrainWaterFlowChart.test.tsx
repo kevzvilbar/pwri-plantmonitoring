@@ -51,19 +51,16 @@ describe('ROTrainWaterFlowChart', () => {
     expect(getByText('Mismatch Marker')).toBeDefined();
   });
 
-  it('displays PERMEATE and REJECT WATER labels in legend and HUD indicators', () => {
-    const { getAllByText } = render(
+  it('displays PERMEATE and REJECT WATER labels in legend', () => {
+    const { getByText } = render(
       <ROTrainWaterFlowChart
         trendRows={mockTrendRows}
         formatYAxis={(v) => `${v}`}
       />
     );
 
-    const permeateLabels = getAllByText('PERMEATE');
-    expect(permeateLabels.length).toBeGreaterThanOrEqual(2); // Legend + HUD badge
-
-    const rejectLabels = getAllByText('REJECT WATER');
-    expect(rejectLabels.length).toBeGreaterThanOrEqual(2); // Legend + HUD badge
+    expect(getByText('PERMEATE')).toBeDefined();
+    expect(getByText('REJECT WATER')).toBeDefined();
   });
 
   it('renders both permeate rect and reject rect', () => {
