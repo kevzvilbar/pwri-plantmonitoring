@@ -143,6 +143,7 @@ function PermeateBarWithHairline(props: any) {
  */
 function RejectBarShape(props: any) {
   const { x, y, width, height, payload } = props;
+  console.log('[RejectBarShape] props:', { x, y, width, height, payload: payload ? { permeate: payload.permeate, reject: payload.reject, rejectNeg: payload.rejectNeg } : null });
   if (!payload || width <= 0 || height <= 0) return null;
 
   const barRadius = Math.min(3, width / 4);

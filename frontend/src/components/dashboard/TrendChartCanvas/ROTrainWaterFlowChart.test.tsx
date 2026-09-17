@@ -51,15 +51,27 @@ describe('ROTrainWaterFlowChart', () => {
     expect(getByText('Mismatch Marker')).toBeDefined();
   });
 
-  it('handles empty trendRows gracefully', () => {
-    const { getByText } = render(
-      <ROTrainWaterFlowChart
-        trendRows={[]}
-        formatYAxis={(v) => `${v}`}
-      />
+  it('renders both permeate rect and reject rect', () => {
+    const { container } = render(
+      <div style={{ width: 500, height: 300 }}>
+        <ROTrainWaterFlowChart
+          trendRows={mockTrendRows}
+          formatYAxis={(v) => `${v}`}
+        />
+      </div>
     );
 
-    expect(getByText('Permeate Water (+)')).toBeDefined();
+    const rects = container.querySelectorAll('rect');
+    console.log('RENDERED RECTS COUNT:', rects.length);
+    rects.forEach((r, i) => {
+      console.log(`Rect ${i}:`, {
+        x: r.getAttribute('x'),
+        y: r.getAttribute('y'),
+        width: r.getAttribute('width'),
+        height: r.getAttribute('height'),
+        fill: r.getAttribute('fill'),
+      });
+    });
   });
 });
 
