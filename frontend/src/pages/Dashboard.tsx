@@ -7,12 +7,10 @@ import { useChartStore } from '@/store/chartStore';
 import { useAlertStore } from '@/store/alertStore';
 import { usePlants } from '@/hooks/usePlants';
 import { format, subDays } from 'date-fns';
-import { CalendarDays } from 'lucide-react';
 import { DowntimeEventsModal } from '@/components/DowntimeEventsModal';
 import { DashboardViewMode, VIEW_MODE_KEY, pctDelta } from '@/components/dashboard/types';
 import { PlantPulseHero } from '@/components/dashboard/PlantPulseHero';
 import { PlantHealthStrip } from '@/components/dashboard/PlantHealthStrip';
-import { RangeAndMonthlyPicker } from '@/components/dashboard/RangeAndMonthlyPicker';
 import { DashboardSectionNav } from '@/components/dashboard/DashboardSectionNav';
 import { loadThresholds, DEFAULT_THRESHOLDS } from '@/pages/Compliance';
 import {
@@ -223,8 +221,6 @@ export default function Dashboard() {
         rawWaterVol={prodStats.rawWaterVol}
         recovery={qualityStats.avgRecovery}
         specificPower={powerStats.pv}
-        viewMode={viewMode}
-        onViewModeChange={persistViewMode}
         onOpenDowntime={() => setDowntimeOpen(true)}
         onSelectPlant={(pid) => navigate(`/plants/${pid}`)}
         onViewIncidents={() => navigate('/incidents')}
@@ -235,38 +231,19 @@ export default function Dashboard() {
         onSelectPlant={(pid) => navigate(`/plants/${pid}`)}
       />
 
-      <div className="p-2 rounded-2xl border border-border/60 bg-card/80 backdrop-blur-xs flex flex-wrap items-center justify-between gap-2 shadow-xs">
-        <div className="flex items-center gap-2 flex-wrap">
-          {chartRange !== 'MONTHLY' && (
-            <span className="text-3xs uppercase font-bold tracking-wider text-muted-foreground mr-0.5 flex items-center gap-1">
-              <CalendarDays className="h-3.5 w-3.5 text-primary" />
-              <span className="hidden xs:inline">Range:</span>
-            </span>
-          )}
-          <RangeAndMonthlyPicker
-            range={chartRange}
-            onRangeChange={setChartRange}
-            from={chartFrom}
-            to={chartTo}
-            onCustomDatesChange={setChartCustomDates}
-            chartYear={chartYear}
-            chartMonth={chartMonth}
-            onMonthlyPeriodChange={setChartMonthlyPeriod}
-            testIdPrefix="dash-range"
-            monthlyTestIdPrefix="dash-monthly"
-          />
-        </div>
-
-        <div className="text-3xs font-mono text-muted-foreground shrink-0 px-1 hidden sm:block">
-          {chartRange === 'MONTHLY'
-            ? chartMonth === 'YTD'
-              ? `Full Year ${chartYear}`
-              : `${chartYear}-${chartMonth}`
-            : `${chartFrom} → ${chartTo}`}
-        </div>
-      </div>
-
-      <DashboardSectionNav viewMode={viewMode} onViewModeChange={persistViewMode} />
+      {/* Unified sticky control bar: sections + range + view-mode (single source) */}
+      <DashboardSectionNav
+        viewMode={viewMode}
+        onViewModeChange={persistViewMode}
+        range={chartRange}
+        onRangeChange={setChartRange}
+        chartFrom={chartFrom}
+        chartTo={chartTo}
+        onCustomDatesChange={setChartCustomDates}
+        chartYear={chartYear}
+        chartMonth={chartMonth}
+        onMonthlyPeriodChange={setChartMonthlyPeriod}
+      />
 
       {/* Ops-first order: Action → Overview (water flow) → Quality → Cost → Health → Trust */}
       <ActionCenter plantIds={plantIds} />

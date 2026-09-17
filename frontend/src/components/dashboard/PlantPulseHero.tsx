@@ -6,14 +6,11 @@ import { usePlants } from '@/hooks/usePlants';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
-import { cn } from '@/lib/utils';
 import {
-  History, LayoutGrid, ListCollapse, ExternalLink, ShieldAlert, Building2,
+  History, ShieldAlert, Building2,
   Droplets, Gauge, Zap,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
-import type { DashboardViewMode } from './types';
 
 interface PlantPulseHeroProps {
   plantIds: string[];
@@ -26,8 +23,6 @@ interface PlantPulseHeroProps {
   recovery?: number | null;
   specificPower?: number | null;
   chartData?: any[];
-  viewMode: DashboardViewMode;
-  onViewModeChange: (mode: DashboardViewMode) => void;
   onOpenDowntime: () => void;
   onSelectPlant?: (plantId: string) => void;
   onViewIncidents?: () => void;
@@ -44,8 +39,6 @@ export function PlantPulseHero({
   recovery,
   specificPower,
   chartData,
-  viewMode,
-  onViewModeChange,
   onOpenDowntime,
   onSelectPlant,
   onViewIncidents,
@@ -154,43 +147,7 @@ export function PlantPulseHero({
               <History className="h-3.5 w-3.5 text-white/80" />
               <span className="hidden sm:inline">Downtime Log</span>
             </Button>
-
-            {/* View Mode Toggle */}
-            <ToggleGroup
-              type="single"
-              value={viewMode}
-              onValueChange={(v) => v && onViewModeChange(v as DashboardViewMode)}
-              className="h-8 bg-black/50 border border-white/15 rounded-lg p-0.5"
-              data-testid="dashboard-view-mode"
-            >
-              <ToggleGroupItem
-                value="inline"
-                className="h-7 px-2.5 text-xs gap-1 text-slate-300 hover:text-white data-[state=on]:bg-primary/30 data-[state=on]:text-white data-[state=on]:border data-[state=on]:border-primary/50 data-[state=on]:shadow-xs rounded-md font-medium transition-colors"
-                title="Inline — all trend graphs visible directly on the dashboard"
-                aria-label="Inline view"
-              >
-                <LayoutGrid className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                <span className="hidden md:inline">Inline</span>
-              </ToggleGroupItem>
-              <ToggleGroupItem
-                value="sections"
-                className="h-7 px-2.5 text-xs gap-1 text-slate-300 hover:text-white data-[state=on]:bg-primary/30 data-[state=on]:text-white data-[state=on]:border data-[state=on]:border-primary/50 data-[state=on]:shadow-xs rounded-md font-medium transition-colors"
-                title="Sections — click any KPI card to fold/unfold its trend chart inline"
-                aria-label="Sections view"
-              >
-                <ListCollapse className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                <span className="hidden md:inline">Sections</span>
-              </ToggleGroupItem>
-              <ToggleGroupItem
-                value="popup"
-                className="h-7 px-2.5 text-xs gap-1 text-slate-300 hover:text-white data-[state=on]:bg-primary/30 data-[state=on]:text-white data-[state=on]:border data-[state=on]:border-primary/50 data-[state=on]:shadow-xs rounded-md font-medium transition-colors"
-                title="Dialog — click a KPI card to open its trend chart in a dialog"
-                aria-label="Dialog view"
-              >
-                <ExternalLink className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                <span className="hidden md:inline">Dialog</span>
-              </ToggleGroupItem>
-            </ToggleGroup>
+            {/* View-mode control lives in the sticky DashboardSectionNav bar — single source. */}
           </div>
         </div>
 
