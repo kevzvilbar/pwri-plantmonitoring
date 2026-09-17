@@ -30,9 +30,9 @@ export function QualityCluster({
     <section id="quality-cluster" className="scroll-mt-28 space-y-2.5">
       <ClusterHeader icon={FlaskConical} title="Quality" accent="text-accent" subtitle="RO output" />
 
-      <div className="grid gap-2.5 grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 items-stretch">
+      <div className="grid gap-2.5 sm:gap-3 grid-cols-2 md:grid-cols-3 xl:grid-cols-5 items-stretch">
         {/* Primary Compliance North Stars */}
-        <div className="lg:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
+        <div className="col-span-2 md:col-span-3 xl:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3">
           <StatCard
             icon={FlaskConical}
             label="Product TDS"
@@ -64,7 +64,7 @@ export function QualityCluster({
         </div>
 
         {/* Upstream Quality Conditions */}
-        <div className="lg:col-span-3 grid grid-cols-1 sm:grid-cols-3 gap-2">
+        <div className="col-span-2 md:col-span-3 grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3">
           <StatCard
             icon={Gauge}
             label="Feed TDS"

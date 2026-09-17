@@ -35,8 +35,8 @@ export function OverviewCluster({
     <section id="overview-cluster" className="scroll-mt-28 space-y-2.5">
       <ClusterHeader icon={Droplet} title="Overview" accent="text-primary" subtitle="Distribution & Sources" />
 
-      {/* Water-flow order: Raw In → RO → Blending → Consumption → NRW loss */}
-      <div className="grid gap-2.5 sm:gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 items-stretch">
+      {/* Standardized KPI grid: 2-col mobile → 3-col tablet → 5-col desktop. */}
+      <div className="grid gap-2.5 sm:gap-3 grid-cols-2 md:grid-cols-3 xl:grid-cols-5 items-stretch">
         <StatCard
           icon={RawWaterIcon}
           label="Raw Water In"

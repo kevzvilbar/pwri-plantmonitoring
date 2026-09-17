@@ -3,8 +3,7 @@ import { Lamp } from '@/components/ui/Lamp';
 import { TrendBadge } from './StatCard';
 import { fmtNum } from '@/lib/calculations';
 import { usePlants } from '@/hooks/usePlants';
-import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { useFleetStatus } from '@/hooks/useFleetStatus';
 import { format } from 'date-fns';
 import {
   History, ShieldAlert, Building2,
@@ -57,52 +56,22 @@ export function PlantPulseHero({
     return () => clearInterval(interval);
   }, []);
 
-  // Filtered plant list
+  // Filtered plant list (kept for onSelectPlant drill-down below).
+  // Memoized so the fleet hook receives a referentially stable id array
+  // (its TanStack key is derived from the joined ids).
   const activePlants = useMemo(
     () => (plants ?? []).filter((p) => !plantIds.length || plantIds.includes(p.id)),
     [plants, plantIds],
   );
 
-  // Query latest readings to compute live fleet online / stale / offline counts
-  const { data: wellLastDt } = useQuery({
-    queryKey: ['plant-pulse-hero-wells', plantIds],
-    queryFn: async () => {
-      if (!plantIds.length) return {} as Record<string, string>;
-      const { data } = await supabase
-        .from('well_readings')
-        .select('plant_id, reading_datetime')
-        .in('plant_id', plantIds)
-        .order('reading_datetime', { ascending: false })
-        .limit(300);
-      const map: Record<string, string> = {};
-      (data ?? []).forEach((r) => {
-        if (!map[r.plant_id]) map[r.plant_id] = r.reading_datetime;
-      });
-      return map;
-    },
-    enabled: plantIds.length > 0,
-    staleTime: 60_000,
-  });
+  const heroPlantIds = useMemo(
+    () => (activePlants.length ? activePlants.map((p) => p.id) : plantIds),
+    [activePlants, plantIds],
+  );
 
-  const fleetCounts = useMemo(() => {
-    let online = 0;
-    let stale = 0;
-    let offline = 0;
-
-    activePlants.forEach((p) => {
-      const dt = wellLastDt?.[p.id];
-      if (!dt) {
-        offline++;
-      } else {
-        const hoursAgo = (Date.now() - new Date(dt).getTime()) / 3_600_000;
-        if (hoursAgo < 2) online++;
-        else if (hoursAgo < 8) stale++;
-        else offline++;
-      }
-    });
-
-    return { online, stale, offline };
-  }, [activePlants, wellLastDt]);
+  // Single shared fleet snapshot (wells ∪ locators) — same data the
+  // PlantHealthStrip chips render, so hero lamps can never disagree.
+  const { counts: fleetCounts } = useFleetStatus(heroPlantIds);
 
   return (
     <div className="rounded-[20px] sm:rounded-[24px] p-1 bg-gradient-to-b from-primary/25 via-primary/10 to-transparent border border-primary/30 shadow-xl shadow-black/20">

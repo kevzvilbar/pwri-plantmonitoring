@@ -1,12 +1,18 @@
-import React from 'react';
+import React, { Suspense, lazy } from 'react';
 import { format } from 'date-fns';
 import { Zap, Banknote, FlaskConical, PieChart } from 'lucide-react';
 import { fmtNum } from '@/lib/calculations';
 import { StatCard, ClusterHeader } from '@/components/dashboard/StatCard';
 import { ClusterCharts } from '@/components/dashboard/TrendChartWrappers';
-import { CostSunburst } from '@/components/dashboard/CostSunburst';
+import { ChartSkeleton } from '@/components/dashboard/CardSkeleton';
 import { COST_CHART_METRICS, type ChartMetric } from '@/components/dashboard/types';
 import type { DashboardViewMode } from '@/components/dashboard/types';
+
+// d3 sunburst is the heaviest card on the dashboard — split it out so Cost
+// KPIs + charts paint first, composition streams in behind a skeleton.
+const LazyCostSunburst = lazy(() =>
+  import('@/components/dashboard/CostSunburst').then((m) => ({ default: m.CostSunburst })),
+);
 
 interface CostClusterProps {
   productionCost: number | null;
@@ -42,7 +48,7 @@ export function CostCluster({
         }
       />
 
-      <div className="stagger-grid grid gap-2 grid-cols-2 sm:[grid-template-columns:repeat(auto-fit,minmax(150px,1fr))]">
+      <div className="grid gap-2.5 sm:gap-3 grid-cols-2 md:grid-cols-3 xl:grid-cols-5 items-stretch">
         <StatCard icon={Banknote} label="Total Production Cost"
           calc
           calcTooltip={
@@ -93,7 +99,9 @@ export function CostCluster({
       />
 
       <div className="grid gap-2.5 sm:gap-3 grid-cols-1 lg:grid-cols-2 items-stretch">
-        <CostSunburst plantIds={plantIds} />
+        <Suspense fallback={<ChartSkeleton />}>
+          <LazyCostSunburst plantIds={plantIds} />
+        </Suspense>
         <div className="rounded-xl border border-border/60 bg-card/60 p-3 flex items-start gap-2.5 text-xs text-muted-foreground">
           <PieChart className="h-4 w-4 mt-0.5 shrink-0 text-chart-6" aria-hidden />
           <p>
