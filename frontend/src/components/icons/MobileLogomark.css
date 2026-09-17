@@ -1,0 +1,60 @@
+.pwri-mobile-logo {
+  display: inline-block;
+  flex-shrink: 0;
+  vertical-align: middle;
+  user-select: none;
+}
+
+.pwri-mobile-logo--glow {
+  filter: drop-shadow(0 2px 5px rgb(0 188 229 / 20%));
+}
+
+.pwri-mobile-logo__light {
+  opacity: 0;
+}
+
+/* Match useIsMobile / md. Desktop and reduced-motion remain fully static. */
+@media (max-width: 767px) and (prefers-reduced-motion: no-preference) {
+  .pwri-mobile-logo[data-motion='once'],
+  .pwri-mobile-logo[data-motion='loading'] {
+    --pwri-logo-cycles: 1;
+  }
+
+  .pwri-mobile-logo[data-motion='loading'] {
+    --pwri-logo-cycles: infinite;
+  }
+
+  .pwri-mobile-logo:is([data-motion='once'], [data-motion='loading']) .pwri-mobile-logo__wave {
+    animation: pwri-logo-wave 3.6s ease-in-out var(--pwri-logo-cycles);
+  }
+
+  .pwri-mobile-logo:is([data-motion='once'], [data-motion='loading']) .pwri-mobile-logo__wave--back {
+    animation-direction: reverse;
+  }
+
+  .pwri-mobile-logo:is([data-motion='once'], [data-motion='loading']) .pwri-mobile-logo__drop {
+    animation: pwri-logo-drop 3.6s ease-in-out var(--pwri-logo-cycles);
+  }
+
+  /* A sheen belongs on the larger loading mark, not the tiny navigation icon. */
+  .pwri-mobile-logo[data-motion='loading'] .pwri-mobile-logo__light {
+    animation: pwri-logo-light 3.6s ease-in-out infinite;
+  }
+}
+
+@keyframes pwri-logo-wave {
+  0%, 100% { transform: translate(0, 0); }
+  30% { transform: translate(-5px, -2px); }
+  70% { transform: translate(5px, 2px); }
+}
+
+@keyframes pwri-logo-drop {
+  0%, 100% { transform: translateY(0); }
+  45% { transform: translateY(-3px); }
+}
+
+@keyframes pwri-logo-light {
+  0%, 15% { transform: translateX(0); opacity: 0; }
+  30% { opacity: 1; }
+  65%, 100% { transform: translateX(310px); opacity: 0; }
+}

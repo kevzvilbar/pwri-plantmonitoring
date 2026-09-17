@@ -2,6 +2,7 @@ import { ReactNode } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { OPERATOR_DESIGNATION } from '@/components/DesignationCombobox';
+import { AppLoading } from '@/components/AppLoading';
 import { isOperatorOnly } from '@/lib/permissions';
 
 // Routes an Operator is allowed to visit. Everything else redirects to /.
@@ -22,7 +23,7 @@ export function ProtectedRoute({ children }: { children: ReactNode }) {
   const loc = useLocation();
 
   if (loading) {
-    return <div className="min-h-screen flex items-center justify-center text-muted-foreground">Loading…</div>;
+    return <AppLoading className="min-h-screen text-muted-foreground" />;
   }
   if (!user) return <Navigate to="/auth" state={{ from: loc }} replace />;
   if (!profile?.profile_complete && loc.pathname !== '/onboarding') {

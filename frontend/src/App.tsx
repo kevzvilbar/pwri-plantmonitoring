@@ -7,6 +7,7 @@ import { AuthProvider } from "@/hooks/useAuth";
 import { PresenceProvider, globalStampActivity } from "@/hooks/usePresence";
 import { friendlyError } from "@/lib/supabaseErrors";
 import { reportError } from "@/lib/monitoring";
+import { AppLoading } from '@/components/AppLoading';
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AppShell } from "@/components/AppShell";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
@@ -37,9 +38,7 @@ const Chemicals = lazy(() => import("./pages/Chemicals"));
 const Alerts = lazy(() => import("./pages/Alerts"));
 
 const RouteFallback = () => (
-  <div className="flex h-[60vh] w-full items-center justify-center text-sm text-muted-foreground">
-    Loading…
-  </div>
+  <AppLoading className="h-[60vh] w-full text-sm text-muted-foreground" />
 );
 
 /** Applies data-theme and .dark to <html> whenever the persisted preferences change. */
