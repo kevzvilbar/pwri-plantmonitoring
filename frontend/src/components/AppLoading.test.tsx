@@ -9,27 +9,29 @@ afterEach(() => {
 });
 
 describe('AppLoading', () => {
-  it('shows a decorative looping mark and readable loading status on mobile', () => {
+  it('shows the static logo and readable loading status on mobile', () => {
     window.innerWidth = 390;
     const { container, unmount } = render(<AppLoading className="min-h-screen" />);
     expect(screen.getByRole('status')).toHaveTextContent('Loading…');
     expect(screen.getByRole('status')).toHaveClass('min-h-screen');
-    expect(container.querySelector('svg')).toHaveAttribute('data-motion', 'loading');
-    expect(container.querySelector('svg')).toHaveAttribute('aria-hidden', 'true');
+    const img = screen.getByAltText('PWRI Monitoring');
+    expect(img).toBeInTheDocument();
+    expect(img.tagName.toLowerCase()).toBe('img');
+    expect(img).toHaveAttribute('src', expect.stringContaining('pwri-logo.png'));
     unmount();
-    expect(container.querySelector('svg')).toBeNull();
+    expect(container.querySelector('img')).toBeNull();
   });
 
   it.each([768, 1280])('keeps desktop loading text-only at %ipx', (width) => {
     window.innerWidth = width;
     const { container } = render(<AppLoading />);
     expect(screen.getByRole('status')).toHaveTextContent('Loading…');
-    expect(container.querySelector('svg')).toBeNull();
+    expect(container.querySelector('img')).toBeNull();
   });
 
   it('includes the last pixel of the mobile breakpoint', () => {
     window.innerWidth = 767;
     const { container } = render(<AppLoading />);
-    expect(container.querySelector('svg')).not.toBeNull();
+    expect(container.querySelector('img')).not.toBeNull();
   });
 });

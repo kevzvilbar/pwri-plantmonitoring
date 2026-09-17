@@ -3,15 +3,12 @@ import { Navigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Logomark } from '@/components/icons/Logomark';
-import { MobileLogomark } from '@/components/icons/MobileLogomark';
 import { AppLoading } from '@/components/AppLoading';
-import { useIsMobile } from '@/hooks/use-mobile';
 import { SignInForm } from '@/pages/auth/LoginForm';
 import { SignUpForm } from '@/pages/auth/SignUpForm';
 import { ResetPasswordForm } from '@/pages/auth/PasswordResetForm';
 
 export default function Auth() {
-  const isMobile = useIsMobile();
   const { user, loading, isRecovery } = useAuth();
   const [activeTab, setActiveTab] = useState<'signin' | 'signup'>('signin');
   const [pendingNotice, setPendingNotice] = useState<{ email: string; count: number } | null>(null);
@@ -57,7 +54,7 @@ export default function Auth() {
         <div className="w-full max-w-md">
           <div className="text-center mb-6 lg:hidden">
             <div className="inline-flex items-center justify-center mb-3">
-              {isMobile ? <MobileLogomark size={64} /> : <Logomark size={64} className="rounded-2xl shadow-elev" />}
+              <Logomark size={64} className="rounded-2xl shadow-elev" />
             </div>
             <h1 className="text-2xl font-extrabold text-topbar-foreground tracking-tight">PWRI Monitoring</h1>
             <p className="text-sm text-topbar-muted">Multi-plant water operations</p>

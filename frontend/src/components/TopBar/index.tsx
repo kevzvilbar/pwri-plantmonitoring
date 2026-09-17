@@ -10,7 +10,7 @@ import {
 import { useNavigate, NavLink } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { SyncIndicator } from '@/components/SyncIndicator';
-import { MobileLogomark } from '@/components/icons/MobileLogomark';
+import { Logomark } from '@/components/icons/Logomark';
 import { ThemeSelector } from '@/components/ThemeSelector';
 import { OperatorSwitcher } from '@/components/OperatorSwitcher';
 
@@ -37,7 +37,7 @@ export function TopBar() {
         <div className="flex items-center min-w-0">
           {isMobile ? (
             <NavLink to="/" className="flex items-center gap-2 shrink-0 group" aria-label="PWRI Monitoring & Alert">
-              <MobileLogomark size={28} alt="" className="shrink-0" />
+              <Logomark size={28} className="rounded-lg shrink-0 group-hover:scale-105 transition-transform duration-200" />
               <div className="flex flex-col leading-none">
                 <span className="text-xs font-semibold tracking-tight text-topbar-foreground group-hover:text-primary transition-colors">
                   PWRI
