@@ -57,13 +57,16 @@ export function formatRangeLabel(
   range: RangeKey,
   from: string,
   to: string,
-  startKey: string,
-  endKey: string,
+  startKey?: string,
+  endKey?: string,
 ): string {
+  const sKey = startKey || from;
+  const eKey = endKey || to;
   if (range === 'CUSTOM' || range === 'MONTHLY') {
-    return startKey === endKey
-      ? format(parseISO(startKey), 'MMM d')
-      : `${format(parseISO(startKey), 'MMM d')}–${format(parseISO(endKey), 'MMM d')}`;
+    if (!sKey || !eKey) return range;
+    return sKey === eKey
+      ? format(parseISO(sKey), 'MMM d')
+      : `${format(parseISO(sKey), 'MMM d')}–${format(parseISO(eKey), 'MMM d')}`;
   }
   return `last ${rangeKeyToDays(range, from, to)}d`;
 }
