@@ -143,17 +143,32 @@ function PermeateBarWithHairline(props: any) {
  */
 function RejectBarShape(props: any) {
   const { x, y, width, height, payload } = props;
-  console.log('[RejectBarShape] props:', { x, y, width, height, payload: payload ? { permeate: payload.permeate, reject: payload.reject, rejectNeg: payload.rejectNeg } : null });
-  if (!payload || width <= 0 || height <= 0) return null;
+  if (!payload || width <= 0 || height === 0) return null;
+
+  // Recharts' Bar.getComposedData computes geometry as:
+  //   y = yAxis.scale(value[1])
+  //   height = yAxis.scale(value[0]) - yAxis.scale(value[1])
+  // For the positive "permeate" bar (stacked value [0, +permeate]) that always
+  // comes out >= 0. But for this "reject" bar, stackOffset="sign" stacks it
+  // as [0, -reject] on the negative side of the axis, which flips the sign:
+  // `y` ends up being the *bottom* edge of the segment and `height` comes out
+  // negative. Recharts' own default shape (Rectangle) handles this by drawing
+  // an SVG <path> with signed relative move commands, which tolerate a
+  // negative height fine. A raw SVG <rect>, however, treats a negative height
+  // as invalid and simply doesn't paint anything — which is why this bar was
+  // invisible even though the tooltip correctly showed a negative value.
+  // Normalize to a top-left corner + positive height before drawing.
+  const rectY = height >= 0 ? y : y + height;
+  const rectHeight = Math.abs(height);
 
   const barRadius = Math.min(3, width / 4);
 
   return (
     <rect
       x={x}
-      y={y}
+      y={rectY}
       width={width}
-      height={height}
+      height={rectHeight}
       rx={barRadius}
       ry={barRadius}
       fill="url(#rejectFlowGrad)"
