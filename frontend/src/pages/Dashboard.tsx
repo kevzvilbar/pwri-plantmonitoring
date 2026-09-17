@@ -265,7 +265,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <DashboardSectionNav />
+      <DashboardSectionNav viewMode={viewMode} onViewModeChange={persistViewMode} />
 
       <OverviewCluster
         consumption={prodStats.consumption}

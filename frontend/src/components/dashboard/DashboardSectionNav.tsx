@@ -1,6 +1,17 @@
 import { useState, useEffect } from 'react';
-import { Droplet, FlaskConical, Zap, ShieldCheck, Activity } from 'lucide-react';
+import {
+  Droplet,
+  FlaskConical,
+  Zap,
+  ShieldCheck,
+  Activity,
+  LayoutGrid,
+  ListCollapse,
+  ExternalLink,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import type { DashboardViewMode } from '@/components/dashboard/types';
 
 export interface DashboardSection {
   id: string;
@@ -18,7 +29,12 @@ export const DASHBOARD_SECTIONS: DashboardSection[] = [
   { id: 'health-cluster', label: 'Health & Coverage', shortLabel: 'Health', icon: Activity, accent: 'text-info' },
 ];
 
-export function DashboardSectionNav() {
+export interface DashboardSectionNavProps {
+  viewMode?: DashboardViewMode;
+  onViewModeChange?: (mode: DashboardViewMode) => void;
+}
+
+export function DashboardSectionNav({ viewMode, onViewModeChange }: DashboardSectionNavProps = {}) {
   const [activeSection, setActiveSection] = useState<string>('overview-cluster');
 
   useEffect(() => {
@@ -58,33 +74,75 @@ export function DashboardSectionNav() {
   };
 
   return (
-    <div className="sticky top-14 z-20 -mx-1 px-1 py-1.5 bg-background/80 backdrop-blur-md border-y border-border/40 transition-all">
-      <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar scroll-smooth">
-        {DASHBOARD_SECTIONS.map((sec) => {
-          const Icon = sec.icon;
-          const isActive = activeSection === sec.id;
-          return (
-            <div key={sec.id} className="relative flex flex-col items-center shrink-0">
-              <button
-                type="button"
-                onClick={() => scrollToSection(sec.id)}
-                className={cn(
-                  'flex items-center gap-1.5 h-7.5 px-3 rounded-full text-xs font-semibold transition-all duration-150 ease-spring-out active:scale-[0.98] cursor-pointer select-none',
-                  isActive
-                    ? 'bg-highlight text-highlight-foreground shadow-xs font-bold'
-                    : 'bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground border border-border/40'
+    <div className="sticky top-14 z-20 -mx-1 px-2 py-1.5 bg-background/85 backdrop-blur-md border-y border-border/40 transition-all shadow-xs">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar scroll-smooth min-w-0 flex-1">
+          {DASHBOARD_SECTIONS.map((sec) => {
+            const Icon = sec.icon;
+            const isActive = activeSection === sec.id;
+            return (
+              <div key={sec.id} className="relative flex flex-col items-center shrink-0">
+                <button
+                  type="button"
+                  onClick={() => scrollToSection(sec.id)}
+                  className={cn(
+                    'flex items-center gap-1.5 h-7.5 px-3 rounded-full text-xs font-semibold transition-all duration-150 ease-spring-out active:scale-[0.98] cursor-pointer select-none',
+                    isActive
+                      ? 'bg-highlight text-highlight-foreground shadow-xs font-bold'
+                      : 'bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground border border-border/40'
+                  )}
+                >
+                  <Icon className={cn('h-3.5 w-3.5 shrink-0', isActive ? 'text-highlight-foreground' : sec.accent)} />
+                  <span className="hidden sm:inline">{sec.label}</span>
+                  <span className="sm:hidden">{sec.shortLabel}</span>
+                </button>
+                {isActive && (
+                  <span className="absolute -bottom-1 w-6 h-[2px] rounded-full bg-highlight transition-all animate-fade-in" />
                 )}
+              </div>
+            );
+          })}
+        </div>
+
+        {viewMode && onViewModeChange && (
+          <div className="flex items-center shrink-0 pl-2 border-l border-border/40">
+            <ToggleGroup
+              type="single"
+              value={viewMode}
+              onValueChange={(v) => v && onViewModeChange(v as DashboardViewMode)}
+              className="h-7.5 bg-muted/50 border border-border/50 rounded-full p-0.5 gap-0.5"
+              data-testid="floating-dashboard-view-mode"
+            >
+              <ToggleGroupItem
+                value="inline"
+                className="h-6.5 px-2.5 rounded-full text-2xs gap-1 text-muted-foreground hover:text-foreground data-[state=on]:bg-highlight data-[state=on]:text-highlight-foreground data-[state=on]:font-bold data-[state=on]:shadow-xs transition-all cursor-pointer"
+                title="Inline — all trend graphs visible directly on the dashboard"
+                aria-label="Inline view"
               >
-                <Icon className={cn('h-3.5 w-3.5 shrink-0', isActive ? 'text-highlight-foreground' : sec.accent)} />
-                <span className="hidden sm:inline">{sec.label}</span>
-                <span className="sm:hidden">{sec.shortLabel}</span>
-              </button>
-              {isActive && (
-                <span className="absolute -bottom-1 w-6 h-[2px] rounded-full bg-highlight transition-all animate-fade-in" />
-              )}
-            </div>
-          );
-        })}
+                <LayoutGrid className="h-3 w-3 shrink-0" aria-hidden />
+                <span className="hidden md:inline font-medium">Inline</span>
+              </ToggleGroupItem>
+              <ToggleGroupItem
+                value="sections"
+                className="h-6.5 px-2.5 rounded-full text-2xs gap-1 text-muted-foreground hover:text-foreground data-[state=on]:bg-highlight data-[state=on]:text-highlight-foreground data-[state=on]:font-bold data-[state=on]:shadow-xs transition-all cursor-pointer"
+                title="Sections — click any KPI card to fold/unfold its trend chart inline"
+                aria-label="Sections view"
+              >
+                <ListCollapse className="h-3 w-3 shrink-0" aria-hidden />
+                <span className="hidden md:inline font-medium">Sections</span>
+              </ToggleGroupItem>
+              <ToggleGroupItem
+                value="popup"
+                className="h-6.5 px-2.5 rounded-full text-2xs gap-1 text-muted-foreground hover:text-foreground data-[state=on]:bg-highlight data-[state=on]:text-highlight-foreground data-[state=on]:font-bold data-[state=on]:shadow-xs transition-all cursor-pointer"
+                title="Dialog — click a KPI card to open its trend chart in a dialog"
+                aria-label="Dialog view"
+              >
+                <ExternalLink className="h-3 w-3 shrink-0" aria-hidden />
+                <span className="hidden md:inline font-medium">Dialog</span>
+              </ToggleGroupItem>
+            </ToggleGroup>
+          </div>
+        )}
       </div>
     </div>
   );
