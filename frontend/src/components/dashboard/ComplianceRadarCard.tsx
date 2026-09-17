@@ -16,6 +16,7 @@ import { useQueries } from '@tanstack/react-query';
 import {
   Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Tooltip, ResponsiveContainer,
 } from 'recharts';
+import { line as d3Line, curveCardinalClosed } from 'd3-shape';
 import { Card } from '@/components/ui/card';
 import { StatusPill } from '@/components/StatusPill';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -175,7 +176,11 @@ export function ComplianceRadarCard({ plantIds }: Props) {
           <div className="w-full max-w-[420px] h-[240px]">
             <ResponsiveContainer width="100%" height="100%">
               <RadarChart data={radarData} outerRadius="78%">
-                <PolarGrid stroke="hsl(var(--border))" />
+                <PolarGrid
+                  gridType="circle"
+                  stroke="hsl(var(--border))"
+                  strokeOpacity={0.75}
+                />
                 <PolarAngleAxis dataKey="axis" tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} />
                 <PolarRadiusAxis
                   angle={90}
@@ -184,18 +189,58 @@ export function ComplianceRadarCard({ plantIds }: Props) {
                   tickCount={4}
                   axisLine={false}
                 />
-                {loaded.map(({ plant }, i) => (
-                  <Radar
-                    key={plant.id}
-                    name={plant.name}
-                    dataKey={plant.id}
-                    stroke={DRILL_COLORS[i % DRILL_COLORS.length]}
-                    fill={DRILL_COLORS[i % DRILL_COLORS.length]}
-                    fillOpacity={loaded.length > 1 ? 0.15 : 0.25}
-                    strokeWidth={1.5}
-                    connectNulls
-                  />
-                ))}
+                {loaded.map(({ plant }, i) => {
+                  const color = DRILL_COLORS[i % DRILL_COLORS.length];
+                  const fillOpacity = loaded.length > 1 ? 0.15 : 0.25;
+
+                  const renderSmoothRadar = (props: any) => {
+                    const { points } = props;
+                    if (!points || points.length < 3) return null;
+
+                    const lineGen = d3Line<{ x: number; y: number }>()
+                      .x((d) => d.x)
+                      .y((d) => d.y)
+                      .curve(curveCardinalClosed.tension(0.2));
+
+                    const pathData = lineGen(points) ?? undefined;
+
+                    return (
+                      <path
+                        d={pathData}
+                        stroke={color}
+                        strokeWidth={2}
+                        fill={color}
+                        fillOpacity={fillOpacity}
+                        className="transition-all duration-300 drop-shadow-xs"
+                      />
+                    );
+                  };
+
+                  return (
+                    <Radar
+                      key={plant.id}
+                      name={plant.name}
+                      dataKey={plant.id}
+                      stroke={color}
+                      fill={color}
+                      fillOpacity={fillOpacity}
+                      strokeWidth={2}
+                      shape={renderSmoothRadar}
+                      dot={{
+                        r: 3,
+                        fill: color,
+                        stroke: 'hsl(var(--card))',
+                        strokeWidth: 1.5,
+                      }}
+                      activeDot={{
+                        r: 4.5,
+                        stroke: 'hsl(var(--card))',
+                        strokeWidth: 1.5,
+                      }}
+                      connectNulls
+                    />
+                  );
+                })}
                 <Tooltip
                   contentStyle={{
                     background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))',

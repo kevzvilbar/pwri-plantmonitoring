@@ -11,6 +11,7 @@ import { useQueries } from '@tanstack/react-query';
 import {
   Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Tooltip, ResponsiveContainer,
 } from 'recharts';
+import { line as d3Line, curveCardinalClosed } from 'd3-shape';
 import { Card } from '@/components/ui/card';
 import { StatusPill } from '@/components/StatusPill';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -271,11 +272,15 @@ export function DataCompletenessRadarCard({ plantIds }: Props) {
         </div>
       ) : (
         <div className="space-y-2">
-          {/* Compact Radar chart */}
+          {/* Compact Circular Radar chart */}
           <div className="w-full h-[185px] sm:h-[195px]">
             <ResponsiveContainer width="100%" height="100%">
               <RadarChart data={radarData} outerRadius="75%" margin={{ top: 6, right: 18, bottom: 6, left: 18 }}>
-                <PolarGrid stroke="hsl(var(--border))" strokeOpacity={0.7} />
+                <PolarGrid
+                  gridType="circle"
+                  stroke="hsl(var(--border))"
+                  strokeOpacity={0.75}
+                />
                 <PolarAngleAxis
                   dataKey="axis"
                   tick={{
@@ -293,29 +298,59 @@ export function DataCompletenessRadarCard({ plantIds }: Props) {
                   axisLine={false}
                   tickFormatter={(v: number) => `${v}%`}
                 />
-                {loaded.map(({ plant }, i) => (
-                  <Radar
-                    key={plant.id}
-                    name={plant.name}
-                    dataKey={plant.id}
-                    stroke={DRILL_COLORS[i % DRILL_COLORS.length]}
-                    fill={DRILL_COLORS[i % DRILL_COLORS.length]}
-                    fillOpacity={loaded.length > 1 ? 0.16 : 0.24}
-                    strokeWidth={1.75}
-                    dot={{
-                      r: 3,
-                      fill: DRILL_COLORS[i % DRILL_COLORS.length],
-                      stroke: 'hsl(var(--card))',
-                      strokeWidth: 1.5,
-                    }}
-                    activeDot={{
-                      r: 4.5,
-                      stroke: 'hsl(var(--card))',
-                      strokeWidth: 1.5,
-                    }}
-                    connectNulls
-                  />
-                ))}
+                {loaded.map(({ plant }, i) => {
+                  const color = DRILL_COLORS[i % DRILL_COLORS.length];
+                  const fillOpacity = loaded.length > 1 ? 0.16 : 0.24;
+
+                  // Custom smooth closed spline shape matching circular radar contour
+                  const renderSmoothRadar = (props: any) => {
+                    const { points } = props;
+                    if (!points || points.length < 3) return null;
+
+                    const lineGen = d3Line<{ x: number; y: number }>()
+                      .x((d) => d.x)
+                      .y((d) => d.y)
+                      .curve(curveCardinalClosed.tension(0.2));
+
+                    const pathData = lineGen(points) ?? undefined;
+
+                    return (
+                      <path
+                        d={pathData}
+                        stroke={color}
+                        strokeWidth={2}
+                        fill={color}
+                        fillOpacity={fillOpacity}
+                        className="transition-all duration-300 drop-shadow-xs"
+                      />
+                    );
+                  };
+
+                  return (
+                    <Radar
+                      key={plant.id}
+                      name={plant.name}
+                      dataKey={plant.id}
+                      stroke={color}
+                      fill={color}
+                      fillOpacity={fillOpacity}
+                      strokeWidth={2}
+                      shape={renderSmoothRadar}
+                      dot={{
+                        r: 3,
+                        fill: color,
+                        stroke: 'hsl(var(--card))',
+                        strokeWidth: 1.5,
+                      }}
+                      activeDot={{
+                        r: 4.5,
+                        stroke: 'hsl(var(--card))',
+                        strokeWidth: 1.5,
+                      }}
+                      connectNulls
+                    />
+                  );
+                })}
                 <Tooltip
                   contentStyle={{
                     background: 'hsl(var(--card))',

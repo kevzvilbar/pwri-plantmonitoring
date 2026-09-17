@@ -353,3 +353,4 @@ export function CostEfficiencyCard({ plantIds }: CostEfficiencyCardProps) {
     </Card>
   );
 }
+
