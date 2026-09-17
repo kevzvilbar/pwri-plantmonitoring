@@ -34,7 +34,6 @@ function PermeateBarWithHairline(props: any) {
 
   // Determine vertical scale (pixels per m3)
   const pxPerM3 = permVal > 0 && height > 0 ? height / permVal : 0;
-  const yRejBottom = yZero + (rejVal * pxPerM3);
 
   // Expected feed aligns with total combined height (permeate + reject)
   // If feed is metered, compute hairline top offset
@@ -61,18 +60,18 @@ function PermeateBarWithHairline(props: any) {
         />
       )}
 
-      {/* Thin Vertical Hairline: Feed Water Indicator */}
+      {/* Thin Vertical Hairline: Feed Water Indicator (Upper / Permeate Section) */}
       {(feedVal > 0 || permVal > 0 || rejVal > 0) && (
         <>
           <line
             x1={cx}
             y1={Math.min(y, yFeedTop)}
             x2={cx}
-            y2={Math.max(yZero, yRejBottom)}
-            stroke={hasDeviation ? '#fca5a5' : '#cbd5e1'}
+            y2={yZero}
+            stroke={hasDeviation ? '#fca5a5' : '#e2e8f0'}
             strokeWidth={1.5}
             strokeDasharray={hasDeviation ? '2 2' : 'none'}
-            opacity={0.85}
+            opacity={0.9}
           />
 
           {/* Hairline Center Baseline Anchor */}
@@ -97,7 +96,7 @@ function PermeateBarWithHairline(props: any) {
                 cy={yFeedTop}
                 r={6}
                 fill="#ef4444"
-                fillOpacity={0.2}
+                fillOpacity={0.25}
               />
               <rect
                 x={cx - 3.5}
@@ -113,7 +112,7 @@ function PermeateBarWithHairline(props: any) {
               <line
                 x1={cx}
                 y1={yFeedTop}
-                x2={cx + width / 2 + 3}
+                x2={cx + width / 2 + 4}
                 y2={yFeedTop}
                 stroke="#ef4444"
                 strokeWidth={1.2}
@@ -139,7 +138,8 @@ function PermeateBarWithHairline(props: any) {
 }
 
 /**
- * Custom Reject Bar (lower diverging bar extending downwards from 0).
+ * Custom Reject Bar (lower diverging bar extending downwards from 0)
+ * with visible vertical Feed hairline across the reject section.
  */
 function RejectBarShape(props: any) {
   const { x, y, width, height, payload } = props;
@@ -148,34 +148,61 @@ function RejectBarShape(props: any) {
   // Recharts' Bar.getComposedData computes geometry as:
   //   y = yAxis.scale(value[1])
   //   height = yAxis.scale(value[0]) - yAxis.scale(value[1])
-  // For the positive "permeate" bar (stacked value [0, +permeate]) that always
-  // comes out >= 0. But for this "reject" bar, stackOffset="sign" stacks it
-  // as [0, -reject] on the negative side of the axis, which flips the sign:
-  // `y` ends up being the *bottom* edge of the segment and `height` comes out
-  // negative. Recharts' own default shape (Rectangle) handles this by drawing
-  // an SVG <path> with signed relative move commands, which tolerate a
-  // negative height fine. A raw SVG <rect>, however, treats a negative height
-  // as invalid and simply doesn't paint anything — which is why this bar was
-  // invisible even though the tooltip correctly showed a negative value.
   // Normalize to a top-left corner + positive height before drawing.
   const rectY = height >= 0 ? y : y + height;
   const rectHeight = Math.abs(height);
-
+  const cx = x + width / 2;
+  const yZero = rectY;
+  const yRejBottom = rectY + rectHeight;
   const barRadius = Math.min(3, width / 4);
+  const hasDeviation = Boolean(payload.hasDeviation);
+  const rejVal = Math.max(0, payload.reject ?? 0);
 
   return (
-    <rect
-      x={x}
-      y={rectY}
-      width={width}
-      height={rectHeight}
-      rx={barRadius}
-      ry={barRadius}
-      fill="url(#rejectFlowGrad)"
-      stroke="#f43f5e"
-      strokeOpacity={0.6}
-      strokeWidth={1}
-    />
+    <g className="ro-reject-bar-group">
+      <rect
+        x={x}
+        y={rectY}
+        width={width}
+        height={rectHeight}
+        rx={barRadius}
+        ry={barRadius}
+        fill="url(#rejectFlowGrad)"
+        stroke="#f43f5e"
+        strokeOpacity={0.7}
+        strokeWidth={1}
+      />
+
+      {/* Hairline on Reject: Thin vertical hairline in the center of the reject section */}
+      {rejVal > 0 && rectHeight > 0 && (
+        <>
+          <line
+            x1={cx}
+            y1={yZero}
+            x2={cx}
+            y2={yRejBottom}
+            stroke={hasDeviation ? '#fca5a5' : '#e2e8f0'}
+            strokeWidth={1.5}
+            strokeDasharray={hasDeviation ? '2 2' : 'none'}
+            opacity={0.95}
+          />
+
+          {/* Bottom terminal crossbar on reject */}
+          <line
+            x1={cx - 3.5}
+            y1={yRejBottom}
+            x2={cx + 3.5}
+            y2={yRejBottom}
+            stroke={hasDeviation ? '#ef4444' : '#f8fafc'}
+            strokeWidth={2}
+            strokeLinecap="round"
+          />
+
+          {/* Center Baseline Anchor Dot */}
+          <circle cx={cx} cy={yZero} r={1.5} fill="#94a3b8" />
+        </>
+      )}
+    </g>
   );
 }
 
@@ -232,22 +259,22 @@ function ROTrainFlowTooltip({ active, payload, label }: any) {
 
       <div className="space-y-1 text-[11px]">
         <div className="flex justify-between items-center text-cyan-400 font-medium">
-          <span>Permeate Water:</span>
+          <span className="font-bold tracking-wide">PERMEATE:</span>
           <span className="font-bold font-mono">+{permVal.toLocaleString()} m³</span>
         </div>
 
         <div className="flex justify-between items-center text-rose-400 font-medium">
-          <span>Reject Water:</span>
+          <span className="font-bold tracking-wide">REJECT WATER:</span>
           <span className="font-bold font-mono">−{rejVal.toLocaleString()} m³</span>
         </div>
 
         <div className="flex justify-between items-center text-slate-300 font-medium pt-1 border-t border-border/40">
-          <span>Feed Water (Hairline):</span>
+          <span>FEED WATER (Hairline):</span>
           <span className="font-bold font-mono text-foreground">{feedVal > 0 ? `${feedVal.toLocaleString()} m³` : '—'}</span>
         </div>
 
         <div className="flex justify-between items-center text-muted-foreground text-[10px]">
-          <span>Permeate + Reject:</span>
+          <span>EXPECTED (Perm + Rej):</span>
           <span className="font-mono">{expectedFeed.toLocaleString()} m³</span>
         </div>
 
@@ -289,24 +316,43 @@ export function ROTrainWaterFlowChart({
       {/* Chart Legend Header */}
       <div className="flex flex-wrap items-center justify-end gap-3 text-[11px] mb-1 px-2 text-muted-foreground">
         <div className="flex items-center gap-1.5">
-          <span className="w-2.5 h-2.5 rounded-sm bg-gradient-to-t from-sky-600 to-cyan-400 inline-block" />
-          <span>Permeate Water (+)</span>
+          <span className="w-2.5 h-2.5 rounded-xs bg-gradient-to-t from-sky-600 to-cyan-400 inline-block shadow-xs" />
+          <span className="font-bold text-xs tracking-wider text-cyan-400">PERMEATE</span>
+          <span className="text-[10px] text-muted-foreground">Permeate Water (+)</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <span className="w-2.5 h-2.5 rounded-sm bg-gradient-to-t from-orange-600 to-rose-500 inline-block" />
-          <span>Reject Water (−)</span>
+          <span className="w-2.5 h-2.5 rounded-xs bg-gradient-to-t from-orange-600 to-rose-500 inline-block shadow-xs" />
+          <span className="font-bold text-xs tracking-wider text-rose-400">REJECT WATER</span>
+          <span className="text-[10px] text-muted-foreground">Reject Water (−)</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <span className="w-2.5 h-0.5 bg-slate-300 inline-block" />
-          <span>Feed Hairline</span>
+          <span className="w-3 h-0.5 bg-slate-200 inline-block rounded-full" />
+          <span className="font-medium text-slate-300">Feed Hairline</span>
         </div>
         <div className="flex items-center gap-1.5 text-rose-400">
-          <span className="w-2 h-2 rounded-[1px] bg-rose-500 inline-block" />
-          <span>Mismatch Marker</span>
+          <span className="w-2 h-2 rounded-xs bg-rose-500 border border-white inline-block shadow-xs" />
+          <span className="font-medium">Mismatch Marker</span>
         </div>
       </div>
 
-      <div className="flex-1 w-full min-h-0">
+      <div className="relative flex-1 w-full min-h-0">
+        {/* Sleek In-Chart Section HUD Indicators */}
+        <div className="absolute top-2 left-14 z-10 pointer-events-none flex items-center gap-1.5 px-2 py-0.5 rounded bg-cyan-950/60 border border-cyan-500/25 shadow-xs backdrop-blur-xs">
+          <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
+          <span className="text-[10px] font-mono font-bold tracking-widest text-cyan-300 uppercase">
+            PERMEATE
+          </span>
+          <span className="text-[9px] font-mono text-cyan-400/80 font-semibold">(+)</span>
+        </div>
+
+        <div className="absolute bottom-8 left-14 z-10 pointer-events-none flex items-center gap-1.5 px-2 py-0.5 rounded bg-rose-950/60 border border-rose-500/25 shadow-xs backdrop-blur-xs">
+          <span className="w-1.5 h-1.5 rounded-full bg-rose-400" />
+          <span className="text-[10px] font-mono font-bold tracking-widest text-rose-300 uppercase">
+            REJECT WATER
+          </span>
+          <span className="text-[9px] font-mono text-rose-400/80 font-semibold">(−)</span>
+        </div>
+
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart
             data={chartData}
