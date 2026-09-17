@@ -8,7 +8,36 @@
 // via feed = permeate + reject, and a day with only permeate (no feed, no
 // reject) falls back to feed = permeate (reject = 0).
 import { format } from 'date-fns';
-import type { ROReading } from '@/integrations/supabase/types';
+import type { Database } from '@/integrations/supabase/types';
+
+export type ROTrainReadingRow = Database['public']['Tables']['ro_train_readings']['Row'];
+
+export interface ROTrainReadingInput {
+  train_id?: string | null;
+  reading_datetime?: string | null;
+  is_meter_replacement?: boolean | null;
+  // Primary saved delta columns from ro_train_readings table
+  permeate_meter_delta?: number | null;
+  feed_meter_delta?: number | null;
+  reject_meter_delta?: number | null;
+  // Cumulative meter readings (for calculating deltas when saved delta is null)
+  permeate_meter?: number | null;
+  permeate_meter_prev?: number | null;
+  feed_meter?: number | null;
+  feed_meter_prev?: number | null;
+  reject_meter?: number | null;
+  reject_meter_prev?: number | null;
+  // Operational recovery
+  recovery_pct?: number | null;
+  // Legacy / fallback aliases
+  permeate_today_m3?: number | null;
+  feed_today_m3?: number | null;
+  reject_today_m3?: number | null;
+  permeate_delta?: number | null;
+  feed_delta?: number | null;
+  reject_delta?: number | null;
+  [key: string]: any;
+}
 
 /** Per-train, per-day volume totals (m³). */
 export interface DailyVolumes {
@@ -22,8 +51,8 @@ export interface DailyVolumes {
  *
  * Inference chain (mirrors plant-level logic in useTrendChartData.ts):
  *   PRIMARY   — sum each meter's daily delta directly from readings that carry
- *                the meter value (permeate_today_m3, feed_today_m3,
- *                reject_today_m3).
+ *                the meter delta column (permeate_meter_delta, feed_meter_delta,
+ *                reject_meter_delta). Falls back to (meter - meter_prev) or aliases.
  *   FALLBACK  — if a meter is missing but the other two are present, infer it:
  *                • feed  = permeate + reject   (when feed missing, perm+rej known)
  *                • reject = feed - permeate     (when reject missing, perm+feed known)
@@ -32,13 +61,17 @@ export interface DailyVolumes {
  *                 (e.g. permeate-only day → feed = permeate, reject = 0).
  */
 export function computeRoTrainDailyVolumes(
-  readings: (ROReading | any)[],
+  readings: (ROTrainReadingRow | ROTrainReadingInput | any)[],
 ): Map<string, Map<string, DailyVolumes>> {
   // dateKey → trainId → accumulator
   const acc = new Map<string, Map<string, { perm: number; feed: number; rej: number }>>();
 
   for (const r of readings) {
     if (!r.train_id || !r.reading_datetime) continue;
+
+    // Skip meter-replacement jumps: their delta represents old-meter→new-meter odometer jump
+    if (r.is_meter_replacement) continue;
+
     const dk = format(new Date(r.reading_datetime), 'yyyy-MM-dd');
     if (!acc.has(dk)) acc.set(dk, new Map());
     const tMap = acc.get(dk)!;
@@ -48,14 +81,51 @@ export function computeRoTrainDailyVolumes(
       tMap.set(r.train_id, entry);
     }
 
-    // PRIMARY: accumulate whatever meters are present on this reading
-    const perm = r.permeate_today_m3 != null ? +r.permeate_today_m3 : 0;
-    const feed = r.feed_today_m3 != null ? +r.feed_today_m3 : 0;
-    const rej = r.reject_today_m3 != null ? +r.reject_today_m3 : 0;
+    // Resolve permeate delta:
+    let perm: number | null =
+      r.permeate_meter_delta != null ? Math.max(0, +r.permeate_meter_delta)
+      : r.permeate_meter != null && r.permeate_meter_prev != null ? Math.max(0, +r.permeate_meter - +r.permeate_meter_prev)
+      : r.permeate_today_m3 != null ? Math.max(0, +r.permeate_today_m3)
+      : r.permeate_delta != null ? Math.max(0, +r.permeate_delta)
+      : null;
 
-    entry.perm += perm;
-    entry.feed += feed;
-    entry.rej += rej;
+    // Resolve feed delta:
+    let feed: number | null =
+      r.feed_meter_delta != null ? Math.max(0, +r.feed_meter_delta)
+      : r.feed_meter != null && r.feed_meter_prev != null ? Math.max(0, +r.feed_meter - +r.feed_meter_prev)
+      : r.feed_today_m3 != null ? Math.max(0, +r.feed_today_m3)
+      : r.feed_delta != null ? Math.max(0, +r.feed_delta)
+      : null;
+
+    // Resolve reject delta:
+    let rej: number | null =
+      r.reject_meter_delta != null ? Math.max(0, +r.reject_meter_delta)
+      : r.reject_meter != null && r.reject_meter_prev != null ? Math.max(0, +r.reject_meter - +r.reject_meter_prev)
+      : r.reject_today_m3 != null ? Math.max(0, +r.reject_today_m3)
+      : r.reject_delta != null ? Math.max(0, +r.reject_delta)
+      : null;
+
+    // Reading-level inference if unmetered:
+    if (rej === null) {
+      if (feed !== null && perm !== null && feed >= perm) {
+        rej = +(feed - perm).toFixed(3);
+      } else if (perm !== null && r.recovery_pct != null && +r.recovery_pct > 0 && +r.recovery_pct < 100) {
+        const rec = +r.recovery_pct / 100;
+        rej = +((perm / rec) - perm).toFixed(3);
+      }
+    }
+
+    if (feed === null) {
+      if (perm !== null && rej !== null) {
+        feed = +(perm + rej).toFixed(3);
+      } else if (perm !== null && r.recovery_pct != null && +r.recovery_pct > 0 && +r.recovery_pct <= 100) {
+        feed = +(perm / (+r.recovery_pct / 100)).toFixed(3);
+      }
+    }
+
+    entry.perm += perm ?? 0;
+    entry.feed += feed ?? 0;
+    entry.rej += rej ?? 0;
   }
 
   // FALLBACK / LAST RESORT: infer missing meters per train-day

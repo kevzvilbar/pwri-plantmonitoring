@@ -210,6 +210,59 @@ describe('computeRoTrainDailyVolumes', () => {
     // permeate should be inferred as 120 - 20 = 100
     expect(dayMap?.get('ro1')).toEqual({ permeate: 100, feed: 120, reject: 20 });
   });
+
+  it('correctly aggregates real database columns (permeate_meter_delta, feed_meter_delta, reject_meter_delta)', () => {
+    const readings = [
+      {
+        train_id: 'ro1',
+        reading_datetime: '2026-09-01T10:00:00Z',
+        permeate_meter_delta: 250.5,
+        feed_meter_delta: 334.0,
+        reject_meter_delta: 83.5,
+        is_meter_replacement: false,
+      },
+      {
+        train_id: 'ro1',
+        reading_datetime: '2026-09-01T14:00:00Z',
+        permeate_meter_delta: 200.0,
+        feed_meter_delta: 266.0,
+        reject_meter_delta: 66.0,
+        is_meter_replacement: false,
+      },
+      {
+        // Meter replacement jump row — MUST be excluded from volume totals
+        train_id: 'ro1',
+        reading_datetime: '2026-09-01T12:00:00Z',
+        permeate_meter_delta: 999999,
+        feed_meter_delta: 999999,
+        reject_meter_delta: 999999,
+        is_meter_replacement: true,
+      },
+    ];
+
+    const result = computeRoTrainDailyVolumes(readings);
+    const dayMap = result.get('2026-09-01');
+    expect(dayMap?.get('ro1')).toEqual({ permeate: 450.5, feed: 600.0, reject: 149.5 });
+  });
+
+  it('calculates deltas from cumulative meters (meter - meter_prev) when delta columns are null', () => {
+    const readings = [
+      {
+        train_id: 'ro1',
+        reading_datetime: '2026-09-01T08:00:00Z',
+        permeate_meter: 1500,
+        permeate_meter_prev: 1000,
+        feed_meter: 2000,
+        feed_meter_prev: 1300,
+        reject_meter: 500,
+        reject_meter_prev: 300,
+      },
+    ];
+
+    const result = computeRoTrainDailyVolumes(readings);
+    const dayMap = result.get('2026-09-01');
+    expect(dayMap?.get('ro1')).toEqual({ permeate: 500, feed: 700, reject: 200 });
+  });
 });
 
 describe('recoveryFromVolumes edge cases', () => {

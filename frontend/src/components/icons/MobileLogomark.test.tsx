@@ -32,7 +32,7 @@ import { MobileLogomark } from './MobileLogomark';
   it('keeps clip and gradient IDs unique across multiple instances', () => {
     const { container } = render(<><MobileLogomark /><MobileLogomark /></>);
     const ids = Array.from(container.querySelectorAll('[id]'), node => node.id);
-    expect(ids).toHaveLength(8);
+    expect(ids).toHaveLength(10);
     expect(new Set(ids).size).toBe(ids.length);
     for (const node of container.querySelectorAll('[fill^="url"], [clip-path]')) {
       const ref = node.getAttribute('clip-path') ?? node.getAttribute('fill');
