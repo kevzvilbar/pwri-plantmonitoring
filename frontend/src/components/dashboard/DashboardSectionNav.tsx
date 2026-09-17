@@ -138,13 +138,13 @@ export function DashboardSectionNav({
         </div>
 
         {viewMode && onViewModeChange && (
-          <div className="flex items-center shrink-0 pl-2 border-l border-border/40">
+          <div className="flex items-center shrink-0 pl-2 border-l border-border/40" data-testid="dashboard-view-mode">
             <ToggleGroup
               type="single"
               value={viewMode}
               onValueChange={(v) => v && onViewModeChange(v as DashboardViewMode)}
               className="h-7.5 bg-muted/50 border border-border/50 rounded-full p-0.5 gap-0.5"
-              data-testid="floating-dashboard-view-mode dashboard-view-mode"
+              data-testid="floating-dashboard-view-mode"
             >
               <ToggleGroupItem
                 value="inline"
