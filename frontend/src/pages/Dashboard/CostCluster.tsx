@@ -1,6 +1,6 @@
 import React, { Suspense, lazy } from 'react';
 import { format } from 'date-fns';
-import { Zap, Banknote, FlaskConical, PieChart } from 'lucide-react';
+import { Zap, Banknote, FlaskConical } from 'lucide-react';
 import { fmtNum } from '@/lib/calculations';
 import { StatCard, ClusterHeader } from '@/components/dashboard/StatCard';
 import { ClusterCharts } from '@/components/dashboard/TrendChartWrappers';
@@ -12,6 +12,10 @@ import type { DashboardViewMode } from '@/components/dashboard/types';
 // KPIs + charts paint first, composition streams in behind a skeleton.
 const LazyCostSunburst = lazy(() =>
   import('@/components/dashboard/CostSunburst').then((m) => ({ default: m.CostSunburst })),
+);
+
+const LazyCostEfficiencyCard = lazy(() =>
+  import('@/components/dashboard/CostEfficiencyCard').then((m) => ({ default: m.CostEfficiencyCard })),
 );
 
 interface CostClusterProps {
@@ -102,14 +106,9 @@ export function CostCluster({
         <Suspense fallback={<ChartSkeleton />}>
           <LazyCostSunburst plantIds={plantIds} />
         </Suspense>
-        <div className="rounded-xl border border-border/60 bg-card/60 p-3 flex items-start gap-2.5 text-xs text-muted-foreground">
-          <PieChart className="h-4 w-4 mt-0.5 shrink-0 text-chart-6" aria-hidden />
-          <p>
-            Cost composition follows the shared dashboard range above. Power splits
-            into grid vs solar, chemicals split per dosed chemical. Add chemical
-            pricing on the Costs page to unlock the full dosing breakdown.
-          </p>
-        </div>
+        <Suspense fallback={<ChartSkeleton />}>
+          <LazyCostEfficiencyCard plantIds={plantIds} />
+        </Suspense>
       </div>
     </section>
   );
