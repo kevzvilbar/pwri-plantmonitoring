@@ -6,11 +6,12 @@ import { DashboardSectionNav } from './DashboardSectionNav';
 describe('DashboardSectionNav', () => {
   it('renders section navigation buttons', () => {
     const { getAllByText } = render(<DashboardSectionNav />);
+    expect(getAllByText('Action Center').length).toBeGreaterThanOrEqual(1);
     expect(getAllByText('Overview').length).toBeGreaterThanOrEqual(1);
     expect(getAllByText('Quality').length).toBeGreaterThanOrEqual(1);
     expect(getAllByText('Production Cost').length).toBeGreaterThanOrEqual(1);
-    expect(getAllByText('Audits & Analytics').length).toBeGreaterThanOrEqual(1);
     expect(getAllByText('Health & Coverage').length).toBeGreaterThanOrEqual(1);
+    expect(getAllByText('Data Trust').length).toBeGreaterThanOrEqual(1);
   });
 
   it('renders floating view mode toggle buttons when provided', () => {

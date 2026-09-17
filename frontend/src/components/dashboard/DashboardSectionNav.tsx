@@ -5,6 +5,7 @@ import {
   Zap,
   ShieldCheck,
   Activity,
+  ClipboardList,
   LayoutGrid,
   ListCollapse,
   ExternalLink,
@@ -22,11 +23,12 @@ export interface DashboardSection {
 }
 
 export const DASHBOARD_SECTIONS: DashboardSection[] = [
+  { id: 'action-center', label: 'Action Center', shortLabel: 'Action', icon: ClipboardList, accent: 'text-warn' },
   { id: 'overview-cluster', label: 'Overview', shortLabel: 'Overview', icon: Droplet, accent: 'text-primary' },
   { id: 'quality-cluster', label: 'Quality', shortLabel: 'Quality', icon: FlaskConical, accent: 'text-accent' },
   { id: 'cost-cluster', label: 'Production Cost', shortLabel: 'Cost', icon: Zap, accent: 'text-chart-6' },
-  { id: 'audits-cluster', label: 'Audits & Analytics', shortLabel: 'Audits', icon: ShieldCheck, accent: 'text-highlight' },
   { id: 'health-cluster', label: 'Health & Coverage', shortLabel: 'Health', icon: Activity, accent: 'text-info' },
+  { id: 'audits-cluster', label: 'Data Trust', shortLabel: 'Trust', icon: ShieldCheck, accent: 'text-highlight' },
 ];
 
 export interface DashboardSectionNavProps {
@@ -35,7 +37,7 @@ export interface DashboardSectionNavProps {
 }
 
 export function DashboardSectionNav({ viewMode, onViewModeChange }: DashboardSectionNavProps = {}) {
-  const [activeSection, setActiveSection] = useState<string>('overview-cluster');
+  const [activeSection, setActiveSection] = useState<string>('action-center');
 
   useEffect(() => {
     const handleScroll = () => {

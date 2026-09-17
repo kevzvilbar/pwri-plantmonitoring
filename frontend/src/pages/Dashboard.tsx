@@ -22,6 +22,7 @@ import {
   useCostStats,
   useDashboardAlerts,
 } from './Dashboard/hooks';
+import { ActionCenter } from './Dashboard/ActionCenter';
 import { OverviewCluster } from './Dashboard/OverviewCluster';
 import { QualityCluster } from './Dashboard/QualityCluster';
 import { CostCluster } from './Dashboard/CostCluster';
@@ -267,6 +268,9 @@ export default function Dashboard() {
 
       <DashboardSectionNav viewMode={viewMode} onViewModeChange={persistViewMode} />
 
+      {/* Ops-first order: Action → Overview (water flow) → Quality → Cost → Health → Trust */}
+      <ActionCenter plantIds={plantIds} />
+
       <OverviewCluster
         consumption={prodStats.consumption}
         dConsumption={prodStats.dConsumption}
@@ -316,9 +320,9 @@ export default function Dashboard() {
         onMetricClick={handleMetricClick}
       />
 
-      <AuditsCluster plantIds={plantIds} />
-
       <HealthCluster plantIds={plantIds} viewMode={viewMode} />
+
+      <AuditsCluster plantIds={plantIds} />
 
       <TrendModal open={!!modal} onClose={() => setModal(null)} metric={modal?.metric ?? ''} title={modal?.title ?? ''} plantIds={plantIds} />
       <DowntimeEventsModal

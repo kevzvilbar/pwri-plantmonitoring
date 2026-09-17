@@ -7,6 +7,7 @@ import { NRWGaugeCard } from '@/components/dashboard/NRWGaugeCard';
 import { ClusterCharts } from '@/components/dashboard/TrendChartWrappers';
 import { WaterBalanceBridgeCard } from '@/components/dashboard/WaterBalanceBridgeCard';
 import { ReconciliationHealthCard } from '@/components/dashboard/ReconciliationHealthCard';
+import { BlendingVolumeCard } from '@/components/BlendingVolumeCard';
 import { OVERVIEW_CHART_METRICS } from '@/components/dashboard/types';
 import type { DashboardViewMode } from '@/components/dashboard/types';
 
@@ -34,22 +35,8 @@ export function OverviewCluster({
     <section id="overview-cluster" className="scroll-mt-28 space-y-2.5">
       <ClusterHeader icon={Droplet} title="Overview" accent="text-primary" subtitle="Distribution & Sources" />
 
+      {/* Water-flow order: Raw In → RO → Blending → Consumption → NRW loss */}
       <div className="grid gap-2.5 sm:gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 items-stretch">
-        <StatCard
-          icon={Receipt}
-          label="Locators Consumption"
-          value={fmtNum(consumption)}
-          unit="m³"
-          trend={dConsumption}
-          onClick={onMetricClick('production', 'Production vs Consumption')}
-        />
-
-        <NRWGaugeCard
-          nrw={nrw}
-          yNrw={yNrw}
-          onClick={onMetricClick('nrw', 'NRW Trend')}
-        />
-
         <StatCard
           icon={RawWaterIcon}
           label="Raw Water In"
@@ -74,6 +61,21 @@ export function OverviewCluster({
           value={fmtNum(blending)}
           unit="m³"
         />
+
+        <StatCard
+          icon={Receipt}
+          label="Locators Consumption"
+          value={fmtNum(consumption)}
+          unit="m³"
+          trend={dConsumption}
+          onClick={onMetricClick('production', 'Production vs Consumption')}
+        />
+
+        <NRWGaugeCard
+          nrw={nrw}
+          yNrw={yNrw}
+          onClick={onMetricClick('nrw', 'NRW Trend')}
+        />
       </div>
 
       <ClusterCharts metrics={OVERVIEW_CHART_METRICS} viewMode={viewMode} expandedMetric={expandedMetric} plantIds={plantIds} clusterId="overview" />
@@ -89,6 +91,8 @@ export function OverviewCluster({
           <ReconciliationHealthCard plantIds={plantIds} />
         </div>
       </div>
+
+      <BlendingVolumeCard plantIds={plantIds} />
     </section>
   );
 }

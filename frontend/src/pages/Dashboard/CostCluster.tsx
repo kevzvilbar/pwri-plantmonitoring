@@ -1,9 +1,10 @@
 import React from 'react';
 import { format } from 'date-fns';
-import { Zap, Banknote, FlaskConical } from 'lucide-react';
+import { Zap, Banknote, FlaskConical, PieChart } from 'lucide-react';
 import { fmtNum } from '@/lib/calculations';
 import { StatCard, ClusterHeader } from '@/components/dashboard/StatCard';
 import { ClusterCharts } from '@/components/dashboard/TrendChartWrappers';
+import { CostSunburst } from '@/components/dashboard/CostSunburst';
 import { COST_CHART_METRICS, type ChartMetric } from '@/components/dashboard/types';
 import type { DashboardViewMode } from '@/components/dashboard/types';
 
@@ -90,6 +91,18 @@ export function CostCluster({
         plantIds={plantIds}
         clusterId="cost"
       />
+
+      <div className="grid gap-2.5 sm:gap-3 grid-cols-1 lg:grid-cols-2 items-stretch">
+        <CostSunburst plantIds={plantIds} />
+        <div className="rounded-xl border border-border/60 bg-card/60 p-3 flex items-start gap-2.5 text-xs text-muted-foreground">
+          <PieChart className="h-4 w-4 mt-0.5 shrink-0 text-chart-6" aria-hidden />
+          <p>
+            Cost composition follows the shared dashboard range above. Power splits
+            into grid vs solar, chemicals split per dosed chemical. Add chemical
+            pricing on the Costs page to unlock the full dosing breakdown.
+          </p>
+        </div>
+      </div>
     </section>
   );
 }
