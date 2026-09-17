@@ -175,39 +175,41 @@ export function ReadingCoverageCard({ plantIds }: Props) {
   const anyMissing = rows.some((r) => r.done < r.total);
 
   return (
-    <Card className="p-3 space-y-3">
-      <div className="flex items-center gap-2">
-        <ClipboardCheck className="h-4 w-4 text-muted-foreground/80 shrink-0" aria-hidden />
-        <span className="text-xs font-medium">Today's coverage</span>
-        {anyMissing && (
-          <span className="ml-auto inline-flex items-center px-1.5 py-0.5 rounded-full bg-warn-soft text-warn border border-warn/70 text-2xs font-medium">
-            Gaps
-          </span>
-        )}
-      </div>
+    <Card className="p-3 flex flex-col justify-between h-full space-y-2.5">
+      <div className="space-y-2">
+        <div className="flex items-center gap-2">
+          <ClipboardCheck className="h-4 w-4 text-muted-foreground shrink-0" aria-hidden />
+          <span className="text-xs font-medium text-foreground">Today's coverage</span>
+          {anyMissing && (
+            <span className="ml-auto inline-flex items-center px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30 text-2xs font-semibold">
+              Gaps
+            </span>
+          )}
+        </div>
 
-      <div className="space-y-2.5">
-        {rows.map((r) => {
-          const { activeVar } = resolveRowColor(r.done, r.total, r.urgent, r.colorVar);
-          return (
-            <div key={r.label}>
-              <div className="flex items-center gap-1.5 mb-1">
-                <span className="h-1.5 w-1.5 rounded-full shrink-0" style={{ backgroundColor: `hsl(var(${activeVar}))` }} />
-                <span className="text-2xs font-medium text-muted-foreground uppercase tracking-wider">
-                  {r.label}
-                </span>
+        <div className="space-y-2">
+          {rows.map((r) => {
+            const { activeVar } = resolveRowColor(r.done, r.total, r.urgent, r.colorVar);
+            return (
+              <div key={r.label}>
+                <div className="flex items-center gap-1.5 mb-1">
+                  <span className="h-1.5 w-1.5 rounded-full shrink-0" style={{ backgroundColor: `hsl(var(${activeVar}))` }} />
+                  <span className="text-2xs font-medium text-slate-400 dark:text-slate-300 uppercase tracking-wider">
+                    {r.label}
+                  </span>
+                </div>
+                <CoverageBar done={r.done} total={r.total} urgent={r.urgent} colorVar={r.colorVar} />
               </div>
-              <CoverageBar done={r.done} total={r.total} urgent={r.urgent} colorVar={r.colorVar} />
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
       </div>
 
-      <div className="flex justify-end pt-0.5 border-t border-border/40">
+      <div className="flex justify-end pt-1 border-t border-border/40">
         <Button
           variant="link"
           size="sm"
-          className="h-auto p-0 text-xs text-muted-foreground"
+          className="h-auto p-0 text-xs font-medium text-primary hover:text-primary/90 hover:underline"
           onClick={() => navigate('/operations')}
         >
           Log missing readings →

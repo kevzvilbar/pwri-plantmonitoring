@@ -39,9 +39,9 @@ function urgencyLabel(days: number): string {
 }
 
 function urgencyPillCls(days: number): string {
-  if (days < 0)   return 'bg-danger-soft text-danger border border-danger/20';
-  if (days <= 3)  return 'bg-warn-soft  text-warn-foreground border border-warn/20';
-  return 'bg-info-soft text-info border border-info/20';
+  if (days < 0)  return 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30 font-semibold';
+  if (days <= 3) return 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30 font-semibold';
+  return 'bg-sky-500/15 text-sky-700 dark:text-sky-300 border border-sky-500/30 font-semibold';
 }
 
 interface Props {
@@ -156,27 +156,27 @@ export function PMDueSoonCard({ plantIds }: Props) {
 
   if (!items.length) {
     return (
-      <Card className="p-3 space-y-2 flex flex-col justify-between" data-testid="pm-due-soon-card">
+      <Card className="p-3 flex flex-col justify-between h-full space-y-2" data-testid="pm-due-soon-card">
         <div className="space-y-2">
           <div className="flex items-center gap-2">
-            <Wrench className="h-4 w-4 text-emerald-400 shrink-0" aria-hidden />
-            <span className="text-xs font-medium">PM due soon</span>
-            <span className="ml-auto inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-2xs font-medium">
+            <Wrench className="h-4 w-4 text-emerald-500 dark:text-emerald-400 shrink-0" aria-hidden />
+            <span className="text-xs font-medium text-foreground">PM due soon</span>
+            <span className="ml-auto inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 text-2xs font-medium">
               <CheckCircle2 className="h-3 w-3" />
               Up to date
             </span>
           </div>
 
-          <p className="text-xs text-muted-foreground">
+          <p className="text-xs text-slate-400 dark:text-slate-300 leading-relaxed">
             No PM tasks due in the next {LOOKAHEAD_DAYS} days. Equipment maintenance schedules are currently up to date.
           </p>
         </div>
 
-        <div className="flex justify-end pt-0.5 border-t border-border/40">
+        <div className="flex justify-end pt-1 border-t border-border/40">
           <Button
             variant="link"
             size="sm"
-            className="h-auto p-0 text-xs text-muted-foreground hover:text-foreground"
+            className="h-auto p-0 text-xs font-medium text-primary hover:text-primary/90 hover:underline"
             onClick={() => navigate('/maintenance')}
           >
             Maintenance calendar →
@@ -187,62 +187,92 @@ export function PMDueSoonCard({ plantIds }: Props) {
   }
 
   return (
-    <Card className="p-3 space-y-2">
-      {/* Header */}
-      <div className="flex items-center gap-2">
-        <Wrench className="h-4 w-4 text-muted-foreground shrink-0" aria-hidden />
-        <span className="text-xs font-medium">PM due soon</span>
-        <span className="ml-auto inline-flex items-center px-1.5 py-0.5 rounded-full bg-warn-soft text-warn-foreground border border-warn/20 text-2xs font-medium">
-          {items.length} item{items.length > 1 ? 's' : ''}
-        </span>
-      </div>
+    <Card className="p-3 flex flex-col justify-between h-full space-y-2.5" data-testid="pm-due-soon-card">
+      <div className="space-y-2">
+        {/* Header */}
+        <div className="flex items-center gap-2">
+          <Wrench className="h-4 w-4 text-muted-foreground shrink-0" aria-hidden />
+          <span className="text-xs font-medium text-foreground">PM due soon</span>
+          <span className="ml-auto inline-flex items-center px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30 text-2xs font-semibold">
+            {items.length} item{items.length > 1 ? 's' : ''}
+          </span>
+        </div>
 
-      {/* Item list */}
-      <div className="space-y-1.5">
-        {items.map((item) => (
-          <div
-            key={item.templateId}
-            className="flex items-center gap-2.5 p-2 rounded-md bg-muted/30 border border-border/40"
-          >
-            {/* Monochromatic bare clock icon */}
-            <Clock
-              className="h-3.5 w-3.5 text-muted-foreground/80 shrink-0"
-              aria-hidden
-            />
+        {/* Item list */}
+        <div className="space-y-1.5">
+          {items.map((item) => (
+            <div
+              key={item.templateId}
+              className="flex items-center gap-2.5 p-2 rounded-md bg-muted/20 border border-border/30 hover:bg-muted/30 transition-colors cursor-pointer"
+              onClick={() => navigate('/maintenance')}
+            >
+              {/* Clock icon with status color */}
+              <Clock
+                className={cn(
+                  'h-3.5 w-3.5 shrink-0',
+                  item.daysUntilDue < 0
+                    ? 'text-rose-500 dark:text-rose-400'
+                    : item.daysUntilDue <= 3
+                      ? 'text-amber-500 dark:text-amber-400'
+                      : 'text-slate-400 dark:text-slate-400',
+                )}
+                aria-hidden
+              />
 
-            {/* Content */}
-            <div className="flex-1 min-w-0">
-              <div className="text-xs font-medium truncate">
-                <span className="text-muted-foreground/70 mr-1">{item.plantName} ·</span>
-                {item.equipment}
+              {/* Content */}
+              <div className="flex-1 min-w-0">
+                <div className="text-xs font-semibold text-foreground truncate">
+                  <span className="text-slate-400 dark:text-slate-400 font-normal mr-1">{item.plantName} ·</span>
+                  {item.equipment}
+                </div>
+                <div className="text-2xs text-slate-400 dark:text-slate-300 mt-0.5 font-medium">
+                  {item.category && <span>{item.category} · </span>}
+                  {item.daysUntilDue < 0 ? (
+                    <span className="text-rose-600 dark:text-rose-400 font-semibold">
+                      Overdue since {format(item.nextDue, 'MMM d')}
+                    </span>
+                  ) : (
+                    <span className="text-amber-700 dark:text-amber-300">
+                      Due {format(item.nextDue, 'MMM d')}
+                    </span>
+                  )}
+                </div>
               </div>
-              <div className="text-2xs text-muted-foreground/60 mt-0.5">
-                {item.category}
-                {item.category && ' · '}
-                {item.daysUntilDue < 0
-                  ? `Overdue since ${format(item.nextDue, 'MMM d')}`
-                  : `Due ${format(item.nextDue, 'MMM d')}`}
+
+              {/* Urgency badge */}
+              <span
+                className={cn(
+                  'shrink-0 px-1.5 py-0.5 rounded-full text-3xs font-semibold',
+                  urgencyPillCls(item.daysUntilDue),
+                )}
+              >
+                {urgencyLabel(item.daysUntilDue)}
+              </span>
+            </div>
+          ))}
+
+          {/* When fewer than 3 items, show on-track lookahead status so card fills space gracefully */}
+          {items.length < 3 && (
+            <div className="flex items-center gap-2 p-2 rounded-md bg-muted/10 border border-border/20 text-xs">
+              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 dark:text-emerald-400 shrink-0" aria-hidden />
+              <div className="min-w-0">
+                <span className="text-xs font-medium text-foreground">
+                  All other equipment on schedule
+                </span>
+                <p className="text-2xs text-slate-400 dark:text-slate-300 truncate mt-0.5">
+                  No other PM tasks due in the next {LOOKAHEAD_DAYS} days
+                </p>
               </div>
             </div>
-
-            {/* Urgency badge */}
-            <span
-              className={cn(
-                'shrink-0 px-1.5 py-0.5 rounded-full text-3xs font-semibold',
-                urgencyPillCls(item.daysUntilDue),
-              )}
-            >
-              {urgencyLabel(item.daysUntilDue)}
-            </span>
-          </div>
-        ))}
+          )}
+        </div>
       </div>
 
-      <div className="flex justify-end pt-0.5 border-t border-border/40">
+      <div className="flex justify-end pt-1 border-t border-border/40">
         <Button
           variant="link"
           size="sm"
-          className="h-auto p-0 text-xs text-muted-foreground"
+          className="h-auto p-0 text-xs font-medium text-primary hover:text-primary/90 hover:underline"
           onClick={() => navigate('/maintenance')}
         >
           Full PM schedule →

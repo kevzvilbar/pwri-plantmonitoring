@@ -17,6 +17,9 @@ describe('recoveryFromVolumes', () => {
   it('infers feed from permeate + reject when feed is 0', () => {
     // permeate = 750, reject = 250, feed inferred = 1000 → 75%
     expect(recoveryFromVolumes(750, 0, 250)).toBe(75.0);
+  });
+});
+
 describe('computeRoTrainDailyVolumes', () => {
   it('aggregates permeate/feed/reject volumes per train per day', () => {
     const readings = [
@@ -156,8 +159,6 @@ describe('computeRoTrainDailyVolumes', () => {
     expect(result.size).toBe(1);
     expect(result.get('2026-09-01')?.get('ro1')).toEqual({ permeate: 100, feed: 100, reject: 0 });
   });
-});
-
 
   it('infers missing feed from permeate + reject', () => {
     const readings = [
@@ -210,8 +211,8 @@ describe('computeRoTrainDailyVolumes', () => {
     expect(dayMap?.get('ro1')).toEqual({ permeate: 100, feed: 120, reject: 20 });
   });
 });
-  });
 
+describe('recoveryFromVolumes edge cases', () => {
   it('handles edge cases with small volumes', () => {
     expect(recoveryFromVolumes(1, 10, 9)).toBe(10.0);
     expect(recoveryFromVolumes(999, 1000, 1)).toBe(99.9);
