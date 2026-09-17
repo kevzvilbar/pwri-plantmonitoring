@@ -30,6 +30,7 @@ export function Logomark({
       width={size}
       height={size}
       alt={alt}
+      data-no-dim=""
       decoding="async"
       loading={props.loading ?? 'eager'}
       className={cn(

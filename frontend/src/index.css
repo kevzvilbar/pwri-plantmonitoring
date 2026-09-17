@@ -74,6 +74,39 @@
   ::-webkit-scrollbar-thumb:hover { background: hsl(var(--muted-foreground) / 0.4); }
   ::-webkit-scrollbar-corner   { background: transparent; }
 
+  /* ── Dark Mode Refined Custom Scrollbars ────────────────────────── */
+  .dark {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.15) rgba(255, 255, 255, 0.02);
+  }
+  .dark ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  .dark ::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.02);
+  }
+  .dark ::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 9999px;
+  }
+  .dark ::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.28);
+  }
+
+  /* ── Photographic Media Dimming in Dark Mode (Anti-Glare) ──────── */
+  .dark img:not([data-no-dim]),
+  .dark video:not([data-no-dim]) {
+    filter: brightness(0.9) contrast(1.04);
+    transition: filter 200ms ease;
+  }
+
+  /* ── Calibrated Selection Styling in Dark Mode ──────────────────── */
+  .dark ::selection {
+    background-color: rgba(59, 130, 246, 0.3);
+    color: #bfdbfe;
+  }
+
   /* ── Number inputs ─────────────────────────────────────────────── */
   input[type="number"]  { text-align: right; }
   input[readonly]       { text-align: left; }

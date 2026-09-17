@@ -38,10 +38,18 @@ export default {
       },
       colors: {
         border: "hsl(var(--border))",
+        hairline: "var(--border-hairline)",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",
         background: "hsl(var(--background))",
         foreground: "hsl(var(--foreground))",
+        surface: {
+          ground: "hsl(var(--surface-ground))",
+          base: "hsl(var(--surface-base))",
+          raised: "hsl(var(--surface-raised))",
+          overlay: "hsl(var(--surface-overlay))",
+          dialog: "hsl(var(--surface-dialog))",
+        },
         primary: {
           DEFAULT: "hsl(var(--primary))",
           foreground: "hsl(var(--primary-foreground))",
