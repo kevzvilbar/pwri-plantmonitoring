@@ -1,4 +1,5 @@
 // @ts-nocheck
+/// <reference path="../deno.d.ts" />
 /**
  * Edge Function: notify-train-offline
  *

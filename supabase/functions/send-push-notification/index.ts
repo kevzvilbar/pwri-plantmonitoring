@@ -1,3 +1,5 @@
+// @ts-nocheck
+/// <reference path="../deno.d.ts" />
 /**
  * Edge Function: send-push-notification
  *
@@ -39,7 +41,7 @@ interface PushRequest {
   tag?: string;
 }
 
-serve(async (req) => {
+serve(async (req: any) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
