@@ -23,6 +23,7 @@ import {
   CheckCircle2, Shield, Key, Building, ChevronRight, Activity, Database
 } from 'lucide-react';
 import { ProfileEmailChange } from '@/components/ProfileEmailChange';
+import { PushNotificationCard } from '@/components/notifications/PushNotificationCard';
 import { useMyCustomRole } from '@/hooks/useCustomRoles';
 
 function getInitials(first?: string | null, last?: string | null, username?: string | null): string {
@@ -345,6 +346,11 @@ export default function Profile() {
 
               <ProfileEmailChange />
             </Card>
+          )}
+
+          {/* Web & Mobile Push Notifications Card */}
+          {!isOverride && (
+            <PushNotificationCard />
           )}
 
           {/* Role & Access Matrix */}

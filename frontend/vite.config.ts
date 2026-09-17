@@ -53,6 +53,7 @@ export default defineConfig(({ mode }) => ({
         // it deliberately does not paper over stale or unavailable data.
         globPatterns: ["**/*.{js,css,html,svg,png,ico,webmanifest}"],
         navigateFallback: "index.html",
+        importScripts: ["sw-push.js"],
       },
     }),
     ...(mode === 'production'

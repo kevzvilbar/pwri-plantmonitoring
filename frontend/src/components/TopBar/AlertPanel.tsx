@@ -1,4 +1,4 @@
-import { Activity, Bell, BellOff, CheckCircle2, ChevronRight, FileText } from 'lucide-react';
+import { Activity, Bell, BellOff, BellRing, CheckCircle2, ChevronRight, FileText } from 'lucide-react';
 import { toast } from 'sonner';
 import { useTopBarState } from './useTopBarState';
 import { cn } from '@/lib/utils';
@@ -280,17 +280,29 @@ export function AlertPanel() {
         )}
       </div>
 
-      <div className="p-2.5 bg-muted/40 border-t border-border/60 flex items-center justify-between">
+      <div className="p-2 bg-muted/40 border-t border-border/60 flex items-center justify-between gap-2">
         <button
           type="button"
           onClick={() => {
             setPanelOpen(false);
             navigate('/alerts');
           }}
-          className="w-full text-xs font-semibold text-primary hover:text-primary/80 py-1.5 px-3 rounded-lg hover:bg-primary/10 transition-colors flex items-center justify-center gap-1.5"
+          className="flex-1 text-xs font-semibold text-primary hover:text-primary/80 py-1.5 px-3 rounded-lg hover:bg-primary/10 transition-colors flex items-center justify-center gap-1.5"
         >
           <span>Open Full Triage Center</span>
           <ChevronRight className="h-3.5 w-3.5" />
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setPanelOpen(false);
+            navigate('/profile');
+          }}
+          className="text-2xs font-medium text-muted-foreground hover:text-foreground py-1.5 px-2.5 rounded-lg hover:bg-muted transition-colors flex items-center gap-1 shrink-0"
+          title="Push Notification Settings"
+        >
+          <BellRing className="h-3 w-3 text-primary" />
+          <span>Push Setup</span>
         </button>
       </div>
     </div>
