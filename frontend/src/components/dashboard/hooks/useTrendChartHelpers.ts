@@ -1,7 +1,11 @@
 export function useChartHelpers(p: Record<string, any>) {
-  const { compact } = p;
+  const { compact, metric } = p;
 
-  const chartHeight = compact ? 'h-[200px]' : 'h-[260px] sm:h-[340px]';
+  const chartHeight = compact
+    ? 'h-[200px]'
+    : metric === 'roFlowBalance'
+      ? 'h-[320px] sm:h-[400px]'
+      : 'h-[260px] sm:h-[340px]';
 
   const formatYAxis = (value: number) => {
     if (value === 0) return '0';

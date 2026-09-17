@@ -45,8 +45,8 @@ describe('ROTrainWaterFlowChart', () => {
       />
     );
 
-    expect(getByText('Permeate Water (+)')).toBeDefined();
-    expect(getByText('Reject Water (−)')).toBeDefined();
+    expect(getByText('Permeate (+)')).toBeDefined();
+    expect(getByText('Reject (−)')).toBeDefined();
     expect(getByText('Feed Hairline')).toBeDefined();
     expect(getByText('Mismatch Marker')).toBeDefined();
   });

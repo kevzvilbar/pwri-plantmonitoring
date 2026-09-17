@@ -303,27 +303,49 @@ export function ROTrainWaterFlowChart({
   formatYAxis,
 }: ROTrainWaterFlowChartProps) {
   // Pre-process trendRows to ensure reject values are strictly negative for downward diverging bars
-  const chartData = React.useMemo(() => {
-    return (trendRows ?? []).map((row) => ({
+  // and compute tight, robust vertical headroom for maximum bar resolution.
+  const { chartData, yDomain } = React.useMemo(() => {
+    const rows = (trendRows ?? []).map((row) => ({
       ...row,
       permeate: Math.max(0, row.permeate ?? 0),
       rejectNeg: -Math.abs(row.reject ?? 0),
     }));
+
+    let maxPermeate = 0;
+    let maxReject = 0;
+    for (const r of rows) {
+      if (r.permeate > maxPermeate) maxPermeate = r.permeate;
+      const rej = Math.abs(r.reject ?? 0);
+      if (rej > maxReject) maxReject = rej;
+    }
+
+    if (maxPermeate === 0 && maxReject === 0) {
+      return { chartData: rows, yDomain: [-1000, 1000] as [number, number] };
+    }
+
+    // Add clean 12% headroom so feed hairlines and markers breathe without excessive empty space
+    const topLimit = Math.ceil((maxPermeate * 1.12) / 1000) * 1000;
+    const botLimit = -Math.ceil((maxReject * 1.12) / 1000) * 1000;
+
+    return {
+      chartData: rows,
+      yDomain: [botLimit, topLimit] as [number, number],
+    };
   }, [trendRows]);
 
   return (
     <div className="relative w-full h-full flex flex-col">
       {/* Chart Legend Header */}
-      <div className="flex flex-wrap items-center justify-end gap-3 text-[11px] mb-1 px-2 text-muted-foreground">
+      <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-1 text-[11px] mb-1 px-1 text-muted-foreground">
         <div className="flex items-center gap-1.5">
           <span className="w-2.5 h-2.5 rounded-xs bg-gradient-to-t from-sky-600 to-cyan-400 inline-block shadow-xs" />
           <span className="font-bold text-xs tracking-wider text-cyan-400">PERMEATE</span>
-          <span className="text-[10px] text-muted-foreground">Permeate Water (+)</span>
+          <span className="text-[10px] text-muted-foreground">Permeate (+)</span>
         </div>
         <div className="flex items-center gap-1.5">
           <span className="w-2.5 h-2.5 rounded-xs bg-gradient-to-t from-orange-600 to-rose-500 inline-block shadow-xs" />
           <span className="font-bold text-xs tracking-wider text-rose-400">REJECT WATER</span>
-          <span className="text-[10px] text-muted-foreground">Reject Water (−)</span>
+          <span className="text-[10px] text-muted-foreground">Reject (−)</span>
         </div>
         <div className="flex items-center gap-1.5">
           <span className="w-3 h-0.5 bg-slate-200 inline-block rounded-full" />
@@ -340,7 +362,7 @@ export function ROTrainWaterFlowChart({
           <ComposedChart
             data={chartData}
             stackOffset="sign"
-            margin={{ top: 16, right: 12, left: -4, bottom: 4 }}
+            margin={{ top: 8, right: 8, left: -10, bottom: 2 }}
           >
             <defs>
               <linearGradient id="permeateFlowGrad" x1="0" y1="0" x2="0" y2="1">
@@ -370,10 +392,11 @@ export function ROTrainWaterFlowChart({
             />
 
             <YAxis
+              domain={yDomain}
               tick={{ fontSize: 10 }}
               stroke="hsl(var(--muted-foreground))"
               tickFormatter={(v: number) => formatYAxis(Math.abs(v))}
-              width={46}
+              width={42}
               axisLine={false}
               tickLine={false}
             />
@@ -396,7 +419,7 @@ export function ROTrainWaterFlowChart({
               dataKey="permeate"
               name="Permeate (m³)"
               stackId="roFlow"
-              maxBarSize={32}
+              maxBarSize={48}
               shape={<PermeateBarWithHairline />}
             />
 
@@ -405,7 +428,7 @@ export function ROTrainWaterFlowChart({
               dataKey="rejectNeg"
               name="Reject (m³)"
               stackId="roFlow"
-              maxBarSize={32}
+              maxBarSize={48}
               shape={<RejectBarShape />}
             />
           </ComposedChart>
