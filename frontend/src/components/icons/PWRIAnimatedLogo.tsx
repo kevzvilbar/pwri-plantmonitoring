@@ -262,3 +262,4 @@ export const PWRIAnimatedLogo: React.FC<PWRIAnimatedLogoProps> = ({
 };
 
 export default PWRIAnimatedLogo;
+

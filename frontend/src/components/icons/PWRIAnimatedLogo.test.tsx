@@ -33,3 +33,4 @@ describe('PWRIAnimatedLogo', () => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 });
+
