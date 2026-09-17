@@ -46,6 +46,7 @@ interface HeaderProps {
     avgChemCost: number | null;
     totalCostOutput: number;
     avgRecovery: number | null;
+    avgReadingRecovery: number | null;  // diagnostic: old reading-count-weighted average
     minRecovery: number | null;
     maxRecovery: number | null;
     recoveryDays: number;

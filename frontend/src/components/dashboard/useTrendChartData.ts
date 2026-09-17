@@ -18,6 +18,7 @@ import { computeEntityDeltas } from '@/lib/entityDeltas';
 import { fillDateRange } from './TrendChartPivotShared';
 import { buildTrendRows, type Granularity, type TrendFieldConfig } from './TrendChartAggregate';
 import { buildTariffsLookup, processPowerReadingsForTrend } from './TrendChart/powerTrendProcessing';
+import { recoveryFromVolumes } from '@/lib/roTrainDailyVolumes';
 
 const TREND_FIELD_AGG: Record<string, TrendFieldConfig> = {
   production: {
@@ -37,7 +38,14 @@ const TREND_FIELD_AGG: Record<string, TrendFieldConfig> = {
   pv: { production: 'sum', kwh: 'sum', solarKwh: 'sum' },
   kwh: { kwh: 'sum', solarKwh: 'sum' },
   tds: { tds: { type: 'weighted-avg', weight: 'tdsSamples' } },
-  recovery: { recovery: { type: 'weighted-avg', weight: 'recoverySamples' } },
+  // Recovery %: volume-based (Σpermeate ÷ Σfeed × 100), not reading-count weighted.
+  // The old reading-count-weighted average is preserved as `recoveryReadingAvg`
+  // for diagnostic comparison. See roTrainDailyVolumes.ts's recoveryFromVolumes()
+  // for the shared formula.
+  recovery: {
+    permeate: 'sum', feed: 'sum', reject: 'sum',
+    recoveryReadingAvg: { type: 'weighted-avg', weight: 'recoverySamples' },
+  },
   roFlowBalance: {
     permeate: 'sum',
     reject: 'sum',
@@ -443,7 +451,11 @@ export function useTrendChartData({
           variance: diff,
           variancePct: pct,
           hasDeviation: hasDev,
-          recovery: recoverySamples ? +(d.recovery / recoverySamples).toFixed(1) : null,
+          // Volume-based recovery %: Σpermeate ÷ Σfeed × 100 (shared formula)
+          // This replaces the old reading-count-weighted average.
+          // The old reading-based number is preserved as recoveryReadingAvg for diagnostic comparison.
+          recovery: recoveryFromVolumes(perm, feed, rej),
+          recoveryReadingAvg: recoverySamples ? +(d.recovery / recoverySamples).toFixed(1) : null,
           tds: tdsSamples ? Math.round(d.tds / tdsSamples) : null,
           nrw: calc.nrw(d.production, d.consumption),
           // ₱/m³ unit costs — null when data is missing
@@ -499,7 +511,7 @@ export function useTrendChartData({
         isoDate: dt.toISOString(),
         production: 0, consumption: 0, rawwater: 0, permeate: 0,
         feed: 0, reject: 0, rejectNeg: 0, expectedFeed: 0, variance: 0, variancePct: 0, hasDeviation: false,
-        recovery: null, tds: null, kwh: null, solarKwh: null,
+        recovery: null, recoveryReadingAvg: null, tds: null, kwh: null, solarKwh: null,
         nrw: 0, powerCost: null, chemCost: null, totalCost: null,
         _meterReplacements: [], _permeateSourceNames: [],
       };
@@ -551,6 +563,21 @@ export function useTrendChartData({
           variance: diff,
           variancePct: pct,
           hasDeviation: hasDev,
+        };
+      });
+    }
+    if (metric === 'recovery') {
+      // Recompute recovery % from bucketed volumes (Σpermeate ÷ Σfeed × 100)
+      // instead of using the weighted-avg of daily ratios.
+      return bucketed.map((r: any) => {
+        const perm = +(r.permeate ?? 0);
+        const rej = +(r.reject ?? 0);
+        const feed = +(r.feed ?? 0);
+        return {
+          ...r,
+          recovery: recoveryFromVolumes(perm, feed, rej),
+          // Preserve the reading-based average as a diagnostic (weighted-avg already computed by buildTrendRows)
+          recoveryReadingAvg: r.recoveryReadingAvg,
         };
       });
     }

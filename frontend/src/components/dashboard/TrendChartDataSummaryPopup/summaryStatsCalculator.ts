@@ -8,6 +8,9 @@ export interface OverviewChartRowForStats {
   powerCost?: number | null;
   chemCost?: number | null;
   recovery?: number | null;
+  recoveryReadingAvg?: number | null;  // diagnostic: old reading-count-weighted average
+  permeate?: number | null;  // for volume-based recovery calculation
+  feed?: number | null;      // for volume-based recovery calculation
   tds?: number | null;
   date?: string;
   [key: string]: unknown;
@@ -60,6 +63,7 @@ export interface SummaryStatsResult {
   avgChemCost: number | null;
   totalCostOutput: number;
   avgRecovery: number | null;
+  avgReadingRecovery: number | null;  // diagnostic: old reading-count-weighted average
   minRecovery: number | null;
   maxRecovery: number | null;
   recoveryDays: number;
@@ -68,6 +72,8 @@ export interface SummaryStatsResult {
   maxTds: number | null;
   tdsDays: number;
 }
+
+import { recoveryFromVolumes } from '@/lib/roTrainDailyVolumes';
 
 /**
  * Computes rollups and metrics for the Data Summary modal / popup tabs.
@@ -118,13 +124,22 @@ export function calculateDataSummaryStats(
   const totalCostOutput = totalProd > 0 ? totalProd : totalRaw;
 
   const recoveryRows = overviewChartRows.filter(
-    (r): r is OverviewChartRowForStats & { recovery: number } =>
+    (r): r is OverviewChartRowForStats & { recovery: number; permeate?: number; feed?: number } =>
       r.recovery != null && r.recovery > 0,
   );
-  const avgRecovery =
+  
+  // Volume-based recovery %: Σpermeate ÷ Σfeed × 100 (matches Water Balance formula)
+  // This replaces the old average-of-daily-averages approach.
+  const totalPermeate = overviewChartRows.reduce((s, r) => s + (r.permeate ?? 0), 0);
+  const totalFeed = overviewChartRows.reduce((s, r) => s + (r.feed ?? 0), 0);
+  const avgRecovery = recoveryFromVolumes(totalPermeate, totalFeed, 0);
+  
+  // Diagnostic: old reading-count-weighted average (for comparison)
+  const avgReadingRecovery =
     recoveryRows.length > 0
       ? recoveryRows.reduce((s, r) => s + r.recovery, 0) / recoveryRows.length
       : null;
+  
   const minRecovery =
     recoveryRows.length > 0 ? Math.min(...recoveryRows.map((r) => r.recovery)) : null;
   const maxRecovery =
@@ -162,6 +177,7 @@ export function calculateDataSummaryStats(
     avgChemCost,
     totalCostOutput,
     avgRecovery,
+    avgReadingRecovery,
     minRecovery,
     maxRecovery,
     recoveryDays,

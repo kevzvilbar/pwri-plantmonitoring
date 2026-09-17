@@ -10,6 +10,7 @@ import {
 } from '../TrendChartPivotShared';
 import type { ChemicalDayBreakdown } from '../TrendChartTables';
 import { calculateDataSummaryStats, calculatePlantHealthStats, type PlantHealthStatsResult } from './summaryStatsCalculator';
+import { computeRoTrainDailyVolumes, recoveryFromVolumes } from '@/lib/roTrainDailyVolumes';
 
 export interface DataSummaryData {
   tab: DSMTab;
@@ -84,6 +85,7 @@ export interface DataSummaryData {
     avgChemCost: number | null;
     totalCostOutput: number;
     avgRecovery: number | null;
+    avgReadingRecovery: number | null;  // diagnostic: old reading-count-weighted average
     minRecovery: number | null;
     maxRecovery: number | null;
     recoveryDays: number;
@@ -284,35 +286,32 @@ export function useDataSummaryData({
   }, [filteredRoReadings, roTrainNames]);
 
   const { roTrainRecoveryByDate, roTrainTdsByDate } = useMemo(() => {
-    const recoveryAcc = new Map<string, Map<string, { sum: number; count: number }>>();
-    const tdsAcc = new Map<string, Map<string, { sum: number; count: number }>>();
+    // Use the shared helper to compute per-train, per-day volumes with proper
+    // PRIMARY/FALLBACK inference chains (mirrors plant-level logic).
+    const volumesByDate = computeRoTrainDailyVolumes(filteredRoReadings ?? []);
+    
+    // Build recovery map from volumes (volume-based, matching Water Balance formula)
+    const recoveryByDate = new Map<string, Record<string, number>>();
+    volumesByDate.forEach((trainMap, dk) => {
+      const rec: Record<string, number> = {};
+      trainMap.forEach((v, tid) => {
+        const recovery = recoveryFromVolumes(v.permeate, v.feed, v.reject);
+        if (recovery != null) rec[tid] = recovery;
+      });
+      if (Object.keys(rec).length > 0) recoveryByDate.set(dk, rec);
+    });
 
+    // TDS: still reading-averaged per train (no volume-based equivalent yet)
+    const tdsAcc = new Map<string, Map<string, { sum: number; count: number }>>();
     (filteredRoReadings ?? []).forEach((r: any) => {
       if (!r.train_id || !r.reading_datetime) return;
       const dk = format(new Date(r.reading_datetime), 'yyyy-MM-dd');
-
-      if (r.recovery_pct != null && !isNaN(+r.recovery_pct)) {
-        if (!recoveryAcc.has(dk)) recoveryAcc.set(dk, new Map());
-        const tMap = recoveryAcc.get(dk)!;
-        const cur = tMap.get(r.train_id) ?? { sum: 0, count: 0 };
-        tMap.set(r.train_id, { sum: cur.sum + (+r.recovery_pct), count: cur.count + 1 });
-      }
-
       if (r.permeate_tds != null && !isNaN(+r.permeate_tds)) {
         if (!tdsAcc.has(dk)) tdsAcc.set(dk, new Map());
         const tMap = tdsAcc.get(dk)!;
         const cur = tMap.get(r.train_id) ?? { sum: 0, count: 0 };
         tMap.set(r.train_id, { sum: cur.sum + (+r.permeate_tds), count: cur.count + 1 });
       }
-    });
-
-    const recoveryByDate = new Map<string, Record<string, number>>();
-    recoveryAcc.forEach((tMap, dk) => {
-      const rec: Record<string, number> = {};
-      tMap.forEach((v, tid) => {
-        if (v.count > 0) rec[tid] = +(v.sum / v.count).toFixed(1);
-      });
-      recoveryByDate.set(dk, rec);
     });
 
     const tdsByDate = new Map<string, Record<string, number>>();

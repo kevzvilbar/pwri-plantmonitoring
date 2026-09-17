@@ -68,6 +68,8 @@ describe('calculateDataSummaryStats', () => {
         chemCost: 5,
         totalCost: 15,
         recovery: 75.5,
+        permeate: 755,  // 75.5% of 1000
+        feed: 1000,
         tds: 120,
       },
       {
@@ -80,6 +82,8 @@ describe('calculateDataSummaryStats', () => {
         chemCost: 6,
         totalCost: 18,
         recovery: 76.5,
+        permeate: 765,  // 76.5% of 1000
+        feed: 1000,
         tds: 130,
       },
     ];
@@ -100,8 +104,10 @@ describe('calculateDataSummaryStats', () => {
     expect(stats.avgProdCost).toBe(16.5);
     expect(stats.totalCostOutput).toBe(2000);
 
-    // Recovery
+    // Recovery — volume-based: Σpermeate ÷ Σfeed × 100 = 1520 / 2000 × 100 = 76.0%
+    // (same as before in this case, but now computed from volumes, not average of averages)
     expect(stats.avgRecovery).toBe(76.0);
+    expect(stats.avgReadingRecovery).toBe(76.0); // average of 75.5 and 76.5 = 76.0 (diagnostic)
     expect(stats.minRecovery).toBe(75.5);
     expect(stats.maxRecovery).toBe(76.5);
     expect(stats.recoveryDays).toBe(2);

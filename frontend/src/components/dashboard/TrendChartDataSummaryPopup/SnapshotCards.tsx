@@ -50,6 +50,7 @@ interface SnapshotCardsProps {
     avgChemCost: number | null;
     totalCostOutput: number;
     avgRecovery: number | null;
+    avgReadingRecovery: number | null;  // diagnostic: old reading-count-weighted average
     minRecovery: number | null;
     maxRecovery: number | null;
     recoveryDays: number;
@@ -133,6 +134,11 @@ export function SnapshotCards({ metric, stats, plantHealthStats, prodEntities }:
       <>
         <StatCard icon={<Activity />} iconColor="text-primary" label="Avg Recovery"
           value={stats.avgRecovery != null ? `${stats.avgRecovery.toFixed(1)}%` : '—'} />
+        {stats.avgReadingRecovery != null && stats.avgRecovery != null && (
+          <div className="text-3xs text-muted-foreground mt-1 italic">
+            Reading-avg: {stats.avgReadingRecovery.toFixed(1)}% (diagnostic)
+          </div>
+        )}
         <StatCard icon={<TrendingUp className="text-amber-500" />} iconColor="" label="Min Recovery"
           value={stats.minRecovery != null ? `${stats.minRecovery.toFixed(1)}%` : '—'} />
         <StatCard icon={<TrendingUp className="text-emerald-500" />} iconColor="" label="Max Recovery"
