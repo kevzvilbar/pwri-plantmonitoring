@@ -11,7 +11,7 @@ interface HealthClusterProps {
 
 export function HealthCluster({ plantIds, viewMode }: HealthClusterProps) {
   return (
-    <section id="health-cluster" className="scroll-mt-28 space-y-2.5">
+    <section id="health-cluster" className="scroll-mt-40 space-y-2.5">
       <ClusterHeader icon={Activity} title="Plant Health Trend" accent="text-accent" subtitle="RO trains" />
       <InlineTrendChart metric="plantHealth" title="Plant Health Trend" plantIds={plantIds} compact={viewMode === 'inline'} />
     </section>

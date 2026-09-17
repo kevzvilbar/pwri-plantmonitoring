@@ -24,6 +24,7 @@ import { ActionCenter } from './Dashboard/ActionCenter';
 import { OverviewCluster } from './Dashboard/OverviewCluster';
 import { QualityCluster } from './Dashboard/QualityCluster';
 import { CostCluster } from './Dashboard/CostCluster';
+import { AuditsCluster } from './Dashboard/AuditsCluster';
 import { HealthCluster } from './Dashboard/HealthCluster';
 import { TrendModal } from '@/components/dashboard/TrendChartWrappers';
 
@@ -297,6 +298,8 @@ export default function Dashboard() {
       />
 
       <HealthCluster plantIds={plantIds} viewMode={viewMode} />
+
+      <AuditsCluster plantIds={plantIds} />
 
       <TrendModal open={!!modal} onClose={() => setModal(null)} metric={modal?.metric ?? ''} title={modal?.title ?? ''} plantIds={plantIds} />
       <DowntimeEventsModal

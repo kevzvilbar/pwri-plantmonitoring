@@ -48,9 +48,10 @@ export interface DashboardSectionNavProps {
   onMonthlyPeriodChange?: (year: number, month: string) => void;
 }
 
-// Single source of truth for scroll offset: sticky bar (≈2 rows when the
-// range picker is merged) + app header. Sections use `scroll-mt-28` as the
-// CSS fallback; this JS offset matches for smooth-scroll clicks.
+// Single source of truth for scroll offset: two-row sticky control bar
+// (sections + range) + app header ≈ 150px. All dashboard sections use
+// `scroll-mt-40` (160px) as the CSS fallback so anchor/keyboard jumps land
+// with the same clearance as smooth-scroll clicks.
 export const DASHBOARD_NAV_OFFSET = 150;
 
 export function DashboardSectionNav({

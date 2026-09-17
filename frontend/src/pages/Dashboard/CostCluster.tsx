@@ -36,7 +36,7 @@ export function CostCluster({
   viewMode, expandedMetric, plantIds, onMetricClick,
 }: CostClusterProps) {
   return (
-    <section id="cost-cluster" className="scroll-mt-28 space-y-2.5">
+    <section id="cost-cluster" className="scroll-mt-40 space-y-2.5">
       <ClusterHeader
         icon={Zap}
         title="Production Cost (Power + Chemical)"

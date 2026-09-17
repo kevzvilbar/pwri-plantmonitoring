@@ -32,7 +32,7 @@ export function OverviewCluster({
   viewMode, expandedMetric, plantIds, onMetricClick,
 }: OverviewClusterProps) {
   return (
-    <section id="overview-cluster" className="scroll-mt-28 space-y-2.5">
+    <section id="overview-cluster" className="scroll-mt-40 space-y-2.5">
       <ClusterHeader icon={Droplet} title="Overview" accent="text-primary" subtitle="Distribution & Sources" />
 
       {/* Standardized KPI grid: 2-col mobile → 3-col tablet → 5-col desktop. */}

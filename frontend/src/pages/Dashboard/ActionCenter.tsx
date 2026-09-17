@@ -15,7 +15,7 @@ interface ActionCenterProps {
 
 export function ActionCenter({ plantIds }: ActionCenterProps) {
   return (
-    <section id="action-center" className="scroll-mt-28 space-y-2.5">
+    <section id="action-center" className="scroll-mt-40 space-y-2.5">
       <ClusterHeader
         icon={ClipboardList}
         title="Action Center"

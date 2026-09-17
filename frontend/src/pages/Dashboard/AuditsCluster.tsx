@@ -18,7 +18,7 @@ interface AuditsClusterProps {
 // moved to OverviewCluster. Only the completeness radar remains here.
 export function AuditsCluster({ plantIds }: AuditsClusterProps) {
   return (
-    <section id="audits-cluster" className="scroll-mt-28 space-y-2.5">
+    <section id="audits-cluster" className="scroll-mt-40 space-y-2.5">
       <ClusterHeader icon={ShieldAlert} title="Data Trust" accent="text-highlight" subtitle="Completeness & audits" />
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
         <Suspense fallback={<ChartSkeleton />}>

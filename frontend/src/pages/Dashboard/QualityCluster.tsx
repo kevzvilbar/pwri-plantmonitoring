@@ -27,7 +27,7 @@ export function QualityCluster({
   avgRecovery, avgRawTds, avgRawTurb, viewMode, expandedMetric, onMetricClick,
 }: QualityClusterProps) {
   return (
-    <section id="quality-cluster" className="scroll-mt-28 space-y-2.5">
+    <section id="quality-cluster" className="scroll-mt-40 space-y-2.5">
       <ClusterHeader icon={FlaskConical} title="Quality" accent="text-accent" subtitle="RO output" />
 
       <div className="grid gap-2.5 sm:gap-3 grid-cols-2 md:grid-cols-3 xl:grid-cols-5 items-stretch">
