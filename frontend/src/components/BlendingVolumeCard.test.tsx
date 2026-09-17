@@ -39,3 +39,4 @@ describe('BlendingVolumeCard', () => {
     expect(getByText('Log blending entry →')).toBeDefined();
   });
 });
+
