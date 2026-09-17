@@ -6,6 +6,7 @@ import { DataState } from '@/components/DataState';
 import { supabase } from '@/integrations/supabase/client';
 import { usePlants } from '@/hooks/usePlants';
 import { useAuth } from '@/hooks/useAuth';
+import { useDebounce } from '@/hooks/useDebounce';
 import { format, subDays } from 'date-fns';
 import { Timer, AlertTriangle, Plus } from 'lucide-react';
 import { toast } from 'sonner';
@@ -142,13 +143,15 @@ export function DowntimeEventsModal({
     retry: false,
   });
 
+  const debouncedSearchQuery = useDebounce(searchQuery, 250);
+
   const filtered = useMemo(() => {
     let list = data?.events ?? [];
     if (subFilter !== 'all') {
       list = list.filter((e) => e.subsystem.toLowerCase().includes(subFilter.toLowerCase()));
     }
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase().trim();
+    if (debouncedSearchQuery.trim()) {
+      const q = debouncedSearchQuery.toLowerCase().trim();
       list = list.filter(
         (e) =>
           e.subsystem.toLowerCase().includes(q) ||
@@ -158,7 +161,7 @@ export function DowntimeEventsModal({
       );
     }
     return list;
-  }, [data, subFilter, searchQuery]);
+  }, [data, subFilter, debouncedSearchQuery]);
 
   const subs = data?.by_subsystem ?? [];
 

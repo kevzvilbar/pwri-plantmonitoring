@@ -22,7 +22,6 @@
     "types:gen": "npx supabase gen types typescript --project-id=\"$VITE_SUPABASE_PROJECT_ID\" > src/integrations/supabase/types.ts"
   },
   "dependencies": {
-    "@hookform/resolvers": "^3.10.0",
     "@radix-ui/react-accordion": "^1.2.11",
     "@radix-ui/react-alert-dialog": "^1.1.14",
     "@radix-ui/react-aspect-ratio": "^1.1.7",
@@ -79,7 +78,6 @@
     "@eslint/js": "^9.32.0",
     "@playwright/test": "^1.63.0",
     "@sentry/vite-plugin": "^2.22.0",
-    "@tailwindcss/typography": "^0.5.16",
     "@testing-library/jest-dom": "^6.6.0",
     "@testing-library/react": "^16.0.0",
     "@types/d3-hierarchy": "^3.1.7",

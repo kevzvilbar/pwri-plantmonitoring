@@ -28,6 +28,7 @@ import { toast } from 'sonner';
 import { friendlyError } from '@/lib/supabaseErrors';
 import { recordTrainStatusTransition } from '@/lib/trainStatusLogWriter';
 import { format } from 'date-fns';
+import { useDebounce } from '@/hooks/useDebounce';
 import { deltaCache } from '@/lib/deltaCache';
 import { reasonCategoryLabel } from '@/lib/reasonCodes';
 import { ReasonDialog } from '@/components/ReasonDialog';
@@ -148,19 +149,21 @@ export function TrainsList({ plantId }: { plantId: string }) {
     await applyTrainStatusChange(t, newStatus);
   };
 
+  const debouncedSearchTerm = useDebounce(searchTerm, 250);
+
   const filteredTrains = useMemo(() => {
     return (trains ?? []).filter((t: any) => {
       const st = deriveTrainStatus(t);
       if (statusFilter !== 'all' && st !== statusFilter) return false;
-      if (searchTerm.trim()) {
-        const q = searchTerm.toLowerCase();
+      if (debouncedSearchTerm.trim()) {
+        const q = debouncedSearchTerm.toLowerCase();
         const numMatch = `train ${t.train_number}`.includes(q) || `${t.train_number}`.includes(q);
         const nameMatch = (t.name ?? '').toLowerCase().includes(q);
         return numMatch || nameMatch;
       }
       return true;
     });
-  }, [trains, statusFilter, searchTerm, recentTrainIds, deriveTrainStatus]);
+  }, [trains, statusFilter, debouncedSearchTerm, recentTrainIds, deriveTrainStatus]);
 
   const runningCount = (trains ?? []).filter((t: any) => deriveTrainStatus(t) === 'Running').length;
   const maintenanceCount = (trains ?? []).filter((t: any) => deriveTrainStatus(t) === 'Maintenance').length;

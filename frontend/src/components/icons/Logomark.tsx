@@ -30,6 +30,8 @@ export function Logomark({
       width={size}
       height={size}
       alt={alt}
+      decoding="async"
+      loading={props.loading ?? 'eager'}
       className={cn(
         'object-contain select-none transition-all duration-300 ease-out',
         'hover:scale-105 active:scale-95',

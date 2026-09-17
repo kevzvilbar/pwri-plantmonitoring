@@ -2,6 +2,7 @@ import React, { useCallback, useMemo } from 'react';
 import { toast } from 'sonner';
 import { runExport } from './engine';
 import { ALL_TABLES, EXPORT_CATEGORIES } from './constants';
+import { useDebounce } from '@/hooks/useDebounce';
 
 export function useExportActions(
   plantId: string,
@@ -91,8 +92,9 @@ export function useExportActions(
 }
 
 export function useTableSearch(searchQuery: string) {
+  const debouncedQuery = useDebounce(searchQuery, 250);
   return useMemo(() => {
-    const q = searchQuery.toLowerCase().trim();
+    const q = debouncedQuery.toLowerCase().trim();
     if (!q) return EXPORT_CATEGORIES;
     return EXPORT_CATEGORIES.map(cat => ({
       ...cat,
@@ -102,5 +104,5 @@ export function useTableSearch(searchQuery: string) {
         t.id.toLowerCase().includes(q)
       ),
     })).filter(cat => cat.tables.length > 0);
-  }, [searchQuery]);
+  }, [debouncedQuery]);
 }

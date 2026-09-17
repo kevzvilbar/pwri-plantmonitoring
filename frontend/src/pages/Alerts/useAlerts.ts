@@ -6,6 +6,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { usePlants } from '@/hooks/usePlants';
 import { usePlantStore } from '@/store/plantStore';
 import { useAlertStore } from '@/store/alertStore';
+import { useDebounce } from '@/hooks/useDebounce';
 import { toast } from 'sonner';
 import { sevTier, EMPTY_NOTIFICATIONS, EMPTY_PLANTS, type Notification } from './constants';
 
@@ -21,6 +22,7 @@ export function useAlerts() {
   const [tierFilter, setTierFilter] = useState<'all' | 'critical' | 'warning' | 'info'>('all');
   const [plantFilter, setPlantFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const debouncedSearchQuery = useDebounce(searchQuery, 250);
 
   const visiblePlants = useMemo(() => {
     if (!plants) return EMPTY_PLANTS;
@@ -79,8 +81,8 @@ export function useAlerts() {
         if (plantFilter !== 'all' && alert.plantId !== plantFilter) return false;
         const tier = sevTier(alert.severity);
         if (tierFilter !== 'all' && tier !== tierFilter) return false;
-        if (searchQuery.trim()) {
-          const q = searchQuery.toLowerCase();
+        if (debouncedSearchQuery.trim()) {
+          const q = debouncedSearchQuery.toLowerCase();
           const pName = plantNameById.get(alert.plantId) || '';
           const matchTitle = (alert.title || '').toLowerCase().includes(q);
           const matchDesc = (alert.description || '').toLowerCase().includes(q);
@@ -94,21 +96,21 @@ export function useAlerts() {
         const order = { critical: 0, warning: 1, info: 2 };
         return (order[sevTier(a.severity)] - order[sevTier(b.severity)]) || (b.timestamp - a.timestamp);
       });
-  }, [plantAlerts, plantFilter, tierFilter, searchQuery, plantNameById]);
+  }, [plantAlerts, plantFilter, tierFilter, debouncedSearchQuery, plantNameById]);
 
   const filteredLogs = useMemo(() => {
     return notifs.filter((n) => {
       const tier = sevTier(n.severity);
       if (tierFilter !== 'all' && tier !== tierFilter) return false;
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
+      if (debouncedSearchQuery.trim()) {
+        const q = debouncedSearchQuery.toLowerCase();
         const matchTitle = (n.title || '').toLowerCase().includes(q);
         const matchMsg = (n.message || '').toLowerCase().includes(q);
         if (!matchTitle && !matchMsg) return false;
       }
       return true;
     });
-  }, [notifs, tierFilter, searchQuery]);
+  }, [notifs, tierFilter, debouncedSearchQuery]);
 
   const criticalCount = useMemo(() => plantAlerts.filter((a) => sevTier(a.severity) === 'critical').length, [plantAlerts]);
   const warningCount = useMemo(() => plantAlerts.filter((a) => sevTier(a.severity) === 'warning').length, [plantAlerts]);
