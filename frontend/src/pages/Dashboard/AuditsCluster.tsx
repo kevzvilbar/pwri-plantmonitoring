@@ -9,29 +9,29 @@ const LazyCompletenessRadar = lazy(() =>
   })),
 );
 
+const LazyDataTrustAuditCard = lazy(() =>
+  import('@/components/dashboard/DataTrustAuditCard').then((m) => ({
+    default: m.DataTrustAuditCard,
+  })),
+);
+
 interface AuditsClusterProps {
   plantIds: string[];
 }
 
-// Renamed section intent: "Data Trust" — collapsed-adjacent audit content kept
-// out of the ops scan path. CostSunburst moved to CostCluster; blending volume
-// moved to OverviewCluster. Only the completeness radar remains here.
+// Data Trust section — surfaces audit-grade data completeness alongside
+// operational reporting confidence gates, anomaly reviews, and compliance limits.
 export function AuditsCluster({ plantIds }: AuditsClusterProps) {
   return (
     <section id="audits-cluster" className="scroll-mt-40 space-y-2.5">
       <ClusterHeader icon={ShieldAlert} title="Data Trust" accent="text-highlight" subtitle="Completeness & audits" />
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 items-stretch">
         <Suspense fallback={<ChartSkeleton />}>
           <LazyCompletenessRadar plantIds={plantIds} />
         </Suspense>
-        <div className="rounded-xl border border-border/60 bg-card/60 p-3 flex items-start gap-2.5 text-xs text-muted-foreground">
-          <ShieldAlert className="h-4 w-4 mt-0.5 shrink-0 text-highlight" aria-hidden />
-          <p>
-            Cost composition now lives under Production Cost, and blending volume
-            lives under Overview. This section is reserved for audit-grade
-            completeness checks that gate reporting confidence.
-          </p>
-        </div>
+        <Suspense fallback={<ChartSkeleton />}>
+          <LazyDataTrustAuditCard plantIds={plantIds} />
+        </Suspense>
       </div>
     </section>
   );
