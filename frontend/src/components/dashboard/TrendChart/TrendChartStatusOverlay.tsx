@@ -39,16 +39,29 @@ export function TrendChartStatusOverlay({
 
       {!queryError && !isFetching && isEmpty && (() => {
         return (
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
-            <div className="rounded-md border border-border/60 bg-card/80 backdrop-blur-sm px-3 py-2 text-xs text-muted-foreground text-center pointer-events-auto max-w-md shadow-sm">
-              <div className="font-medium text-foreground">
-                {isFutureRange ? "This period hasn't occurred yet" : 'No data in selected range'}
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10 p-3">
+            <div className="rounded-xl border border-border/70 bg-card/90 backdrop-blur-md px-4 py-3 text-xs text-muted-foreground text-center pointer-events-auto max-w-sm shadow-lg flex flex-col items-center">
+              <div className="w-8 h-8 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center mb-1.5 text-primary">
+                <BarChart2 className="h-4 w-4 text-primary" />
               </div>
-              <div className="text-xs mt-0.5">
+              <div className="font-semibold text-foreground text-xs">
+                {isFutureRange ? "This period hasn't occurred yet" : 'No Data in Selected Range'}
+              </div>
+              <div className="text-3xs mt-1 text-muted-foreground/80 leading-relaxed max-w-xs">
                 {isFutureRange
                   ? 'The selected date range is in the future. Select an earlier month, year, or a current date range to view operational trends.'
-                  : `Try a wider range, switch plant, or log readings for ${metric === 'nrw' ? 'wells & locators' : metric === 'pv' ? 'wells & power' : metric === 'tds' || metric === 'recovery' || metric === 'plantHealth' ? 'RO trains' : metric === 'productionCost' ? 'power readings (Operations) + tariff rate (Costs → Power tab) + production volume (product meter readings)' : 'wells'}.`}
+                  : `No telemetry or readings recorded for ${metric === 'nrw' ? 'wells & locators' : metric === 'pv' ? 'wells & power' : metric === 'tds' || metric === 'recovery' || metric === 'plantHealth' || metric === 'roFlowBalance' ? 'RO trains' : metric === 'productionCost' ? 'power readings & tariffs' : 'wells'}.`}
               </div>
+              {!isFutureRange && (
+                <div className="mt-2.5 flex items-center gap-2">
+                  <a
+                    href="/operations"
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-3xs font-medium bg-primary/15 text-primary hover:bg-primary/25 border border-primary/30 transition-colors shadow-xs"
+                  >
+                    Log readings in Operations →
+                  </a>
+                </div>
+              )}
             </div>
           </div>
         );

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { FileSearch } from 'lucide-react';
+import { FileSearch, CheckCircle2 } from 'lucide-react';
 
 // The tables DataCorrections.tsx treats as sources of truth for norm_status —
 // kept in sync with its own usePendingCount() so this card and the page it
@@ -55,9 +55,32 @@ export function PendingReviewCard({ plantIds }: Props) {
 
   if (pendingCount === 0) {
     return (
-      <Card className="p-3 flex items-center gap-2 text-xs text-muted-foreground">
-        <FileSearch className="h-4 w-4 shrink-0" aria-hidden />
-        No readings or corrections awaiting review.
+      <Card className="p-3 space-y-2 flex flex-col justify-between" data-testid="pending-review-card">
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <FileSearch className="h-4 w-4 text-emerald-400 shrink-0" aria-hidden />
+            <span className="text-xs font-medium">Pending review</span>
+            <span className="ml-auto inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-2xs font-medium">
+              <CheckCircle2 className="h-3 w-3" />
+              All clear
+            </span>
+          </div>
+
+          <p className="text-xs text-muted-foreground">
+            No readings or corrections awaiting review. All operator entries have been verified and approved.
+          </p>
+        </div>
+
+        <div className="flex justify-end pt-0.5 border-t border-border/40">
+          <Button
+            variant="link"
+            size="sm"
+            className="h-auto p-0 text-xs text-muted-foreground hover:text-foreground"
+            onClick={() => navigate('/data-corrections')}
+          >
+            Review history →
+          </Button>
+        </div>
       </Card>
     );
   }

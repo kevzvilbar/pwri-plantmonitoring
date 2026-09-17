@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Wrench, Clock } from 'lucide-react';
+import { Wrench, Clock, CheckCircle2 } from 'lucide-react';
 import { addDays, differenceInDays, parseISO, format } from 'date-fns';
 import { usePlants } from '@/hooks/usePlants';
 import { cn } from '@/lib/utils';
@@ -156,9 +156,32 @@ export function PMDueSoonCard({ plantIds }: Props) {
 
   if (!items.length) {
     return (
-      <Card className="p-3 flex items-center gap-2 text-xs text-muted-foreground">
-        <Wrench className="h-4 w-4 shrink-0" aria-hidden />
-        No PM tasks due in the next {LOOKAHEAD_DAYS} days.
+      <Card className="p-3 space-y-2 flex flex-col justify-between" data-testid="pm-due-soon-card">
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <Wrench className="h-4 w-4 text-emerald-400 shrink-0" aria-hidden />
+            <span className="text-xs font-medium">PM due soon</span>
+            <span className="ml-auto inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-2xs font-medium">
+              <CheckCircle2 className="h-3 w-3" />
+              Up to date
+            </span>
+          </div>
+
+          <p className="text-xs text-muted-foreground">
+            No PM tasks due in the next {LOOKAHEAD_DAYS} days. Equipment maintenance schedules are currently up to date.
+          </p>
+        </div>
+
+        <div className="flex justify-end pt-0.5 border-t border-border/40">
+          <Button
+            variant="link"
+            size="sm"
+            className="h-auto p-0 text-xs text-muted-foreground hover:text-foreground"
+            onClick={() => navigate('/maintenance')}
+          >
+            Maintenance calendar →
+          </Button>
+        </div>
       </Card>
     );
   }

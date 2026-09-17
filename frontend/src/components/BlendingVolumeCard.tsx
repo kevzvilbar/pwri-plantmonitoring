@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import { Card } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell,
 } from 'recharts';
@@ -124,6 +126,7 @@ const TOTAL_FILL = 'hsl(var(--blend-total))';
 const MAX_STACK_WELLS = 5;
 
 export function BlendingVolumeCard({ plantIds }: Props) {
+  const navigate = useNavigate();
   const [viewMode, setViewMode] = useState<'total' | 'by-well'>('total');
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
 
@@ -321,76 +324,99 @@ export function BlendingVolumeCard({ plantIds }: Props) {
         <KpiTile label="Daily avg" value={fmtNum(dailyAvg, 0)} testId="blending-avg" />
       </div>
 
-      <div className="h-36">
-        {total === 0 ? (
-          <div className="h-full flex items-center justify-center text-xs text-muted-foreground text-center px-2">
-            No blending injections recorded {rangeLabel === `last ${days}d` ? `in the ${rangeLabel}` : `for ${rangeLabel}`}
-          </div>
-        ) : (
-          <ResponsiveContainer>
-            <BarChart
-              data={chartData}
-              margin={{ top: 4, right: 4, left: -16, bottom: 0 }}
-              barCategoryGap="28%"
-            >
-              <defs>
-                <linearGradient id="blendVolumeFill" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor={TOTAL_FILL} stopOpacity={0.95} />
-                  <stop offset="100%" stopColor={TOTAL_FILL} stopOpacity={0.55} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} strokeOpacity={0.6} />
-              <XAxis
-                dataKey="date"
-                tick={{ fontSize: 10, fontWeight: 500 }}
-                stroke="hsl(var(--muted-foreground))"
-                axisLine={false}
-                tickLine={false}
-              />
-              <YAxis
-                tick={{ fontSize: 10 }}
-                stroke="hsl(var(--muted-foreground))"
-                axisLine={false}
-                tickLine={false}
-                width={32}
-              />
+      <div className="relative h-40">
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart
+            data={chartData}
+            margin={{ top: 8, right: 8, left: -16, bottom: 0 }}
+            barCategoryGap="28%"
+          >
+            <defs>
+              <linearGradient id="blendVolumeFill" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor={TOTAL_FILL} stopOpacity={0.95} />
+                <stop offset="100%" stopColor={TOTAL_FILL} stopOpacity={0.55} />
+              </linearGradient>
+            </defs>
+            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} strokeOpacity={0.4} />
+            <XAxis
+              dataKey="date"
+              tick={{ fontSize: 10, fontWeight: 500 }}
+              stroke="hsl(var(--muted-foreground))"
+              axisLine={false}
+              tickLine={false}
+            />
+            <YAxis
+              tick={{ fontSize: 10 }}
+              stroke="hsl(var(--muted-foreground))"
+              axisLine={false}
+              tickLine={false}
+              width={32}
+              domain={total === 0 ? [0, 10] : [0, 'auto']}
+            />
+            {total > 0 && (
               <Tooltip content={<BlendingTooltip />} cursor={{ fill: 'hsl(var(--muted))', opacity: 0.35 }} />
-              {viewMode === 'total' ? (
-                <Bar
-                  dataKey="volume"
-                  name="Blending (m³)"
-                  fill="url(#blendVolumeFill)"
-                  radius={[6, 6, 0, 0]}
-                  maxBarSize={28}
-                  cursor="pointer"
-                  onClick={handleBarClick}
-                >
-                  {chartData.map((row) => (
-                    <Cell
-                      key={row.isoDate}
-                      fillOpacity={selectedDay && row.isoDate !== selectedDay ? 0.45 : 1}
-                      stroke={row.isoDate === selectedDay ? TOTAL_FILL : 'transparent'}
-                      strokeWidth={row.isoDate === selectedDay ? 2 : 0}
-                    />
-                  ))}
-                </Bar>
-              ) : (
-                stackSegments.map((seg, i) => (
-                  <Bar
-                    key={seg.key}
-                    dataKey={seg.key}
-                    name={seg.label}
-                    stackId="blend"
-                    fill={seg.color}
-                    radius={i === stackSegments.length - 1 ? [6, 6, 0, 0] : [0, 0, 0, 0]}
-                    maxBarSize={28}
-                    cursor="pointer"
-                    onClick={handleBarClick}
+            )}
+            {viewMode === 'total' ? (
+              <Bar
+                dataKey="volume"
+                name="Blending (m³)"
+                fill="url(#blendVolumeFill)"
+                radius={[6, 6, 0, 0]}
+                maxBarSize={28}
+                cursor={total > 0 ? 'pointer' : 'default'}
+                onClick={total > 0 ? handleBarClick : undefined}
+              >
+                {chartData.map((row) => (
+                  <Cell
+                    key={row.isoDate}
+                    fillOpacity={selectedDay && row.isoDate !== selectedDay ? 0.45 : 1}
+                    stroke={row.isoDate === selectedDay ? TOTAL_FILL : 'transparent'}
+                    strokeWidth={row.isoDate === selectedDay ? 2 : 0}
                   />
-                ))
-              )}
-            </BarChart>
-          </ResponsiveContainer>
+                ))}
+              </Bar>
+            ) : (
+              stackSegments.map((seg, i) => (
+                <Bar
+                  key={seg.key}
+                  dataKey={seg.key}
+                  name={seg.label}
+                  stackId="blend"
+                  fill={seg.color}
+                  radius={i === stackSegments.length - 1 ? [6, 6, 0, 0] : [0, 0, 0, 0]}
+                  maxBarSize={28}
+                  cursor={total > 0 ? 'pointer' : 'default'}
+                  onClick={total > 0 ? handleBarClick : undefined}
+                />
+              ))
+            )}
+          </BarChart>
+        </ResponsiveContainer>
+
+        {total === 0 && (
+          <div className="absolute inset-0 flex items-center justify-center p-2 pointer-events-none">
+            <div className="pointer-events-auto flex flex-col items-center max-w-sm text-center px-4 py-3 rounded-xl bg-card/90 border border-border/70 shadow-lg backdrop-blur-md">
+              <div className="w-8 h-8 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center mb-1.5 text-primary">
+                <Waves className="h-4 w-4 text-sky-400" />
+              </div>
+              <span className="text-xs font-semibold text-foreground">
+                Zero Blending Injections Recorded
+              </span>
+              <p className="text-3xs text-muted-foreground mt-0.5 mb-2.5 max-w-xs leading-relaxed">
+                No blending events logged {rangeLabel === `last ${days}d` ? `in the ${rangeLabel}` : `for ${rangeLabel}`}. Raw water bypassed blending or injection was inactive.
+              </p>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-3xs font-medium gap-1 bg-primary/10 hover:bg-primary/20 text-primary border-primary/30 shadow-xs"
+                  onClick={() => navigate('/operations')}
+                >
+                  Log blending entry →
+                </Button>
+              </div>
+            </div>
+          </div>
         )}
       </div>
 
