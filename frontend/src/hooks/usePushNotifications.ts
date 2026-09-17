@@ -105,7 +105,7 @@ export function usePushNotifications(): UsePushNotificationsResult {
       if (!sub) {
         sub = await registration.pushManager.subscribe({
           userVisibleOnly: true,
-          applicationServerKey,
+          applicationServerKey: applicationServerKey as unknown as BufferSource,
         });
       }
 

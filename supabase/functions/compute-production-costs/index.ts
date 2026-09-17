@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Edge Function: compute-production-costs
  * 

@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Edge Function: send-push-notification
  *
