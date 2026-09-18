@@ -191,9 +191,9 @@ export function usePretreatmentActions(rawOpts: PretreatmentActionsOptions) {
         const emIncomplete = configuredEmFields.length > 0 && emFilled < emMinRequired;
 
         const configuredMeters = [
-          opts.showFeedMeter !== false && !emFlags.feedIsEM ? { key: 'feed', label: 'Feed Water Meter', val: opts.roValues.feed_meter_curr } : undefined,
-          opts.showPermeateMeter !== false && !emFlags.permIsEM ? { key: 'perm', label: 'Permeate Water Meter', val: opts.roValues.permeate_meter_curr } : undefined,
-          opts.showRejectMeter !== false && !emFlags.rejIsEM ? { key: 'rej', label: 'Reject Water Meter', val: opts.roValues.reject_meter_curr } : undefined,
+          opts.showFeedMeter !== false ? { key: 'feed', label: 'Feed Water Meter', val: opts.roValues.feed_meter_curr } : undefined,
+          opts.showPermeateMeter !== false ? { key: 'perm', label: 'Permeate Water Meter', val: opts.roValues.permeate_meter_curr } : undefined,
+          opts.showRejectMeter !== false ? { key: 'rej', label: 'Reject Water Meter', val: opts.roValues.reject_meter_curr } : undefined,
         ].filter(Boolean) as { key: string; label: string; val: string }[];
         const filledMeters = configuredMeters.filter((m) => m.val !== '' && m.val != null);
         // Any 2 of 3 streams are sufficient to auto-calculate the inferred 3rd meter:
@@ -296,16 +296,25 @@ export function usePretreatmentActions(rawOpts: PretreatmentActionsOptions) {
           feed_meter:       opts.feedCurr,
           feed_meter_prev:  opts.prevFeedMeter ?? null,
           feed_meter_delta: opts.feedDelta     ?? null,
+        } : opts.feedVol !== null ? {
+          feed_meter_prev:  opts.prevFeedMeter ?? null,
+          feed_meter_delta: opts.feedVol,
         } : {}),
         ...(opts.permCurr && !isNaN(opts.permCurr) ? {
           permeate_meter:       opts.permCurr,
           permeate_meter_prev:  opts.prevPermMeter ?? null,
           permeate_meter_delta: opts.permDelta     ?? null,
+        } : opts.permVol !== null ? {
+          permeate_meter_prev:  opts.prevPermMeter ?? null,
+          permeate_meter_delta: opts.permVol,
         } : {}),
         ...(opts.rejCurr && !isNaN(opts.rejCurr) ? {
           reject_meter:       opts.rejCurr,
           reject_meter_prev:  opts.prevRejMeter ?? null,
           reject_meter_delta: opts.rejDelta     ?? null,
+        } : opts.rejVol !== null ? {
+          reject_meter_prev:  opts.prevRejMeter ?? null,
+          reject_meter_delta: opts.rejVol,
         } : {}),
         power_meter_reading_kwh: opts.pwrCurr && !isNaN(opts.pwrCurr) ? opts.pwrCurr : null,
         power_delta_kwh: opts.pwrDelta,
