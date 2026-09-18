@@ -48,8 +48,8 @@ export function usePendingCount() {
   return useQuery({
     queryKey: queryKeys.corrections.pendingCount(),
     queryFn: fetchPendingCount,
-    staleTime: 5_000,
-    refetchInterval: 15_000,
+    staleTime: 60_000,
+    refetchInterval: 5 * 60_000,
   });
 }
 
@@ -58,8 +58,8 @@ export function useCorrectionRequestsCount() {
   return useQuery({
     queryKey: queryKeys.corrections.requestsCount(),
     queryFn: fetchCorrectionRequestsCount,
-    staleTime: 5_000,
-    refetchInterval: 15_000,
+    staleTime: 60_000,
+    refetchInterval: 5 * 60_000,
   });
 }
 
@@ -67,8 +67,8 @@ export function useInboxCount() {
   return useQuery({
     queryKey: queryKeys.corrections.inboxCount(),
     queryFn: fetchInboxCount,
-    staleTime: 10_000,
-    refetchInterval: 30_000,
+    staleTime: 60_000,
+    refetchInterval: 5 * 60_000,
   });
 }
 
