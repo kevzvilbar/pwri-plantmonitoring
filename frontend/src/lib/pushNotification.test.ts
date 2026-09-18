@@ -1,19 +1,24 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import {
   isPushNotificationSupported,
   isIOSDevice,
   isStandalonePWA,
   urlBase64ToUint8Array,
   getVapidPublicKey,
+  isValidVapidPublicKey,
   playNotificationSound,
-  DEFAULT_VAPID_PUBLIC_KEY,
 } from './pushNotification';
+
+// A genuine 65-byte uncompressed P-256 point (RFC 8291 Appendix A, as_public).
+const VALID_VAPID_KEY =
+  'BP4z9KsN6nGRTbVYI_c7VJSPQTBtkgcy27mlmlMoZIIgDll6e3vCYLocInmYWAmS6TlzAC8wEqKK6PBru3jl7A8';
 
 describe('pushNotification utils', () => {
   const originalNavigator = window.navigator;
 
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.unstubAllEnvs();
   });
 
   describe('isPushNotificationSupported', () => {
@@ -90,16 +95,54 @@ describe('pushNotification utils', () => {
 
   describe('urlBase64ToUint8Array', () => {
     it('correctly converts base64url string to Uint8Array', () => {
-      const result = urlBase64ToUint8Array(DEFAULT_VAPID_PUBLIC_KEY);
+      const result = urlBase64ToUint8Array(VALID_VAPID_KEY);
       expect(result).toBeInstanceOf(Uint8Array);
-      expect(result.length).toBeGreaterThan(0);
+      expect(result.length).toBe(65); // uncompressed P-256 point
+      expect(result[0]).toBe(0x04);
     });
   });
 
   describe('getVapidPublicKey', () => {
-    it('returns default fallback key if env var is empty', () => {
-      const key = getVapidPublicKey();
-      expect(key).toBe(DEFAULT_VAPID_PUBLIC_KEY);
+    it('returns an empty string when the deployment has not set a key', () => {
+      // Regression guard: this used to return a hardcoded tutorial key whose
+      // private half is public, making a broken deployment look configured.
+      vi.stubEnv('VITE_VAPID_PUBLIC_KEY', '');
+      expect(getVapidPublicKey()).toBe('');
+      expect(isValidVapidPublicKey(getVapidPublicKey())).toBe(false);
+    });
+
+    it('returns the configured key, trimmed', () => {
+      vi.stubEnv('VITE_VAPID_PUBLIC_KEY', `  ${VALID_VAPID_KEY}  `);
+      expect(getVapidPublicKey()).toBe(VALID_VAPID_KEY);
+      expect(isValidVapidPublicKey(getVapidPublicKey())).toBe(true);
+    });
+  });
+
+  describe('isValidVapidPublicKey', () => {
+    it('accepts a 65-byte uncompressed P-256 point', () => {
+      expect(isValidVapidPublicKey(VALID_VAPID_KEY)).toBe(true);
+    });
+
+    it('rejects missing, empty, and whitespace-only values', () => {
+      expect(isValidVapidPublicKey(undefined)).toBe(false);
+      expect(isValidVapidPublicKey(null)).toBe(false);
+      expect(isValidVapidPublicKey('')).toBe(false);
+      expect(isValidVapidPublicKey('   ')).toBe(false);
+    });
+
+    it('rejects a truncated key that a length heuristic would accept', () => {
+      const truncated = VALID_VAPID_KEY.slice(0, 80);
+      expect(truncated.length).toBeGreaterThan(20);
+      expect(isValidVapidPublicKey(truncated)).toBe(false);
+    });
+
+    it('rejects 65 bytes that are not an uncompressed point', () => {
+      // Same length, but the leading 0x04 tag is gone.
+      expect(isValidVapidPublicKey(`A${VALID_VAPID_KEY.slice(1)}`)).toBe(false);
+    });
+
+    it('rejects non-base64 input', () => {
+      expect(isValidVapidPublicKey('not a key!!')).toBe(false);
     });
   });
 

@@ -272,6 +272,124 @@ emails while keeping the trigger (`trg_train_status_log_notify_offline`) present
 ---
 
 
+## Web Push notifications (mobile lockscreen + desktop)
+
+Complements the email alert above: when a train is marked Offline, subscribed
+devices also receive an encrypted Web Push notification. Both pipelines fire from
+the same `train_status_log` INSERT and are independent — either can be enabled
+without the other.
+
+### What changed
+
+- **SQL migration** — `supabase/migrations/20260918000002_train_offline_push_notify.sql`
+  - Adds `get_push_alert_recipient_ids(plant_id)`: the same Active
+    Manager/Analyst/Admin audience as the email path, but returning **user ids**.
+    The email helper returns email addresses and has no user id, so it cannot be
+    reused for push targeting.
+  - Adds trigger `trg_train_status_log_push_offline` → `pg_net.http_post` → edge
+    function, mirroring the email trigger's guards exactly.
+- **Edge function** — `supabase/functions/send-push-notification/index.ts`
+  - Encrypts each payload per **RFC 8291** (`aes128gcm`) and authenticates with a
+    **RFC 8292** VAPID token. (Before this, it POSTed plaintext JSON with no
+    Authorization header, which every push service rejects — `sent` was always 0.)
+  - Targeting is **fail-closed**: `user_id` or `plant_id` is required; a request
+    with neither returns 400 instead of broadcasting to every subscriber.
+  - Prunes subscriptions the push service reports as gone (404/410).
+  - No-op guarantees: VAPID secrets unset → 200 `{ skipped: true }`; no
+    subscriptions or recipients → 200 `{ sent: 0, skipped: true }`.
+- **Crypto module** — `supabase/functions/_shared/webpush.ts` — pure WebCrypto, no
+  npm dependency. Verified byte-for-byte against the RFC 8291 Appendix A test
+  vector by `frontend/src/lib/webpush.test.ts`.
+
+### Required setup (per Supabase project)
+
+#### 1. Generate a VAPID keypair
+
+```
+node scripts/generate-vapid-keys.mjs
+```
+
+⚠️ Rotating these keys invalidates every stored subscription — the browser binds a
+subscription to the key it was created with, so all users must re-enable push.
+
+#### 2. Set the edge-function secrets
+
+```
+supabase secrets set VAPID_PUBLIC_KEY="<publicKey>" \
+                     VAPID_PRIVATE_KEY="<privateKey>" \
+                     VAPID_SUBJECT="mailto:alerts@yourdomain.com"
+```
+
+(Or Supabase Dashboard → Edge Functions → Settings → Secrets.) `VAPID_SUBJECT`
+must be a `mailto:` or `https:` URI you control; it is sent to the push service so
+its operator can contact you about abusive traffic.
+
+#### 3. Set the frontend build variable
+
+Set `VITE_VAPID_PUBLIC_KEY` to the **same public key**, in `frontend/.env.local`
+and in the CI/host environment, then rebuild. The public key is not a secret — the
+private key never leaves the server.
+
+#### 4. Enable the migration and `pg_net`
+
+Run `20260918000002_train_offline_push_notify.sql` in order (after
+`20260918000001_push_subscriptions.sql`), and enable **pg_net** under
+Database → Extensions if it is not already on (the email feature needs it too).
+
+#### 5. Deploy the function
+
+```
+supabase functions deploy send-push-notification
+```
+
+The function imports `../_shared/webpush.ts`, which the Supabase CLI bundles — so
+deploy with the CLI rather than pasting the function into the dashboard editor.
+
+### Testing
+
+```
+curl -X POST \
+  'https://<project-ref>.supabase.co/functions/v1/send-push-notification' \
+  -H 'Authorization: Bearer <service_role_key>' \
+  -H 'Content-Type: application/json' \
+  -d '{"plant_id":"<uuid>","title":"Push smoke test","message":"If you see this, delivery works.","severity":"critical"}'
+```
+
+A healthy run returns `{"sent": N, "failed": 0, "pruned": 0, ...}`. Any non-zero
+`failed` includes a `diagnostics` array carrying the push service's HTTP status:
+**401/403 means the frontend's `VITE_VAPID_PUBLIC_KEY` does not match the
+`VAPID_PRIVATE_KEY` secret.**
+
+For a real end-to-end test: mark a test train Offline in the Operator Log, then
+confirm it back Online. (Do not leave a real plant's train Offline — the alert
+reaches managers.)
+
+In the app, **Profile → Push Notifications** shows the per-device status:
+
+- **Active** — this device is subscribed and registered server-side.
+- **Not Configured** — `VITE_VAPID_PUBLIC_KEY` is missing or invalid; the toggle
+  and test button are disabled.
+- **Blocked** — the browser has denied notification permission for the site.
+
+**"Send Test Alert" is a local preview only** — it calls
+`ServiceWorkerRegistration.showNotification()` and does not touch the server, so a
+successful result does not prove server delivery. Use the `curl` above for that.
+
+### Turning it off
+
+Remove the VAPID secrets to stop all pushes while keeping the trigger present — the
+function returns `skipped: true` for every call. To fully remove:
+
+1. `DROP TRIGGER trg_train_status_log_push_offline ON public.train_status_log;`
+2. `DROP FUNCTION IF EXISTS public.fn_notify_train_offline_push;`
+3. `DROP FUNCTION IF EXISTS public.get_push_alert_recipient_ids;`
+4. Remove the migration, `supabase/functions/send-push-notification/`, and
+   `supabase/functions/_shared/webpush.ts` from the repo.
+
+---
+
+## Database Normalization & Regression Workflow
+
 | Role          | Raw Data | Run Regression | Edit Values | Apply/Retract |
 |---------------|----------|---------------|-------------|---------------|
 | Admin         | ✅       | ✅            | ✅          | ✅            |

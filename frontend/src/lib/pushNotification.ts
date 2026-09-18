@@ -3,16 +3,53 @@
  * Provides helpers for push support detection, VAPID encoding, iOS PWA status, and audible alarm synthesis.
  */
 
-// Fallback demo/dev VAPID Public Key (Uncompressed P-256 point in URL-safe base64)
-export const DEFAULT_VAPID_PUBLIC_KEY =
-  'BEl62iUYgUivxIkv69yViEuiBIa-Ib9-SkvMeAtA3LFgDzkrxZJjSgSnfckjBJuBkr3qBUYIHBQFLXYp5Nksh8U';
+/**
+ * There is deliberately NO hardcoded fallback VAPID public key.
+ *
+ * This module previously fell back to `BEl62iUYgUivxIkv69yViEuiBIa-...` — the
+ * example key printed in the `web-push` README. Its private half is public, so
+ * subscriptions created against it can never be delivered to legitimately; the
+ * failure was also invisible, because a plausible-looking key made the UI report
+ * "Active". An unconfigured deployment now reports "Not configured" instead.
+ *
+ * A valid key is a 65-byte uncompressed P-256 point (87 base64url chars), and it
+ * MUST match VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY in the Edge Function secrets —
+ * generate a pair with `node scripts/generate-vapid-keys.mjs`.
+ */
+const P256_UNCOMPRESSED_BYTES = 65;
+const UNCOMPRESSED_POINT_TAG = 0x04;
 
+/** Returns the configured VAPID public key, or '' when this deployment has none. */
 export function getVapidPublicKey(): string {
   const envKey = import.meta.env.VITE_VAPID_PUBLIC_KEY;
-  if (envKey && typeof envKey === 'string' && envKey.trim().length > 20) {
-    return envKey.trim();
+  return typeof envKey === 'string' ? envKey.trim() : '';
+}
+
+/**
+ * Validates that `key` is a decodable 65-byte uncompressed P-256 point.
+ *
+ * A length heuristic (`key.length > 20`) is not enough: a truncated or
+ * mis-encoded key is accepted by `length` and then rejected by the browser with
+ * an opaque `InvalidAccessError` at subscribe time, or worse, silently produces
+ * a subscription the server cannot encrypt to.
+ */
+export function isValidVapidPublicKey(key: string | null | undefined): boolean {
+  if (!key || typeof key !== 'string') return false;
+  const trimmed = key.trim();
+  if (!trimmed) return false;
+
+  const padding = '='.repeat((4 - (trimmed.length % 4)) % 4);
+  const base64 = (trimmed + padding).replace(/-/g, '+').replace(/_/g, '/');
+
+  try {
+    const decoded = window.atob(base64);
+    return (
+      decoded.length === P256_UNCOMPRESSED_BYTES &&
+      decoded.charCodeAt(0) === UNCOMPRESSED_POINT_TAG
+    );
+  } catch {
+    return false;
   }
-  return DEFAULT_VAPID_PUBLIC_KEY;
 }
 
 /**

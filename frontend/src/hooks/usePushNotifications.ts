@@ -5,6 +5,7 @@ import {
   isPushNotificationSupported,
   isIOSDevice,
   isStandalonePWA,
+  isValidVapidPublicKey,
   urlBase64ToUint8Array,
   getVapidPublicKey,
   playNotificationSound,
@@ -15,6 +16,8 @@ export type PushPermissionState = 'granted' | 'denied' | 'default' | 'unsupporte
 
 export interface UsePushNotificationsResult {
   isSupported: boolean;
+  /** False when this deployment has no valid VITE_VAPID_PUBLIC_KEY — subscribing is futile. */
+  isConfigured: boolean;
   permission: PushPermissionState;
   isSubscribed: boolean;
   isPending: boolean;
@@ -26,6 +29,15 @@ export interface UsePushNotificationsResult {
   checkSubscription: () => Promise<void>;
 }
 
+/** Base64-encodes a subscription key, or '' if the browser withheld it. */
+function encodeKey(key: ArrayBuffer | null): string {
+  if (!key) return '';
+  const bytes = new Uint8Array(key);
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += 1) binary += String.fromCharCode(bytes[i]);
+  return btoa(binary);
+}
+
 export function usePushNotifications(): UsePushNotificationsResult {
   const { user } = useAuth();
   const [isSupported, setIsSupported] = useState<boolean>(false);
@@ -35,6 +47,38 @@ export function usePushNotifications(): UsePushNotificationsResult {
   const [subscription, setSubscription] = useState<PushSubscription | null>(null);
 
   const isIOSNonStandalone = isIOSDevice() && !isStandalonePWA();
+  // VAPID config is baked in at build time, so this is constant for the session.
+  const isConfigured = isValidVapidPublicKey(getVapidPublicKey());
+
+  /**
+   * Persists a browser subscription so the server can reach this device.
+   *
+   * Uses the upsert_push_subscription RPC rather than a direct table upsert for
+   * two reasons: it is atomic, and it is SECURITY DEFINER (it takes user_id from
+   * auth.uid()). A direct upsert's ON CONFLICT DO UPDATE is gated by the UPDATE
+   * RLS policy against the *existing* row, so when a shared device changes hands
+   * the update is silently refused — the new operator never receives alerts, with
+   * no error anywhere. The RPC reassigns ownership explicitly.
+   */
+  const persistSubscription = useCallback(async (sub: PushSubscription): Promise<void> => {
+    const p256dh = encodeKey(sub.getKey('p256dh'));
+    const auth = encodeKey(sub.getKey('auth'));
+    if (!p256dh || !auth) {
+      throw new Error('The browser did not expose the subscription encryption keys.');
+    }
+
+    const { error } = await (supabase.rpc as unknown as (
+      fn: string,
+      args: Record<string, unknown>,
+    ) => Promise<{ error: { message: string } | null }>)('upsert_push_subscription', {
+      p_endpoint: sub.endpoint,
+      p_p256dh: p256dh,
+      p_auth: auth,
+      p_user_agent: navigator.userAgent,
+    });
+
+    if (error) throw new Error(error.message);
+  }, []);
 
   // Check initial capability & subscription state
   const checkSubscription = useCallback(async () => {
@@ -53,20 +97,62 @@ export function usePushNotifications(): UsePushNotificationsResult {
         const sub = await registration.pushManager.getSubscription();
         setSubscription(sub);
         setIsSubscribed(!!sub);
+
+        // Self-healing registration. A subscription can exist in the browser
+        // while having no (or a stale) server-side row — e.g. it was created
+        // before sign-in, the row was pruned as expired, or the browser rotated
+        // the endpoint. Re-registering on every load makes the device reachable
+        // again without the operator having to notice and toggle anything.
+        // Failures are logged, not toasted: this runs on mount, and a toast per
+        // page load would be noise the operator cannot act on.
+        if (sub && user && isConfigured) {
+          try {
+            await persistSubscription(sub);
+          } catch (err) {
+            console.warn('[PushNotifications] Could not register this device for server pushes:', err);
+          }
+        }
       }
     } catch (err) {
       console.warn('[PushNotifications] Failed to inspect subscription state:', err);
     }
-  }, []);
+  }, [user, isConfigured, persistSubscription]);
 
   useEffect(() => {
     checkSubscription();
+  }, [checkSubscription]);
+
+  // The service worker has no VAPID key of its own, so on `pushsubscriptionchange`
+  // it just pokes the app; re-running checkSubscription() picks up whatever the
+  // browser replaced the subscription with and re-registers it.
+  useEffect(() => {
+    if (!isPushNotificationSupported() || !('serviceWorker' in navigator)) return;
+
+    const onMessage = (event: MessageEvent) => {
+      if (event.data?.type === 'PWRI_PUSH_SUBSCRIPTION_CHANGED') {
+        checkSubscription();
+      }
+    };
+
+    navigator.serviceWorker.addEventListener('message', onMessage);
+    return () => navigator.serviceWorker.removeEventListener('message', onMessage);
   }, [checkSubscription]);
 
   // Subscribe to browser push manager and persist to Supabase
   const subscribeToPush = useCallback(async (): Promise<boolean> => {
     if (!isPushNotificationSupported()) {
       toast.error('Push notifications are not supported in this browser.');
+      return false;
+    }
+
+    // Without a matching VAPID keypair nothing can be delivered, so surface the
+    // missing configuration instead of creating a subscription that will never
+    // receive anything while the UI claims success.
+    if (!isConfigured) {
+      toast.error(
+        'Push notifications are not configured for this deployment. ' +
+          'An administrator must set VITE_VAPID_PUBLIC_KEY.',
+      );
       return false;
     }
 
@@ -109,37 +195,23 @@ export function usePushNotifications(): UsePushNotificationsResult {
         });
       }
 
-      // 4. Extract encryption keys
-      const p256dhKey = sub.getKey('p256dh');
-      const authKey = sub.getKey('auth');
-
-      const p256dh = p256dhKey
-        ? btoa(String.fromCharCode.apply(null, Array.from(new Uint8Array(p256dhKey))))
-        : '';
-      const auth = authKey
-        ? btoa(String.fromCharCode.apply(null, Array.from(new Uint8Array(authKey))))
-        : '';
-
-      // 5. Upsert to Supabase if authenticated
-      if (user) {
+      // 4. Register the device with the server. A subscription that never lands
+      // in push_subscriptions receives nothing, so a failure here must not be
+      // reported as success.
+      if (!user) {
+        toast.warning(
+          'This device is registered locally, but alerts will not arrive until you sign in.',
+        );
+      } else {
         try {
-          const { error } = await (supabase.from as any)('push_subscriptions').upsert(
-            {
-              endpoint: sub.endpoint,
-              p256dh,
-              auth,
-              user_agent: navigator.userAgent,
-              user_id: user.id,
-              updated_at: new Date().toISOString(),
-            },
-            { onConflict: 'endpoint' }
-          );
-
-          if (error) {
-            console.warn('[PushNotifications] Database subscription sync notice:', error.message);
-          }
+          await persistSubscription(sub);
         } catch (dbErr) {
-          console.warn('[PushNotifications] Database subscription error:', dbErr);
+          console.error('[PushNotifications] Failed to register device for pushes:', dbErr);
+          toast.error(
+            'Push notifications could not be registered on the server: ' +
+              ((dbErr as Error)?.message || 'Unknown error'),
+          );
+          return false;
         }
       }
 
@@ -155,7 +227,7 @@ export function usePushNotifications(): UsePushNotificationsResult {
     } finally {
       setIsPending(false);
     }
-  }, [isIOSNonStandalone, user]);
+  }, [isConfigured, isIOSNonStandalone, user, persistSubscription]);
 
   // Unsubscribe from browser and delete from Supabase
   const unsubscribeFromPush = useCallback(async (): Promise<boolean> => {
@@ -174,6 +246,8 @@ export function usePushNotifications(): UsePushNotificationsResult {
                 .delete()
                 .eq('endpoint', endpoint);
             } catch (dbErr) {
+              // Not fatal: the endpoint is gone from the browser, and the server
+              // prunes it automatically the first time it answers 404/410.
               console.warn('[PushNotifications] Database removal warning:', dbErr);
             }
           }
@@ -193,7 +267,15 @@ export function usePushNotifications(): UsePushNotificationsResult {
     }
   }, [user]);
 
-  // Dispatch an immediate test alert to verify notification delivery & sound
+  /**
+   * Displays an immediate notification on this device.
+   *
+   * This is a LOCAL notification via showNotification — it exercises the
+   * permission, the service worker registration and the alarm chime, but it does
+   * NOT exercise server delivery. A green result here does not mean the server
+   * can reach this device; that path is verified by triggering a real alert (or
+   * by inspecting the send-push-notification response).
+   */
   const sendLocalTestNotification = useCallback(async () => {
     if (permission !== 'granted') {
       const ok = await subscribeToPush();
@@ -222,7 +304,7 @@ export function usePushNotifications(): UsePushNotificationsResult {
         new Notification(title, options);
       }
 
-      toast.success('Test notification dispatched!');
+      toast.success('Test notification shown on this device (local preview).');
     } catch (err) {
       console.error('[PushNotifications] Test notification failed:', err);
       toast.error('Could not display test notification.');
@@ -231,6 +313,7 @@ export function usePushNotifications(): UsePushNotificationsResult {
 
   return {
     isSupported,
+    isConfigured,
     permission,
     isSubscribed,
     isPending,
@@ -242,4 +325,3 @@ export function usePushNotifications(): UsePushNotificationsResult {
     checkSubscription,
   };
 }
-

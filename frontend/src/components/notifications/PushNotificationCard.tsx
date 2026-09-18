@@ -21,6 +21,7 @@ import { playNotificationSound } from '@/lib/pushNotification';
 export function PushNotificationCard() {
   const {
     isSupported,
+    isConfigured,
     permission,
     isSubscribed,
     isPending,
@@ -43,6 +44,13 @@ export function PushNotificationCard() {
       return (
         <StatusPill tone="neutral" className="text-2xs font-mono">
           Unsupported
+        </StatusPill>
+      );
+    }
+    if (!isConfigured) {
+      return (
+        <StatusPill tone="warn" className="text-2xs font-mono">
+          Not Configured
         </StatusPill>
       );
     }
@@ -105,7 +113,7 @@ export function PushNotificationCard() {
                 id="push-toggle-switch"
                 checked={isSubscribed}
                 onCheckedChange={handleToggle}
-                disabled={permission === 'denied'}
+                disabled={permission === 'denied' || !isConfigured}
                 aria-label="Toggle push notifications"
               />
             )}
@@ -137,6 +145,23 @@ export function PushNotificationCard() {
             </li>
             <li>3. Open PWRI from your Home Screen to enable instant push alerts.</li>
           </ol>
+        </div>
+      )}
+
+      {/* Deployment Not Configured */}
+      {!isConfigured && (
+        <div className="p-3 rounded-xl bg-warn-soft/50 border border-warn/30 flex items-start gap-2.5 text-xs">
+          <AlertTriangle className="h-4 w-4 text-warn shrink-0 mt-0.5" />
+          <div className="space-y-1">
+            <p className="text-xs font-semibold text-warn">Push is not configured for this deployment</p>
+            <p className="text-2xs text-muted-foreground leading-relaxed">
+              Alert delivery requires a VAPID keypair. An administrator must generate one with{' '}
+              <code className="font-mono text-foreground">node scripts/generate-vapid-keys.mjs</code>{' '}
+              and set <code className="font-mono text-foreground">VITE_VAPID_PUBLIC_KEY</code> for the
+              frontend alongside the matching <code className="font-mono text-foreground">VAPID_PUBLIC_KEY</code> /{' '}
+              <code className="font-mono text-foreground">VAPID_PRIVATE_KEY</code> Edge secrets.
+            </p>
+          </div>
         </div>
       )}
 
@@ -196,7 +221,8 @@ export function PushNotificationCard() {
             size="sm"
             variant="outline"
             onClick={sendLocalTestNotification}
-            disabled={!isSupported || isPending || isIOSNonStandalone}
+            disabled={!isSupported || isPending || isIOSNonStandalone || !isConfigured}
+            title="Shows a local notification on this device. This previews the look and chime only — it does not test server delivery."
             className="h-8 text-xs gap-1.5 font-medium border-primary/40 hover:bg-primary/10 hover:border-primary text-primary"
             data-testid="send-test-push-button"
           >

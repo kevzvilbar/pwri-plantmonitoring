@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { PushNotificationCard } from './PushNotificationCard';
 
@@ -6,13 +6,19 @@ const mockSubscribeToPush = vi.fn();
 const mockUnsubscribeFromPush = vi.fn();
 const mockSendLocalTestNotification = vi.fn();
 
+// Overridable per-test so the "not configured" branch can be exercised.
+const mockState = {
+  isSupported: true,
+  isConfigured: true,
+  permission: 'granted' as const,
+  isSubscribed: true,
+  isPending: false,
+  isIOSNonStandalone: false,
+};
+
 vi.mock('@/hooks/usePushNotifications', () => ({
   usePushNotifications: () => ({
-    isSupported: true,
-    permission: 'granted',
-    isSubscribed: true,
-    isPending: false,
-    isIOSNonStandalone: false,
+    ...mockState,
     subscription: { endpoint: 'https://push.example.com' },
     subscribeToPush: mockSubscribeToPush,
     unsubscribeFromPush: mockUnsubscribeFromPush,
@@ -22,6 +28,11 @@ vi.mock('@/hooks/usePushNotifications', () => ({
 }));
 
 describe('PushNotificationCard', () => {
+  beforeEach(() => {
+    mockState.isConfigured = true;
+    mockState.isSubscribed = true;
+  });
+
   it('renders correctly with active status', () => {
     render(<PushNotificationCard />);
 
@@ -44,6 +55,20 @@ describe('PushNotificationCard', () => {
 
     const chimeBtn = screen.getByText('Preview Chime');
     expect(() => fireEvent.click(chimeBtn)).not.toThrow();
+  });
+
+  // Regression guard: an unconfigured deployment previously rendered "Active"
+  // off a hardcoded tutorial VAPID key, so the operator believed alerts worked.
+  it('surfaces a missing VAPID configuration instead of claiming to be active', () => {
+    mockState.isConfigured = false;
+    mockState.isSubscribed = false;
+
+    render(<PushNotificationCard />);
+
+    expect(screen.getByText('Not Configured')).toBeInTheDocument();
+    expect(screen.queryByText('Active')).not.toBeInTheDocument();
+    expect(screen.getByText('Push is not configured for this deployment')).toBeInTheDocument();
+    expect(screen.getByTestId('send-test-push-button')).toBeDisabled();
   });
 });
 

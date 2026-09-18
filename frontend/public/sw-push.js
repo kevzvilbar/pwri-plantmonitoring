@@ -54,8 +54,13 @@ self.addEventListener('notificationclick', function (event) {
   var notifData = event.notification.data || {};
   var rawUrl = notifData.url || './alerts';
 
-  // Construct absolute URL
-  var targetUrl = new URL(rawUrl, self.location.origin).href;
+  // Resolve against the service worker's SCOPE, not the bare origin. Under the
+  // GitHub Pages deployment the app is served from a sub-path
+  // (/pwri-plant-monitoring/) set via Vite's `base`, and React Router's basename
+  // matches it — so 'https://host/alerts' would 404. The scope already carries
+  // the correct prefix, and an absolute URL in the payload still wins because
+  // `new URL(absolute, base)` returns it unchanged.
+  var targetUrl = new URL(rawUrl.replace(/^\.\//, ''), self.registration.scope).href;
 
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function (windowClients) {
@@ -79,5 +84,26 @@ self.addEventListener('notificationclick', function (event) {
 
 self.addEventListener('notificationclose', function (event) {
   // Notification dismissed by user
+});
+
+/**
+ * The browser silently rotates push subscriptions (endpoint expiry, key
+ * rotation, storage eviction). Without this the server keeps pushing to an
+ * endpoint the browser has discarded, and the device simply stops receiving
+ * alerts with no error on either side.
+ *
+ * The service worker cannot re-subscribe by itself — it has no VAPID public key
+ * compiled into it — so it hands off to the app, which re-reads whatever the
+ * browser now has and re-registers it (see usePushNotifications' message
+ * listener and its self-healing checkSubscription on load).
+ */
+self.addEventListener('pushsubscriptionchange', function (event) {
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function (windowClients) {
+      for (var i = 0; i < windowClients.length; i++) {
+        windowClients[i].postMessage({ type: 'PWRI_PUSH_SUBSCRIPTION_CHANGED' });
+      }
+    })
+  );
 });
 
