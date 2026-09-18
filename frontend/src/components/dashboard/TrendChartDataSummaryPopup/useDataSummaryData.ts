@@ -35,12 +35,16 @@ export interface DataSummaryData {
   hasConsTab: boolean;
   hasGridTab: boolean;
   hasChemBreakdownTab: boolean;
+  hasPermeateTab: boolean;
+  hasRejectTab: boolean;
   chemicalBreakdown: Map<string, ChemicalDayBreakdown>;
   overviewLabel: string;
   prodTabLabel: string;
   roTrainEntities: { id: string; label: string }[];
   roTrainRecoveryByDate: Map<string, Record<string, number>>;
   roTrainTdsByDate: Map<string, Record<string, number>>;
+  roTrainPermeatePivot: Map<string, Map<string, number>>;
+  roTrainRejectPivot: Map<string, Map<string, number>>;
   /** plantHealth metric — per-day per-train status map */
   phHealthByDate: Map<string, {
     trainOnline: Record<string, boolean>;   // trainId → online (had readings that day)
@@ -249,10 +253,13 @@ export function useDataSummaryData({
   const hasConsTab = metric === 'production' || metric === 'nrw';
   const hasGridTab = metric === 'kwh';
   const hasChemBreakdownTab = metric === 'productionCost' || metric === 'chemCost';
+  const hasPermeateTab = metric === 'roFlowBalance';
+  const hasRejectTab = metric === 'roFlowBalance';
 
   const overviewLabel =
     metric === 'production' || metric === 'nrw' ? 'Prod. vs Consum.'
     : metric === 'pv' ? 'Prod. vs Power'
+    : metric === 'roFlowBalance' ? 'Balance Overview'
     : metric === 'productionCost' ? 'Cost Overview'
     : metric === 'chemCost' ? 'Chemical Cost'
     : metric === 'powerCost' ? 'Power Cost'
@@ -285,20 +292,41 @@ export function useDataSummaryData({
     })).sort((a, b) => a.label.localeCompare(b.label, undefined, { numeric: true }));
   }, [filteredRoReadings, roTrainNames]);
 
-  const { roTrainRecoveryByDate, roTrainTdsByDate } = useMemo(() => {
+  const {
+    roTrainRecoveryByDate,
+    roTrainTdsByDate,
+    roTrainPermeatePivot,
+    roTrainRejectPivot,
+    roTrainFeedPivot,
+  } = useMemo(() => {
     // Use the shared helper to compute per-train, per-day volumes with proper
     // PRIMARY/FALLBACK inference chains (mirrors plant-level logic).
     const volumesByDate = computeRoTrainDailyVolumes(filteredRoReadings ?? []);
     
     // Build recovery map from volumes (volume-based, matching Water Balance formula)
     const recoveryByDate = new Map<string, Record<string, number>>();
+    const permeatePivot = new Map<string, Map<string, number>>();
+    const rejectPivot = new Map<string, Map<string, number>>();
+    const feedPivot = new Map<string, Map<string, number>>();
+
     volumesByDate.forEach((trainMap, dk) => {
       const rec: Record<string, number> = {};
+      const permMap = new Map<string, number>();
+      const rejMap = new Map<string, number>();
+      const fMap = new Map<string, number>();
+
       trainMap.forEach((v, tid) => {
         const recovery = recoveryFromVolumes(v.permeate, v.feed, v.reject);
         if (recovery != null) rec[tid] = recovery;
+        if (v.permeate > 0) permMap.set(tid, v.permeate);
+        if (v.reject > 0) rejMap.set(tid, v.reject);
+        if (v.feed > 0) fMap.set(tid, v.feed);
       });
+
       if (Object.keys(rec).length > 0) recoveryByDate.set(dk, rec);
+      if (permMap.size > 0) permeatePivot.set(dk, permMap);
+      if (rejMap.size > 0) rejectPivot.set(dk, rejMap);
+      if (fMap.size > 0) feedPivot.set(dk, fMap);
     });
 
     // TDS: still reading-averaged per train (no volume-based equivalent yet)
@@ -323,7 +351,13 @@ export function useDataSummaryData({
       tdsByDate.set(dk, rec);
     });
 
-    return { roTrainRecoveryByDate: recoveryByDate, roTrainTdsByDate: tdsByDate };
+    return {
+      roTrainRecoveryByDate: recoveryByDate,
+      roTrainTdsByDate: tdsByDate,
+      roTrainPermeatePivot: permeatePivot,
+      roTrainRejectPivot: rejectPivot,
+      roTrainFeedPivot: feedPivot,
+    };
   }, [filteredRoReadings]);
 
   /** Per-day per-train plant health data (used by OverviewTable for plantHealth metric) */
@@ -564,6 +598,36 @@ export function useDataSummaryData({
         powerCost: null, chemCost: null, totalCost: null,
       };
 
+      // RO train flow balance fields
+      let perm = existing?.permeate;
+      let rej = existing?.reject;
+      let feed = existing?.feed;
+
+      if (perm == null && roTrainPermeatePivot.has(dk)) {
+        const pSum = Array.from(roTrainPermeatePivot.get(dk)!.values()).reduce((a, b) => a + b, 0);
+        if (pSum > 0) perm = pSum;
+      }
+      if (rej == null && roTrainRejectPivot.has(dk)) {
+        const rSum = Array.from(roTrainRejectPivot.get(dk)!.values()).reduce((a, b) => a + b, 0);
+        if (rSum > 0) rej = rSum;
+      }
+      if (feed == null && roTrainFeedPivot.has(dk)) {
+        const fSum = Array.from(roTrainFeedPivot.get(dk)!.values()).reduce((a, b) => a + b, 0);
+        if (fSum > 0) feed = fSum;
+      }
+
+      if (rej == null && feed != null && perm != null && feed > perm) {
+        rej = +(feed - perm).toFixed(2);
+      }
+      if (feed == null && (perm != null || rej != null)) {
+        feed = +((perm ?? 0) + (rej ?? 0)).toFixed(2);
+      }
+
+      const expectedFeed = existing?.expectedFeed ?? ((perm != null || rej != null) ? +((perm ?? 0) + (rej ?? 0)).toFixed(2) : null);
+      const variance = existing?.variance ?? (feed != null && expectedFeed != null ? +(feed - expectedFeed).toFixed(2) : null);
+      const variancePct = existing?.variancePct ?? (feed != null && feed > 0 && variance != null ? +((variance / feed) * 100).toFixed(1) : null);
+      const hasDeviation = existing?.hasDeviation ?? (feed != null && feed > 0 && variance != null && Math.abs(variance) > 0.5 && Math.abs(variance / feed) > 0.02);
+
       return {
         ...base,
         production,
@@ -572,10 +636,18 @@ export function useDataSummaryData({
         nrw,
         trainRecoveries,
         trainTds,
+        permeate: perm,
+        reject: rej,
+        feed,
+        expectedFeed,
+        variance,
+        variancePct,
+        hasDeviation,
       };
     });
   }, [overviewDates, overviewByDate, metric, prodDates, prodEntities, prodPivotMap,
-      consEntities, consPivot, roTrainRecoveryByDate, roTrainTdsByDate]);
+      consEntities, consPivot, roTrainRecoveryByDate, roTrainTdsByDate,
+      roTrainPermeatePivot, roTrainRejectPivot, roTrainFeedPivot]);
 
   const filteredCostReadings = useMemo(() => {
     if (!costReadings) return [];
@@ -657,13 +729,17 @@ export function useDataSummaryData({
     (!hasProdTab && tab === 'production') ||
     (!hasConsTab && tab === 'consumption') ||
     (!hasGridTab && tab === 'grid-by-meter') ||
-    (!hasChemBreakdownTab && tab === 'chemical-breakdown')
+    (!hasChemBreakdownTab && tab === 'chemical-breakdown') ||
+    (!hasPermeateTab && tab === 'permeate') ||
+    (!hasRejectTab && tab === 'reject')
       ? 'overview' : tab;
 
   const tabDates = activeTab === 'consumption' ? consDates
     : activeTab === 'production' ? prodDates
     : activeTab === 'grid-by-meter' ? overviewDates
     : activeTab === 'chemical-breakdown' ? overviewDates
+    : activeTab === 'permeate' ? overviewDates
+    : activeTab === 'reject' ? overviewDates
     : metric === 'rawwater' ? prodDates
     : overviewDates;
 
@@ -683,8 +759,10 @@ export function useDataSummaryData({
     filteredWellReadings, filteredRoReadings,
     gridMeterMeta, gridBreakdown,
     hasProdTab, hasConsTab, hasGridTab, hasChemBreakdownTab,
+    hasPermeateTab, hasRejectTab,
     overviewLabel, prodTabLabel,
     roTrainEntities, roTrainRecoveryByDate, roTrainTdsByDate, phHealthByDate,
+    roTrainPermeatePivot, roTrainRejectPivot,
     prodEntities, prodPivotMap, prodDateKeys, prodDates,
     hasProductMeterData, hasPermeateData,
     consEntities, consPivot, consDateKeys, consDates,

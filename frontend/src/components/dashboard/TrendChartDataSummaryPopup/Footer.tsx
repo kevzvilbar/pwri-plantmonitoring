@@ -10,12 +10,13 @@ interface FooterProps {
   metric: string;
   prodEntities: { id: string; label: string; kind: string }[];
   consEntities: { id: string; label: string }[];
+  roTrainEntities?: { id: string; label: string }[];
   gridBreakdown: GridMeterBreakdown;
 }
 
 export function Footer({
   tabDates, activeTab, hasProdTab, hasConsTab, hasGridTab, hasChemBreakdownTab, metric,
-  prodEntities, consEntities, gridBreakdown,
+  prodEntities, consEntities, roTrainEntities, gridBreakdown,
 }: FooterProps) {
   const prodKindCounts = (() => {
     const meterCount = prodEntities.filter((e) => e.kind === 'meter').length;
@@ -43,6 +44,9 @@ export function Footer({
       )}
       {activeTab === 'chemical-breakdown' && (
         <span>· Dosed chemicals breakdown</span>
+      )}
+      {(activeTab === 'permeate' || activeTab === 'reject') && (
+        <span>· {(roTrainEntities ?? []).length} RO trains</span>
       )}
     </div>
   );

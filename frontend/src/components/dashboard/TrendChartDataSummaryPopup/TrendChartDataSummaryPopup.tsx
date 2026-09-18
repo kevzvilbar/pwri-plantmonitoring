@@ -47,6 +47,8 @@ export function DataSummaryPopup({
     prodPivotMap: data.prodPivotMap,
     consPivot: data.consPivot,
     roTrainEntities: data.roTrainEntities,
+    roTrainPermeatePivot: data.roTrainPermeatePivot,
+    roTrainRejectPivot: data.roTrainRejectPivot,
     powerReadings,
     chemicalBreakdown: data.chemicalBreakdown,
   });
@@ -73,6 +75,8 @@ export function DataSummaryPopup({
             hasConsTab={data.hasConsTab}
             hasGridTab={data.hasGridTab}
             hasChemBreakdownTab={data.hasChemBreakdownTab}
+            hasPermeateTab={data.hasPermeateTab}
+            hasRejectTab={data.hasRejectTab}
             overviewLabel={data.overviewLabel}
             prodTabLabel={data.prodTabLabel}
             setTab={data.setTab}
@@ -91,10 +95,14 @@ export function DataSummaryPopup({
           metric={metric}
           hasProdTab={data.hasProdTab}
           hasConsTab={data.hasConsTab}
+          hasPermeateTab={data.hasPermeateTab}
+          hasRejectTab={data.hasRejectTab}
           overviewChartRows={data.overviewChartRows}
           overviewDates={data.overviewDates}
           roTrainEntities={data.roTrainEntities}
           phHealthByDate={data.phHealthByDate}
+          roTrainPermeatePivot={data.roTrainPermeatePivot}
+          roTrainRejectPivot={data.roTrainRejectPivot}
           gridBreakdown={data.gridBreakdown}
           prodDates={data.prodDates}
           prodEntities={data.prodEntities}
@@ -116,6 +124,7 @@ export function DataSummaryPopup({
           metric={metric}
           prodEntities={data.prodEntities}
           consEntities={data.consEntities}
+          roTrainEntities={data.roTrainEntities}
           gridBreakdown={data.gridBreakdown}
         />
       </DialogContent>

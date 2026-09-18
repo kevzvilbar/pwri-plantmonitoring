@@ -49,6 +49,9 @@ interface SnapshotCardsProps {
     avgPowerCost: number | null;
     avgChemCost: number | null;
     totalCostOutput: number;
+    totalPermeate?: number;
+    totalReject?: number;
+    totalFeed?: number;
     avgRecovery: number | null;
     avgReadingRecovery: number | null;  // diagnostic: old reading-count-weighted average
     minRecovery: number | null;
@@ -175,6 +178,24 @@ export function SnapshotCards({ metric, stats, plantHealthStats, prodEntities }:
           value={stats.peakRaw > 0 ? stats.peakRaw.toLocaleString(undefined, { maximumFractionDigits: 1 }) : '—'} unit="m³" />
         <StatCard icon={<Activity className="text-emerald-500" />} iconColor="" label="Active Wells"
           value={prodEntities.length > 0 ? `${prodEntities.length} wells` : '—'} />
+      </>
+    );
+  }
+
+  if (metric === 'roFlowBalance') {
+    const perm = stats.totalPermeate ?? 0;
+    const rej = stats.totalReject ?? 0;
+    const feed = stats.totalFeed ?? 0;
+    return (
+      <>
+        <StatCard icon={<Droplet />} iconColor="text-cyan-500" label="Total Permeate"
+          value={perm > 0 ? perm.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : '—'} unit="m³" />
+        <StatCard icon={<Droplet className="text-amber-500" />} iconColor="" label="Total Reject"
+          value={rej > 0 ? rej.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : '—'} unit="m³" />
+        <StatCard icon={<Droplet className="text-primary" />} iconColor="" label="Total Feed"
+          value={feed > 0 ? feed.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : '—'} unit="m³" />
+        <StatCard icon={<Activity className="text-emerald-500" />} iconColor="" label="Overall Recovery"
+          value={stats.avgRecovery != null ? `${stats.avgRecovery.toFixed(1)}%` : '—'} />
       </>
     );
   }

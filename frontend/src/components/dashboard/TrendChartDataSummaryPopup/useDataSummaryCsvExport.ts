@@ -19,6 +19,8 @@ export interface CsvExportOptions {
   prodPivotMap: Map<string, Map<string, number>>;
   consPivot: Map<string, Map<string, number>>;
   roTrainEntities: { id: string; label: string }[];
+  roTrainPermeatePivot?: Map<string, Map<string, number>>;
+  roTrainRejectPivot?: Map<string, Map<string, number>>;
   powerReadings?: GridPowerReadingRow[];
   chemicalBreakdown?: Map<string, ChemicalDayBreakdown>;
 }
@@ -27,7 +29,8 @@ export function useDataSummaryCsvExport({
   activeTab, metric, overviewChartRows,
   gridBreakdown, overviewDates, prodDates, consDates,
   prodEntities, consEntities, prodPivotMap, consPivot,
-  roTrainEntities, powerReadings, chemicalBreakdown,
+  roTrainEntities, roTrainPermeatePivot, roTrainRejectPivot,
+  powerReadings, chemicalBreakdown,
 }: CsvExportOptions) {
   const handleExportCsv = () => {
     let csvContent = '';
@@ -89,6 +92,18 @@ export function useDataSummaryCsvExport({
           return [r.date, ...trainVals, avgVal].join(',');
         });
         csvContent = [headers.join(','), ...rows].join('\n');
+      } else if (metric === 'roFlowBalance') {
+        const headers = ['Date', 'Feed Water (m3)', 'Permeate (m3)', 'Reject (m3)', 'Expected Feed (m3)', 'Variance (m3)', 'Variance (%)'];
+        const rows = overviewChartRows.map((r) => {
+          const feed = r.feed != null && r.feed > 0 ? (+r.feed).toFixed(2) : '';
+          const perm = r.permeate != null && r.permeate > 0 ? (+r.permeate).toFixed(2) : '';
+          const rej = r.reject != null && r.reject > 0 ? (+r.reject).toFixed(2) : '';
+          const exp = r.expectedFeed != null ? (+r.expectedFeed).toFixed(2) : (perm && rej ? (+perm + +rej).toFixed(2) : '');
+          const diff = r.variance != null ? (+r.variance).toFixed(2) : '';
+          const pct = r.variancePct != null ? `${(+r.variancePct).toFixed(1)}%` : '';
+          return [r.date, feed, perm, rej, exp, diff, pct].join(',');
+        });
+        csvContent = [headers.join(','), ...rows].join('\n');
       } else {
         const headers = ['Date', 'Production (m3)', 'Consumption (m3)', ...(metric === 'nrw' ? ['NRW (%)'] : [])];
         const rows = overviewChartRows.map(r => [
@@ -128,6 +143,22 @@ export function useDataSummaryCsvExport({
         const entityVals = consEntities.map(e => consPivot.get(d)?.get(e.id) ?? 0);
         const rowTot = entityVals.reduce((a, b) => a + b, 0);
         return [format(new Date(d + 'T00:00:00'), 'MMM d'), ...entityVals, rowTot].join(',');
+      });
+      csvContent = [headers.join(','), ...rows].join('\n');
+    } else if (activeTab === 'permeate') {
+      const headers = ['Date', ...roTrainEntities.map((e) => `"${e.label.replace(/"/g, '""')}"`), 'Total Permeate (m3)'];
+      const rows = [...overviewDates].reverse().map((d) => {
+        const entityVals = roTrainEntities.map((e) => roTrainPermeatePivot?.get(d)?.get(e.id) ?? 0);
+        const rowTot = entityVals.reduce((a, b) => a + b, 0);
+        return [format(new Date(d + 'T00:00:00'), 'MMM d'), ...entityVals.map((v) => v > 0 ? v.toFixed(2) : ''), rowTot > 0 ? rowTot.toFixed(2) : ''].join(',');
+      });
+      csvContent = [headers.join(','), ...rows].join('\n');
+    } else if (activeTab === 'reject') {
+      const headers = ['Date', ...roTrainEntities.map((e) => `"${e.label.replace(/"/g, '""')}"`), 'Total Reject (m3)'];
+      const rows = [...overviewDates].reverse().map((d) => {
+        const entityVals = roTrainEntities.map((e) => roTrainRejectPivot?.get(d)?.get(e.id) ?? 0);
+        const rowTot = entityVals.reduce((a, b) => a + b, 0);
+        return [format(new Date(d + 'T00:00:00'), 'MMM d'), ...entityVals.map((v) => v > 0 ? v.toFixed(2) : ''), rowTot > 0 ? rowTot.toFixed(2) : ''].join(',');
       });
       csvContent = [headers.join(','), ...rows].join('\n');
     } else if (activeTab === 'chemical-breakdown') {

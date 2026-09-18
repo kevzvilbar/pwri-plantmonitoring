@@ -24,13 +24,18 @@ interface BodyProps {
   hasPermeateData: boolean;
   consDates: string[];
   consEntities: { id: string; label: string }[];
-  consPivot: Map<string, Map<string, number>>;
+  hasPermeateTab?: boolean;
+  hasRejectTab?: boolean;
+  roTrainPermeatePivot?: Map<string, Map<string, number>>;
+  roTrainRejectPivot?: Map<string, Map<string, number>>;
   chemicalBreakdown?: Map<string, ChemicalDayBreakdown>;
 }
 
 export function Body({
   activeTab, metric, hasProdTab, hasConsTab,
+  hasPermeateTab, hasRejectTab,
   overviewChartRows, overviewDates, roTrainEntities, phHealthByDate,
+  roTrainPermeatePivot, roTrainRejectPivot,
   gridBreakdown, prodDates, prodEntities, prodPivotMap, hasPermeateData,
   consDates, consEntities, consPivot, chemicalBreakdown,
 }: BodyProps) {
@@ -87,6 +92,28 @@ export function Body({
             unit="m³"
             colorClass="text-highlight"
             entityType="locator"
+          />
+        )}
+        {activeTab === 'permeate' && hasPermeateTab && (
+          <PivotTable
+            dates={overviewDates}
+            entities={roTrainEntities}
+            pivot={roTrainPermeatePivot ?? new Map()}
+            totalLabel="Total Permeate (m³)"
+            unit="m³"
+            colorClass="text-cyan-500"
+            entityType="ro_train"
+          />
+        )}
+        {activeTab === 'reject' && hasRejectTab && (
+          <PivotTable
+            dates={overviewDates}
+            entities={roTrainEntities}
+            pivot={roTrainRejectPivot ?? new Map()}
+            totalLabel="Total Reject (m³)"
+            unit="m³"
+            colorClass="text-amber-500"
+            entityType="ro_train"
           />
         )}
       </div>

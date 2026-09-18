@@ -11,6 +11,7 @@ export interface OverviewChartRowForStats {
   recoveryReadingAvg?: number | null;  // diagnostic: old reading-count-weighted average
   permeate?: number | null;  // for volume-based recovery calculation
   feed?: number | null;      // for volume-based recovery calculation
+  reject?: number | null;
   tds?: number | null;
   date?: string;
   [key: string]: unknown;
@@ -62,6 +63,9 @@ export interface SummaryStatsResult {
   avgPowerCost: number | null;
   avgChemCost: number | null;
   totalCostOutput: number;
+  totalPermeate: number;
+  totalReject: number;
+  totalFeed: number;
   avgRecovery: number | null;
   avgReadingRecovery: number | null;  // diagnostic: old reading-count-weighted average
   minRecovery: number | null;
@@ -131,6 +135,7 @@ export function calculateDataSummaryStats(
   // Volume-based recovery %: Σpermeate ÷ Σfeed × 100 (matches Water Balance formula)
   // This replaces the old average-of-daily-averages approach.
   const totalPermeate = overviewChartRows.reduce((s, r) => s + (r.permeate ?? 0), 0);
+  const totalReject = overviewChartRows.reduce((s, r) => s + (r.reject ?? 0), 0);
   const totalFeed = overviewChartRows.reduce((s, r) => s + (r.feed ?? 0), 0);
   const avgRecovery = recoveryFromVolumes(totalPermeate, totalFeed, 0);
   
@@ -176,6 +181,9 @@ export function calculateDataSummaryStats(
     avgPowerCost,
     avgChemCost,
     totalCostOutput,
+    totalPermeate,
+    totalReject,
+    totalFeed,
     avgRecovery,
     avgReadingRecovery,
     minRecovery,

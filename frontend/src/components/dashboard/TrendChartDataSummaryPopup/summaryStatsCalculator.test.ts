@@ -30,6 +30,9 @@ describe('calculateDataSummaryStats', () => {
     expect(stats.totalCostOutput).toBe(0);
     expect(stats.avgRecovery).toBeNull();
     expect(stats.recoveryDays).toBe(0);
+    expect(stats.totalPermeate).toBe(0);
+    expect(stats.totalReject).toBe(0);
+    expect(stats.totalFeed).toBe(0);
     expect(stats.avgTds).toBeNull();
     expect(stats.tdsDays).toBe(0);
   });

@@ -177,6 +177,69 @@ export function OverviewTable({
       fmt: (d) => d.tds != null ? d.tds + ' ppm' : <span className="text-muted-foreground/40">—</span>,
     });
   }
+  if (metric === 'roFlowBalance') {
+    cols.push(
+      {
+        key: 'feed',
+        label: 'Feed Water (m³)',
+        fmt: (d) => d.feed != null && d.feed > 0
+          ? <span className="font-semibold">{d.feed.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+          : <span className="text-muted-foreground/40">—</span>,
+      },
+      {
+        key: 'permeate',
+        label: 'Permeate (m³)',
+        fmt: (d) => d.permeate != null && d.permeate > 0
+          ? <span className="text-cyan-600 dark:text-cyan-400 font-semibold">{d.permeate.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+          : <span className="text-muted-foreground/40">—</span>,
+      },
+      {
+        key: 'reject',
+        label: 'Reject (m³)',
+        fmt: (d) => d.reject != null && d.reject > 0
+          ? <span className="text-amber-600 dark:text-amber-400 font-semibold">{d.reject.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+          : <span className="text-muted-foreground/40">—</span>,
+      },
+      {
+        key: 'expectedFeed',
+        label: 'Expected Feed (m³)',
+        fmt: (d) => {
+          const exp = d.expectedFeed ?? ((d.permeate ?? 0) + (d.reject ?? 0));
+          return exp > 0
+            ? exp.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+            : <span className="text-muted-foreground/40">—</span>;
+        },
+      },
+      {
+        key: 'variance',
+        label: 'Variance (m³)',
+        fmt: (d) => {
+          if (d.variance == null && d.feed == null) return <span className="text-muted-foreground/40">—</span>;
+          const v = d.variance ?? (d.feed - ((d.permeate ?? 0) + (d.reject ?? 0)));
+          const isDev = d.hasDeviation || Math.abs(v) > 0.5;
+          return (
+            <span className={isDev ? 'text-destructive font-semibold' : 'text-foreground/90 font-mono'}>
+              {v > 0 ? `+${v.toFixed(2)}` : v.toFixed(2)}
+            </span>
+          );
+        },
+      },
+      {
+        key: 'variancePct',
+        label: 'Variance %',
+        fmt: (d) => {
+          if (d.variancePct == null && (d.feed == null || d.feed === 0)) return <span className="text-muted-foreground/40">—</span>;
+          const pct = d.variancePct ?? (d.feed > 0 ? +(((d.variance ?? 0) / d.feed) * 100).toFixed(1) : 0);
+          const isDev = d.hasDeviation || Math.abs(pct) > 2.0;
+          return (
+            <span className={isDev ? 'text-destructive font-semibold' : 'text-foreground/90 font-mono'}>
+              {pct > 0 ? `+${pct.toFixed(1)}%` : `${pct.toFixed(1)}%`}
+            </span>
+          );
+        },
+      },
+    );
+  }
   if (metric === 'pv') {
     cols.push(
       { key: 'production', label: 'Production (m³)', fmt: (d) => d.production != null ? <span className={d.production < 0 ? 'text-destructive font-semibold' : ''}>{d.production.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span> : '—' },
