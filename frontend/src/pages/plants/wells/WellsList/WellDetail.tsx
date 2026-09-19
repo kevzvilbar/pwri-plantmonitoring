@@ -604,55 +604,6 @@ export function WellDetail({ wellId, onBack }: { wellId: string; onBack: () => v
         )}
       </Card>
 
-      {/* Recent raw readings table */}
-      {rawReadings.length > 0 && (
-        <Card className="p-3" data-testid="well-raw-readings-card">
-          <h4 className="text-sm font-semibold mb-2 flex items-center gap-1.5">
-            <Gauge className="h-3.5 w-3.5" /> Recent Readings
-            {well.has_power_meter && (
-              <span className="ml-1 inline-flex items-center gap-0.5 text-2xs uppercase tracking-wide text-warn bg-warn-soft px-1.5 py-0.5 rounded">
-                <Zap className="h-2.5 w-2.5" /> kWh tracked
-              </span>
-            )}
-          </h4>
-          <div className="overflow-x-auto -mx-1">
-            <table className="w-full text-xs">
-              <thead className="text-2xs uppercase text-muted-foreground">
-                <tr className="border-b">
-                  <th className="text-left px-1 py-1 font-medium">Date</th>
-                  <th className="text-right px-1 py-1 font-medium">Water m³</th>
-                  <th className="text-right px-1 py-1 font-medium">Δ</th>
-                  {well.has_power_meter && <th className="text-right px-1 py-1 font-medium">kWh</th>}
-                  <th className="text-right px-1 py-1 font-medium">TDS (ppm)</th>
-                  <th className="text-right px-1 py-1 font-medium">Pressure (psi)</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rawReadings.map((r: any) => {
-                  const delta = r.previous_reading != null && r.current_reading != null
-                    ? +r.current_reading - +r.previous_reading : null;
-                  return (
-                    <tr key={r.id} className="border-b last:border-0">
-                      <td className="px-1 py-1 text-muted-foreground whitespace-nowrap">
-                        {r.reading_datetime ? format(new Date(r.reading_datetime), 'MMM d HH:mm') : '—'}
-                      </td>
-                      <td className="px-1 py-1 text-right font-mono-num">{r.current_reading != null ? fmtNum(+r.current_reading, 2) : '—'}</td>
-                      <td className="px-1 py-1 text-right font-mono-num text-muted-foreground">{delta != null ? fmtNum(delta, 2) : '—'}</td>
-                      {well.has_power_meter && (
-                        <td className="px-1 py-1 text-right font-mono-num text-warn">
-                          {r.power_meter_reading != null ? fmtNum(+r.power_meter_reading, 2) : '—'}
-                        </td>
-                      )}
-                      <td className="px-1 py-1 text-right font-mono-num">{r.tds_ppm != null ? fmtNum(+r.tds_ppm, 2) : '—'}</td>
-                      <td className="px-1 py-1 text-right font-mono-num">{r.pressure_psi != null ? fmtNum(+r.pressure_psi, 2) : '—'}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </Card>
-      )}
 
       {replaceOpen && (
         <ReplaceMeterDialog kind="well" assetId={wellId} plantId={well.plant_id} oldSerial={well.meter_serial}
