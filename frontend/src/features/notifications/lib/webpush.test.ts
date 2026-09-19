@@ -23,7 +23,7 @@ import {
   createVapidAuthorization,
   sendWebPush,
   type VapidKeys,
-} from '../../../supabase/functions/_shared/webpush';
+} from '../../../../../supabase/functions/_shared/webpush';
 
 Object.defineProperty(globalThis, 'crypto', { value: webcrypto, configurable: true });
 
