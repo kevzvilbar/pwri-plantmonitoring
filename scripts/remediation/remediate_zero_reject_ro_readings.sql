@@ -67,8 +67,6 @@ SELECT COUNT(*) AS backed_up_rows FROM public.ro_train_readings_pre_remediation_
 -- Annotates the rows for audit:
 --   • incomplete_reason  → explanation (only if not already set)
 --
--- OPTIONAL (remove if you do not want to flood Data Corrections):
---   • norm_status  → 'pending_review'
 -- ─────────────────────────────────────────────────────────────────────────────
 UPDATE public.ro_train_readings
 SET
