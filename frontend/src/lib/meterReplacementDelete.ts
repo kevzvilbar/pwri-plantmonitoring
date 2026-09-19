@@ -1,4 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
+import { resyncWellChain } from '@/data/queries/readingHistory';
 
 /**
  * Deletes a well meter replacement record and restores meter state:
@@ -6,6 +7,7 @@ import { supabase } from '@/integrations/supabase/client';
  * 2. Deletes the replacement record from `well_meter_replacements`.
  * 3. Reverts the active meter attributes on the `wells` table to the
  *    prior remaining replacement (or original serial).
+ * 4. Re-synchronizes the well readings chain so deltas and volumes recalculate.
  */
 export async function deleteWellMeterReplacement(params: {
   replacementId: string;
@@ -25,22 +27,20 @@ export async function deleteWellMeterReplacement(params: {
       return { success: false, error: fetchErr?.message ?? 'Replacement record not found' };
     }
 
-    // 2. Clean up synthetic reading if present
+    // 2. Clean up or unflag linked reading if present
     if (repl.reading_id) {
       const { data: reading } = await supabase
         .from('well_readings')
-        .select('id, is_meter_replacement, remarks')
+        .select('id, is_meter_replacement')
         .eq('id', repl.reading_id)
         .maybeSingle();
 
       if (reading) {
-        if (reading.remarks?.includes('[METER REPLACEMENT]')) {
-          // Synthetic row created purely for replacement; safe to remove
-          await supabase.from('well_readings').delete().eq('id', reading.id);
-        } else {
-          // Real reading that carried the flag; keep reading but unflag
-          await supabase.from('well_readings').update({ is_meter_replacement: false }).eq('id', reading.id);
-        }
+        // Unflag the replacement reading
+        await supabase
+          .from('well_readings')
+          .update({ is_meter_replacement: false })
+          .eq('id', reading.id);
       }
     }
 
@@ -74,9 +74,11 @@ export async function deleteWellMeterReplacement(params: {
       }).eq('id', wellId);
     }
 
+    // 5. Renormalize the well reading chain so deltas recompute cleanly
+    await resyncWellChain(wellId);
+
     return { success: true };
   } catch (err: any) {
     return { success: false, error: err.message };
   }
 }
-
