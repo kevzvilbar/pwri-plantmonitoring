@@ -9,7 +9,7 @@ import { resolveBlendingDateContext } from '@/lib/blendingBackdate';
 import { latestRaw } from '@/lib/blendingRawCache';
 import { computeRate, classifyDeviation, MIN_ELAPSED_DAYS } from '@/lib/flowRateGuards';
 import { submitAnomalyRemark, isAnomalyRemarkValid } from '@/lib/anomalyRemarks';
-import { invalidateWellDash } from '../../../pages/operations/shared';
+import { invalidateWellDash } from '../../../shared';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 import { friendlyError } from '@/lib/supabaseErrors';

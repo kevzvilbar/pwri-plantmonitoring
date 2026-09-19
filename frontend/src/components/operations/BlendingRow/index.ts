@@ -1,2 +1,2 @@
-export { BlendingRow, type BlendingRowProps } from './BlendingRow';
-export { useBlendingRow, type BlendingRowLogic } from './useBlendingRow';
+export * from '@/features/operations/components/blending/BlendingRow';
+export { BlendingRow as default } from '@/features/operations/components/blending/BlendingRow';

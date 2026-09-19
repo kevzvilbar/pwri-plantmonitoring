@@ -5,7 +5,7 @@ import { ReadingHistoryDialog } from '@/components/ReadingHistoryDialog';
 import { PowerMeterChangeDialog } from '@/pages/plants/config/PowerMeters/PowerMeters';
 import { ReasonDialog } from '@/components/ReasonDialog';
 import { friendlyError } from '@/lib/supabaseErrors';
-import { invalidatePowerDash } from '../../shared';
+import { invalidatePowerDash } from '../../../shared';
 import { validatePowerRow } from '@/lib/readingValidation';
 import { insertPowerReadings } from '@/data/mutations/power';
 import type { QueryClient } from '@tanstack/react-query';

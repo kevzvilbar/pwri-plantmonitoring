@@ -27,7 +27,7 @@ import { submitAnomalyRemark, isAnomalyRemarkValid } from '@/lib/anomalyRemarks'
 import { isReasonComplete, resolveReason } from '@/lib/correctionReasons';
 import { reasonCategoryLabel } from '@/lib/reasonCodes';
 import { logReadingEdit, diffFields, canEditEntry } from '@/pages/ro-trains/helpers';
-import { logProductionCalc, invalidateProductMeterDash } from '@/pages/operations/shared';
+import { logProductionCalc, invalidateProductMeterDash } from '../../shared';
 import { ReplPill } from '@/components/readingHistory/ReplPill';
 import { MeterReplacementDetailDialog } from '@/components/readingHistory/MeterReplacementDetailDialog';
 import { useMeterReplacementDetail } from '@/components/readingHistory/useMeterReplacementDetail';

@@ -9,7 +9,7 @@ import { ALERTS } from '@/lib/calculations';
 import { findExistingReading } from '@/lib/duplicateCheck';
 import { isAnomalyRemarkValid, submitAnomalyRemark } from '@/lib/anomalyRemarks';
 import { friendlyError } from '@/lib/supabaseErrors';
-import { invalidatePowerDash } from '../../shared';
+import { invalidatePowerDash } from '../../../shared';
 import { usePowerSubmit } from './usePowerSubmit';
 import type { UsePowerSubmitOptions } from './usePowerSubmit';
 
