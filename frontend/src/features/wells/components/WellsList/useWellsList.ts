@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useWellsForPlant } from '@/hooks/useWells';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
-import { usePlantMeterConfig, logStatusChange } from '../../../shared';
+import { usePlantMeterConfig, logStatusChange } from '@/pages/plants/shared';
 import { lastReadingFreshness } from '@/lib/format';
 import { friendlyError } from '@/lib/supabaseErrors';
 import { toast } from 'sonner';

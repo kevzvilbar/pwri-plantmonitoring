@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import { ChangeMeterIcon } from '@/components/icons/water-icons';
 import { StatusPill } from '@/components/StatusPill';
-import { EntityHistoryChart } from '../../../charts/EntityHistoryChart';
+import { EntityHistoryChart } from '@/pages/plants/charts/EntityHistoryChart';
 import { lastReadingFreshness } from '@/lib/format';
 
 import type { ReactNode } from 'react';
