@@ -3,7 +3,7 @@ import { format } from 'date-fns';
 import { Dialog, DialogContent, DialogHeader } from '@/components/ui/dialog';
 import { DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Loader2, Pencil, ExternalLink } from 'lucide-react';
+import { Loader2, Pencil, ExternalLink, Trash2 } from 'lucide-react';
 import type { NormalizedReplacement, ReplacementDetailHost } from './replacementTypes';
 
 function Field({ label, value, span }: { label: string; value: any; span?: boolean }) {
@@ -30,13 +30,14 @@ const KIND_LABEL: Record<string, string> = {
 };
 
 export function MeterReplacementDetailDialog({
-  host, records, isLoading, onClose, onEdit,
+  host, records, isLoading, onClose, onEdit, onDelete,
 }: {
   host: ReplacementDetailHost | null;
   records: NormalizedReplacement[];
   isLoading: boolean;
   onClose: () => void;
   onEdit: (record: NormalizedReplacement | null) => void;
+  onDelete?: (record: NormalizedReplacement) => void;
 }) {
   if (!host) return null;
   const { target, settingsHref, canEdit = true } = host;
@@ -67,9 +68,16 @@ export function MeterReplacementDetailDialog({
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-xs font-semibold text-foreground">{rec.meterLabel ?? 'Meter swap'}</p>
                     {canEdit && (
-                      <Button size="sm" variant="ghost" className="h-6 px-1.5 text-2xs gap-1" onClick={() => onEdit(rec)}>
-                        <Pencil className="h-3 w-3" /> Edit
-                      </Button>
+                      <div className="flex items-center gap-1">
+                        <Button size="sm" variant="ghost" className="h-6 px-1.5 text-2xs gap-1" onClick={() => onEdit(rec)}>
+                          <Pencil className="h-3 w-3" /> Edit
+                        </Button>
+                        {onDelete && (
+                          <Button size="sm" variant="ghost" className="h-6 px-1.5 text-2xs gap-1 text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => onDelete(rec)}>
+                            <Trash2 className="h-3 w-3" /> Delete
+                          </Button>
+                        )}
+                      </div>
                     )}
                   </div>
                 )}
@@ -100,6 +108,11 @@ export function MeterReplacementDetailDialog({
           </div>
         )}
         <DialogFooter className="gap-2 flex-wrap">
+          {canEdit && target.kind !== 'blending' && records.length === 1 && onDelete && (
+            <Button size="sm" variant="destructive" onClick={() => onDelete(records[0])} disabled={isLoading} className="gap-1.5 mr-auto">
+              <Trash2 className="h-3 w-3" /> Delete
+            </Button>
+          )}
           {canEdit && target.kind !== 'blending' && records.length <= 1 && (
             <Button size="sm" onClick={() => onEdit(records[0] ?? null)} disabled={isLoading} className="gap-1.5">
               <Pencil className="h-3 w-3" />{records.length ? 'Edit replacement…' : 'Log details…'}
