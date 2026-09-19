@@ -21,13 +21,19 @@
 - [x] 10. Verify all gates: `tsc`, `npm test` (75 suites, 688 tests), `npm run build`, `npm run lint`
 - [x] 11. Commit `41aa42c2` & pushed to origin `main`
 
-## Slice 3: `notifications` & `auth` (In Progress)
-- [ ] 1. Create `src/features/notifications/` (`components/`, `hooks/`, `lib/`)
-- [ ] 2. Migrate Alerts page, components, hooks, and tests into `src/features/notifications/`
-- [ ] 3. Migrate PushNotificationCard, hooks, lib, and tests into `src/features/notifications/`
-- [ ] 4. Create `src/features/auth/` (`components/`, `components/SignUpForm/`)
-- [ ] 5. Migrate Auth, Onboarding, Profile pages and auth components into `src/features/auth/`
-- [ ] 6. Setup barrels and compatibility shims for pages, components, and hooks
-- [ ] 7. Update internal imports within `src/features/notifications/` and `src/features/auth/`
-- [ ] 8. Verify all gates: `tsc`, `npm test`, `npm run build`, `npm run lint`
-- [ ] 9. Commit & push Slice 3 to origin `main`
+## Slice 3: `notifications` & `auth` (Completed)
+- [x] 1. Create `src/features/notifications/` (`components/`, `hooks/`, `lib/`)
+- [x] 2. Migrate Alerts page, components, hooks, and tests into `src/features/notifications/`
+- [x] 3. Migrate PushNotificationCard, hooks, lib, and tests into `src/features/notifications/`
+- [x] 4. Create `src/features/auth/` (`components/`, `components/SignUpForm/`)
+- [x] 5. Migrate Auth, Onboarding, Profile pages and auth components into `src/features/auth/`
+- [x] 6. Setup barrels and compatibility shims for pages, components, and hooks
+- [x] 7. Update internal imports within `src/features/notifications/` and `src/features/auth/`
+- [x] 8. Verify all gates: `tsc`, `npm test` (75 suites, 688 tests), `npm run build`, `npm run lint`
+- [x] 9. Commit `7bf7c7fd` & pushed to origin `main`
+
+## Slice 4: `readings` (Next Up)
+- [ ] 1. Plan and organize `src/features/readings/` (smart-import, ReadingImportDialog, components/import, data-corrections, dataAnalysis)
+- [ ] 2. Maintain routing and re-export shims
+- [ ] 3. Verify all gates: `tsc`, `npm test`, `npm run build`, `npm run lint`
+- [ ] 4. Commit & push Slice 4
