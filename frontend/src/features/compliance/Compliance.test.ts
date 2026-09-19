@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computeViolations, DEFAULT_THRESHOLDS, type ChemSupply } from './Compliance';
+import { computeViolations, DEFAULT_THRESHOLDS, type ChemSupply } from './types';
 
 describe('computeViolations — chemical low-stock check', () => {
   it('raises nothing when chemSupply is empty (unchanged legacy behavior)', () => {
