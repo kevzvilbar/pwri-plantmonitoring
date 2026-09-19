@@ -42,7 +42,12 @@ export function RoVesselContainer({
   rejIsEM,
   onFieldChange,
 }: RoVesselContainerProps) {
-  const emEntered = [form.roValues.feed_flow, form.roValues.permeate_flow, form.roValues.reject_flow].filter(Boolean).length;
+  // A flow value only counts as "entered" if it parses to a number strictly > 0.
+  // "0" is falsy when cast to boolean in some paths but truthy as a string, so
+  // use an explicit numeric check to match the save-time rule in usePretreatmentActions.
+  const emEntered = [form.roValues.feed_flow, form.roValues.permeate_flow, form.roValues.reject_flow]
+    .filter((v) => { const n = parseFloat(String(v ?? '')); return !isNaN(n) && n > 0; })
+    .length;
 
   return (
     <RoVesselSection

@@ -79,8 +79,8 @@ export function EMFlowRow({
           Electromagnetic Flowmeter (m³/hr)
         </p>
         <p className="text-2xs text-muted-foreground/60 italic">
-          {emEntered === 0 && 'Enter any two — third auto-computes'}
-          {emEntered === 1 && 'Enter one more — third will be computed'}
+          {emEntered === 0 && 'At least two readings required — one may be computed from the other two'}
+          {emEntered === 1 && 'Enter one more — third can be computed from these two'}
           {emEntered === 2 && 'One value computed from the other two'}
           {emEntered === 3 && 'All three manually entered'}
         </p>

@@ -23,3 +23,4 @@ WHERE
   AND (feed_meter_delta IS NULL OR feed_meter_delta = 0)
   AND permeate_meter IS NOT NULL
   AND recovery_pct IS NOT NULL;
+

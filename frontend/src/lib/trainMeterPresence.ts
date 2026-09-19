@@ -41,3 +41,65 @@ export function missingRequiredMeters(
     (stream) => flags[stream] && String(readings[stream] ?? '').trim() === '',
   );
 }
+
+/**
+ * Whether a single stream is considered "measured" given its manual meter
+ * reading and/or its EM flow value.
+ *
+ * Rules:
+ *   - A manual meter reading is present when the string is non-empty.
+ *   - An EM flow reading is present when it parses to a number STRICTLY > 0.
+ *     Zero is not accepted: 0 m³/hr on a running RO train is physically
+ *     implausible and was the exact loophole operators used to type past the
+ *     required-field check while leaving the stream effectively unread.
+ */
+export function streamIsMeasured(opts: {
+  /** Whether the stream has a physical manual-totalizer meter installed. */
+  hasManualMeter: boolean;
+  /** Whether the stream is configured for electromagnetic-flowmeter input. */
+  isEM: boolean;
+  /** The raw string value from the manual-meter "current reading" input. */
+  meterReading: string | null | undefined;
+  /** The raw string value from the EM flow input field. */
+  emFlow: string | null | undefined;
+}): boolean {
+  // Manual meter: any non-empty entry counts.
+  if (opts.hasManualMeter && String(opts.meterReading ?? '').trim() !== '') return true;
+  // EM flow: must parse to a number strictly above zero.
+  if (opts.isEM) {
+    const v = parseFloat(String(opts.emFlow ?? ''));
+    if (!isNaN(v) && v > 0) return true;
+  }
+  return false;
+}
+
+/**
+ * Returns every configured stream that is not yet measured.
+ *
+ * A stream is "configured" when its meter flag is true (installed in Plant
+ * Config). A stream is "measured" per the rules in {@link streamIsMeasured}.
+ *
+ * This is the single source of truth for the save-time hard block and replaces
+ * the earlier dual-path checks (manual-meter path + separate EM-count path)
+ * that could be bypassed by typing 0 into an EM field.
+ */
+export function missingMeasuredStreams(
+  meterFlags: { feed: boolean; permeate: boolean; reject: boolean },
+  emFlags: { feedIsEM: boolean; permIsEM: boolean; rejIsEM: boolean },
+  meterReadings: { feed?: string | null; permeate?: string | null; reject?: string | null },
+  emReadings: { feed?: string | null; permeate?: string | null; reject?: string | null },
+): MeterStream[] {
+  return (['feed', 'permeate', 'reject'] as const).filter((stream) => {
+    if (!meterFlags[stream]) return false; // not installed → auto-inferred, never required
+    const isEM = stream === 'feed' ? emFlags.feedIsEM
+               : stream === 'permeate' ? emFlags.permIsEM
+               : emFlags.rejIsEM;
+    return !streamIsMeasured({
+      hasManualMeter: meterFlags[stream],
+      isEM,
+      meterReading: meterReadings[stream],
+      emFlow: emReadings[stream],
+    });
+  });
+}
+

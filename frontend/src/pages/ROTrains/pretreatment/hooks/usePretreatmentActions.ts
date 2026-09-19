@@ -9,7 +9,7 @@ import { STANDARD_OFFLINE_REASONS, getUnitReasonText } from '../types';
 import { isWasActuallyRunningReason } from '@/lib/trainUptimeExemption';
 import { reportTrainRunningExemption } from '@/hooks/useTrainUptimeExemption';
 import { trainEmFlags } from '@/lib/trainEmMeter';
-import { missingRequiredMeters } from '@/lib/trainMeterPresence';
+import { missingRequiredMeters, missingMeasuredStreams } from '@/lib/trainMeterPresence';
 
 export interface PretreatmentActionsOptions {
   plantId: string;
@@ -159,6 +159,100 @@ export function usePretreatmentActions(rawOpts: PretreatmentActionsOptions) {
     let hasMissingRoEntries = false;
     try {
       if (opts.trainOnline) {
+
+        // ────────────────────────────────────────────────────────────────────
+        // Unified stream-measurement check
+        //
+        // A stream counts as "measured" when:
+        //   • its manual-totalizer current reading is non-empty, OR
+        //   • it is an EM stream AND its typed flow value is STRICTLY > 0.
+        //
+        // Typing 0 into an EM flow box is NOT a valid reading — 0 m³/hr on a
+        // running RO train is physically implausible. This was the exact
+        // loophole that produced 959 rows where reject_flow = 0, feed_flow =
+        // permeate_flow, and recovery = 100% (SRP RO3, RO5, RO7 Jul–Sep 2026).
+        //
+        // Rules:
+        //   ≥ 2 unmeasured configured streams → hard block; no reason waives it.
+        //   1 unmeasured configured stream    → OK if a reason is supplied.
+        //   0 unmeasured                      → proceed normally.
+        // ────────────────────────────────────────────────────────────────────
+        const emFlags = trainEmFlags(opts.train);
+        const streamMeterFlags = {
+          feed:     opts.showFeedMeter !== false,
+          permeate: opts.showPermeateMeter !== false,
+          reject:   opts.showRejectMeter !== false,
+        };
+        const streamEmFlags = {
+          feedIsEM: emFlags.feedIsEM,
+          permIsEM: emFlags.permIsEM,
+          rejIsEM:  emFlags.rejIsEM,
+        };
+        const streamMeterReadings = {
+          feed:     opts.roValues.feed_meter_curr,
+          permeate: opts.roValues.permeate_meter_curr,
+          reject:   opts.roValues.reject_meter_curr,
+        };
+        const streamEmReadings = {
+          feed:     opts.roValues.feed_flow,
+          permeate: opts.roValues.permeate_flow,
+          reject:   opts.roValues.reject_flow,
+        };
+
+        const unmeasuredStreams = missingMeasuredStreams(
+          streamMeterFlags,
+          streamEmFlags,
+          streamMeterReadings,
+          streamEmReadings,
+        );
+
+        // Hard block: two or more configured streams are not measured.
+        // No incomplete-reading reason can waive this — the mass-balance
+        // equation requires at least two known values to infer the third.
+        if (unmeasuredStreams.length >= 2) {
+          const labels = unmeasuredStreams
+            .map((s) => s[0].toUpperCase() + s.slice(1))
+            .join(' and ');
+          toast.error(
+            `${labels}: two or more water flow streams have no valid reading — ` +
+            `at least two must be measured (manual meter reading, or EM flow above 0). ` +
+            `Cannot save.`,
+            { duration: 8000 },
+          );
+          return;
+        }
+
+        // For legacy compatibility: missingRequiredMeters still drives which
+        // manual-meter reason rows appear in the UI. A single unmeasured stream
+        // is fine — it will be inferred from the other two.
+        missingMeters = missingRequiredMeters(
+          streamMeterFlags,
+          streamMeterReadings,
+        );
+
+        const missingWaterMeters = missingMeters.map((m) => ({
+          key: `${m}_meter`,
+          label: `${m[0].toUpperCase()}${m.slice(1)} Water Meter`,
+        }));
+
+        // EM missing entries: streams that are EM-configured, not inferred,
+        // and have no valid flow (blank or 0).
+        const emMissingItems = (['feed', 'permeate', 'reject'] as const)
+          .filter((s) => {
+            if (!streamMeterFlags[s]) return false;
+            const isEM = s === 'feed' ? emFlags.feedIsEM
+                       : s === 'permeate' ? emFlags.permIsEM
+                       : emFlags.rejIsEM;
+            if (!isEM) return false;
+            const flow = streamEmReadings[s];
+            const v = parseFloat(String(flow ?? ''));
+            return isNaN(v) || v <= 0; // blank or zero = missing
+          })
+          .map((s) => ({
+            key: `${s}_flow`,
+            label: `${s[0].toUpperCase()}${s.slice(1)} Flow Rate`,
+          }));
+
         const directRequired: { key: string; label: string; value: string }[] = [
           { key: 'feed_tds', label: 'Feed TDS', value: opts.roValues.feed_tds },
           { key: 'permeate_tds', label: 'Permeate TDS', value: opts.roValues.permeate_tds },
@@ -174,55 +268,10 @@ export function usePretreatmentActions(rawOpts: PretreatmentActionsOptions) {
         ];
         const missingDirect = directRequired.filter((f) => f.value === '' || f.value == null);
 
-        // Only require an EM flow field for a stream that's actually configured
-        // as Electromagnetic (EMF) AND has a meter at all — a Turbine (Common) /
-        // manual-meter stream never shows this field (see EMFlowRow.tsx's
-        // emFeedShown/emPermShown/emRejShown), so counting it against the
-        // operator here used to block every single save on any train that
-        // wasn't in "All Electromagnetic (EMF)" mode. The "any 2 of 3" shortcut
-        // itself only holds when all 3 streams are EM — that's the only case
-        // usePretreatmentCalculations can actually derive the third value by
-        // subtraction; with fewer EM streams shown there's no cross-stream
-        // inference to lean on, so every shown field is required.
-        const emFlags = trainEmFlags(opts.train);
-        const configuredEmFields: { key: string; label: string; value: string }[] = [
-          opts.showFeedMeter !== false && emFlags.feedIsEM ? { key: 'feed_flow', label: 'Feed Flow Rate', value: opts.roValues.feed_flow } : undefined,
-          opts.showPermeateMeter !== false && emFlags.permIsEM ? { key: 'permeate_flow', label: 'Permeate Flow Rate', value: opts.roValues.permeate_flow } : undefined,
-          opts.showRejectMeter !== false && emFlags.rejIsEM ? { key: 'reject_flow', label: 'Reject Flow Rate', value: opts.roValues.reject_flow } : undefined,
-        ].filter(Boolean) as { key: string; label: string; value: string }[];
-        const emFilled = configuredEmFields.filter((v) => v.value !== '' && v.value != null).length;
-        const emMinRequired = configuredEmFields.length === 3 ? 2 : configuredEmFields.length;
-        const emIncomplete = configuredEmFields.length > 0 && emFilled < emMinRequired;
-        const missingEm = emIncomplete ? configuredEmFields.filter((f) => f.value === '' || f.value == null) : [];
-
-        // Water meters: every meter configured for this train is REQUIRED.
-        // Only a meter marked "not installed" in Plant Config (hidden from the
-        // form) is auto-calculated from the other two by water balance:
-        //   Reject = Feed − Permeate, Feed = Permeate + Reject, Permeate = Feed − Reject
-        // If an installed meter is broken or undergoing servicing in the field,
-        // the operator must provide an explicit incomplete-reading reason.
-        missingMeters = missingRequiredMeters(
-          {
-            feed: opts.showFeedMeter !== false,
-            permeate: opts.showPermeateMeter !== false,
-            reject: opts.showRejectMeter !== false,
-          },
-          {
-            feed: opts.roValues.feed_meter_curr,
-            permeate: opts.roValues.permeate_meter_curr,
-            reject: opts.roValues.reject_meter_curr,
-          },
-        );
-
-        const missingWaterMeters = missingMeters.map((m) => ({
-          key: `${m}_meter`,
-          label: `${m[0].toUpperCase()}${m.slice(1)} Water Meter`,
-        }));
-
         const allMissingItems = [
           ...missingWaterMeters,
           ...missingDirect.map((f) => ({ key: f.key, label: f.label })),
-          ...missingEm.map((f) => ({ key: f.key, label: f.label })),
+          ...emMissingItems,
         ];
 
         if (allMissingItems.length > 0) {

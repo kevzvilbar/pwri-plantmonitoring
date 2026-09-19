@@ -122,19 +122,31 @@ export function usePretreatmentCalculations(
     const rejInferred = rejDelta === null && rejVol !== null;
 
     // EM 3-way inference
-    const emFeedFlow = roValues.feed_flow ? num(roValues.feed_flow) : null;
-    const emPermFlow = roValues.permeate_flow ? num(roValues.permeate_flow) : null;
-    const emRejFlow = roValues.reject_flow ? num(roValues.reject_flow) : null;
+    // Treat 0 (and negative) as "no reading" — 0 m³/hr is not physically
+    // plausible on a running train and was the loophole for the SRP RO5 rows.
+    const parseEmFlow = (raw: string) => {
+      const v = parseFloat(raw);
+      return !isNaN(v) && v > 0 ? v : null;
+    };
+    const emFeedFlow = parseEmFlow(roValues.feed_flow ?? '');
+    const emPermFlow = parseEmFlow(roValues.permeate_flow ?? '');
+    const emRejFlow = parseEmFlow(roValues.reject_flow ?? '');
     const emEntered = [emFeedFlow, emPermFlow, emRejFlow].filter(v => v !== null).length;
 
     // EM-vs-manual per-stream guards. A manual-only stream always uses its
-    // own manual-meter calculation � never backfilled via subtraction from
+    // own manual-meter calculation — never backfilled via subtraction from
     // the other two streams' EM values.
+    //
+    // effFeedFlow: prefer the EM reading; fall back to the meter-derived rate;
+    // if feed is unmetered (not installed), infer from any pair of the other
+    // two flow sources — this covers permeate-by-meter + reject-by-EM too.
     const effFeedFlow: number | null = (() => {
       if (!feedIsEM) return feedFlowMeter;
       if (emFeedFlow !== null) return emFeedFlow;
-      if (emEntered === 2 && emPermFlow !== null && emRejFlow !== null)
-        return +((emPermFlow + emRejFlow).toFixed(2));
+      // Infer feed from whatever combination of perm/rej is available
+      const perm = emPermFlow ?? permFlowMeter;
+      const rej  = emRejFlow  ?? rejFlowMeter;
+      if (perm !== null && rej !== null) return +((perm + rej).toFixed(2));
       return feedFlowMeter;
     })();
     const effPermFlow: number | null = (() => {

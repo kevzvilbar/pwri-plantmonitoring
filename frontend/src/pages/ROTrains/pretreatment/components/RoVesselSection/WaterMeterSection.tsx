@@ -125,7 +125,7 @@ export function WaterMeterSection({
           {!showFeedMeter && showPermeateMeter && showRejectMeter && 'Feed meter unconfigured — feed volume auto-inferred as Permeate + Reject.'}
           {showFeedMeter && !showPermeateMeter && showRejectMeter && 'Permeate meter unconfigured — permeate volume auto-inferred as Feed − Reject.'}
           {showFeedMeter && showPermeateMeter && !showRejectMeter && 'Reject meter unconfigured — reject volume auto-inferred as Feed − Permeate.'}
-          {!showFeedMeter && !showRejectMeter && 'Feed and reject meters unconfigured — only permeate logged.'}
+          {!showFeedMeter && !showRejectMeter && 'Two streams unconfigured — check Plant Config (at least 2 meters required).'}
         </div>
       )}
       <div className={cn('grid gap-2', meterGridClass)}>
