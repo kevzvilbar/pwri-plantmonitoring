@@ -7,8 +7,8 @@ import {
   dpPsi,
   type ROMeterKind,
 } from './roReadingGuards';
-import type { RatePoint } from './flowRateGuards';
-import { ALERTS } from './calculations';
+import type { RatePoint } from '@/shared/flowRateGuards';
+import { ALERTS } from '@/shared/calculations';
 
 describe('computeROAverageFlowRate', () => {
   const hoursAgo = (h: number) => new Date(Date.now() - h * 3_600_000);

@@ -4,7 +4,7 @@ import { AUTO_OFFLINE_THRESHOLD_HOURS, ONE_HOUR_MS, TWO_HOURS_MS } from './autoO
 // The two former hand-rolled copies of the threshold, re-exported from their
 // original homes — every one of these must agree with the shared module:
 import { AUTO_OFFLINE_THRESHOLD_HOURS as TIMELINE_THRESHOLD_HOURS } from './trainStatusTimeline';
-import { TWO_HOURS_MS as HELPERS_TWO_HOURS_MS, ONE_HOUR_MS as HELPERS_ONE_HOUR_MS } from '../features/ro-trains/helpers';
+import { TWO_HOURS_MS as HELPERS_TWO_HOURS_MS, ONE_HOUR_MS as HELPERS_ONE_HOUR_MS } from '@/features/ro-trains/helpers';
 
 // The 2h auto-offline threshold used to exist as three independent
 // hand-rolled constants + an inline literal. They drifted once (1h vs 2h,
@@ -16,10 +16,10 @@ import { TWO_HOURS_MS as HELPERS_TWO_HOURS_MS, ONE_HOUR_MS as HELPERS_ONE_HOUR_M
 // shipping again.
 
 const SHARED_FILES = [
-  '../hooks/useTrainAutoOffline.ts',
+  '../../../hooks/useTrainAutoOffline.ts',
   './trainStatusTimeline.ts',
-  '../features/ro-trains/helpers.tsx',
-  '../features/ro-trains/pretreatment/hooks/usePretreatmentData.ts',
+  '../helpers.tsx',
+  '../pretreatment/hooks/usePretreatmentData.ts',
 ] as const;
 
 describe('auto-offline threshold — single source of truth', () => {
