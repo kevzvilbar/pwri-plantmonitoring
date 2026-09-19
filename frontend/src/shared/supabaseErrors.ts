@@ -1,0 +1,165 @@
+/**
+ * supabaseErrors.ts
+ *
+ * Maps raw Postgres/PostgREST error messages to friendly, user-facing strings.
+ * Import `friendlyError` anywhere you currently do `toast.error(error.message)`.
+ *
+ * Usage:
+ *   import { friendlyError } from '@/lib/supabaseErrors';
+ *   toast.error(friendlyError(error));
+ */
+
+interface SupabaseError {
+  message?: string;
+  code?: string;
+  details?: string;
+  hint?: string;
+}
+
+type AnyError = SupabaseError | Error | unknown;
+
+/** Constraint name → human-readable explanation */
+const CONSTRAINT_MESSAGES: Record<string, string> = {
+  uix_well_one_per_user_per_hour:
+    'A reading for this well was already saved in the last hour. ' +
+    'Open the existing reading to update the pressure field instead.',
+  uix_locator_one_per_user_per_hour:
+    'A reading for this locator was already saved in the last hour.',
+  reading_gap_reasons_entity_type_entity_id_gap_date_key:
+    'A gap reason for this entity and date already exists. Edit the existing entry.',
+  reading_gap_reasons_entity_type_entity_id_gap_date_meter_key_key:
+    'A gap reason for this meter and date already exists. Edit the existing entry.',
+};
+
+/** PostgREST schema-cache messages → hints */
+const SCHEMA_CACHE_PATTERN = /could not find the table ['"]public\.(\w+)['"]/i;
+
+/** Postgres duplicate-key pattern */
+const DUPLICATE_KEY_PATTERN =
+  /duplicate key value violates unique constraint "(\w+)"/i;
+
+/** Postgres FK violation */
+const FK_PATTERN = /violates foreign key constraint/i;
+
+/** Postgres not-null violation */
+const NOT_NULL_PATTERN = /null value in column "(\w+)" .* violates not-null/i;
+
+/** Column-does-not-exist pattern (schema drift) */
+const MISSING_COLUMN_PATTERN = /column "(\w+)" of relation "\w+" does not exist/i;
+
+/** PostgREST schema-cache missing column pattern */
+const SCHEMA_COLUMN_PATTERN = /could not find the ['"]?(\w+)['"]? column of ['"]?(\w+)['"]? in the schema cache/i;
+
+/**
+ * Postgres row-level security violation, e.g.:
+ *   "new row violates row-level security policy for table \"reading_gap_reasons\""
+ *   "record violates row-level security policy for table \"wells\""
+ * Almost every write-policy in this schema is gated by
+ * user_has_plant_access(plant_id) — Active profile + the row's plant in
+ * plant_assignments, or Admin. Surfacing that (instead of the raw Postgres
+ * text) is what actually points the user at the fix.
+ */
+const RLS_PATTERN = /row-level security policy for table "?(\w+)"?/i;
+
+/**
+ * Returns a friendly, safe-to-display string for any Supabase/Postgres error.
+ * Falls back to the raw message if no specific match is found.
+ */
+export function friendlyError(err: AnyError, fallback = 'An unexpected error occurred.'): string {
+  let msg = '';
+  if (err instanceof Error) {
+    msg = err.message;
+  } else if (typeof err === 'string') {
+    msg = err;
+  } else if (err && typeof err === 'object') {
+    const e = err as Record<string, any>;
+    msg = e.message || e.error_description || e.error || e.details || '';
+  }
+
+  if (!msg || msg === '[object Object]') return fallback;
+
+  // 1. Known constraint violations
+  const dupMatch = msg.match(DUPLICATE_KEY_PATTERN);
+  if (dupMatch) {
+    const constraintName = dupMatch[1];
+    if (CONSTRAINT_MESSAGES[constraintName]) {
+      return CONSTRAINT_MESSAGES[constraintName];
+    }
+    // Generic duplicate
+    return 'This entry already exists. Please check for duplicates before saving.';
+  }
+
+  // 2. Schema cache miss (table not found)
+  const schemaMatch = msg.match(SCHEMA_CACHE_PATTERN);
+  if (schemaMatch) {
+    const table = schemaMatch[1];
+    return (
+      `The "${table}" feature requires a database update. ` +
+      'Please ask your administrator to run the latest migrations (supabase db push).'
+    );
+  }
+
+  // 3. FK violation
+  if (FK_PATTERN.test(msg)) {
+    return 'This record is still in use by other data and cannot be deleted.';
+  }
+
+  // 3b. Row-level security violation — almost always a plant-access gap,
+  // not a "the app is broken" situation. Tell the user what to check
+  // instead of showing them raw Postgres text.
+  const rlsMatch = msg.match(RLS_PATTERN);
+  if (rlsMatch) {
+    return (
+      "You don't have access to save this for the selected plant. " +
+      "This usually means your account isn't assigned to this plant (or your " +
+      'account is still Pending/Suspended). Ask an admin to check your plant ' +
+      'assignments under Admin Console → Employees, then try again.'
+    );
+  }
+
+  // 4. Not-null violation
+  const nullMatch = msg.match(NOT_NULL_PATTERN);
+  if (nullMatch) {
+    const col = nullMatch[1].replace(/_/g, ' ');
+    return `A required field is missing: "${col}". Please fill it in and try again.`;
+  }
+
+  // 5. Missing column (schema drift — backend migration not yet applied)
+  const colMatch = msg.match(MISSING_COLUMN_PATTERN);
+  if (colMatch) {
+    return (
+      `A database field ("${colMatch[1]}") is missing. ` +
+      'The latest migration may not have been applied yet.'
+    );
+  }
+  const schemaColMatch = msg.match(SCHEMA_COLUMN_PATTERN);
+  if (schemaColMatch) {
+    return (
+      `Database column "${schemaColMatch[1]}" was not found on "${schemaColMatch[2]}". ` +
+      'Please check the database schema or run latest migrations.'
+    );
+  }
+
+  // 6. Auth errors
+  const rateLimitMatch = msg.match(/for security purposes.*after (\d+) ?seconds?/i);
+  if (rateLimitMatch) {
+    return `Please wait about ${rateLimitMatch[1]} seconds before requesting another code.`;
+  }
+  if (msg.toLowerCase().includes('invalid login credentials')) {
+    return 'Incorrect email or password.';
+  }
+  if (msg.toLowerCase().includes('already registered')) {
+    return 'Unable to complete registration with this email. If you already have an account, please sign in or reset your password.';
+  }
+
+  // 7. Generic network / JWT
+  if (msg.toLowerCase().includes('jwt')) {
+    return 'Your session has expired. Please sign in again.';
+  }
+  if (msg.toLowerCase().includes('networkerror') || msg.toLowerCase().includes('failed to fetch')) {
+    return 'Network error — please check your connection and try again.';
+  }
+
+  // 8. Fallback to raw message (acceptable for most app-level errors)
+  return msg;
+}

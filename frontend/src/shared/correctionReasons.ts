@@ -1,0 +1,94 @@
+/**
+ * correctionReasons.ts
+ * ═════════════════════
+ * Single shared taxonomy for "why was this reading wrong," used by:
+ *  - CorrectionRequestDialog.tsx   (operator requesting a correction — Item 8)
+ *  - DataCorrections.tsx EditValueModal (admin correcting a system-flagged
+ *    reading directly from the Pending Review tab)
+ *  - CorrectionReasonField.tsx (shared Select — every direct "edit an
+ *    already-saved reading" dialog: RO train, pretreatment, locator, well,
+ *    product, blending, power, dosing/CIP logs), feeding
+ *    reading_edit_audit_log.reason via logReadingEdit()
+ *
+ * These were previously two independently hand-maintained lists with
+ * different wording for the same underlying causes (e.g. "Meter replaced —
+ * baseline reset" vs. "Meter replaced — should be marked as replacement"),
+ * which meant the "why" field on an operator request and the "why" field on
+ * an admin edit couldn't be rolled up together for reporting (e.g. an
+ * eventual reason breakdown alongside the Operator Stats / item 7 error-rate
+ * table). Keep this as the ONLY place either dialog defines its options —
+ * add new fault modes here, not inline in a component.
+ */
+
+export const CORRECTION_REASONS = [
+  'Meter misread — wrong digits copied',
+  'Data entry typo — extra/missing digit',
+  'Wrong previous value used as anchor',
+  'Meter replaced — baseline reset',
+  'Duplicate entry — this one is the wrong one',
+  'Reading entered for wrong locator/well',
+  'Other',
+] as const;
+
+export type CorrectionReason = typeof CORRECTION_REASONS[number];
+
+// Folds a selected reason + its free-typed detail (only used when
+// reason === 'Other') into the single string every consumer stores —
+// same flattening CorrectionRequestDialog.tsx has always done for
+// correction_requests.reason, reused here so reading_edit_audit_log.reason
+// stays in the same shape instead of introducing a second convention.
+// NOTE: this is a fold, not a validator — call isReasonComplete() first and
+// gate Save on it, or resolveReason() will happily fall back to the bare
+// literal 'Other' for an unexplained edit (see isReasonComplete below).
+export function resolveReason(reason: string, customReason: string): string {
+  return reason === 'Other' ? (customReason.trim() || 'Other') : reason;
+}
+
+// BUGFIX: every "Reason for this edit" dialog (ReadingHistoryDialog,
+// CorrectionRequestDialog, DataCorrections.tsx's EditValueModal, the RO
+// train / CIP / dosing edit dialogs, DerivedMeterOverrideDialog) gated its
+// Save button on nothing more than "a reason category was picked"
+// (`!reason`). That's true the instant 'Other' is selected, before any
+// explanation is typed — so a reading could be saved as edited "for a
+// reason" while the actual free-text description sat empty, or held a
+// single throwaway character. Save buttons should gate on this instead of
+// re-deriving the same check inline.
+export const MIN_CUSTOM_REASON_LENGTH = 5;
+
+// A reason is complete when it is long enough and actually contains words
+// another person can interpret. Numbers and punctuation are fine on their
+// own, but a reason that is digits/symbols only is not useful as an
+// explanation, so isReasonComplete now also requires at least one letter.
+export const MIN_FINGERPRINT_LETTERS = 1;
+
+function countLetters(reason: string): number {
+  const matches = reason.match(/[a-zA-Z]/g);
+  return matches ? matches.length : 0;
+}
+
+function hasMinimumFingerprint(reason: string): boolean {
+  return countLetters(reason) >= MIN_FINGERPRINT_LETTERS;
+}
+
+export function isReasonComplete(
+  reason: string,
+  customReason: string,
+): boolean {
+  if (!reason) {
+    return false;
+  }
+  if (!hasMinimumFingerprint(reason)) {
+    return false;
+  }
+  if (reason === 'Other') {
+    const detail = customReason.trim();
+    if (detail.length < MIN_CUSTOM_REASON_LENGTH) {
+      return false;
+    }
+    if (!hasMinimumFingerprint(detail)) {
+      return false;
+    }
+    return true;
+  }
+  return true;
+}
