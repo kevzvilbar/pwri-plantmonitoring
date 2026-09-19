@@ -154,6 +154,7 @@ export function usePretreatmentActions(rawOpts: PretreatmentActionsOptions) {
       return;
     }
     setIsSaving(true);
+    let missingMeters: string[] = [];
     try {
       if (opts.trainOnline) {
         const directRequired: { label: string; value: string }[] = [
@@ -195,10 +196,9 @@ export function usePretreatmentActions(rawOpts: PretreatmentActionsOptions) {
         // Only a meter marked "not installed" in Plant Config (hidden from the
         // form) is auto-calculated from the other two by water balance:
         //   Reject = Feed − Permeate, Feed = Permeate + Reject, Permeate = Feed − Reject
-        // This is a hard stop — unlike the fields above it can NOT be waived by
-        // typing an incomplete-reading reason, otherwise a configured meter
-        // (e.g. Reject) could be skipped and saved as blank.
-        const missingMeters = missingRequiredMeters(
+        // If an installed meter is broken or undergoing servicing in the field,
+        // the operator must provide an explicit incomplete-reading reason.
+        missingMeters = missingRequiredMeters(
           {
             feed: opts.showFeedMeter !== false,
             permeate: opts.showPermeateMeter !== false,
@@ -210,22 +210,15 @@ export function usePretreatmentActions(rawOpts: PretreatmentActionsOptions) {
             reject: opts.roValues.reject_meter_curr,
           },
         );
-        if (missingMeters.length > 0) {
-          const labels = missingMeters.map((m) => `${m[0].toUpperCase()}${m.slice(1)} Water Meter`);
-          toast.error(
-            `Missing required meter reading: ${labels.join(', ')}. ` +
-            `Every meter configured for this train must be entered — only a meter marked as not installed is auto-calculated.`,
-          );
-          return;
-        }
 
-        if ((missingDirect.length > 0 || emIncomplete) && !opts.roIncompleteReason.trim()) {
+        if ((missingDirect.length > 0 || emIncomplete || missingMeters.length > 0) && !opts.roIncompleteReason.trim()) {
           opts.setRoReasonNeeded(true);
           const parts = [
             ...missingDirect.map((f) => f.label),
             ...(emIncomplete ? ['Feed/Permeate/Reject Flow (need at least 2 of 3)'] : []),
+            ...(missingMeters.length > 0 ? [`Water Meter (${missingMeters.map((m) => `${m[0].toUpperCase()}${m.slice(1)}`).join(', ')})`] : []),
           ];
-          toast.error(`Missing: ${parts.join(', ')}. Fill these in, or enter a reason below to proceed with missing values.`);
+          toast.error(`Missing: ${parts.join(', ')}. Fill these in, or enter a reason below (e.g. meter broken/servicing) to proceed.`);
           return;
         }
       }
@@ -342,7 +335,7 @@ export function usePretreatmentActions(rawOpts: PretreatmentActionsOptions) {
           // would merge it into an offline span in the Operator Log.
           : !opts.trainOnline && !isWasActuallyRunningReason(opts.offlineReason) ? { incomplete_reason: `Offline${opts.offlineReason ? `: ${opts.offlineReason}` : ''}` }
           : {}),
-        ...(opts.anyMeterSpike ? { norm_status: 'pending_review' } : {}),
+        ...(opts.anyMeterSpike || missingMeters.length > 0 ? { norm_status: 'pending_review' } : {}),
         recorded_by: opts.activeOperator?.id,
       };
 

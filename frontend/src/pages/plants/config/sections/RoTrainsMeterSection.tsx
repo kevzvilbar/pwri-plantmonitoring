@@ -237,28 +237,28 @@ type MeterPresencePatch = Partial<{
   has_reject_meter: boolean;
 }>;
 
-type MeterPresenceMode = 'all' | 'feed_only' | 'feed_perm' | 'none';
+type MeterPresenceMode = 'all' | 'feed_perm' | 'perm_rej' | 'perm_only';
 const METER_PRESENCE_MODE_LABEL: Record<MeterPresenceMode, string> = {
   all: 'All Meters',
-  feed_only: 'Feed Only',
   feed_perm: 'Feed + Permeate',
-  none: 'No Meters',
+  perm_rej: 'Permeate + Reject',
+  perm_only: 'Permeate Only',
 };
-const METER_PRESENCE_MODES: MeterPresenceMode[] = ['all', 'feed_perm', 'feed_only', 'none'];
+const METER_PRESENCE_MODES: MeterPresenceMode[] = ['all', 'feed_perm', 'perm_rej', 'perm_only'];
 
 const METER_PRESENCE_META: Record<MeterPresenceMode, { activeClass: string }> = {
   all: { activeClass: 'data-[state=on]:bg-info-soft data-[state=on]:text-info data-[state=on]:border-info/40' },
   feed_perm: { activeClass: 'data-[state=on]:bg-info-soft data-[state=on]:text-info data-[state=on]:border-info/40' },
-  feed_only: { activeClass: 'data-[state=on]:bg-warn-soft data-[state=on]:text-warn data-[state=on]:border-warn/40' },
-  none: { activeClass: 'data-[state=on]:bg-muted data-[state=on]:text-foreground data-[state=on]:border-border' },
+  perm_rej: { activeClass: 'data-[state=on]:bg-info-soft data-[state=on]:text-info data-[state=on]:border-info/40' },
+  perm_only: { activeClass: 'data-[state=on]:bg-muted data-[state=on]:text-foreground data-[state=on]:border-border' },
 };
 
 function meterPresenceModeToPatch(mode: MeterPresenceMode): MeterPresencePatch {
   switch (mode) {
     case 'all': return { has_feed_meter: true, has_permeate_meter: true, has_reject_meter: true };
-    case 'feed_only': return { has_feed_meter: true, has_permeate_meter: false, has_reject_meter: false };
     case 'feed_perm': return { has_feed_meter: true, has_permeate_meter: true, has_reject_meter: false };
-    case 'none': return { has_feed_meter: false, has_permeate_meter: false, has_reject_meter: false };
+    case 'perm_rej': return { has_feed_meter: false, has_permeate_meter: true, has_reject_meter: true };
+    case 'perm_only': return { has_feed_meter: false, has_permeate_meter: true, has_reject_meter: false };
   }
 }
 

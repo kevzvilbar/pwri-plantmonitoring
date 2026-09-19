@@ -94,7 +94,7 @@ export function WaterMeterSection({
         <p className="text-2xs text-muted-foreground/60 italic">
           {(!showFeedMeter || !showPermeateMeter || !showRejectMeter)
             ? 'Unmetered streams auto-inferred from water balance'
-            : 'All meter readings are required'}
+            : 'All configured meter readings are required (or supply reason if meter broken)'}
         </p>
       </div>
       <div className="flex items-center gap-2 mb-1">

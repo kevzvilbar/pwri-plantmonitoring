@@ -60,15 +60,33 @@ export async function insertROTrainReadings(
     dateRange?: { start: string; end: string };
   },
 ): Promise<{ count: number; skipped: number; errors: string[]; affectedTrainIds: string[] }> {
-  // Skip the DB train lookup when the caller already knows the target train.
-  const numToId: Record<string, string> = {};
-  if (!options?.trainIdOverride) {
-    const { data: trains } = await supabase
-      .from('ro_trains')
-      .select('id, train_number')
-      .eq('plant_id', plantId);
-    (trains ?? []).forEach((t: any) => { numToId[String(t.train_number)] = t.id; });
+  interface TrainMeterPresence {
+    hasFeed: boolean;
+    hasPerm: boolean;
+    hasRej: boolean;
   }
+  const trainMetaById: Record<string, TrainMeterPresence> = {};
+  const numToId: Record<string, string> = {};
+
+  let trainQuery = supabase
+    .from('ro_trains')
+    .select('id, train_number, has_feed_meter, has_permeate_meter, has_reject_meter, unit_type');
+
+  if (options?.trainIdOverride) {
+    trainQuery = trainQuery.eq('id', options.trainIdOverride);
+  } else {
+    trainQuery = trainQuery.eq('plant_id', plantId);
+  }
+
+  const { data: trains } = await trainQuery;
+  (trains ?? []).forEach((t: any) => {
+    numToId[String(t.train_number)] = t.id;
+    trainMetaById[t.id] = {
+      hasFeed: t.unit_type !== 'secondary' && t.has_feed_meter !== false,
+      hasPerm: t.has_permeate_meter !== false,
+      hasRej: t.has_reject_meter !== false,
+    };
+  });
 
   const conflictMode: ConflictMode = options?.conflictMode ?? 'skip';
   let count = 0;
@@ -174,6 +192,28 @@ export async function insertROTrainReadings(
     const rejCurr   = (r.reject_meter_curr ?? r.reject_meter)?.trim() ? +(r.reject_meter_curr ?? r.reject_meter) : null;
     const rejPrev   = (r.reject_meter_prev)?.trim() ? +r.reject_meter_prev : null;
     let rejDelta    = rejCurr !== null && rejPrev !== null ? Math.max(0, rejCurr - rejPrev) : null;
+
+    // Validate required meters against train configuration
+    const meta = trainMetaById[trainId];
+    if (meta) {
+      const configuredStreams = [
+        meta.hasFeed ? { name: 'Feed', present: feedCurr !== null || feedDelta !== null } : null,
+        meta.hasPerm ? { name: 'Permeate', present: permCurr !== null || permDelta !== null } : null,
+        meta.hasRej  ? { name: 'Reject', present: rejCurr !== null || rejDelta !== null } : null,
+      ].filter(Boolean) as { name: string; present: boolean }[];
+
+      const missingStreams = configuredStreams.filter((s) => !s.present);
+      const minRequired = configuredStreams.length === 3 ? 2 : configuredStreams.length;
+      const filledCount = configuredStreams.length - missingStreams.length;
+
+      if (configuredStreams.length > 0 && filledCount < minRequired) {
+        errors.push(
+          `Skipped row at ${dt} (Train ${r.train_number ?? trainId}): Missing required water meter readings (${missingStreams.map((s) => s.name).join(', ')}). Need at least ${minRequired} stream(s) for mass balance.`,
+        );
+        skipped++;
+        continue;
+      }
+    }
 
     // Feed, permeate and reject meters are each required unless they're the
     // one being inferred from the other two via mass balance. Only ONE of
