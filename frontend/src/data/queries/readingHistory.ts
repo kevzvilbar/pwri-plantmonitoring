@@ -227,3 +227,68 @@ export async function resyncLocatorChain(locatorId: string): Promise<void> {
     (supabase.rpc as any)('fn_backfill_missing_readings', { p_lookback_days: 14 }).catch(() => {});
   }
 }
+
+/**
+ * Shared normalization sweep for reading tables that store daily_volume as a
+ * plain column (well_readings, product_meter_readings). locator_readings
+ * doesn't need this — its daily_volume is GENERATED ALWAYS AS
+ * (current_reading - previous_reading), so resyncLocatorChain only has to fix
+ * previous_reading and Postgres recomputes the volume.
+ *
+ * Walks the asset's readings oldest → newest and rewrites previous_reading +
+ * daily_volume to the meter-replacement rules:
+ *   • flagged row (is_meter_replacement) → daily_volume = 0 (swap row, Δ zeroed)
+ *   • any other row → previous_reading = previous row's current_reading,
+ *     daily_volume = max(0, current − previous)
+ * so the row right after a swap (new meter's initial reading, usually 0)
+ * restarts the baseline instead of producing a huge negative delta against the
+ * old meter's final reading. Deliberately does NOT call
+ * fn_backfill_missing_readings — that would flood sparse well histories with
+ * estimated hourly rows; it only fixes the stored values.
+ */
+async function resyncStoredVolumeChain(
+  table: 'well_readings' | 'product_meter_readings',
+  filterColumn: 'well_id' | 'meter_id',
+  assetId: string,
+): Promise<void> {
+  const { data: all, error } = await (supabase.from(table as any) as any)
+    .select('id, current_reading, previous_reading, daily_volume, is_meter_replacement')
+    .eq(filterColumn, assetId)
+    .order('reading_datetime', { ascending: true });
+
+  if (error || !all) return;
+
+  const numEq = (a: unknown, b: unknown) =>
+    a === b || (a != null && b != null && Math.abs(+a - +b) < 1e-6);
+
+  let last: number | null = null;
+  const updates: { id: string; previous_reading: number | null; daily_volume: number }[] = [];
+
+  for (const row of all as any[]) {
+    if (row.current_reading == null) continue; // defective/empty row — doesn't move the meter
+    const cur = +row.current_reading;
+    const newPrev = last;
+    const newVol = row.is_meter_replacement ? 0 : (newPrev != null ? Math.max(0, cur - newPrev) : 0);
+    if (!numEq(row.previous_reading, newPrev) || !numEq(row.daily_volume, newVol)) {
+      updates.push({ id: row.id, previous_reading: newPrev, daily_volume: newVol });
+    }
+    last = cur;
+  }
+
+  if (updates.length) {
+    await Promise.all(updates.map(u => supabase
+      .from(table)
+      .update({ previous_reading: u.previous_reading, daily_volume: u.daily_volume } as any)
+      .eq('id', u.id)));
+  }
+}
+
+/** Rebuild previous_reading/daily_volume across a well's readings (replacement-aware). */
+export async function resyncWellChain(wellId: string): Promise<void> {
+  return resyncStoredVolumeChain('well_readings', 'well_id', wellId);
+}
+
+/** Rebuild previous_reading/daily_volume across a product meter's readings (replacement-aware). */
+export async function resyncProductMeterChain(meterId: string): Promise<void> {
+  return resyncStoredVolumeChain('product_meter_readings', 'meter_id', meterId);
+}
