@@ -3,6 +3,8 @@ import { Card } from '@/components/ui/card';
 import { ComputedInput } from '@/components/ComputedInput';
 import { Label } from '@/components/ui/label';
 import { MeterColumn } from './MeterColumn';
+import { PerUnitReasonRow } from '../PerUnitReasonRow';
+import { RO_REASON_OPTIONS } from '../../types';
 
 export interface WaterMeterSectionProps {
   showFeedMeter: boolean;
@@ -44,6 +46,11 @@ export interface WaterMeterSectionProps {
   rejInferred: boolean;
   rejVol: number | null;
   rejFlowMeter: number | null;
+  roReasonNeeded?: boolean;
+  roEntryReasons?: Record<string, { reason: string; custom: string }>;
+  onReasonChange?: (key: string, reason: string) => void;
+  onCustomReasonChange?: (key: string, custom: string) => void;
+  onApplyAll?: (sourceKey: string) => void;
 }
 
 export function WaterMeterSection({
@@ -83,6 +90,11 @@ export function WaterMeterSection({
   rejInferred,
   rejVol,
   rejFlowMeter,
+  roReasonNeeded,
+  roEntryReasons,
+  onReasonChange,
+  onCustomReasonChange,
+  onApplyAll,
 }: WaterMeterSectionProps) {
   const activeMeters = [showFeedMeter, showPermeateMeter, showRejectMeter].filter(Boolean).length;
   const meterGridClass = activeMeters === 3 ? 'grid-cols-3' : activeMeters === 2 ? 'grid-cols-2' : 'grid-cols-1';
@@ -188,6 +200,46 @@ export function WaterMeterSection({
           />
         )}
       </div>
+      {roReasonNeeded && (
+        <div className="space-y-2 mt-2">
+          {showFeedMeter && !feedMeterCurr && (
+            <PerUnitReasonRow
+              unitLabel="Feed Water Meter"
+              options={RO_REASON_OPTIONS}
+              value={roEntryReasons?.['feed_meter']?.reason}
+              customValue={roEntryReasons?.['feed_meter']?.custom}
+              onChange={(val) => onReasonChange?.('feed_meter', val)}
+              onCustomChange={(val) => onCustomReasonChange?.('feed_meter', val)}
+              onApplyAll={() => onApplyAll?.('feed_meter')}
+              applyAllLabel="Apply reason to all missing fields"
+            />
+          )}
+          {showPermeateMeter && !permMeterCurr && (
+            <PerUnitReasonRow
+              unitLabel="Permeate Water Meter"
+              options={RO_REASON_OPTIONS}
+              value={roEntryReasons?.['permeate_meter']?.reason}
+              customValue={roEntryReasons?.['permeate_meter']?.custom}
+              onChange={(val) => onReasonChange?.('permeate_meter', val)}
+              onCustomChange={(val) => onCustomReasonChange?.('permeate_meter', val)}
+              onApplyAll={() => onApplyAll?.('permeate_meter')}
+              applyAllLabel="Apply reason to all missing fields"
+            />
+          )}
+          {showRejectMeter && !rejMeterCurr && (
+            <PerUnitReasonRow
+              unitLabel="Reject Water Meter"
+              options={RO_REASON_OPTIONS}
+              value={roEntryReasons?.['reject_meter']?.reason}
+              customValue={roEntryReasons?.['reject_meter']?.custom}
+              onChange={(val) => onReasonChange?.('reject_meter', val)}
+              onCustomChange={(val) => onCustomReasonChange?.('reject_meter', val)}
+              onApplyAll={() => onApplyAll?.('reject_meter')}
+              applyAllLabel="Apply reason to all missing fields"
+            />
+          )}
+        </div>
+      )}
     </div>
   );
 }

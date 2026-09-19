@@ -1,3 +1,4 @@
+import { toast } from 'sonner';
 import { Card } from '@/components/ui/card';
 import { RawWaterIcon, PermeateIcon, RejectIcon } from '@/components/icons/water-icons';
 import { evaluateROMeterSpike } from '@/lib/roReadingGuards';
@@ -10,6 +11,7 @@ import { PHRow } from './PHRow';
 import { ProductQualityRow } from './ProductQualityRow';
 import { PowerMeterSection } from './PowerMeterSection';
 import { RemarksSection } from './RemarksSection';
+import { RO_FIELD_LABELS } from '../../types';
 
 export interface RoVesselSectionProps {
   train: any;
@@ -78,6 +80,10 @@ export interface RoVesselSectionProps {
   feedIsEM: boolean;
   permIsEM: boolean;
   rejIsEM: boolean;
+  roReasonNeeded: boolean;
+  setRoReasonNeeded: (v: boolean) => void;
+  roEntryReasons: Record<string, { reason: string; custom: string }>;
+  setRoEntryReasons: (v: Record<string, { reason: string; custom: string }> | ((prev: Record<string, { reason: string; custom: string }>) => Record<string, { reason: string; custom: string }>)) => void;
 }
 
 export function RoVesselSection({
@@ -144,10 +150,61 @@ export function RoVesselSection({
   feedIsEM,
   permIsEM,
   rejIsEM,
+  roReasonNeeded,
+  setRoReasonNeeded,
+  roEntryReasons,
+  setRoEntryReasons,
 }: RoVesselSectionProps) {
   const f = (k: string) => onFieldChange(k);
   const activeMeters = [showFeedMeter, showPermeateMeter, showRejectMeter].filter(Boolean).length;
   const meterGridClass = activeMeters === 3 ? 'grid-cols-3' : activeMeters === 2 ? 'grid-cols-2' : 'grid-cols-1';
+
+  const updateRoReason = (key: string, reason: string) => {
+    setRoEntryReasons((prev) => ({
+      ...prev,
+      [key]: { reason, custom: reason === 'Other' ? (prev[key]?.custom || '') : '' },
+    }));
+  };
+
+  const updateRoCustomReason = (key: string, custom: string) => {
+    setRoEntryReasons((prev) => ({
+      ...prev,
+      [key]: { reason: prev[key]?.reason || 'Other', custom },
+    }));
+  };
+
+  const onApplyAllRoReasons = (sourceKey: string) => {
+    const cur = roEntryReasons[sourceKey];
+    if (!cur?.reason) {
+      toast.error(`Select a reason for ${RO_FIELD_LABELS[sourceKey] || sourceKey} first before applying to all.`);
+      return;
+    }
+    const next = { ...roEntryReasons };
+    const incompleteKeys: string[] = [];
+    if (showFeedMeter && !roValues.feed_meter_curr) incompleteKeys.push('feed_meter');
+    if (showPermeateMeter && !roValues.permeate_meter_curr) incompleteKeys.push('permeate_meter');
+    if (showRejectMeter && !roValues.reject_meter_curr) incompleteKeys.push('reject_meter');
+    if (!roValues.suction_pressure_psi) incompleteKeys.push('suction_pressure_psi');
+    if (!roValues.feed_pressure_psi) incompleteKeys.push('feed_pressure_psi');
+    if (!roValues.reject_pressure_psi) incompleteKeys.push('reject_pressure_psi');
+    if (showFeedMeter && feedIsEM && !emFeedInferred && !roValues.feed_flow) incompleteKeys.push('feed_flow');
+    if (showPermeateMeter && permIsEM && !emPermInferred && !roValues.permeate_flow) incompleteKeys.push('permeate_flow');
+    if (showRejectMeter && rejIsEM && !emRejInferred && !roValues.reject_flow) incompleteKeys.push('reject_flow');
+    if (!roValues.feed_tds) incompleteKeys.push('feed_tds');
+    if (!roValues.permeate_tds) incompleteKeys.push('permeate_tds');
+    if (!roValues.reject_tds) incompleteKeys.push('reject_tds');
+    if (!roValues.feed_ph) incompleteKeys.push('feed_ph');
+    if (!roValues.permeate_ph) incompleteKeys.push('permeate_ph');
+    if (!roValues.reject_ph) incompleteKeys.push('reject_ph');
+    if (!roValues.turbidity_ntu) incompleteKeys.push('turbidity_ntu');
+    if (!roValues.temperature_c) incompleteKeys.push('temperature_c');
+
+    incompleteKeys.forEach((k) => {
+      next[k] = { ...cur };
+    });
+    setRoEntryReasons(next);
+    toast.success('Applied reason to all incomplete RO entries.');
+  };
 
   return (
     <>
@@ -212,9 +269,23 @@ export function RoVesselSection({
           rejInferred={rejInferred}
           rejVol={rejVol}
           rejFlowMeter={rejFlowMeter}
+          roReasonNeeded={roReasonNeeded}
+          roEntryReasons={roEntryReasons}
+          onReasonChange={updateRoReason}
+          onCustomReasonChange={updateRoCustomReason}
+          onApplyAll={onApplyAllRoReasons}
         />
 
-        <PressureRow f={f} dp={dp} dpAlert={dpAlert} />
+        <PressureRow
+          f={f}
+          dp={dp}
+          dpAlert={dpAlert}
+          roReasonNeeded={roReasonNeeded}
+          roEntryReasons={roEntryReasons}
+          onReasonChange={updateRoReason}
+          onCustomReasonChange={updateRoCustomReason}
+          onApplyAll={onApplyAllRoReasons}
+        />
         <EMFlowRow
           showFeedMeter={showFeedMeter}
           showPermeateMeter={showPermeateMeter}
@@ -236,10 +307,39 @@ export function RoVesselSection({
           feedIsEM={feedIsEM}
           permIsEM={permIsEM}
           rejIsEM={rejIsEM}
+          roReasonNeeded={roReasonNeeded}
+          roEntryReasons={roEntryReasons}
+          onReasonChange={updateRoReason}
+          onCustomReasonChange={updateRoCustomReason}
+          onApplyAll={onApplyAllRoReasons}
         />
-        <TDSRow f={f} rejection={rejection} saltPassage={saltPassage} />
-        <PHRow f={f} phWarn={phWarn} />
-        <ProductQualityRow f={f} />
+        <TDSRow
+          f={f}
+          rejection={rejection}
+          saltPassage={saltPassage}
+          roReasonNeeded={roReasonNeeded}
+          roEntryReasons={roEntryReasons}
+          onReasonChange={updateRoReason}
+          onCustomReasonChange={updateRoCustomReason}
+          onApplyAll={onApplyAllRoReasons}
+        />
+        <PHRow
+          f={f}
+          phWarn={phWarn}
+          roReasonNeeded={roReasonNeeded}
+          roEntryReasons={roEntryReasons}
+          onReasonChange={updateRoReason}
+          onCustomReasonChange={updateRoCustomReason}
+          onApplyAll={onApplyAllRoReasons}
+        />
+        <ProductQualityRow
+          f={f}
+          roReasonNeeded={roReasonNeeded}
+          roEntryReasons={roEntryReasons}
+          onReasonChange={updateRoReason}
+          onCustomReasonChange={updateRoCustomReason}
+          onApplyAll={onApplyAllRoReasons}
+        />
       </Card>
 
       {showPowerMeter && (

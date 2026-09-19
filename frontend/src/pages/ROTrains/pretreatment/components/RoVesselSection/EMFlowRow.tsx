@@ -2,6 +2,8 @@ import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ComputedInput } from '@/components/ComputedInput';
+import { PerUnitReasonRow } from '../PerUnitReasonRow';
+import { RO_REASON_OPTIONS } from '../../types';
 
 export interface EMFlowRowProps {
   showFeedMeter: boolean;
@@ -27,6 +29,11 @@ export interface EMFlowRowProps {
     ro_production_source?: string;
     permeate_is_production?: boolean;
   };
+  roReasonNeeded?: boolean;
+  roEntryReasons?: Record<string, { reason: string; custom: string }>;
+  onReasonChange?: (key: string, reason: string) => void;
+  onCustomReasonChange?: (key: string, custom: string) => void;
+  onApplyAll?: (sourceKey: string) => void;
 }
 
 export function EMFlowRow({
@@ -50,6 +57,11 @@ export function EMFlowRow({
   recovery,
   recWarn,
   meterCfg,
+  roReasonNeeded,
+  roEntryReasons,
+  onReasonChange,
+  onCustomReasonChange,
+  onApplyAll,
 }: EMFlowRowProps) {
   // Only show EM input when both the meter exists (plant-wide flag) AND the
   // train is configured as EM-capable for that stream. Manual-only streams
@@ -134,6 +146,46 @@ export function EMFlowRow({
           </div>
         )}
       </div>
+      {roReasonNeeded && (
+        <div className="space-y-2 mt-2">
+          {emFeedShown && !emFeedInferred && !f('feed_flow').value && (
+            <PerUnitReasonRow
+              unitLabel="Feed Flow Rate"
+              options={RO_REASON_OPTIONS}
+              value={roEntryReasons?.['feed_flow']?.reason}
+              customValue={roEntryReasons?.['feed_flow']?.custom}
+              onChange={(val) => onReasonChange?.('feed_flow', val)}
+              onCustomChange={(val) => onCustomReasonChange?.('feed_flow', val)}
+              onApplyAll={() => onApplyAll?.('feed_flow')}
+              applyAllLabel="Apply reason to all missing fields"
+            />
+          )}
+          {emPermShown && !emPermInferred && !f('permeate_flow').value && (
+            <PerUnitReasonRow
+              unitLabel="Permeate Flow Rate"
+              options={RO_REASON_OPTIONS}
+              value={roEntryReasons?.['permeate_flow']?.reason}
+              customValue={roEntryReasons?.['permeate_flow']?.custom}
+              onChange={(val) => onReasonChange?.('permeate_flow', val)}
+              onCustomChange={(val) => onCustomReasonChange?.('permeate_flow', val)}
+              onApplyAll={() => onApplyAll?.('permeate_flow')}
+              applyAllLabel="Apply reason to all missing fields"
+            />
+          )}
+          {emRejShown && !emRejInferred && !f('reject_flow').value && (
+            <PerUnitReasonRow
+              unitLabel="Reject Flow Rate"
+              options={RO_REASON_OPTIONS}
+              value={roEntryReasons?.['reject_flow']?.reason}
+              customValue={roEntryReasons?.['reject_flow']?.custom}
+              onChange={(val) => onReasonChange?.('reject_flow', val)}
+              onCustomChange={(val) => onCustomReasonChange?.('reject_flow', val)}
+              onApplyAll={() => onApplyAll?.('reject_flow')}
+              applyAllLabel="Apply reason to all missing fields"
+            />
+          )}
+        </div>
+      )}
     </div>
   );
 }

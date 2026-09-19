@@ -109,6 +109,10 @@ export function RoVesselContainer({
       feedIsEM={feedIsEM}
       permIsEM={permIsEM}
       rejIsEM={rejIsEM}
+      roReasonNeeded={form.roReasonNeeded}
+      setRoReasonNeeded={form.setRoReasonNeeded}
+      roEntryReasons={form.roEntryReasons}
+      setRoEntryReasons={form.setRoEntryReasons}
     />
   );
 }

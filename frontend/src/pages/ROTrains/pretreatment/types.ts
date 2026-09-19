@@ -57,6 +57,37 @@ export const HOUSING_REASON_OPTIONS = [
   'Other',
 ];
 
+export const RO_REASON_OPTIONS = [
+  'Instrument / sensor faulty or unreadable',
+  'Meter dial / display jammed or damaged',
+  'Transmitter offline / signal lost',
+  'Sensor undergoing calibration / maintenance',
+  'Sample point valved off / inaccessible',
+  'Power / cabling disconnected',
+  'Other',
+];
+
+export const RO_FIELD_LABELS: Record<string, string> = {
+  feed_meter: 'Feed Water Meter',
+  permeate_meter: 'Permeate Water Meter',
+  reject_meter: 'Reject Water Meter',
+  suction_pressure_psi: 'Suction Pressure',
+  feed_pressure_psi: 'Feed Pressure',
+  reject_pressure_psi: 'Reject Pressure',
+  feed_flow: 'Feed Flow Rate',
+  permeate_flow: 'Permeate Flow Rate',
+  reject_flow: 'Reject Flow Rate',
+  feed_tds: 'Feed TDS',
+  permeate_tds: 'Permeate TDS',
+  reject_tds: 'Reject TDS',
+  feed_ph: 'Feed pH',
+  permeate_ph: 'Permeate pH',
+  reject_ph: 'Reject pH',
+  turbidity_ntu: 'Product Turbidity',
+  temperature_c: 'Product Temperature',
+  power_meter: 'Power Meter',
+};
+
 export function getUnitReasonText(entry?: { reason: string; custom: string } | string | null) {
   if (!entry) return '';
   if (typeof entry === 'string') return entry.trim();

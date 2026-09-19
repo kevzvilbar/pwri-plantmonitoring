@@ -155,20 +155,22 @@ export function usePretreatmentActions(rawOpts: PretreatmentActionsOptions) {
     }
     setIsSaving(true);
     let missingMeters: string[] = [];
+    let roReasonsSummary = '';
+    let hasMissingRoEntries = false;
     try {
       if (opts.trainOnline) {
-        const directRequired: { label: string; value: string }[] = [
-          { label: 'Feed TDS', value: opts.roValues.feed_tds },
-          { label: 'Permeate TDS', value: opts.roValues.permeate_tds },
-          { label: 'Reject TDS', value: opts.roValues.reject_tds },
-          { label: 'Feed pH', value: opts.roValues.feed_ph },
-          { label: 'Permeate pH', value: opts.roValues.permeate_ph },
-          { label: 'Reject pH', value: opts.roValues.reject_ph },
-          { label: 'Feed Pressure', value: opts.roValues.feed_pressure_psi },
-          { label: 'Reject Pressure', value: opts.roValues.reject_pressure_psi },
-          { label: 'Suction Pressure', value: opts.roValues.suction_pressure_psi },
-          { label: 'Product Temperature', value: opts.roValues.temperature_c },
-          { label: 'Product Turbidity', value: opts.roValues.turbidity_ntu },
+        const directRequired: { key: string; label: string; value: string }[] = [
+          { key: 'feed_tds', label: 'Feed TDS', value: opts.roValues.feed_tds },
+          { key: 'permeate_tds', label: 'Permeate TDS', value: opts.roValues.permeate_tds },
+          { key: 'reject_tds', label: 'Reject TDS', value: opts.roValues.reject_tds },
+          { key: 'feed_ph', label: 'Feed pH', value: opts.roValues.feed_ph },
+          { key: 'permeate_ph', label: 'Permeate pH', value: opts.roValues.permeate_ph },
+          { key: 'reject_ph', label: 'Reject pH', value: opts.roValues.reject_ph },
+          { key: 'feed_pressure_psi', label: 'Feed Pressure', value: opts.roValues.feed_pressure_psi },
+          { key: 'reject_pressure_psi', label: 'Reject Pressure', value: opts.roValues.reject_pressure_psi },
+          { key: 'suction_pressure_psi', label: 'Suction Pressure', value: opts.roValues.suction_pressure_psi },
+          { key: 'temperature_c', label: 'Product Temperature', value: opts.roValues.temperature_c },
+          { key: 'turbidity_ntu', label: 'Product Turbidity', value: opts.roValues.turbidity_ntu },
         ];
         const missingDirect = directRequired.filter((f) => f.value === '' || f.value == null);
 
@@ -183,14 +185,15 @@ export function usePretreatmentActions(rawOpts: PretreatmentActionsOptions) {
         // subtraction; with fewer EM streams shown there's no cross-stream
         // inference to lean on, so every shown field is required.
         const emFlags = trainEmFlags(opts.train);
-        const configuredEmFields = [
-          opts.showFeedMeter !== false && emFlags.feedIsEM ? opts.roValues.feed_flow : undefined,
-          opts.showPermeateMeter !== false && emFlags.permIsEM ? opts.roValues.permeate_flow : undefined,
-          opts.showRejectMeter !== false && emFlags.rejIsEM ? opts.roValues.reject_flow : undefined,
-        ].filter((v) => v !== undefined) as string[];
-        const emFilled = configuredEmFields.filter((v) => v !== '' && v != null).length;
+        const configuredEmFields: { key: string; label: string; value: string }[] = [
+          opts.showFeedMeter !== false && emFlags.feedIsEM ? { key: 'feed_flow', label: 'Feed Flow Rate', value: opts.roValues.feed_flow } : undefined,
+          opts.showPermeateMeter !== false && emFlags.permIsEM ? { key: 'permeate_flow', label: 'Permeate Flow Rate', value: opts.roValues.permeate_flow } : undefined,
+          opts.showRejectMeter !== false && emFlags.rejIsEM ? { key: 'reject_flow', label: 'Reject Flow Rate', value: opts.roValues.reject_flow } : undefined,
+        ].filter(Boolean) as { key: string; label: string; value: string }[];
+        const emFilled = configuredEmFields.filter((v) => v.value !== '' && v.value != null).length;
         const emMinRequired = configuredEmFields.length === 3 ? 2 : configuredEmFields.length;
         const emIncomplete = configuredEmFields.length > 0 && emFilled < emMinRequired;
+        const missingEm = emIncomplete ? configuredEmFields.filter((f) => f.value === '' || f.value == null) : [];
 
         // Water meters: every meter configured for this train is REQUIRED.
         // Only a meter marked "not installed" in Plant Config (hidden from the
@@ -211,15 +214,42 @@ export function usePretreatmentActions(rawOpts: PretreatmentActionsOptions) {
           },
         );
 
-        if ((missingDirect.length > 0 || emIncomplete || missingMeters.length > 0) && !opts.roIncompleteReason.trim()) {
-          opts.setRoReasonNeeded(true);
-          const parts = [
-            ...missingDirect.map((f) => f.label),
-            ...(emIncomplete ? ['Feed/Permeate/Reject Flow (need at least 2 of 3)'] : []),
-            ...(missingMeters.length > 0 ? [`Water Meter (${missingMeters.map((m) => `${m[0].toUpperCase()}${m.slice(1)}`).join(', ')})`] : []),
-          ];
-          toast.error(`Missing: ${parts.join(', ')}. Fill these in, or enter a reason below (e.g. meter broken/servicing) to proceed.`);
-          return;
+        const missingWaterMeters = missingMeters.map((m) => ({
+          key: `${m}_meter`,
+          label: `${m[0].toUpperCase()}${m.slice(1)} Water Meter`,
+        }));
+
+        const allMissingItems = [
+          ...missingWaterMeters,
+          ...missingDirect.map((f) => ({ key: f.key, label: f.label })),
+          ...missingEm.map((f) => ({ key: f.key, label: f.label })),
+        ];
+
+        if (allMissingItems.length > 0) {
+          hasMissingRoEntries = true;
+          const unreasonedItems = allMissingItems.filter(
+            (item) => !getUnitReasonText(opts.roEntryReasons?.[item.key]) && !opts.roIncompleteReason?.trim()
+          );
+
+          if (unreasonedItems.length > 0) {
+            opts.setRoReasonNeeded(true);
+            const parts = unreasonedItems.map((f) => f.label);
+            toast.error(`Missing: ${parts.join(', ')}. Please fill in the values or select a reason for each missing entry below.`);
+            return;
+          }
+
+          if (opts.roEntryReasons && Object.keys(opts.roEntryReasons).length > 0) {
+            roReasonsSummary = allMissingItems
+              .map((item) => {
+                const text = getUnitReasonText(opts.roEntryReasons?.[item.key]) || opts.roIncompleteReason?.trim();
+                return text ? `${item.label}: ${text}` : null;
+              })
+              .filter(Boolean)
+              .join('; ');
+          }
+          if (!roReasonsSummary && opts.roIncompleteReason?.trim()) {
+            roReasonsSummary = opts.roIncompleteReason.trim();
+          }
         }
       }
 
@@ -329,13 +359,14 @@ export function usePretreatmentActions(rawOpts: PretreatmentActionsOptions) {
         specific_energy_kwh_m3: opts.secEnergy,
         shared_power_meter_group: opts.sharedPowerGroup ?? null,
         ...(opts.roValues.chlorine_residual_mg_l !== '' ? { chlorine_residual_mg_l: +opts.roValues.chlorine_residual_mg_l } : {}),
-        ...(opts.roIncompleteReason.trim() ? { incomplete_reason: opts.roIncompleteReason.trim() }
+        ...(roReasonsSummary ? { incomplete_reason: roReasonsSummary }
+          : opts.roIncompleteReason?.trim() ? { incomplete_reason: opts.roIncompleteReason.trim() }
           // After the exemption the row is a normal Running reading — never
           // tag it "Offline: Was actually running…", or downtimeRowMerger
           // would merge it into an offline span in the Operator Log.
           : !opts.trainOnline && !isWasActuallyRunningReason(opts.offlineReason) ? { incomplete_reason: `Offline${opts.offlineReason ? `: ${opts.offlineReason}` : ''}` }
           : {}),
-        ...(opts.anyMeterSpike || missingMeters.length > 0 ? { norm_status: 'pending_review' } : {}),
+        ...(opts.anyMeterSpike || missingMeters.length > 0 || hasMissingRoEntries ? { norm_status: 'pending_review' } : {}),
         recorded_by: opts.activeOperator?.id,
       };
 

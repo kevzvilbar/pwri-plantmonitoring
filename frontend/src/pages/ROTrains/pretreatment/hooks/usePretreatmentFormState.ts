@@ -70,6 +70,8 @@ export interface PretreatmentFormState {
   setRoReasonNeeded: (v: boolean) => void;
   roIncompleteReason: string;
   setRoIncompleteReason: (v: string) => void;
+  roEntryReasons: Record<string, { reason: string; custom: string }>;
+  setRoEntryReasons: (v: Record<string, { reason: string; custom: string }> | ((prev: Record<string, { reason: string; custom: string }>) => Record<string, { reason: string; custom: string }>)) => void;
   afmmf: Record<number, AfmRow>;
   setAfmmf: (v: Record<number, AfmRow>) => void;
   setAfmmfField: (u: number, patch: Partial<AfmRow>) => void;
@@ -131,6 +133,7 @@ export function usePretreatmentFormState(_trainId: string, _train: any): Pretrea
   const [housingUnitReasons, setHousingUnitReasons] = useState<Record<number, { reason: string; custom: string }>>({});
   const [roReasonNeeded, setRoReasonNeeded] = useState(false);
   const [roIncompleteReason, setRoIncompleteReason] = useState('');
+  const [roEntryReasons, setRoEntryReasons] = useState<Record<string, { reason: string; custom: string }>>({});
   const [afmmf, setAfmmf] = useState<Record<number, AfmRow>>({});
   const [boosters, setBoosters] = useState<Record<number, { hz: string; target: string; amp: string; psiMode: boolean }>>({});
   const [housings, setHousings] = useState<Record<number, { inP: string; outP: string }>>({});
@@ -185,6 +188,7 @@ export function usePretreatmentFormState(_trainId: string, _train: any): Pretrea
     housingUnitReasons, setHousingUnitReasons,
     roReasonNeeded, setRoReasonNeeded,
     roIncompleteReason, setRoIncompleteReason,
+    roEntryReasons, setRoEntryReasons,
     afmmf, setAfmmf, setAfmmfField,
     boosters, setBoosters,
     housings, setHousings,
