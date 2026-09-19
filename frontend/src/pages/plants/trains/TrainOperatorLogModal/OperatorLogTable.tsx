@@ -1,5 +1,6 @@
 import { DataState } from '@/components/DataState';
 import { Button } from '@/components/ui/button';
+import { ReplPill } from '@/components/readingHistory/ReplPill';
 import { Loader2, BarChart2, Download } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
@@ -24,6 +25,7 @@ type OperatorLogTableProps = {
   setRangePreset: (v: '7' | '30' | '90' | 'custom') => void;
   fmtVal: (v: any, unit?: string) => ReactNode;
   onToggleMeterReplacement: (r: any) => void;
+  onViewReplacement?: (r: any) => void;
   onExport: () => void;
   onPrevPage: () => void;
   onNextPage: () => void;
@@ -33,7 +35,7 @@ type OperatorLogTableProps = {
 export function OperatorLogTable({
   trainLabel, logs, pageLogs, isLoading, error, togglingId, isManager,
   totalPages, page, todayStr, dateFrom, setDateFrom, dateTo, setDateTo,
-  rangePreset, setRangePreset, fmtVal, onToggleMeterReplacement, onExport,
+  rangePreset, setRangePreset, fmtVal, onToggleMeterReplacement, onViewReplacement, onExport,
   onPrevPage, onNextPage, onRetry,
 }: OperatorLogTableProps) {
   return (
@@ -150,7 +152,7 @@ export function OperatorLogTable({
                       <div className="flex items-center gap-1">
                         <span className="text-muted-foreground text-3xs">{r.reading_datetime ? format(new Date(r.reading_datetime), 'HH:mm') : ''}</span>
                         {isRepl && (
-                          <span className="text-3xs font-bold uppercase tracking-wide text-kpi-solar bg-kpi-solar/15 px-1 py-0.5 rounded leading-none">repl.</span>
+                          <ReplPill title="View replacement details" onClick={() => onViewReplacement?.(r)} />
                         )}
                       </div>
                     </td>

@@ -2,6 +2,7 @@ import React from 'react';
 import { calc, fmtNum } from '@/lib/calculations';
 import { canEditEntry } from '@/pages/ro-trains/helpers';
 import { StatusPill } from '@/components/StatusPill';
+import { ReplPill } from '../ReplPill';
 import { Loader2, Pencil, X } from 'lucide-react';
 
 interface StandardRowProps {
@@ -122,9 +123,7 @@ export function StandardRow({
         <span className="flex items-center gap-1.5">
           {dateStr}
           {isMeterReplacement && (
-            <span className="text-3xs font-semibold uppercase tracking-wide text-kpi-solar bg-kpi-solar/15 px-1 py-0.5 rounded leading-none">
-              repl.
-            </span>
+            <ReplPill title="View replacement details" onClick={() => actions.viewReplacement?.(r)} />
           )}
         </span>
       </td>

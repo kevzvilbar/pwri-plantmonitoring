@@ -3,6 +3,7 @@ import { fmtNum } from '@/lib/format';
 import { getGridMeterVal } from '../types';
 import { Loader2, Pencil, X } from 'lucide-react';
 import { GridPylonIcon } from '@/pages/operations/shared';
+import { ReplPill } from '../ReplPill';
 
 interface PowerRowProps {
   r: any;
@@ -101,9 +102,11 @@ export function PowerRow({
               </span>
             )}
             {isRepl && (
-              <span className={`text-3xs font-semibold uppercase tracking-wide px-1 py-0.5 rounded leading-none ${isSolar ? 'text-kpi-solar bg-kpi-solar/15' : 'text-kpi-grid bg-kpi-grid/15'}`}>
-                repl.
-              </span>
+              <ReplPill
+                tone={isSolar ? 'solar' : 'grid'}
+                title={isSolar ? 'Solar has no replacement log' : 'View replacement details'}
+                onClick={() => { if (!isSolar) actions.viewReplacement?.(r, isSolar ? null : gridIdx); }}
+              />
             )}
           </span>
         </td>
@@ -218,12 +221,10 @@ export function PowerRow({
               </span>
             )}
             {isGridRepl && (
-              <span className="text-3xs font-semibold uppercase tracking-wide text-kpi-grid bg-kpi-grid/15 px-1 py-0.5 rounded leading-none">
-                grid repl.
-              </span>
+              <ReplPill tone="grid" label="grid repl." title="View replacement details" onClick={() => actions.viewReplacement?.(r, null)} />
             )}
             {isSolarRepl && (
-              <span className="text-3xs font-semibold uppercase tracking-wide text-kpi-solar bg-kpi-solar/15 px-1 py-0.5 rounded leading-none">
+              <span className="text-3xs font-semibold uppercase tracking-wide text-kpi-solar bg-kpi-solar/15 px-1 py-0.5 rounded leading-none" title="Solar has no replacement log">
                 solar repl.
               </span>
             )}

@@ -8,6 +8,7 @@
 import React from 'react';
 import { Loader2, Calendar, Pencil, Trash2, MessageSquarePlus } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { ReplPill } from '@/components/readingHistory/ReplPill';
 import { TrainStatusBannerRow, GapBadgeRow, OfflineSpanRow } from './TrainLogRowComponents';
 
 interface RoLogTableProps {
@@ -37,6 +38,8 @@ interface RoLogTableProps {
   replaceReadingId: string | null;
   setReplaceReadingId: (v: string | null) => void;
   toggleMeterReplacement: (r: any) => Promise<void>;
+  /** Opens the read-only replacement detail popover for a flagged row. */
+  onViewReplacement?: (r: any) => void;
   recalculateTrainDeltas: (trainId: string) => Promise<void>;
   trainId: string;
   qc: any;
@@ -61,7 +64,7 @@ export function RoLogTable({
   togglingId, setEditingRoRow, setPendingDelete,
   canEditEntry, hasFullAccess, activeOperator, isManager,
   editingRoRow, replaceReadingId, setReplaceReadingId,
-  toggleMeterReplacement, recalculateTrainDeltas, trainId, qc, queryKey, exportCSV, doDeleteReading,
+  toggleMeterReplacement, onViewReplacement, recalculateTrainDeltas, trainId, qc, queryKey, exportCSV, doDeleteReading,
   onReportRunning, reportingBanner, onFixTimings, fixingTimings,
   fmtVal, format,
 }: RoLogTableProps) {
@@ -157,7 +160,12 @@ export function RoLogTable({
                         isHighlighted ? 'bg-danger-soft' : 'bg-background group-hover:bg-muted/30'
                       )}>
                         <div className="text-foreground font-medium">{r.reading_datetime ? format(new Date(r.reading_datetime), 'MMM d, yyyy') : '—'}</div>
-                        <div className="text-muted-foreground">{r.reading_datetime ? format(new Date(r.reading_datetime), 'HH:mm') : ''}</div>
+                        <div className="flex items-center gap-1">
+                          <span className="text-muted-foreground">{r.reading_datetime ? format(new Date(r.reading_datetime), 'HH:mm') : ''}</span>
+                          {isRepl && (
+                            <ReplPill title="View replacement details" onClick={() => onViewReplacement?.(r)} />
+                          )}
+                        </div>
                       </td>
                       <td className="px-2 py-1.5 text-left">
                         <div className="flex items-center gap-1.5">
@@ -226,7 +234,12 @@ export function RoLogTable({
                 isHighlighted ? 'bg-danger-soft' : isRepl ? 'bg-kpi-solar/40' : 'bg-background group-hover:bg-muted/40'
               )}>
                 <div className="text-foreground font-medium">{r.reading_datetime ? format(new Date(r.reading_datetime), 'MMM d, yyyy') : '—'}</div>
-                <div className="text-muted-foreground text-3xs">{r.reading_datetime ? format(new Date(r.reading_datetime), 'HH:mm') : ''}</div>
+                <div className="flex items-center gap-1">
+                  <span className="text-muted-foreground text-3xs">{r.reading_datetime ? format(new Date(r.reading_datetime), 'HH:mm') : ''}</span>
+                  {isRepl && (
+                    <ReplPill title="View replacement details" onClick={() => onViewReplacement?.(r)} />
+                  )}
+                </div>
               </td>
               <td className="px-2 py-2 text-left">
                 <div className="flex items-center gap-1.5">

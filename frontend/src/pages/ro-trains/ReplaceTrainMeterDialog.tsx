@@ -35,7 +35,7 @@ const METER_LABELS: Record<TrainMeterType, string> = {
 };
 
 export function ReplaceTrainMeterDialog({
-  trainId, plantId, readingId, defaultMeterType, onClose, onSuccess,
+  trainId, plantId, readingId, defaultMeterType, initial, onClose, onSuccess,
 }: {
   trainId: string;
   plantId: string;
@@ -46,11 +46,20 @@ export function ReplaceTrainMeterDialog({
   /** Pre-select a meter type — e.g. when opened from a per-meter "Replace"
    *  button in TrainsList.tsx rather than the shared operator-log toggle. */
   defaultMeterType?: TrainMeterType;
+  /** Edit mode: update this ro_train_meter_replacements row instead of insert. */
+  initial?: {
+    id: string; readingId?: string | null; replacementDate: string | null; oldFinal: string;
+    newBrand: string; newSize: string; newSerial: string; newInitial: string;
+    installedDate: string | null; remarks: string; rawMeterType?: string | null;
+    rawOldSerial?: string | null;
+  } | null;
   onClose: () => void;
   onSuccess?: () => void;
 }) {
   const { user, activeOperator } = useAuth();
-  const [meterType, setMeterType] = useState<TrainMeterType>(defaultMeterType ?? 'permeate');
+  const isEdit = !!initial?.id;
+  const editMeterType = (initial?.rawMeterType ?? null) as TrainMeterType | null;
+  const [meterType, setMeterType] = useState<TrainMeterType>(editMeterType ?? defaultMeterType ?? 'permeate');
   const [busy, setBusy] = useState(false);
 
   // Current per-meter identity, fetched live by trainId rather than threaded
@@ -64,15 +73,18 @@ export function ReplaceTrainMeterDialog({
     },
   });
 
-  const [form, setForm] = useState({
-    replacement_date: format(new Date(), 'yyyy-MM-dd'),
-    old_final_reading: '', new_brand: '', new_size: '', new_serial: '', new_initial_reading: '',
-    new_installed_date: format(new Date(), 'yyyy-MM-dd'), remarks: '',
-  });
+  const [form, setForm] = useState(() => ({
+    replacement_date: initial?.replacementDate?.slice(0, 10) || format(new Date(), 'yyyy-MM-dd'),
+    old_final_reading: initial?.oldFinal ?? '',
+    new_brand: initial?.newBrand ?? '', new_size: initial?.newSize ?? '',
+    new_serial: initial?.newSerial ?? '', new_initial_reading: initial?.newInitial ?? '',
+    new_installed_date: initial?.installedDate?.slice(0, 10) || format(new Date(), 'yyyy-MM-dd'),
+    remarks: initial?.remarks ?? '',
+  }));
 
   const oldSerial: string | null = train
     ? ((train as Record<string, unknown>)[`${meterType}_meter_serial`] as string | null ?? null)
-    : null;
+    : (initial?.rawOldSerial ?? null);
 
   const submit = async () => {
     if (!form.new_serial) { toast.error('New serial required'); return; }
@@ -86,6 +98,26 @@ export function ReplaceTrainMeterDialog({
       new_meter_installed_date: form.new_installed_date,
       replaced_by: activeOperator?.id ?? user?.id, remarks: form.remarks || null,
     };
+    if (isEdit) {
+      const { error: updErr } = await supabase.from('ro_train_meter_replacements')
+        .update({
+          replacement_date: form.replacement_date,
+          old_meter_final_reading: form.old_final_reading ? +form.old_final_reading : null,
+          new_meter_brand: form.new_brand, new_meter_size: form.new_size,
+          new_meter_serial: form.new_serial,
+          new_meter_initial_reading: form.new_initial_reading ? +form.new_initial_reading : null,
+          new_meter_installed_date: form.new_installed_date,
+          remarks: form.remarks || null,
+        })
+        .eq('id', initial!.id);
+      if (updErr) { setBusy(false); toast.error(friendlyError(updErr)); return; }
+      await recalculateTrainDeltas(trainId);
+      setBusy(false);
+      toast.success(`${METER_LABELS[meterType]} replacement updated`);
+      onSuccess?.();
+      onClose();
+      return;
+    }
     const { error } = await supabase.from('ro_train_meter_replacements').insert(payload);
     if (error) { setBusy(false); toast.error(friendlyError(error)); return; }
 
@@ -136,11 +168,11 @@ export function ReplaceTrainMeterDialog({
   return (
     <Dialog open onOpenChange={onClose}>
       <DialogContent>
-        <DialogHeader><DialogTitle>Replace Train Meter</DialogTitle></DialogHeader>
+        <DialogHeader><DialogTitle>{isEdit ? 'Edit Train Meter Replacement' : 'Replace Train Meter'}</DialogTitle></DialogHeader>
         <div className="space-y-2">
           <div>
             <Label htmlFor="replacetrainmeterdialog-which-meter-was-replaced">Which meter was replaced?</Label>
-            <Select value={meterType} onValueChange={(v) => setMeterType(v as TrainMeterType)}>
+            <Select value={meterType} onValueChange={(v) => setMeterType(v as TrainMeterType)} disabled={isEdit}>
               <SelectTrigger className="h-9 text-sm" id="replacetrainmeterdialog-which-meter-was-replaced"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="feed">Feed</SelectItem>
@@ -148,6 +180,11 @@ export function ReplaceTrainMeterDialog({
                 <SelectItem value="reject">Reject</SelectItem>
               </SelectContent>
             </Select>
+            {isEdit && (
+              <p className="text-3xs text-muted-foreground mt-1">
+                Meter locked while editing — delete and re-log to move this swap to a different meter.
+              </p>
+            )}
           </div>
           <div className="grid grid-cols-2 gap-2">
             <div><Label htmlFor="replacetrainmeterdialog-replacement-date">Replacement date</Label><Input type="date" value={form.replacement_date} onChange={e => setForm({ ...form, replacement_date: e.target.value })} id="replacetrainmeterdialog-replacement-date"/></div>
@@ -165,7 +202,7 @@ export function ReplaceTrainMeterDialog({
           </div>
           <div><Label htmlFor="replacetrainmeterdialog-remarks">Remarks</Label><Input value={form.remarks} onChange={e => setForm({ ...form, remarks: e.target.value })} id="replacetrainmeterdialog-remarks"/></div>
         </div>
-        <DialogFooter><Button onClick={submit} disabled={busy}>Save replacement</Button></DialogFooter>
+        <DialogFooter><Button onClick={submit} disabled={busy}>{isEdit ? 'Save changes' : 'Save replacement'}</Button></DialogFooter>
       </DialogContent>
     </Dialog>
   );

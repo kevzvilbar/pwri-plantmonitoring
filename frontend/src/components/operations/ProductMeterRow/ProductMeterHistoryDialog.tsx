@@ -28,6 +28,11 @@ import { isReasonComplete, resolveReason } from '@/lib/correctionReasons';
 import { reasonCategoryLabel } from '@/lib/reasonCodes';
 import { logReadingEdit, diffFields, canEditEntry } from '@/pages/ro-trains/helpers';
 import { logProductionCalc, invalidateProductMeterDash } from '@/pages/operations/shared';
+import { ReplPill } from '@/components/readingHistory/ReplPill';
+import { MeterReplacementDetailDialog } from '@/components/readingHistory/MeterReplacementDetailDialog';
+import { useMeterReplacementDetail } from '@/components/readingHistory/useMeterReplacementDetail';
+import { replacementToInitial } from '@/components/readingHistory/replacementEdit';
+import type { ReplacementDetailHost, ReplacementTarget } from '@/components/readingHistory/replacementTypes';
 import { Gauge, Droplet, Pencil, X, Loader2, AlertCircle, Undo2 } from 'lucide-react';
 
 interface ProductMeterHistoryDialogProps {
@@ -53,6 +58,8 @@ export function ProductMeterHistoryDialog({ meter, plantId, onClose }: ProductMe
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [replaceReadingId, setReplaceReadingId] = useState<string | null>(null);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [detailRow, setDetailRow] = useState<any | null>(null);
+  const [editInitial, setEditInitial] = useState<any | null>(null);
   const WINDOWS = [{ label: '7D', days: 7 }, { label: '14D', days: 14 }, { label: '30D', days: 30 }, { label: '60D', days: 60 }] as const;
 
   const localMidnight = (dateStr: string) => {
@@ -61,6 +68,18 @@ export function ProductMeterHistoryDialog({ meter, plantId, onClose }: ProductMe
   };
 
   const queryKey = ['product-meter-history', meter.id, days, appliedFrom, appliedTo];
+
+  const detailTarget: ReplacementTarget | null = detailRow ? {
+    kind: 'product', readingId: detailRow.id ?? null, entityId: meter.id,
+    plantId: plantId ?? null, entityName: meter.name ?? meter.meter_name ?? null,
+    readingDatetime: detailRow.reading_datetime ?? null,
+  } : null;
+  const { records: detailRecords, isLoading: detailLoading } = useMeterReplacementDetail(detailTarget);
+  const detailHost: ReplacementDetailHost | null = detailTarget ? {
+    target: detailTarget,
+    settingsHref: plantId ? `/plants/${plantId}` : null,
+    canEdit: hasFullAccess,
+  } : null;
 
   const { data: rows, isLoading } = useQuery({
     queryKey,
@@ -387,9 +406,7 @@ export function ProductMeterHistoryDialog({ meter, plantId, onClose }: ProductMe
                             </span>
                           )}
                           {isMeterReplacement && (
-                            <span className="text-3xs font-semibold uppercase tracking-wide text-kpi-solar bg-kpi-solar/15 px-1 py-0.5 rounded leading-none">
-                              repl.
-                            </span>
+                            <ReplPill title="View replacement details" onClick={() => setDetailRow(r)} />
                           )}
                         </span>
                       </td>
@@ -504,6 +521,32 @@ export function ProductMeterHistoryDialog({ meter, plantId, onClose }: ProductMe
               invalidateProductMeterDash(qc);
             }}
             onClose={() => setReplaceReadingId(null)}
+          />
+        )}
+        <MeterReplacementDetailDialog
+          host={detailHost} records={detailRecords} isLoading={detailLoading}
+          onClose={() => { setDetailRow(null); }}
+          onEdit={(rec) => {
+            if (!rec) { setDetailRow(null); setReplaceReadingId(detailRow?.id ?? null); return; }
+            setEditInitial(replacementToInitial(rec));
+          }}
+        />
+        {editInitial && (
+          <ReplaceMeterDialog
+            kind="product"
+            assetId={meter.id}
+            plantId={plantId}
+            oldSerial={meter.meter_serial ?? null}
+            readingId={detailRow?.id ?? undefined}
+            initial={editInitial}
+            onSuccess={() => {
+              setEditInitial(null);
+              setDetailRow(null);
+              qc.invalidateQueries({ queryKey });
+              qc.invalidateQueries({ queryKey: ['meter-replacement-detail'] });
+              invalidateProductMeterDash(qc);
+            }}
+            onClose={() => setEditInitial(null)}
           />
         )}
       </DialogContent>

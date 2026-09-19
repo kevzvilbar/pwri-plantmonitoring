@@ -47,6 +47,9 @@ export function useReadingHistoryActions(options: {
   const [togglingGridId, setTogglingGridId] = useState<string | null>(null);
   const [replacePowerReadingId, setReplacePowerReadingId] = useState<{ id: string; gridIdx: number } | null>(null);
   const [togglingSolarId, setTogglingSolarId] = useState<string | null>(null);
+  /** Row the user clicked "view replacement details" on (Option A popover). */
+  const [detailRow, setDetailRow] = useState<any | null>(null);
+  const [detailGridIdx, setDetailGridIdx] = useState<number | null>(null);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
@@ -498,6 +501,13 @@ export function useReadingHistoryActions(options: {
     togglingGridId, setTogglingGridId,
     replacePowerReadingId, setReplacePowerReadingId,
     togglingSolarId, setTogglingSolarId,
+    detailRow, setDetailRow,
+    detailGridIdx, setDetailGridIdx,
+    viewReplacement: (row: any, gridIdx?: number | null) => {
+      setDetailRow(row);
+      setDetailGridIdx(gridIdx ?? null);
+    },
+    closeReplacementDetail: () => { setDetailRow(null); setDetailGridIdx(null); },
     pendingDeleteId, setPendingDeleteId,
     selectedIds, setSelectedIds,
     bulkDeleting, setBulkDeleting,

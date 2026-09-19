@@ -152,8 +152,10 @@ export function ReadingHistoryTable(props: any) {
       <TableFooter days={days} appliedFrom={appliedFrom} appliedTo={appliedTo} rows={rows} />
 
       <TableDialogs
-        actions={actions} module={module} entityId={entityId} plantId={plantId}
+        actions={actions} module={module} entityId={entityId} entityName={entityName} plantId={plantId}
         assetMeterSerial={assetMeterSerial} queryKey={queryKey} qc={qc}
+        gridMeterNames={gridMeterNames} gridMeterCount={resolvedGridCount}
+        gridMultipliers={gridMultipliers} multiplier={multiplier} meterFilter={meterFilter ?? null}
       />
     </>
   );

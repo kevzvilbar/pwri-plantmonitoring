@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Loader2 } from 'lucide-react';
 import { ChangeMeterIcon } from '@/components/icons/water-icons';
 import { toast } from 'sonner';
+import { friendlyError } from '@/lib/supabaseErrors';
 import { GridPylonIcon } from '@/components/icons/water-icons';
 import { format } from 'date-fns';
 
@@ -20,24 +21,30 @@ interface PowerMeterChangeFormProps {
   currentMultipliers: number[];
   readingId?: string;
   initialMeterIndex?: number;
+  /** Edit mode: update this power_meter_changes row instead of insert. */
+  initial?: {
+    id: string; readingId?: string | null; replacementDate: string | null; oldFinal: string;
+    newInitial: string; remarks: string; rawMeterIndex?: number | null;
+  } | null;
   onSuccess?: () => void;
   onClose: () => void;
 }
 
 export function PowerMeterChangeForm({
   plant, gridMeterCount, gridMeterNames, currentMultipliers,
-  readingId, initialMeterIndex, onSuccess, onClose,
+  readingId, initialMeterIndex, initial, onSuccess, onClose,
 }: PowerMeterChangeFormProps) {
   const qc = useQueryClient();
   const { user } = useAuth();
-  const [form, setForm] = useState({
-    meterIndex: initialMeterIndex ?? 0,
-    changeDate: format(new Date(), 'yyyy-MM-dd'),
+  const isEdit = !!initial?.id;
+  const [form, setForm] = useState(() => ({
+    meterIndex: initial?.rawMeterIndex ?? initialMeterIndex ?? 0,
+    changeDate: (initial?.replacementDate ?? '').slice(0, 10) || format(new Date(), 'yyyy-MM-dd'),
     newMultiplier: '',
-    oldFinalReading: '',
-    newInitialReading: '',
-    notes: '',
-  });
+    oldFinalReading: initial?.oldFinal ?? '',
+    newInitialReading: initial?.newInitial ?? '',
+    notes: initial?.remarks ?? '',
+  }));
   const [saving, setSaving] = useState(false);
 
   const oldMultiplier = currentMultipliers[form.meterIndex] ?? 1;
@@ -49,11 +56,44 @@ export function PowerMeterChangeForm({
     if (!form.newInitialReading) { toast.error("New meter's initial reading is required"); return; }
     if (!form.changeDate) { toast.error('Date changed is required'); return; }
     let newMult = oldMultiplier;
-    if (!readingId) {
+    if (!readingId && !isEdit) {
       newMult = parseFloat(form.newMultiplier);
       if (!(newMult > 0)) { toast.error('Enter a valid multiplier (must be > 0)'); return; }
     }
     setSaving(true);
+
+    // Edit mode: update the logged change + sync the linked reading slot.
+    if (isEdit) {
+      const { error: updErr } = await (supabase.from('power_meter_changes' as any) as any)
+        .update({
+          change_date: form.changeDate,
+          old_meter_final_reading: +form.oldFinalReading,
+          new_meter_initial_reading: +form.newInitialReading,
+          notes: form.notes || null,
+        })
+        .eq('id', initial!.id);
+      if (updErr) { setSaving(false); toast.error(friendlyError(updErr)); return; }
+      const linkedId = readingId ?? initial!.readingId ?? null;
+      if (linkedId) {
+        try {
+          const { data: prow } = await (supabase.from('power_readings') as any)
+            .select('grid_meter_readings, meter_reading_kwh').eq('id', linkedId).maybeSingle();
+          const gmr: Record<string, number> = { ...((prow?.grid_meter_readings as Record<string, number> | null) ?? {}) };
+          gmr[String(form.meterIndex)] = +form.newInitialReading;
+          await (supabase.from('power_readings') as any).update({
+            grid_meter_readings: gmr,
+            ...(form.meterIndex === 0 ? { meter_reading_kwh: +form.newInitialReading } : {}),
+          }).eq('id', linkedId);
+        } catch { /* non-critical */ }
+      }
+      setSaving(false);
+      qc.invalidateQueries({ queryKey: ['plant-power-config', plant.id] });
+      qc.invalidateQueries();
+      toast.success(`${getMeterName(form.meterIndex)}: replacement updated`);
+      onSuccess?.();
+      onClose();
+      return;
+    }
 
     if (!readingId) {
       try {
@@ -135,14 +175,14 @@ export function PowerMeterChangeForm({
   };
 
   const newMultNum = parseFloat(form.newMultiplier);
-  const newMultValid = readingId ? true : newMultNum > 0;
+  const newMultValid = readingId || isEdit ? true : newMultNum > 0;
 
   return (
     <Dialog open onOpenChange={onClose}>
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-base">
-            <ChangeMeterIcon className="h-4 w-4 text-primary" /> {readingId ? 'Log Meter Replacement' : 'Change Power Meter'}
+            <ChangeMeterIcon className="h-4 w-4 text-primary" /> {isEdit ? 'Edit Meter Replacement' : readingId ? 'Log Meter Replacement' : 'Change Power Meter'}
           </DialogTitle>
         </DialogHeader>
 
@@ -155,6 +195,7 @@ export function PowerMeterChangeForm({
               <Select
                 value={String(form.meterIndex)}
                 onValueChange={v => setForm(f => ({ ...f, meterIndex: +v }))}
+                disabled={isEdit}
               >
                 <SelectTrigger className="h-9" id="powermeters-grid-meter">
                   <SelectValue />
@@ -198,7 +239,7 @@ export function PowerMeterChangeForm({
             </div>
           </div>
 
-          <div className={readingId ? 'grid grid-cols-1 gap-3' : 'grid grid-cols-2 gap-3'}>
+          <div className={readingId || isEdit ? 'grid grid-cols-1 gap-3' : 'grid grid-cols-2 gap-3'}>
             <div className="space-y-1">
               <Label htmlFor="powermeters-new-meter-s-initial-reading-kwh" className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                 New Meter&apos;s Initial Reading * <span className="normal-case font-normal">(kWh)</span>
@@ -210,7 +251,7 @@ export function PowerMeterChangeForm({
                 className="h-9"
               id="powermeters-new-meter-s-initial-reading-kwh"/>
             </div>
-            {!readingId && (
+            {!readingId && !isEdit && (
               <div className="space-y-1">
                 <Label htmlFor="powermeters-new-multiplier-ct-ratio" className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                   New Multiplier * <span className="normal-case font-normal">(CT ratio)</span>
@@ -250,7 +291,7 @@ export function PowerMeterChangeForm({
                 {' '}→{' '}<span className="font-mono font-semibold text-primary">{form.newInitialReading}</span>
                 {' '}on <strong>{form.changeDate}</strong> — Δ zeroed at rollover
               </p>
-              {!readingId && (
+              {!readingId && !isEdit && (
                 <p>
                   • Multiplier: <span className="font-mono">×{oldMultiplier}</span>
                   {' '}→{' '}<span className="font-mono font-semibold text-primary">×{form.newMultiplier}</span>,
@@ -271,7 +312,7 @@ export function PowerMeterChangeForm({
             className="h-9 bg-primary text-primary-foreground hover:bg-primary/90"
           >
             {saving && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
-            {readingId ? 'Log replacement' : 'Record meter change'}
+            {isEdit ? 'Save changes' : readingId ? 'Log replacement' : 'Record meter change'}
           </Button>
         </DialogFooter>
       </DialogContent>

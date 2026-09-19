@@ -52,6 +52,8 @@ export function useOperatorLog(trainId: string, trainLabel: string, plantId: str
   const [page, setPage] = useState(0);
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [replaceReadingId, setReplaceReadingId] = useState<string | null>(null);
+  const [detailRow, setDetailRow] = useState<any | null>(null);
+  const [editInitial, setEditInitial] = useState<any | null>(null);
 
   const todayStr = format(new Date(), 'yyyy-MM-dd');
   const thirtyDaysAgoStr = format(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), 'yyyy-MM-dd');
@@ -219,6 +221,8 @@ export function useOperatorLog(trainId: string, trainLabel: string, plantId: str
     page, setPage, PAGE_SIZE,
     togglingId, setTogglingId,
     replaceReadingId, setReplaceReadingId,
+    detailRow, setDetailRow,
+    editInitial, setEditInitial,
     dateFrom, setDateFrom,
     dateTo, setDateTo,
     rangePreset, setRangePreset,

@@ -26,6 +26,10 @@ import { planStrayReadingShift, type StrayReadingRef, type StrayReadingShift } f
 import { CORRECTION_REASONS, isReasonComplete, resolveReason } from '@/lib/correctionReasons';
 import { canEditEntry, logReadingEdit, recalculateTrainDeltas } from './helpers';
 import { ReplaceTrainMeterDialog } from './ReplaceTrainMeterDialog';
+import { MeterReplacementDetailDialog } from '@/components/readingHistory/MeterReplacementDetailDialog';
+import { useMeterReplacementDetail } from '@/components/readingHistory/useMeterReplacementDetail';
+import { replacementToInitial } from '@/components/readingHistory/replacementEdit';
+import type { ReplacementDetailHost } from '@/components/readingHistory/replacementTypes';
 import { EditRoReadingDialog } from './EditRoReadingDialog';
 import { EditPretreatReadingDialog } from './EditPretreatReadingDialog';
 import { ImportROReadingsDialog } from './ImportROReadingsDialog';
@@ -83,6 +87,8 @@ export function TrainLogModal({ trainId, trainLabel, plantId, onClose, initialTa
   };
 
   const [replaceReadingId, setReplaceReadingId] = useState<string | null>(null);
+  const [detailRow, setDetailRow]             = useState<any | null>(null);
+  const [replacementInitial, setReplacementInitial] = useState<any | null>(null);
   const [logTab, setLogTab]           = useState<'ro' | 'pretreat'>(initialTab ?? 'ro');
   const [editingRoRow, setEditingRoRow]           = useState<any | null>(null);
   const [editingPretreatRow, setEditingPretreatRow] = useState<any | null>(null);
@@ -430,6 +436,19 @@ export function TrainLogModal({ trainId, trainLabel, plantId, onClose, initialTa
     logTab, queryKey, preQueryKey,
   });
 
+  // Option A: read-only replacement popover opened from a flagged "repl." pill.
+  // A single RO reading can carry up to three swaps (feed / permeate / reject),
+  // so the popover lists every linked ro_train_meter_replacements row.
+  const detailTarget = detailRow ? {
+    kind: 'train' as const, readingId: detailRow.id ?? null, entityId: trainId,
+    plantId: plantId ?? null, entityName: trainLabel ?? null,
+    readingDatetime: detailRow.reading_datetime ?? null,
+  } : null;
+  const { records: detailRecords, isLoading: detailLoading } = useMeterReplacementDetail(detailTarget);
+  const detailHost: ReplacementDetailHost | null = detailTarget ? {
+    target: detailTarget, settingsHref: plantId ? `/plants/${plantId}` : null, canEdit: isManager,
+  } : null;
+
   useEffect(() => {
     if (highlightRowRef.current) highlightRowRef.current.scrollIntoView({ block: 'center', behavior: 'smooth' });
   }, [page, highlightJumped]);
@@ -440,7 +459,7 @@ export function TrainLogModal({ trainId, trainLabel, plantId, onClose, initialTa
         <DialogContent
           className="max-w-[95vw] w-full max-h-[88vh] flex flex-col gap-0 p-0 overflow-hidden"
           onInteractOutside={(e) => {
-            if (editingRoRow || editingPretreatRow || replaceReadingId || correctionTarget || showImportRO || showImportPretreat || pendingDelete) {
+            if (editingRoRow || editingPretreatRow || replaceReadingId || correctionTarget || showImportRO || showImportPretreat || pendingDelete || detailRow || replacementInitial) {
               e.preventDefault();
               return;
             }
@@ -503,6 +522,7 @@ export function TrainLogModal({ trainId, trainLabel, plantId, onClose, initialTa
                 replaceReadingId={replaceReadingId}
                 setReplaceReadingId={setReplaceReadingId}
                 toggleMeterReplacement={actions.toggleMeterReplacement}
+                onViewReplacement={(r: any) => setDetailRow(r)}
                 recalculateTrainDeltas={recalculateTrainDeltas}
                 trainId={trainId}
                 qc={qc}
@@ -622,8 +642,33 @@ export function TrainLogModal({ trainId, trainLabel, plantId, onClose, initialTa
           onSuccess={() => {
             qc.invalidateQueries({ queryKey });
             qc.invalidateQueries({ queryKey: ['ro-overview'] });
+            qc.invalidateQueries({ queryKey: ['meter-replacement-detail'] });
           }}
           onClose={() => setReplaceReadingId(null)}
+        />
+      )}
+      <MeterReplacementDetailDialog
+        host={detailHost} records={detailRecords} isLoading={detailLoading}
+        onClose={() => setDetailRow(null)}
+        onEdit={(rec) => {
+          if (!rec) { setDetailRow(null); setReplaceReadingId(detailRow?.id ?? null); return; }
+          setReplacementInitial(replacementToInitial(rec));
+        }}
+      />
+      {replacementInitial && (
+        <ReplaceTrainMeterDialog
+          trainId={trainId}
+          plantId={plantId}
+          readingId={detailRow?.id ?? undefined}
+          initial={replacementInitial}
+          onSuccess={() => {
+            setReplacementInitial(null);
+            setDetailRow(null);
+            qc.invalidateQueries({ queryKey });
+            qc.invalidateQueries({ queryKey: ['ro-overview'] });
+            qc.invalidateQueries({ queryKey: ['meter-replacement-detail'] });
+          }}
+          onClose={() => setReplacementInitial(null)}
         />
       )}
       {gapDialogTarget && (

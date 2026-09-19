@@ -5,6 +5,10 @@ import { format } from 'date-fns';
 import { ReplaceTrainMeterDialog } from '../../ro-trains/ReplaceTrainMeterDialog';
 import { useOperatorLog } from './TrainOperatorLogModal/useOperatorLog.tsx';
 import { OperatorLogTable } from './TrainOperatorLogModal/OperatorLogTable';
+import { MeterReplacementDetailDialog } from '@/components/readingHistory/MeterReplacementDetailDialog';
+import { useMeterReplacementDetail } from '@/components/readingHistory/useMeterReplacementDetail';
+import { replacementToInitial } from '@/components/readingHistory/replacementEdit';
+import type { ReplacementDetailHost } from '@/components/readingHistory/replacementTypes';
 
 export function TrainOperatorLogModal({
   trainId,
@@ -24,6 +28,8 @@ export function TrainOperatorLogModal({
     page, setPage, PAGE_SIZE,
     togglingId, setTogglingId,
     replaceReadingId, setReplaceReadingId,
+    detailRow, setDetailRow,
+    editInitial, setEditInitial,
     dateFrom, setDateFrom,
     dateTo, setDateTo,
     rangePreset, setRangePreset,
@@ -33,6 +39,16 @@ export function TrainOperatorLogModal({
     fmtVal, exportCSV,
     toggleMeterReplacement,
   } = useOperatorLog(trainId, trainLabel, plantId);
+
+  const detailTarget = detailRow ? {
+    kind: 'train' as const, readingId: detailRow.id ?? null, entityId: trainId,
+    plantId: plantId ?? null, entityName: trainLabel ?? null,
+    readingDatetime: detailRow.reading_datetime ?? null,
+  } : null;
+  const { records: detailRecords, isLoading: detailLoading } = useMeterReplacementDetail(detailTarget);
+  const detailHost: ReplacementDetailHost | null = detailTarget ? {
+    target: detailTarget, settingsHref: plantId ? `/plants/${plantId}` : null, canEdit: isManager,
+  } : null;
 
   return (
     <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
@@ -64,6 +80,7 @@ export function TrainOperatorLogModal({
           setRangePreset={setRangePreset}
           fmtVal={fmtVal}
           onToggleMeterReplacement={toggleMeterReplacement}
+          onViewReplacement={(r: any) => setDetailRow(r)}
           onExport={exportCSV}
           onPrevPage={() => setPage(p => p - 1)}
           onNextPage={() => setPage(p => p + 1)}
@@ -82,6 +99,29 @@ export function TrainOperatorLogModal({
               qc.invalidateQueries({ queryKey: ['dsm-ro-readings'] });
             }}
             onClose={() => setReplaceReadingId(null)}
+          />
+        )}
+        <MeterReplacementDetailDialog
+          host={detailHost} records={detailRecords} isLoading={detailLoading}
+          onClose={() => setDetailRow(null)}
+          onEdit={(rec) => {
+            if (!rec) { setDetailRow(null); setReplaceReadingId(detailRow?.id ?? null); return; }
+            setEditInitial({ ...replacementToInitial(rec), rawMeterType: rec.raw?.meter_type ?? null, rawOldSerial: rec.oldSerial ?? null });
+          }}
+        />
+        {editInitial && (
+          <ReplaceTrainMeterDialog
+            trainId={trainId}
+            plantId={plantId}
+            readingId={detailRow?.id ?? undefined}
+            initial={editInitial}
+            onSuccess={() => {
+              setEditInitial(null);
+              setDetailRow(null);
+              qc.invalidateQueries({ queryKey });
+              qc.invalidateQueries({ queryKey: ['meter-replacement-detail'] });
+            }}
+            onClose={() => setEditInitial(null)}
           />
         )}
       </DialogContent>

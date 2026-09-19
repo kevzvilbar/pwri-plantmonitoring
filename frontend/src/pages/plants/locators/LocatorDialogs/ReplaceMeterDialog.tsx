@@ -9,17 +9,27 @@ import { format } from 'date-fns';
 import { toast } from 'sonner';
 import { friendlyError } from '@/lib/supabaseErrors';
 
+const readingTableFor = (k: 'locator' | 'well' | 'product') =>
+  k === 'well' ? 'well_readings' : k === 'locator' ? 'locator_readings' : 'product_meter_readings';
+
 export function ReplaceMeterDialog({
-  kind, assetId, plantId, oldSerial, readingId, onSuccess, onClose,
+  kind, assetId, plantId, oldSerial, readingId, initial, onSuccess, onClose,
 }: {
   kind: 'locator' | 'well' | 'product';
   assetId: string;
   plantId: string;
   oldSerial: string | null;
+  readingId?: string;
+  /** Edit mode: prefill from an already-logged swap; save becomes an UPDATE
+   *  of that record (+ linked reading sync) instead of an INSERT. */
+  initial?: {
+    id: string; readingId?: string | null; replacementDate: string | null; oldFinal: string;
+    newBrand: string; newSize: string; newSerial: string; newInitial: string;
+    installedDate: string | null; remarks: string;
+  } | null;
   /** When passed, this specific reading is flagged is_meter_replacement = true
    *  once the replacement record + asset update succeed — lets the row that
    *  triggered "Replace meter" be marked without a separate manual toggle. */
-  readingId?: string;
   /** Called after a successful save. Receives the entered new-meter initial
    *  reading (so a live entry form can prefill its input) and the id of the
    *  replacement record just inserted (so the entry form can link it back to
@@ -30,10 +40,15 @@ export function ReplaceMeterDialog({
   onClose: () => void;
 }) {
   const { user, activeOperator } = useAuth();
-  const [form, setForm] = useState({
-    replacement_date: format(new Date(), "yyyy-MM-dd'T'HH:mm"),
-    old_final_reading: '', new_brand: '', new_size: '', new_serial: '', new_initial_reading: '', new_installed_date: format(new Date(), "yyyy-MM-dd'T'HH:mm"), remarks: '',
-  });
+  const isEdit = !!initial?.id;
+  const [form, setForm] = useState(() => ({
+    replacement_date: initial?.replacementDate || format(new Date(), "yyyy-MM-dd'T'HH:mm"),
+    old_final_reading: initial?.oldFinal ?? '',
+    new_brand: initial?.newBrand ?? '', new_size: initial?.newSize ?? '',
+    new_serial: initial?.newSerial ?? '', new_initial_reading: initial?.newInitial ?? '',
+    new_installed_date: initial?.installedDate || format(new Date(), "yyyy-MM-dd'T'HH:mm"),
+    remarks: initial?.remarks ?? '',
+  }));
   const submit = async () => {
     // Required: new serial (who's now installed), the old meter's last reading,
     // the new meter's starting reading, and the date it happened — without
@@ -73,6 +88,32 @@ export function ReplaceMeterDialog({
       });
       replacementTable = 'well_meter_replacements';
       assetTable = 'wells';
+    }
+    if (isEdit) {
+      const editPayload = { ...payload };
+      delete (editPayload as any).plant_id;
+      delete (editPayload as any).reading_id;
+      delete (editPayload as any).replaced_by;
+      const { error: updErr } = await (supabase.from(replacementTable as any) as any)
+        .update(editPayload)
+        .eq('id', initial!.id);
+      if (updErr) { toast.error(friendlyError(updErr)); return; }
+      const linkedId = readingId ?? initial!.readingId ?? null;
+      if (linkedId) {
+        const dtNew = new Date(form.new_installed_date || form.replacement_date).toISOString();
+        const { error: linkErr } = await (supabase.from(readingTableFor(kind) as any) as any)
+          .update({
+            current_reading: +form.new_initial_reading,
+            reading_datetime: dtNew,
+            is_meter_replacement: true,
+          })
+          .eq('id', linkedId);
+        if (linkErr) toast.error(`Replacement updated, but couldn't sync the reading: ${friendlyError(linkErr)}`);
+      }
+      toast.success('Replacement updated');
+      onSuccess?.({ newInitialReading: form.new_initial_reading !== '' ? +form.new_initial_reading : null, replacementId: initial!.id });
+      onClose();
+      return;
     }
     const { data: inserted, error } = await supabase.from(replacementTable as any).insert(payload).select('id').single();
     if (error) { toast.error(friendlyError(error)); return; }
@@ -165,7 +206,7 @@ export function ReplaceMeterDialog({
   return (
     <Dialog open onOpenChange={onClose}>
       <DialogContent>
-        <DialogHeader><DialogTitle>Replace meter</DialogTitle></DialogHeader>
+        <DialogHeader><DialogTitle>{isEdit ? 'Edit meter replacement' : 'Replace meter'}</DialogTitle></DialogHeader>
         <div className="space-y-2">
           <div className="grid grid-cols-2 gap-2">
             <div><Label htmlFor="locatordialogs-date-changed">Date &amp; time changed *</Label><Input type="datetime-local" value={form.replacement_date} onChange={e => setForm({ ...form, replacement_date: e.target.value })} id="locatordialogs-date-changed"/></div>
@@ -183,7 +224,7 @@ export function ReplaceMeterDialog({
           </div>
           <div><Label htmlFor="locatordialogs-remarks">Remarks</Label><Input value={form.remarks} onChange={e => setForm({ ...form, remarks: e.target.value })} id="locatordialogs-remarks"/></div>
         </div>
-        <DialogFooter><Button onClick={submit}>Save replacement</Button></DialogFooter>
+        <DialogFooter><Button onClick={submit}>{isEdit ? 'Save changes' : 'Save replacement'}</Button></DialogFooter>
       </DialogContent>
     </Dialog>
   );

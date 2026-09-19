@@ -9,6 +9,12 @@ import { fmtNum } from '@/lib/calculations';
 import { MeterDetailButton } from '../../charts/EntityHistoryChart/index';
 import { EntityHistoryChart } from '../../charts/EntityHistoryChart/index';
 import { ReplaceMeterDialog } from '../../locators/LocatorDialogs';
+import { MeterReplacementDetailDialog } from '@/components/readingHistory/MeterReplacementDetailDialog';
+import { normalizeReplacementRow } from '@/components/readingHistory/replacementLookup';
+import { replacementToInitial } from '@/components/readingHistory/replacementEdit';
+import { ReplPill } from '@/components/readingHistory/ReplPill';
+import { ChangeMeterIcon } from '@/components/icons/water-icons';
+import type { NormalizedReplacement, ReplacementDetailHost } from '@/components/readingHistory/replacementTypes';
 import { EditElectricMeterDialog, EditHydraulicDialog } from '../WellDialogs';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -16,6 +22,9 @@ export function WellDetail({ wellId, onBack }: { wellId: string; onBack: () => v
   const qc = useQueryClient();
   const { isManager } = useAuth();
   const [replaceOpen, setReplaceOpen] = useState(false);
+  /** Option A: which logged swap the user clicked in Replacement History. */
+  const [detailRec, setDetailRec] = useState<NormalizedReplacement | null>(null);
+  const [editInitial, setEditInitial] = useState<any | null>(null);
   const [editHydraulicOpen, setEditHydraulicOpen] = useState(false);
   const [editElectricOpen, setEditElectricOpen] = useState(false);
 
@@ -34,6 +43,15 @@ export function WellDetail({ wellId, onBack }: { wellId: string; onBack: () => v
         .select('*, replacer:user_profiles!well_meter_replacements_replaced_by_fkey(first_name,last_name)')
         .eq('well_id', wellId).order('replacement_date', { ascending: false }).limit(1);
       return (data?.[0] ?? null) as any;
+    },
+  });
+  const { data: allReplacements = [] } = useQuery<any[]>({
+    queryKey: ['well-replacements', wellId],
+    queryFn: async () => {
+      const { data } = await supabase.from('well_meter_replacements')
+        .select('*, replacer:user_profiles!well_meter_replacements_replaced_by_fkey(first_name,last_name)')
+        .eq('well_id', wellId).order('replacement_date', { ascending: false });
+      return data ?? [];
     },
   });
   const { data: rawReadings = [] } = useQuery<any[]>({
@@ -137,6 +155,33 @@ export function WellDetail({ wellId, onBack }: { wellId: string; onBack: () => v
           )}
         </MeterDetailButton>
       )}
+
+      {/* Replacement History — Option A: every logged swap, click for details. */}
+      <Card className="p-3">
+        <h4 className="text-sm font-semibold mb-2 flex items-center gap-1.5">
+          <ChangeMeterIcon className="h-3.5 w-3.5 text-muted-foreground" /> Replacement History
+        </h4>
+        {(allReplacements as any[]).length ? (
+          <div className="space-y-0">
+            {(allReplacements as any[]).map((r: any) => (
+              <button
+                key={r.id}
+                type="button"
+                onClick={() => setDetailRec(normalizeReplacementRow('well', r))}
+                title="View replacement details"
+                className="w-full text-left border-t py-2 text-xs grid grid-cols-2 gap-x-3 gap-y-0.5 hover:bg-muted/40 transition-colors rounded-sm px-1 -mx-1 cursor-pointer"
+              >
+                <div className="col-span-2 font-medium text-foreground flex items-center gap-1.5">
+                  {r.replacement_date}
+                  <ReplPill title="View replacement details" />
+                </div>
+                <div className="text-muted-foreground">Old: SN {r.old_serial ?? '—'} <span className="font-mono">({r.old_final_reading ?? '—'})</span></div>
+                <div className="text-muted-foreground">New: SN {r.new_serial ?? '—'} <span className="font-mono">({r.new_initial_reading ?? '—'})</span></div>
+              </button>
+            ))}
+          </div>
+        ) : <p className="text-xs text-muted-foreground">No replacements recorded</p>}
+      </Card>
 
       {/* Historical Consumption Chart */}
       <Card className="p-3">
@@ -251,7 +296,46 @@ export function WellDetail({ wellId, onBack }: { wellId: string; onBack: () => v
             setReplaceOpen(false);
             qc.invalidateQueries({ queryKey: ['well', wellId] });
             qc.invalidateQueries({ queryKey: ['well-latest-replacement', wellId] });
+            qc.invalidateQueries({ queryKey: ['well-replacements', wellId] });
           }}
+        />
+      )}
+
+      <MeterReplacementDetailDialog
+        host={detailRec ? ({
+          target: {
+            kind: 'well',
+            readingId: (detailRec.raw?.reading_id ?? null) as string | null,
+            entityId: wellId, plantId: well.plant_id ?? null,
+            entityName: well.name, readingDatetime: detailRec.replacementDate ?? null,
+          },
+          settingsHref: null,
+          canEdit: isManager,
+        } satisfies ReplacementDetailHost) : null}
+        records={detailRec ? [detailRec] : []}
+        isLoading={false}
+        onClose={() => setDetailRec(null)}
+        onEdit={(rec) => {
+          setDetailRec(null);
+          if (rec) setEditInitial(replacementToInitial(rec));
+          else setReplaceOpen(true);
+        }}
+      />
+
+      {editInitial && (
+        <ReplaceMeterDialog
+          kind="well" assetId={wellId} plantId={well.plant_id} oldSerial={well.meter_serial}
+          readingId={(editInitial.readingId ?? undefined) as string | undefined}
+          initial={editInitial}
+          onSuccess={() => {
+            setEditInitial(null);
+            qc.invalidateQueries({ queryKey: ['well', wellId] });
+            qc.invalidateQueries({ queryKey: ['well-latest-replacement', wellId] });
+            qc.invalidateQueries({ queryKey: ['well-replacements', wellId] });
+            qc.invalidateQueries({ queryKey: ['meter-replacement-detail'] });
+            qc.invalidateQueries({ queryKey: ['reading-history'] });
+          }}
+          onClose={() => setEditInitial(null)}
         />
       )}
       {editHydraulicOpen && (
