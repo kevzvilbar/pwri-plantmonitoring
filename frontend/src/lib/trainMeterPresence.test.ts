@@ -4,6 +4,7 @@ import {
   trainMeterFlags,
   streamIsMeasured,
   missingMeasuredStreams,
+  countMeasuredStreams,
 } from './trainMeterPresence';
 
 const ALL = { feed: true, permeate: true, reject: true };
@@ -162,4 +163,81 @@ describe('missingMeasuredStreams', () => {
       .toEqual([]); // feed is inferred, permeate + reject are present
   });
 });
+
+describe('countMeasuredStreams — absolute 2-out-of-3 water balance rule', () => {
+  const ALL_FLAGS = { feed: true, permeate: true, reject: true };
+  const ALL_EM = { feedIsEM: true, permIsEM: true, rejIsEM: true };
+  const NO_EM = { feedIsEM: false, permIsEM: false, rejIsEM: false };
+
+  it('counts 3 when all 3 streams are measured (manual or EM)', () => {
+    const count = countMeasuredStreams(
+      ALL_FLAGS,
+      ALL_EM,
+      { feed: '', permeate: '', reject: '' },
+      { feed: '150', permeate: '113', reject: '37' },
+    );
+    expect(count).toBe(3);
+  });
+
+  it('counts 2 when 2 streams are measured and 1 is unmeasured', () => {
+    const count = countMeasuredStreams(
+      ALL_FLAGS,
+      ALL_EM,
+      { feed: '', permeate: '', reject: '' },
+      { feed: '150', permeate: '113', reject: '' },
+    );
+    expect(count).toBe(2);
+    expect(count >= 2).toBe(true); // Water balance valid: 3rd can be inferred
+  });
+
+  it('SRP RO5 scenario: only Permeate measured, Reject EM typed as 0 -> count is 1 (HARD BLOCK)', () => {
+    // Feed uninstalled, Permeate and Reject are EM
+    const meterFlags = { feed: false, permeate: true, reject: true };
+    const count = countMeasuredStreams(
+      meterFlags,
+      ALL_EM,
+      { feed: '', permeate: '', reject: '' },
+      { feed: '', permeate: '113', reject: '0' }, // reject = 0 is not measured!
+    );
+    expect(count).toBe(1);
+    expect(count < 2).toBe(true); // Fails 2-of-3 rule: HARD BLOCK, cannot save even with reason
+  });
+
+  it('counts 1 when only 1 manual meter is entered -> fails 2-of-3 rule', () => {
+    const count = countMeasuredStreams(
+      ALL_FLAGS,
+      NO_EM,
+      { feed: '', permeate: '3082857', reject: '' },
+      { feed: '', permeate: '', reject: '' },
+    );
+    expect(count).toBe(1);
+    expect(count < 2).toBe(true); // HARD BLOCK
+  });
+
+  it('counts 0 when all fields are empty -> fails 2-of-3 rule', () => {
+    const count = countMeasuredStreams(
+      ALL_FLAGS,
+      NO_EM,
+      { feed: '', permeate: '', reject: '' },
+      { feed: '', permeate: '', reject: '' },
+    );
+    expect(count).toBe(0);
+    expect(count < 2).toBe(true); // HARD BLOCK
+  });
+
+  it('handles mixed trains: 1 manual meter + 1 EM flow -> count is 2 (valid water balance)', () => {
+    // Permeate is manual meter, Reject is EM
+    const meterFlags = { feed: false, permeate: true, reject: true };
+    const emFlags = { feedIsEM: false, permIsEM: false, rejIsEM: true };
+    const count = countMeasuredStreams(
+      meterFlags,
+      emFlags,
+      { feed: '', permeate: '3082857', reject: '' },
+      { feed: '', permeate: '', reject: '37' },
+    );
+    expect(count).toBe(2);
+    expect(count >= 2).toBe(true); // Valid! Feed can be inferred as Permeate + Reject
+  });
+});
+
 

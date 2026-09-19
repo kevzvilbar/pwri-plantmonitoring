@@ -193,13 +193,33 @@ export async function insertROTrainReadings(
     const rejPrev   = (r.reject_meter_prev)?.trim() ? +r.reject_meter_prev : null;
     let rejDelta    = rejCurr !== null && rejPrev !== null ? Math.max(0, rejCurr - rejPrev) : null;
 
-    // Validate required meters against train configuration
+    // A stream is measured if manual meter/delta is present OR flow rate is strictly > 0
+    const feedFlowRate = num('feed_flow');
+    const permFlowRate = num('permeate_flow');
+    const rejFlowRate  = num('reject_flow');
+
+    const feedPresent = feedCurr !== null || feedDelta !== null || (feedFlowRate !== null && feedFlowRate > 0);
+    const permPresent = permCurr !== null || permDelta !== null || (permFlowRate !== null && permFlowRate > 0);
+    const rejPresent  = rejCurr !== null || rejDelta !== null || (rejFlowRate !== null && rejFlowRate > 0);
+
+    const totalMeasuredStreams = (feedPresent ? 1 : 0) + (permPresent ? 1 : 0) + (rejPresent ? 1 : 0);
+
+    // Rule 1: Water Balance Absolute Requirement (at least 2 of 3 streams must be measured)
+    if (totalMeasuredStreams < 2) {
+      errors.push(
+        `Skipped row at ${dt} (Train ${r.train_number ?? trainId}): At least 2 of 3 water flow streams (Feed, Permeate, Reject) must be present for water balance calculation. Only ${totalMeasuredStreams} stream(s) present.`,
+      );
+      skipped++;
+      continue;
+    }
+
+    // Rule 2: Plant Configuration Conformity — all configured meters are required
     const meta = trainMetaById[trainId];
     if (meta) {
       const configuredStreams = [
-        meta.hasFeed ? { name: 'Feed', present: feedCurr !== null || feedDelta !== null } : null,
-        meta.hasPerm ? { name: 'Permeate', present: permCurr !== null || permDelta !== null } : null,
-        meta.hasRej  ? { name: 'Reject', present: rejCurr !== null || rejDelta !== null } : null,
+        meta.hasFeed ? { name: 'Feed', present: feedPresent } : null,
+        meta.hasPerm ? { name: 'Permeate', present: permPresent } : null,
+        meta.hasRej  ? { name: 'Reject', present: rejPresent } : null,
       ].filter(Boolean) as { name: string; present: boolean }[];
 
       const missingStreams = configuredStreams.filter((s) => !s.present);

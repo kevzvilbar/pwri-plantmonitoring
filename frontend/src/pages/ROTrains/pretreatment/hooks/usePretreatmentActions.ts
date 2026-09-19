@@ -9,7 +9,7 @@ import { STANDARD_OFFLINE_REASONS, getUnitReasonText } from '../types';
 import { isWasActuallyRunningReason } from '@/lib/trainUptimeExemption';
 import { reportTrainRunningExemption } from '@/hooks/useTrainUptimeExemption';
 import { trainEmFlags } from '@/lib/trainEmMeter';
-import { missingRequiredMeters, missingMeasuredStreams } from '@/lib/trainMeterPresence';
+import { missingRequiredMeters, missingMeasuredStreams, countMeasuredStreams } from '@/lib/trainMeterPresence';
 
 export interface PretreatmentActionsOptions {
   plantId: string;
@@ -206,16 +206,39 @@ export function usePretreatmentActions(rawOpts: PretreatmentActionsOptions) {
           streamEmReadings,
         );
 
-        // Hard block: two or more configured streams are not measured.
-        // No incomplete-reading reason can waive this — the mass-balance
-        // equation requires at least two known values to infer the third.
+        const measuredCount = countMeasuredStreams(
+          streamMeterFlags,
+          streamEmFlags,
+          streamMeterReadings,
+          streamEmReadings,
+        );
+
+        // Rule 1: Water Balance Absolute Requirement (2 of 3 rule)
+        // Regardless of meter type (EM or manual), at least 2 of the 3 water flow
+        // streams (Feed, Permeate, Reject) MUST be measured (manual reading or EM > 0).
+        // If fewer than 2 are measured, mass balance is physically impossible.
+        // No incomplete reason can waive this — saving is hard-blocked.
+        if (measuredCount < 2) {
+          toast.error(
+            `At least 2 of the 3 water flow streams (Feed, Permeate, Reject) must be measured ` +
+            `(manual meter reading, or EM flow above 0). Currently only ${measuredCount} is measured. ` +
+            `Cannot save.`,
+            { duration: 8000 },
+          );
+          return;
+        }
+
+        // Rule 2: Plant Configuration Conformity
+        // If 2 or more configured streams are not measured, hard block.
+        // If 3 meters are configured in Plant Config, all 3 are required (at most one
+        // may be inferred provided an incomplete reason is supplied).
         if (unmeasuredStreams.length >= 2) {
           const labels = unmeasuredStreams
             .map((s) => s[0].toUpperCase() + s.slice(1))
             .join(' and ');
           toast.error(
-            `${labels}: two or more water flow streams have no valid reading — ` +
-            `at least two must be measured (manual meter reading, or EM flow above 0). ` +
+            `${labels}: two or more configured water flow streams have no valid reading — ` +
+            `all configured meters are required (at most one may be inferred with an incomplete reason). ` +
             `Cannot save.`,
             { duration: 8000 },
           );

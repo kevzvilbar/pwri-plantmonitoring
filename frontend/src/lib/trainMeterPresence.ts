@@ -103,3 +103,33 @@ export function missingMeasuredStreams(
   });
 }
 
+/**
+ * Counts how many of the 3 absolute water flow streams (Feed, Permeate, Reject)
+ * are actually measured (manual meter entered, or EM flow strictly > 0).
+ *
+ * Fundamental RO Rule:
+ * For water balance (Feed = Permeate + Reject) to be physically solvable,
+ * AT LEAST 2 OUT OF THE 3 STREAMS MUST BE MEASURED.
+ * If fewer than 2 streams are measured, saving is hard-blocked because
+ * the third cannot be calculated.
+ */
+export function countMeasuredStreams(
+  meterFlags: { feed: boolean; permeate: boolean; reject: boolean },
+  emFlags: { feedIsEM: boolean; permIsEM: boolean; rejIsEM: boolean },
+  meterReadings: { feed?: string | null; permeate?: string | null; reject?: string | null },
+  emReadings: { feed?: string | null; permeate?: string | null; reject?: string | null },
+): number {
+  return (['feed', 'permeate', 'reject'] as const).filter((stream) => {
+    const isEM = stream === 'feed' ? emFlags.feedIsEM
+               : stream === 'permeate' ? emFlags.permIsEM
+               : emFlags.rejIsEM;
+    return streamIsMeasured({
+      hasManualMeter: meterFlags[stream],
+      isEM,
+      meterReading: meterReadings[stream],
+      emFlow: emReadings[stream],
+    });
+  }).length;
+}
+
+
