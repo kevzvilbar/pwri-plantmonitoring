@@ -2,7 +2,7 @@ import { Card } from '@/components/ui/card';
 import { FileText } from 'lucide-react';
 import { Signal } from '@/components/ui/Signal';
 import { Activity } from 'lucide-react';
-import { sevTier } from './constants';
+import { sevTier } from '../lib/constants';
 
 interface SystemLogsListProps {
   filteredLogs: any[];

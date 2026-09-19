@@ -30,12 +30,12 @@ import type { Database } from '@/integrations/supabase/types';
 import { useAuth } from '@/hooks/useAuth';
 import { canEditEntry, diffFields, logReadingEdit, recalculateTrainDeltas } from './helpers';
 import { getHourBucket, isOfflineRORecord } from '@/lib/hourlyReadingGuard';
+import { trainEmFlags } from '@/lib/trainEmMeter';
 import {
   trainMeterFlags,
   missingMeasuredStreams,
   countMeasuredStreams,
 } from '@/lib/trainMeterPresence';
-import { trainEmFlags } from '@/lib/trainEmMeter';
 
 const RO_EDIT_NUMERIC_FIELDS: { key: string; label: string; unit?: string; step?: string }[] = [
   { key: 'feed_pressure_psi',    label: 'Feed Pressure',      unit: 'psi' },
@@ -124,8 +124,8 @@ export function EditRoReadingDialog({ row, trainId, onClose, onSaved }: Props) {
     //   < 2 measured streams overall      → hard block (2-of-3 water balance).
     //   1 unmeasured configured stream    → allowed — the edit reason (required
     //                                       above) documents the inference.
-    const { data: trainCfg, error: trainCfgError } = await (supabase
-      .from('ro_trains' as any) as any)
+    const { data: trainCfg, error: trainCfgError } = await supabase
+      .from('ro_trains')
       .select('has_feed_meter, has_permeate_meter, has_reject_meter, uses_em_meter, em_all_streams, em_stream_feed, em_stream_permeate, em_stream_reject')
       .eq('id', trainId)
       .single();

@@ -8,7 +8,7 @@ import { usePlantStore } from '@/store/plantStore';
 import { useAlertStore } from '@/store/alertStore';
 import { useDebounce } from '@/hooks/useDebounce';
 import { toast } from 'sonner';
-import { sevTier, EMPTY_NOTIFICATIONS, EMPTY_PLANTS, type Notification } from './constants';
+import { sevTier, EMPTY_NOTIFICATIONS, EMPTY_PLANTS, type Notification } from '../lib/constants';
 
 export function useAlerts() {
   const navigate = useNavigate();

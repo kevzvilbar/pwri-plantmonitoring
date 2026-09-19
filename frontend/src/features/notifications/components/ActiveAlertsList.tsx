@@ -1,7 +1,7 @@
 import { Card } from '@/components/ui/card';
 import { CheckCircle2 } from 'lucide-react';
 import { Signal } from '@/components/ui/Signal';
-import { getAlertIcon, sevTier } from './constants';
+import { getAlertIcon, sevTier } from '../lib/constants';
 
 interface ActiveAlertsListProps {
   filteredPlantAlerts: any[];

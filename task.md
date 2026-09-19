@@ -21,9 +21,13 @@
 - [x] 10. Verify all gates: `tsc`, `npm test` (75 suites, 688 tests), `npm run build`, `npm run lint`
 - [x] 11. Commit `41aa42c2` & pushed to origin `main`
 
-## Slice 3: `notifications` & `auth` (Next Up)
-- [ ] 1. Plan and organize `src/features/notifications/` (Alerts, components/notifications, push notifications)
-- [ ] 2. Plan and organize `src/features/auth/` (Auth, Onboarding, Profile)
-- [ ] 3. Maintain routing and re-export shims
-- [ ] 4. Verify all gates: `tsc`, `npm test`, `npm run build`, `npm run lint`
-- [ ] 5. Commit & push Slice 3
+## Slice 3: `notifications` & `auth` (In Progress)
+- [ ] 1. Create `src/features/notifications/` (`components/`, `hooks/`, `lib/`)
+- [ ] 2. Migrate Alerts page, components, hooks, and tests into `src/features/notifications/`
+- [ ] 3. Migrate PushNotificationCard, hooks, lib, and tests into `src/features/notifications/`
+- [ ] 4. Create `src/features/auth/` (`components/`, `components/SignUpForm/`)
+- [ ] 5. Migrate Auth, Onboarding, Profile pages and auth components into `src/features/auth/`
+- [ ] 6. Setup barrels and compatibility shims for pages, components, and hooks
+- [ ] 7. Update internal imports within `src/features/notifications/` and `src/features/auth/`
+- [ ] 8. Verify all gates: `tsc`, `npm test`, `npm run build`, `npm run lint`
+- [ ] 9. Commit & push Slice 3 to origin `main`

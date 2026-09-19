@@ -16,7 +16,7 @@ const mockState = {
   isIOSNonStandalone: false,
 };
 
-vi.mock('@/hooks/usePushNotifications', () => ({
+vi.mock('../hooks/usePushNotifications', () => ({
   usePushNotifications: () => ({
     ...mockState,
     subscription: { endpoint: 'https://push.example.com' },
