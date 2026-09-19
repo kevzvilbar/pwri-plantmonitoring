@@ -1,27 +1,29 @@
-# Fix Tasks
+# Feature-Slice Reorganization — Task List
 
-## 🔴 Critical / High
-- [x] Fix circuit breaker SQL bug (boolean into integer variable) — `20260909000004_phase4_cascade_circuit_breaker.sql` (Committed)
-- [x] Fix N+1 power query → added DB migration `20260910000001_latest_power_readings_fn.sql`, updated both `todayPowerRaw` and `yPower` queries in `useDashboardQueries.ts` (Committed)
-- [x] Modularize Dashboard "God Component" complex into domain hooks (`useProductionStats`, `usePowerStats`, `useQualityStats`, `useCostStats`, `useDashboardAlerts`) (Committed)
-- [x] Replace `Record<string, any>` in `useDashboardAlerts` with strictly typed `DashboardAlertsParams` interface (Committed)
-- [x] Remove legacy `as any` casts in dashboard queries now enabled by 72/72 table types (Committed)
-- [x] Ratchet down ESLint warning ceiling from 2486 → 2447 (**-39 warnings total**) (Committed)
-- [x] Ratchet down bundle size from 1161.8 kB → 1161.5 kB (Committed)
-- [x] Delete dead monolithic files `useDashboardQueries.ts` (935 lines) and `useDashboardAggregates.ts` (588 lines) (Committed)
+## Slice 1: `ro-trains` (Completed)
+- [x] 1. Extract `readingAudit.ts` into `src/shared/`
+- [x] 2. Consolidate `pages/ROTrains/` and `pages/ro-trains/` into `src/features/ro-trains/`
+- [x] 3. Fix all internal and external import paths
+- [x] 4. Remove duplicate directory and configure compatibility re-exports (`pages/ROTrains.tsx`, `pages/ro-trains/helpers.tsx`)
+- [x] 5. Verify all gates: `tsc`, `npm test` (75 suites, 688 tests), `npm run build`, `npm run lint`
+- [x] 6. Commit `6a1f1b6c` & pushed to origin `main`
 
-## 🟡 Medium
-- [x] Replace `next-themes` in `sonner.tsx` with Zustand `useThemeStore` (Committed)
-- [x] Remove `next-themes` from `frontend/package.json` dependencies
-- [x] Delete dead toast files (`toaster.tsx`, `use-toast.ts`, and `hooks/use-toast.ts`) now that Sonner is the sole toast notification system
-- [x] Improve root `package.json` build command (`npm --prefix frontend run build` instead of chaining `cd frontend && npm install && npm run build`)
-- [x] Add per-route ErrorBoundary in AppShell wrapping `<Outlet />` — shell stays alive when one page crashes (Committed)
+## Slice 2: `costs` (Completed)
+- [x] 1. Create `src/features/costs/` structure (`components/`, `tabs/`, `hooks/`)
+- [x] 2. Migrate `src/components/costs/` to `src/features/costs/components/`
+- [x] 3. Migrate `src/pages/costs/` to `src/features/costs/tabs/`
+- [x] 4. Migrate `src/pages/Costs.tsx` to `src/features/costs/CostsPage.tsx`
+- [x] 5. Migrate `useCostComposition.ts` and `useOpexBudget.ts` to `src/features/costs/hooks/`
+- [x] 6. Create barrel `src/features/costs/index.ts`
+- [x] 7. Update internal relative/alias imports within `src/features/costs/`
+- [x] 8. Setup backwards-compatibility shims (`src/pages/Costs.tsx`, `src/hooks/useCostComposition.ts`, `src/hooks/useOpexBudget.ts`)
+- [x] 9. Remove legacy `src/pages/costs/` and `src/components/costs/`
+- [x] 10. Verify all gates: `tsc`, `npm test` (75 suites, 688 tests), `npm run build`, `npm run lint`
+- [x] 11. Commit `41aa42c2` & pushed to origin `main`
 
-## 🟢 Low / Quick wins
-- [x] Add `frontend/.env.example` with all required/optional vars documented (Committed)
-- [x] Delete duplicate `TRIGGER-DEPENDENCY-GRAPH.md` (kept the larger `TRIGGER_DEPENDENCY_GRAPH.md`) (Committed)
-- [x] Updated CI `ci.yml` Phase 4 migration gate to include new `20260910000001_latest_power_readings_fn.sql` (Committed)
-
-## ✅ Verification
-- [x] TypeScript build passes cleanly (`tsc --noEmit -p tsconfig.app.json` exit code 0)
-- [x] Full Vitest test suite passes (42 test files, 393 tests passed cleanly)
+## Slice 3: `notifications` & `auth` (Next Up)
+- [ ] 1. Plan and organize `src/features/notifications/` (Alerts, components/notifications, push notifications)
+- [ ] 2. Plan and organize `src/features/auth/` (Auth, Onboarding, Profile)
+- [ ] 3. Maintain routing and re-export shims
+- [ ] 4. Verify all gates: `tsc`, `npm test`, `npm run build`, `npm run lint`
+- [ ] 5. Commit & push Slice 3
