@@ -30,10 +30,18 @@
 - [x] 6. Setup barrels and compatibility shims for pages, components, and hooks
 - [x] 7. Update internal imports within `src/features/notifications/` and `src/features/auth/`
 - [x] 8. Verify all gates: `tsc`, `npm test` (75 suites, 688 tests), `npm run build`, `npm run lint`
-- [x] 9. Commit `7bf7c7fd` & pushed to origin `main`
+- [x] 9. Commit `7bf7c7fd` & `f58c3ae7` & pushed to origin `main`
 
-## Slice 4: `readings` (Next Up)
-- [ ] 1. Plan and organize `src/features/readings/` (smart-import, ReadingImportDialog, components/import, data-corrections, dataAnalysis)
-- [ ] 2. Maintain routing and re-export shims
-- [ ] 3. Verify all gates: `tsc`, `npm test`, `npm run build`, `npm run lint`
-- [ ] 4. Commit & push Slice 4
+## Slice 4: `readings` (Completed)
+- [x] 1. Create `src/features/readings/` (`pages/`, `components/`, `dataCorrections/`, `dataAnalysis/`, `hooks/`)
+- [x] 2. Migrate `ImportPage`, `DataCorrectionsPage`, `DataAnalysisPage` to `features/readings/pages/`
+- [x] 3. Migrate `SmartImportPanel`, `smart-import/`, `import/`, `ReadingImportDialog/`, `readingHistory/` to `features/readings/components/`
+- [x] 4. Migrate `dataCorrections/` and `dataAnalysis/` subdirectories to `features/readings/`
+- [x] 5. Migrate `useCorrections.ts` and `useReadingGaps.ts` to `features/readings/hooks/`
+- [x] 6. Co-locate `ReadingImportDialog.test.ts`, `ReadingHistoryDialog.test.ts`, and `useReadingGaps.test.ts`
+- [x] 7. Create barrel `src/features/readings/index.ts`
+- [x] 8. Maintain backwards-compatibility shims across `pages/`, `components/`, `hooks/`, and `data/`
+- [x] 9. Verify all gates: `tsc`, `npm test` (75 suites, 688 tests), `npm run build`, `npm run lint`
+- [ ] 10. Commit & push Slice 4 to origin `main`
+
+## Slice 5: `wells`, `operations`, `plants`, `compliance`, `admin` (Next Up)

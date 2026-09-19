@@ -6,7 +6,7 @@
  * Components wrap them with React Query via the hooks in src/data/hooks/.
  */
 import { supabase } from '@/integrations/supabase/client';
-import type { ImportTypeConfig } from '@/components/smart-import/registry';
+import type { ImportTypeConfig } from '@/features/readings/components/smart-import/registry';
 
 /** Fetch entity name-to-ID mapping for a plant and config */
 export async function fetchEntityNameMap(

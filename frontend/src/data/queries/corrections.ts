@@ -17,8 +17,8 @@ import {
   fmtNum,
   extractOldValueFromChanges,
   tableLabel,
-} from '@/pages/dataCorrections/types';
-import { formatElapsedDuration } from '@/pages/dataCorrections/components/DiagnosticPopover';
+} from '@/features/readings/dataCorrections/types';
+import { formatElapsedDuration } from '@/features/readings/dataCorrections/components/DiagnosticPopover';
 import {
   computeRollingAverageRate,
   computeRollingAverageRateFromDeltas,

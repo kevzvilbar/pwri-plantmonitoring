@@ -44,7 +44,7 @@ export function EditValueModal({
         p_table:       row.source_table,
         p_row_id:      row.id,
         p_new_current: parsed,
-        p_admin_id:    user?.id ?? null,
+        p_admin_id:    user?.id ?? '',
         p_reason:      resolveReason(reason, customReason),
       });
       if (error) throw error;

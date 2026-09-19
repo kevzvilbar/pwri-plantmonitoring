@@ -17,8 +17,8 @@ import {
   setDupShowPrompt,
   clearDupShowPrompt,
   logReadingImport,
-} from '@/components/ReadingImportDialog/utils';
-import { DupConfirmDialog } from '@/components/ReadingImportDialog/DuplicateConfirmDialog';
+} from '../ReadingImportDialog/utils';
+import { DupConfirmDialog } from '../ReadingImportDialog/DuplicateConfirmDialog';
 import type { CsvImportDialogProps, CsvColumnDef } from './types';
 
 export function CsvImportDialog({

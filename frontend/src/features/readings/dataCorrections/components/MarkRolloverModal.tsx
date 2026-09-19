@@ -32,12 +32,12 @@ export function MarkRolloverModal({
     queryKey: ['well-rollover-max', row.entity_id],
     queryFn: async () => {
       if (!row.entity_id) return null;
-      const { data } = await supabase
-        .from('wells')
+      const { data } = await (supabase
+        .from('wells') as any)
         .select('meter_rollover_max')
         .eq('id', row.entity_id)
         .maybeSingle();
-      return data?.meter_rollover_max ?? null;
+      return (data as any)?.meter_rollover_max ?? null;
     },
     enabled: row.source_table === 'well_readings' && !!row.entity_id,
     staleTime: 60_000,

@@ -6,7 +6,7 @@
  * Components wrap them with React Query via the hooks in src/data/hooks/.
  */
 import { supabase } from '@/integrations/supabase/client';
-import type { ImportTypeConfig, ParsedRow } from '@/components/smart-import/registry';
+import type { ImportTypeConfig, ParsedRow } from '@/features/readings/components/smart-import/registry';
 
 export interface ImportBatchResult {
   inserted: number;

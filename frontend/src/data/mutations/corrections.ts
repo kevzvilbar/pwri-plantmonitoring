@@ -7,7 +7,7 @@
  */
 import { supabase } from '@/integrations/supabase/client';
 import type { Database } from '@/integrations/supabase/types';
-import type { SourceTable } from '@/pages/dataCorrections/types';
+import type { SourceTable } from '@/features/readings/dataCorrections/types';
 
 type CorrectionRequestInsert = Database['public']['Tables']['correction_requests']['Insert'];
 type CorrectionRequestUpdate = Database['public']['Tables']['correction_requests']['Update'];
