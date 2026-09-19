@@ -6,8 +6,8 @@ import { usePlants } from '@/hooks/usePlants';
 import { Card } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
-import { PlantPicker } from '@/components/costs/PlantPicker';
-import { CostsFiltersTab } from '@/components/costs/CostsFiltersTab';
+import { PlantPicker } from '@/features/costs/components/PlantPicker';
+import { CostsFiltersTab } from '@/features/costs/components/CostsFiltersTab';
 
 import { Building2 } from 'lucide-react';
 

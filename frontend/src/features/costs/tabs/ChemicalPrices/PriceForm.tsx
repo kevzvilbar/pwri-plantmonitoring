@@ -5,7 +5,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { DatePicker } from '@/components/ui/date-picker';
-import { PlantPicker } from '@/components/costs/PlantPicker';
+import { PlantPicker } from '@/features/costs/components/PlantPicker';
 import { CategoryToggle } from './CategoryToggle';
 
 const CIP_ONLY_CHEMICALS = ['Free Cl Reagent', 'Caustic Soda', 'HCl', 'SLS'];

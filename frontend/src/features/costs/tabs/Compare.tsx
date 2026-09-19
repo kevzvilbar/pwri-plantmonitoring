@@ -6,7 +6,7 @@ import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { StatusPill } from '@/components/StatusPill';
-import { PlantPicker } from '@/components/costs/PlantPicker';
+import { PlantPicker } from '@/features/costs/components/PlantPicker';
 import { DateRangePicker } from '@/components/ui/date-picker';
 import { fmtNum } from '@/lib/calculations';
 import { format, parseISO } from 'date-fns';

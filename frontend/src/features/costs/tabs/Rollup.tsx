@@ -12,7 +12,7 @@ import { AlertTriangle, FlaskConical, Zap, Droplet, Tag, Calendar, Download, Tre
 import { StatusPill } from '@/components/StatusPill';
 import { StatCard } from '@/components/dashboard/StatCard';
 import { ExportButton } from '@/components/ExportButton';
-import { PlantPicker } from '@/components/costs/PlantPicker';
+import { PlantPicker } from '@/features/costs/components/PlantPicker';
 import { DateRangePicker } from '@/components/ui/date-picker';
 import { useMonthlyOpex, opexVarianceTone } from '@/hooks/useOpexBudget';
 import { fmtNum } from '@/lib/calculations';

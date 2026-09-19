@@ -6,7 +6,7 @@ import { usePermission } from '@/hooks/usePermission';
 import { useAppStore } from '@/store/appStore';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { PlantPicker } from '@/components/costs/PlantPicker';
+import { PlantPicker } from '@/features/costs/components/PlantPicker';
 import { UploadCloud } from 'lucide-react';
 import { toast } from 'sonner';
 import { friendlyError } from '@/lib/supabaseErrors';

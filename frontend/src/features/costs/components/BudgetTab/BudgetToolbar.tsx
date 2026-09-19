@@ -1,4 +1,4 @@
-import { PlantPicker } from '@/components/costs/PlantPicker';
+import { PlantPicker } from '@/features/costs/components/PlantPicker';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 export function BudgetToolbar({ plantId, setPlantId, year, setYear }: {
