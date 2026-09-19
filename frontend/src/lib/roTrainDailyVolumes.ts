@@ -82,7 +82,7 @@ export function computeRoTrainDailyVolumes(
     }
 
     // Resolve permeate delta:
-    let perm: number | null =
+    const perm: number | null =
       r.permeate_meter_delta != null ? Math.max(0, +r.permeate_meter_delta)
       : r.permeate_meter != null && r.permeate_meter_prev != null ? Math.max(0, +r.permeate_meter - +r.permeate_meter_prev)
       : r.permeate_today_m3 != null ? Math.max(0, +r.permeate_today_m3)

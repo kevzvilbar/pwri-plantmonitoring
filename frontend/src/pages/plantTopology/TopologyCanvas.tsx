@@ -149,7 +149,9 @@ export default function PlantTopologyContent({
     setAnimatedFlow(v);
     try {
       localStorage.setItem('topo_animated_flow', String(v));
-    } catch {}
+    } catch {
+      /* ignore storage quota or disabled errors */
+    }
   }, []);
 
   const activePlant = useMemo(() => plants.find((p) => p.id === effectivePlantId), [plants, effectivePlantId]);

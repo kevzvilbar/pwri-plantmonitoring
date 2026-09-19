@@ -8,7 +8,7 @@ SET search_path = public, extensions;
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 CREATE EXTENSION IF NOT EXISTS pgtap;
 
-SELECT plan(20);
+SELECT plan(21);
 
 -- ── 1. Structural Checks ─────────────────────────────────────────────────────
 
@@ -326,10 +326,12 @@ SELECT ok(
 );
 
 -- Test 20: Security permissions check: EXECUTE on fn_backfill_missing_readings is revoked from anon
-SELECT hasnt_function_privilege(
-  'anon',
-  'public.fn_backfill_missing_readings(date, integer)',
-  'execute',
+SELECT ok(
+  NOT has_function_privilege(
+    'anon',
+    'public.fn_backfill_missing_readings(date, integer)',
+    'execute'
+  ),
   'fn_backfill_missing_readings execute privilege is revoked from anon'
 );
 

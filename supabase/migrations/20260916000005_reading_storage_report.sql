@@ -248,7 +248,9 @@ COMMENT ON FUNCTION public.fn_reading_storage_report(boolean) IS
 -- PUBLIC revoked, signed-in users with the in-function Manager/Admin guard, plus
 -- service_role for the scheduled/CI path. anon is deliberately not granted.
 REVOKE ALL ON FUNCTION public.fn_duplicate_index_report() FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.fn_duplicate_index_report() FROM anon;
 GRANT EXECUTE ON FUNCTION public.fn_duplicate_index_report() TO authenticated, service_role;
 
 REVOKE ALL ON FUNCTION public.fn_reading_storage_report(boolean) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.fn_reading_storage_report(boolean) FROM anon;
 GRANT EXECUTE ON FUNCTION public.fn_reading_storage_report(boolean) TO authenticated, service_role;

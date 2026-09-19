@@ -30,7 +30,7 @@ CREATE EXTENSION IF NOT EXISTS pgtap;
 -- security_invoker view, which is its own guarantee, tested by 000008's
 -- design and the policies on its source tables).
 SELECT plan(
-  (SELECT count(*)
+  (SELECT count(*)::integer
    FROM pg_class c
    JOIN pg_namespace n ON n.oid = c.relnamespace
    WHERE n.nspname = 'public'

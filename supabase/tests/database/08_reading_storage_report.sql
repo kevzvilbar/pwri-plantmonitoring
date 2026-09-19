@@ -84,6 +84,7 @@ SELECT ok(
      JOIN pg_namespace n ON n.oid = p.pronamespace
     WHERE n.nspname = 'public' AND p.proname = 'fn_reading_storage_report'),
   'fn_reading_storage_report is SECURITY DEFINER with search_path pinned'
+);
 
 -- ── 4. Report shape (called here as the migration/superuser role) ─────────────
 -- auth.uid() is NULL in this context, which is the documented service_role /
@@ -174,4 +175,3 @@ SELECT set_config('request.jwt.claims', NULL, true);
 
 SELECT * FROM finish();
 ROLLBACK;
-);
