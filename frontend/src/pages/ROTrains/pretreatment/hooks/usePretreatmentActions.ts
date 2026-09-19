@@ -227,6 +227,19 @@ export function usePretreatmentActions(rawOpts: PretreatmentActionsOptions) {
 
         if (allMissingItems.length > 0) {
           hasMissingRoEntries = true;
+
+          const missingOtherDetail = allMissingItems.filter((item) => {
+            const entry = opts.roEntryReasons?.[item.key];
+            return entry?.reason === 'Other' && !entry.custom?.trim();
+          });
+
+          if (missingOtherDetail.length > 0) {
+            opts.setRoReasonNeeded(true);
+            const labels = missingOtherDetail.map((f) => f.label).join(', ');
+            toast.error(`Please provide reason details for: ${labels} (selected "Other")`);
+            return;
+          }
+
           const unreasonedItems = allMissingItems.filter(
             (item) => !getUnitReasonText(opts.roEntryReasons?.[item.key]) && !opts.roIncompleteReason?.trim()
           );

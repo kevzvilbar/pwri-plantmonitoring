@@ -98,9 +98,17 @@ function TrainMeterPresenceSection({ plantId, canEdit }: {
   if (error) return <div className="pt-2 text-xs text-warn">Could not load trains</div>;
   if (trains.length === 0) return null;
 
-  const handleUpdate = async (trainId: string, trainLabel: string, patch: MeterPresencePatch) => {
+  const handleUpdate = async (train: ROTrain, trainLabel: string, patch: MeterPresencePatch) => {
+    const nextFeed = patch.has_feed_meter ?? train.has_feed_meter ?? true;
+    const nextPerm = patch.has_permeate_meter ?? train.has_permeate_meter ?? true;
+    const nextRej  = patch.has_reject_meter ?? train.has_reject_meter ?? true;
+    const count = [nextFeed, nextPerm, nextRej].filter(Boolean).length;
+    if (count < 2) {
+      toast.error('At least 2 water meters must be enabled for water balance calculation.');
+      return;
+    }
     try {
-      await updateTrainMeterPresence(trainId, patch);
+      await updateTrainMeterPresence(train.id, patch);
       toast.success(`${trainLabel} meter presence updated`);
       await queryClient.invalidateQueries({ queryKey: ['ro_trains', [plantId]] });
     } catch (err: any) {
@@ -178,21 +186,21 @@ function TrainMeterPresenceSection({ plantId, canEdit }: {
                   <TableCell className="font-semibold text-foreground whitespace-nowrap align-middle py-3">{trainLabel}</TableCell>
                   <MeterPresenceCell
                     checked={t.has_feed_meter}
-                    onChange={v => handleUpdate(t.id, trainLabel, { has_feed_meter: v })}
+                    onChange={v => handleUpdate(t, trainLabel, { has_feed_meter: v })}
                     canEdit={canEdit}
                     label="Feed"
                     trainLabel={trainLabel}
                   />
                   <MeterPresenceCell
                     checked={t.has_permeate_meter}
-                    onChange={v => handleUpdate(t.id, trainLabel, { has_permeate_meter: v })}
+                    onChange={v => handleUpdate(t, trainLabel, { has_permeate_meter: v })}
                     canEdit={canEdit}
                     label="Permeate"
                     trainLabel={trainLabel}
                   />
                   <MeterPresenceCell
                     checked={t.has_reject_meter}
-                    onChange={v => handleUpdate(t.id, trainLabel, { has_reject_meter: v })}
+                    onChange={v => handleUpdate(t, trainLabel, { has_reject_meter: v })}
                     canEdit={canEdit}
                     label="Reject"
                     trainLabel={trainLabel}
@@ -237,20 +245,20 @@ type MeterPresencePatch = Partial<{
   has_reject_meter: boolean;
 }>;
 
-type MeterPresenceMode = 'all' | 'feed_perm' | 'perm_rej' | 'perm_only';
+type MeterPresenceMode = 'all' | 'feed_perm' | 'perm_rej' | 'feed_rej';
 const METER_PRESENCE_MODE_LABEL: Record<MeterPresenceMode, string> = {
   all: 'All Meters',
   feed_perm: 'Feed + Permeate',
   perm_rej: 'Permeate + Reject',
-  perm_only: 'Permeate Only',
+  feed_rej: 'Feed + Reject',
 };
-const METER_PRESENCE_MODES: MeterPresenceMode[] = ['all', 'feed_perm', 'perm_rej', 'perm_only'];
+const METER_PRESENCE_MODES: MeterPresenceMode[] = ['all', 'feed_perm', 'perm_rej', 'feed_rej'];
 
 const METER_PRESENCE_META: Record<MeterPresenceMode, { activeClass: string }> = {
   all: { activeClass: 'data-[state=on]:bg-info-soft data-[state=on]:text-info data-[state=on]:border-info/40' },
   feed_perm: { activeClass: 'data-[state=on]:bg-info-soft data-[state=on]:text-info data-[state=on]:border-info/40' },
   perm_rej: { activeClass: 'data-[state=on]:bg-info-soft data-[state=on]:text-info data-[state=on]:border-info/40' },
-  perm_only: { activeClass: 'data-[state=on]:bg-muted data-[state=on]:text-foreground data-[state=on]:border-border' },
+  feed_rej: { activeClass: 'data-[state=on]:bg-info-soft data-[state=on]:text-info data-[state=on]:border-info/40' },
 };
 
 function meterPresenceModeToPatch(mode: MeterPresenceMode): MeterPresencePatch {
@@ -258,7 +266,7 @@ function meterPresenceModeToPatch(mode: MeterPresenceMode): MeterPresencePatch {
     case 'all': return { has_feed_meter: true, has_permeate_meter: true, has_reject_meter: true };
     case 'feed_perm': return { has_feed_meter: true, has_permeate_meter: true, has_reject_meter: false };
     case 'perm_rej': return { has_feed_meter: false, has_permeate_meter: true, has_reject_meter: true };
-    case 'perm_only': return { has_feed_meter: false, has_permeate_meter: true, has_reject_meter: false };
+    case 'feed_rej': return { has_feed_meter: true, has_permeate_meter: false, has_reject_meter: true };
   }
 }
 

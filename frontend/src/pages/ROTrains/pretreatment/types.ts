@@ -91,6 +91,6 @@ export const RO_FIELD_LABELS: Record<string, string> = {
 export function getUnitReasonText(entry?: { reason: string; custom: string } | string | null) {
   if (!entry) return '';
   if (typeof entry === 'string') return entry.trim();
-  if (entry.reason === 'Other') return entry.custom?.trim() || 'Other';
+  if (entry.reason === 'Other') return entry.custom?.trim() || '';
   return entry.reason?.trim() || '';
 }

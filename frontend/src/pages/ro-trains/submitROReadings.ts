@@ -203,31 +203,28 @@ export async function insertROTrainReadings(
       ].filter(Boolean) as { name: string; present: boolean }[];
 
       const missingStreams = configuredStreams.filter((s) => !s.present);
-      const minRequired = configuredStreams.length === 3 ? 2 : configuredStreams.length;
-      const filledCount = configuredStreams.length - missingStreams.length;
 
-      if (configuredStreams.length > 0 && filledCount < minRequired) {
+      if (missingStreams.length > 0) {
         errors.push(
-          `Skipped row at ${dt} (Train ${r.train_number ?? trainId}): Missing required water meter readings (${missingStreams.map((s) => s.name).join(', ')}). Need at least ${minRequired} stream(s) for mass balance.`,
+          `Skipped row at ${dt} (Train ${r.train_number ?? trainId}): Missing configured meter reading(s) (${missingStreams.map((s) => s.name).join(', ')}). All meters installed for this train are required.`,
         );
         skipped++;
         continue;
       }
     }
 
-    // Feed, permeate and reject meters are each required unless they're the
-    // one being inferred from the other two via mass balance. Only ONE of
-    // the three should ever be missing for inference to apply cleanly:
-    // 1. Reject is inferred:   Reject = Feed - Permeate
-    // 2. Feed is inferred:     Feed = Permeate + Reject
-    // 3. Permeate is inferred: Permeate = Feed - Reject
-    if (rejDelta === null && feedDelta !== null && permDelta !== null) {
+    // For trains configured with an unmetered stream (has_*_meter = false in Plant Config),
+    // calculate that stream's volume by water balance from the other two:
+    // 1. Reject unmetered:   Reject = Feed − Permeate
+    // 2. Feed unmetered:     Feed = Permeate + Reject
+    // 3. Permeate unmetered: Permeate = Feed − Reject
+    if ((!meta || !meta.hasRej) && rejDelta === null && feedDelta !== null && permDelta !== null) {
       rejDelta = Math.max(0, +(feedDelta - permDelta).toFixed(3));
     }
-    if (feedDelta === null && permDelta !== null && rejDelta !== null) {
+    if ((!meta || !meta.hasFeed) && feedDelta === null && permDelta !== null && rejDelta !== null) {
       feedDelta = +(permDelta + rejDelta).toFixed(3);
     }
-    if (permDelta === null && feedDelta !== null && rejDelta !== null) {
+    if ((!meta || !meta.hasPerm) && permDelta === null && feedDelta !== null && rejDelta !== null) {
       permDelta = Math.max(0, +(feedDelta - rejDelta).toFixed(3));
     }
 
