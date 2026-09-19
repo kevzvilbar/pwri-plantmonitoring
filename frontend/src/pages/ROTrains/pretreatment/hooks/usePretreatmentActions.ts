@@ -9,6 +9,7 @@ import { STANDARD_OFFLINE_REASONS, getUnitReasonText } from '../types';
 import { isWasActuallyRunningReason } from '@/lib/trainUptimeExemption';
 import { reportTrainRunningExemption } from '@/hooks/useTrainUptimeExemption';
 import { trainEmFlags } from '@/lib/trainEmMeter';
+import { missingRequiredMeters } from '@/lib/trainMeterPresence';
 
 export interface PretreatmentActionsOptions {
   plantId: string;
@@ -190,26 +191,39 @@ export function usePretreatmentActions(rawOpts: PretreatmentActionsOptions) {
         const emMinRequired = configuredEmFields.length === 3 ? 2 : configuredEmFields.length;
         const emIncomplete = configuredEmFields.length > 0 && emFilled < emMinRequired;
 
-        const configuredMeters = [
-          opts.showFeedMeter !== false ? { key: 'feed', label: 'Feed Water Meter', val: opts.roValues.feed_meter_curr } : undefined,
-          opts.showPermeateMeter !== false ? { key: 'perm', label: 'Permeate Water Meter', val: opts.roValues.permeate_meter_curr } : undefined,
-          opts.showRejectMeter !== false ? { key: 'rej', label: 'Reject Water Meter', val: opts.roValues.reject_meter_curr } : undefined,
-        ].filter(Boolean) as { key: string; label: string; val: string }[];
-        const filledMeters = configuredMeters.filter((m) => m.val !== '' && m.val != null);
-        // Any 2 of 3 streams are sufficient to auto-calculate the inferred 3rd meter:
-        // - Reject = Feed - Permeate
-        // - Feed = Permeate + Reject
-        // - Permeate = Feed - Reject
-        // Inferred meter is not required for input, but auto-calc is a must.
-        const minMetersRequired = configuredMeters.length === 3 ? 2 : configuredMeters.length;
-        const meterIncomplete = configuredMeters.length > 0 && filledMeters.length < minMetersRequired;
+        // Water meters: every meter configured for this train is REQUIRED.
+        // Only a meter marked "not installed" in Plant Config (hidden from the
+        // form) is auto-calculated from the other two by water balance:
+        //   Reject = Feed − Permeate, Feed = Permeate + Reject, Permeate = Feed − Reject
+        // This is a hard stop — unlike the fields above it can NOT be waived by
+        // typing an incomplete-reading reason, otherwise a configured meter
+        // (e.g. Reject) could be skipped and saved as blank.
+        const missingMeters = missingRequiredMeters(
+          {
+            feed: opts.showFeedMeter !== false,
+            permeate: opts.showPermeateMeter !== false,
+            reject: opts.showRejectMeter !== false,
+          },
+          {
+            feed: opts.roValues.feed_meter_curr,
+            permeate: opts.roValues.permeate_meter_curr,
+            reject: opts.roValues.reject_meter_curr,
+          },
+        );
+        if (missingMeters.length > 0) {
+          const labels = missingMeters.map((m) => `${m[0].toUpperCase()}${m.slice(1)} Water Meter`);
+          toast.error(
+            `Missing required meter reading: ${labels.join(', ')}. ` +
+            `Every meter configured for this train must be entered — only a meter marked as not installed is auto-calculated.`,
+          );
+          return;
+        }
 
-        if ((missingDirect.length > 0 || emIncomplete || meterIncomplete) && !opts.roIncompleteReason.trim()) {
+        if ((missingDirect.length > 0 || emIncomplete) && !opts.roIncompleteReason.trim()) {
           opts.setRoReasonNeeded(true);
           const parts = [
             ...missingDirect.map((f) => f.label),
             ...(emIncomplete ? ['Feed/Permeate/Reject Flow (need at least 2 of 3)'] : []),
-            ...(meterIncomplete ? [`Water Meter (need at least ${minMetersRequired} stream${minMetersRequired > 1 ? 's' : ''} to auto-calculate inferred meter)`] : []),
           ];
           toast.error(`Missing: ${parts.join(', ')}. Fill these in, or enter a reason below to proceed with missing values.`);
           return;

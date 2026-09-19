@@ -23,3 +23,21 @@ export function trainMeterFlags(
     reject: trainHasMeter(train, 'reject'),
   };
 }
+
+/**
+ * Water-meter streams the operator must still enter a reading for.
+ *
+ * A stream is either metered (its meter is configured for the train) → the
+ * reading is REQUIRED, or unmetered (has_*_meter = false in Plant Config) →
+ * its volume is auto-calculated from the other two via water balance and it
+ * is never asked for. There is deliberately no "leave any one blank and we'll
+ * infer it" shortcut: that made a configured meter skippable.
+ */
+export function missingRequiredMeters(
+  flags: { feed: boolean; permeate: boolean; reject: boolean },
+  readings: { feed?: string | null; permeate?: string | null; reject?: string | null },
+): MeterStream[] {
+  return (['feed', 'permeate', 'reject'] as const).filter(
+    (stream) => flags[stream] && String(readings[stream] ?? '').trim() === '',
+  );
+}

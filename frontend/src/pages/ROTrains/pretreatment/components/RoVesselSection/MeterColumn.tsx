@@ -82,7 +82,7 @@ export function MeterColumn({
           type="number"
           step="any"
           {...currentOnChange}
-          placeholder={inferred ? `Inferred from water balance (or enter reading)` : `Input current ${stream} reading${required ? ' (required)' : ' (optional)'}`}
+          placeholder={required ? `Input current ${stream} reading (required)` : inferred ? `Inferred from water balance (or enter reading)` : `Input current ${stream} reading (optional)`}
           className={inputClass}
           id={currentId}
         />

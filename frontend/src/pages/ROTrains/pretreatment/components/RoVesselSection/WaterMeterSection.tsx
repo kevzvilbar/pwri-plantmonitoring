@@ -87,16 +87,6 @@ export function WaterMeterSection({
   const activeMeters = [showFeedMeter, showPermeateMeter, showRejectMeter].filter(Boolean).length;
   const meterGridClass = activeMeters === 3 ? 'grid-cols-3' : activeMeters === 2 ? 'grid-cols-2' : 'grid-cols-1';
 
-  const hasFeedInput = feedMeterCurr.trim() !== '';
-  const hasPermInput = permMeterCurr.trim() !== '';
-  const hasRejInput  = rejMeterCurr.trim()  !== '';
-
-  // Entering any 2 streams allows the 3rd to be auto-inferred from water balance.
-  // Inferred meters are not required inputs.
-  const feedRequired = !feedInferred && !(hasPermInput && hasRejInput);
-  const permRequired = !permInferred && !(hasFeedInput && hasRejInput);
-  const rejRequired  = !rejInferred  && !(hasFeedInput && hasPermInput);
-
   return (
     <div className="space-y-1">
       <div className="flex items-center justify-between">
@@ -104,7 +94,7 @@ export function WaterMeterSection({
         <p className="text-2xs text-muted-foreground/60 italic">
           {(!showFeedMeter || !showPermeateMeter || !showRejectMeter)
             ? 'Unmetered streams auto-inferred from water balance'
-            : 'Enter any 2 streams — inferred stream auto-calculates (Reject = Feed − Perm, Feed = Perm + Rej, Perm = Feed − Rej)'}
+            : 'All meter readings are required'}
         </p>
       </div>
       <div className="flex items-center gap-2 mb-1">
@@ -131,7 +121,7 @@ export function WaterMeterSection({
           <MeterColumn
             label="Feed"
             stream="feed"
-            required={feedRequired}
+            required
             f={f}
             prevReading={prevFeedMeter}
             prevId="pretreat-previous-feed-meter-reading"
@@ -154,7 +144,7 @@ export function WaterMeterSection({
           <MeterColumn
             label="Permeate"
             stream="permeate"
-            required={permRequired}
+            required
             f={f}
             prevReading={prevPermMeter}
             prevId="pretreat-previous-permeate-meter-reading"
@@ -178,7 +168,7 @@ export function WaterMeterSection({
           <MeterColumn
             label="Reject"
             stream="reject"
-            required={rejRequired}
+            required
             f={f}
             prevReading={prevRejMeter}
             prevId="pretreat-previous-reject-meter-reading"
