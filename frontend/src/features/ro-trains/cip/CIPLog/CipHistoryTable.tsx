@@ -15,7 +15,7 @@ import { fmtNum } from '@/lib/calculations';
 import { Loader2, Pencil, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ExportButton } from '@/components/ExportButton';
-import { EDIT_WINDOW_HOURS, canEditEntry } from '../../../ro-trains';
+import { EDIT_WINDOW_HOURS, canEditEntry } from '@/features/ro-trains';
 import { CorrectionReasonField } from '@/components/CorrectionReasonField';
 import { resolveReason, isReasonComplete } from '@/lib/correctionReasons';
 

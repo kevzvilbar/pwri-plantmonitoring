@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { format } from 'date-fns';
 import { ExportButton } from '@/components/ExportButton';
 import { Upload, Loader2 } from 'lucide-react';
-import { ImportROReadingsDialog } from '../../ro-trains';
+import { ImportROReadingsDialog } from '@/features/ro-trains';
 
 import { DowntimeResolutionCard, OfflineDetailsPanel, OfflineLockedCard } from './components/OfflineTrainBanner';
 import { PlantTrainSelector } from './components/PlantTrainSelector';

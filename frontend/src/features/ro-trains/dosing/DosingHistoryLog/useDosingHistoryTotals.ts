@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { DOSING_KEYS } from '../../../ro-trains/constants';
+import { DOSING_KEYS } from '@/features/ro-trains/constants';
 
 export function useDosingHistoryTotals(logs: any[] | undefined, prices: Record<string, number> | undefined) {
   return useMemo(() => {

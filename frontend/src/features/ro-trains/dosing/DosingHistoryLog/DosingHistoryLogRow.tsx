@@ -9,8 +9,8 @@ import { Loader2, Pencil, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { fmtNum } from '@/lib/calculations';
-import { DOSING_KEYS } from '../../../ro-trains/constants';
-import { canEditEntry } from '../../../ro-trains/helpers';
+import { DOSING_KEYS } from '@/features/ro-trains/constants';
+import { canEditEntry } from '@/features/ro-trains/helpers';
 import { useDosingHistoryEdit } from './useDosingHistoryEdit';
 import { useDosingHistoryDelete } from './useDosingHistoryDelete';
 

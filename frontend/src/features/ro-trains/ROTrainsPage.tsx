@@ -8,7 +8,7 @@ import { usePlants } from '@/hooks/usePlants';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { type Database } from '@/integrations/supabase/types';
-import { deriveTrainStatus, ROTrainHero } from '../ro-trains';
+import { deriveTrainStatus, ROTrainHero } from './index';
 import { loadThresholds } from '@/pages/Compliance';
 
 import { CIPLog } from './cip/CIPLog';

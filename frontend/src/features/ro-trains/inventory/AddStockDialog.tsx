@@ -11,7 +11,7 @@ import { DatePicker } from '@/components/ui/date-picker';
 import { toast } from 'sonner';
 import { friendlyError } from '@/lib/supabaseErrors';
 import { format } from 'date-fns';
-import { KNOWN_CHEMICALS, CHEM_UNITS } from '../../ro-trains';
+import { KNOWN_CHEMICALS, CHEM_UNITS } from '@/features/ro-trains';
 
 import { ChemPlantPick } from '../dosing/ChemPlantPick';
 

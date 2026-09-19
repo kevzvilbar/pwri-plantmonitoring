@@ -2,7 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { usePlants } from '@/hooks/usePlants';
 import { format } from 'date-fns';
-import { DOSING_KEYS } from '../../../ro-trains/constants';
+import { DOSING_KEYS } from '@/features/ro-trains/constants';
 
 export function useDosingHistoryQueries(filterPlantId: string, from: string, to: string) {
   const qc = useQueryClient();

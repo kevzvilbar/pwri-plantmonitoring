@@ -3,10 +3,10 @@ import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { friendlyError } from '@/lib/supabaseErrors';
-import { canEditEntry, diffFields, logReadingEdit } from '../../../ro-trains';
+import { canEditEntry, diffFields, logReadingEdit } from '@/features/ro-trains';
 import { resolveReason, isReasonComplete } from '@/lib/correctionReasons';
 import { format } from 'date-fns';
-import { CIP_BUILTIN_DB_MAP } from '../../../ro-trains';
+import { CIP_BUILTIN_DB_MAP } from '@/features/ro-trains';
 
 export function useCipEdit(cipChemicals: any[], isManager: boolean, activeOperator: any, qc: ReturnType<typeof useQueryClient>, plantId: string, user: any) {
   const [editId, setEditId] = useState<string | null>(null);

@@ -4,7 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useAppStore } from '@/store/appStore';
 import { usePlants } from '@/hooks/usePlants';
-import { usePlantMeterConfig } from '../../plants/shared';
+import { usePlantMeterConfig } from '@/pages/plants/shared';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -15,7 +15,7 @@ import { toast } from 'sonner';
 import { friendlyError } from '@/lib/supabaseErrors';
 import { format } from 'date-fns';
 import { Upload, Building2, Droplets, FlaskConical } from 'lucide-react';
-import { KNOWN_CHEMICALS, DOSING_KEYS } from '../../ro-trains';
+import { KNOWN_CHEMICALS, DOSING_KEYS } from '@/features/ro-trains';
 
 import { ChemCard } from './ChemCard';
 import { ChemPlantPick } from './ChemPlantPick';

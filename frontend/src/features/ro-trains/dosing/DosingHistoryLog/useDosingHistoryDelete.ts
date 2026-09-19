@@ -3,8 +3,8 @@ import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
-import { canEditEntry } from '../../../ro-trains/helpers';
-import { logReadingEdit } from '../../../ro-trains/helpers';
+import { canEditEntry } from '@/features/ro-trains/helpers';
+import { logReadingEdit } from '@/features/ro-trains/helpers';
 import { friendlyError } from '@/lib/supabaseErrors';
 
 export function useDosingHistoryDelete() {

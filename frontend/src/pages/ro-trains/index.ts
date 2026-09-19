@@ -1,22 +1,7 @@
 /**
- * ro-trains/index.ts
+ * pages/ro-trains/index.ts
  *
- * Public surface of the ro-trains sub-module.
- * Extracted from ROTrains.tsx (§4 item 2 decomposition).
- *
- * ROTrains.tsx remains the orchestrator for PretreatmentAndROLog and
- * CIPVolumetric (still to be extracted in a future pass).
+ * Backward-compatibility re-export pointing to features/ro-trains.
  */
-export * from './constants';
-export * from './csv';
-export * from './pretreat-csv';
-export * from './helpers';
-export * from './submitROReadings';
-export * from './submitPretreatReadings';
-export { ImportROReadingsDialog }       from './ImportROReadingsDialog';
-export { ImportPretreatReadingsDialog } from './ImportPretreatReadingsDialog';
-export { TrainCard }                    from './TrainCard';
-export { TrainLogModal }                from './TrainLogModal';
-export { EditRoReadingDialog }          from './EditRoReadingDialog';
-export { EditPretreatReadingDialog }    from './EditPretreatReadingDialog';
-export { ROTrainHero }                  from '@/components/dashboard/ROTrainHero';
+export * from '@/features/ro-trains';
+export { default } from '@/features/ro-trains';

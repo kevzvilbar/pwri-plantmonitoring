@@ -3,7 +3,7 @@ import { Label } from '@/components/ui/label';
 import { DateTimePicker } from '@/components/ui/date-picker';
 import { Card } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
-import { CIP_CHEM_ACCENTS, CIP_CUSTOM_ACCENT, CIP_BUILTIN_DB_MAP } from '../../../ro-trains';
+import { CIP_CHEM_ACCENTS, CIP_CUSTOM_ACCENT, CIP_BUILTIN_DB_MAP } from '@/features/ro-trains';
 
 export function DosingAndTimeCard({
   cipChemicals,

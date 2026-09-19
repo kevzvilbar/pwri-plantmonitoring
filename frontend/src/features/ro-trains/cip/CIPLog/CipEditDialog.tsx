@@ -12,7 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Loader2, Pencil } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { CIP_CHEM_ACCENTS, CIP_CUSTOM_ACCENT, CIP_BUILTIN_DB_MAP } from '../../../ro-trains';
+import { CIP_CHEM_ACCENTS, CIP_CUSTOM_ACCENT, CIP_BUILTIN_DB_MAP } from '@/features/ro-trains';
 import { CorrectionReasonField } from '@/components/CorrectionReasonField';
 
 export function CipEditDialog({
