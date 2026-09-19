@@ -46,6 +46,10 @@ Required environment variables (Vite build-time):
 | `VITE_SUPABASE_PUBLISHABLE_KEY` | Supabase anon/public key |
 | `VITE_SUPABASE_PROJECT_ID` | Supabase project ref (used for a couple of dashboard deep-links) |
 
+`frontend/.env.example` is the canonical, complete list — including
+`VITE_VAPID_PUBLIC_KEY` (required for Web Push notifications) and the optional
+Sentry / logging variables. Copy it to `frontend/.env.local` and fill in values.
+
 ### Database
 
 Apply the SQL files in `supabase/migrations/` in filename (timestamp) order
