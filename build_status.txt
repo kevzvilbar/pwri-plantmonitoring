@@ -1,3 +1,0 @@
-status=0
-signal=null
-exit=0
