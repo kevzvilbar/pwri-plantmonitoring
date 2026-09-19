@@ -32,7 +32,7 @@ import { friendlyError } from '@/lib/supabaseErrors';
 import { format } from 'date-fns';
 
 import { EntityHistoryChart, MeterDetailButton } from '../charts/EntityHistoryChart/index';
-import { usePlantMeterConfig } from '../shared';
+import { usePlantMeterConfig } from '../../shared';
 import { ReasonField, ReplaceMeterDialog } from '../locators/LocatorDialogs';
 import { ProductMetersStat } from './sections/ProductMetersStat';
 import { AssignLocatorsDialog } from './sections/AssignLocatorsDialog';

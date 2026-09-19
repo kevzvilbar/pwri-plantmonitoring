@@ -1,6 +1,6 @@
 import { Switch } from '@/components/ui/switch';
 import { FlaskConical } from 'lucide-react';
-import { PLANT_CHEMICALS } from '../../shared';
+import { PLANT_CHEMICALS } from '../../../shared';
 
 export function ChemicalsSection({
   cfg,

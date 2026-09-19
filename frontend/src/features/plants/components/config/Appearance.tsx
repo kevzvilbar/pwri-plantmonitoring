@@ -35,7 +35,7 @@ import { fmtNum } from '@/lib/calculations';
 import { toast } from 'sonner';
 import { friendlyError } from '@/lib/supabaseErrors';
 import { format } from 'date-fns';
-import { GridPylonIcon } from '../shared';
+import { GridPylonIcon } from '../../shared';
 // ─── BackwashModeCard ─────────────────────────────────────────────────────────
 export function BackwashModeCard({ plant }: { plant: any }) {
   const qc = useQueryClient();

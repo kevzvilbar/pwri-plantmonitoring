@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { parseCsv, downloadTemplate, CsvPreviewTable } from '../../shared';
+import { parseCsv, downloadTemplate, CsvPreviewTable } from '../../../shared';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';

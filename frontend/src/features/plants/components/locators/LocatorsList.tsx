@@ -37,7 +37,7 @@ import {
   ReasonField,
 } from './LocatorDialogs';
 import { LocatorCard, LocatorDetail, DeleteDialogs } from './LocatorsList/index';
-import { CollapsibleSection, GridPylonIcon, logStatusChange } from '../shared';
+import { CollapsibleSection, GridPylonIcon, logStatusChange } from '../../shared';
 import { ReasonDialog } from '@/components/ReasonDialog';
 import type { ReasonCategory, LockReasonCategory } from '@/lib/reasonCodes';
 import { LOCK_REASON_CATEGORIES } from '@/lib/reasonCodes';

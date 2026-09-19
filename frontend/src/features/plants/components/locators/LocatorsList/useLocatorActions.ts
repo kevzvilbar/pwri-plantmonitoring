@@ -3,7 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { friendlyError } from '@/lib/supabaseErrors';
-import { logStatusChange } from '../../shared';
+import { logStatusChange } from '../../../shared';
 import type { LockReasonCategory } from '@/lib/reasonCodes';
 import { LOCK_REASON_CATEGORIES } from '@/lib/reasonCodes';
 

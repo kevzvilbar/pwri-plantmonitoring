@@ -5,7 +5,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { deltaCache } from '@/lib/deltaCache';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
-import { recalculateTrainDeltas } from '../../../ro-trains/helpers';
+import { recalculateTrainDeltas } from '@/features/ro-trains/helpers';
 
 export const PAGE_SIZE = 20;
 

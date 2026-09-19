@@ -7,7 +7,7 @@ import { Lamp } from '@/components/ui/Lamp';
 import { fmtNum } from '@/lib/format';
 import { useQuery } from '@tanstack/react-query';
 import { loadThresholds } from '@/pages/Compliance';
-import { ProductMetersStat } from '../config/ProductMeters';
+import { ProductMetersStat } from './config/ProductMeters';
 
 interface PlantHeroBannerProps {
   plant: any;

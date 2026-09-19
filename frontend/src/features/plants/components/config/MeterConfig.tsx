@@ -34,7 +34,7 @@ import { format } from 'date-fns';
 import {
   usePlantMeterConfig, PlantMeterConfig, CollapsibleSection, GridPylonIcon,
   DEFAULT_METER_CONFIG, PLANT_CHEMICALS,
-} from '../shared';
+} from '../../shared';
 import { BackwashModeCard } from './Appearance';
 import { RoTrainsMeterSection } from './sections/RoTrainsMeterSection';
 import { WellsMeterSection } from './sections/WellsMeterSection';

@@ -1,12 +1,12 @@
 import type { ReactNode } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { PretreatAFMChart } from '@/pages/plants/trains/PretreatAFMChart';
-import { PretreatBoosterChart } from '@/pages/plants/trains/PretreatBoosterChart';
-import { PretreatCFChart } from '@/pages/plants/trains/PretreatCFChart';
-import { PretreatHPPChart } from '@/pages/plants/trains/PretreatHPPChart';
-import { TrainRODetailCharts } from '@/pages/plants/trains/TrainRODetailCharts';
-import { MeterDetailButton } from '@/pages/plants/charts/EntityHistoryChart';
+import { PretreatAFMChart } from '../../PretreatAFMChart';
+import { PretreatBoosterChart } from '../../PretreatBoosterChart';
+import { PretreatCFChart } from '../../PretreatCFChart';
+import { PretreatHPPChart } from '../../PretreatHPPChart';
+import { TrainRODetailCharts } from '../../TrainRODetailCharts';
+import { MeterDetailButton } from '../../../charts/EntityHistoryChart';
 import { ReplaceTrainMeterDialog } from '@/pages/ro-trains/ReplaceTrainMeterDialog';
 import {
   ROTrainIcon, ChangeMeterIcon, MeterOdometerIcon, PressureGaugeIcon,
