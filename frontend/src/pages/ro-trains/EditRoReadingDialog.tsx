@@ -10,6 +10,14 @@
  * and awaiting review in Data Corrections — otherwise, use "Request
  * correction" instead. Unlike every other reading type in the app, there's
  * no time-window cutoff here: Kevz asked for it removed specifically for
+import { canEditEntry, diffFields, logReadingEdit, recalculateTrainDeltas } from './helpers';
+import { getHourBucket, isOfflineRORecord } from '@/lib/hourlyReadingGuard';
+import {
+  trainMeterFlags,
+  trainEmFlags,
+  missingMeasuredStreams,
+  countMeasuredStreams,
+} from '@/lib/trainMeterPresence';
  * RO Train / Pretreatment readings, offset by the existing audit trail
  * (logReadingEdit below, plus the required reason on every edit).
  */
@@ -107,6 +115,60 @@ export function EditRoReadingDialog({ row, trainId, onClose, onSaved }: Props) {
     }
 
     const num = (k: string) => (vals[k] !== '' && vals[k] !== undefined ? +vals[k] : null);
+
+    // ── Water-meter presence guard (mirrors usePretreatmentActions submit) ────
+    // An edit must never blank a stream below the absolute 2-of-3 water-balance
+    // rule, and configured meters must stay measured. Without this the dialog
+    // happily wrote null into feed_meter/reject_meter (or zeroed the EM flows)
+    // and re-created exactly the recovery=100% rows the save path blocks.
+    //
+    // Rules (identical semantics to the create form):
+    //   ≥ 2 unmeasured configured streams → hard block.
+    //   < 2 measured streams overall      → hard block (2-of-3 water balance).
+    //   1 unmeasured configured stream    → allowed — the edit reason (required
+    //                                       above) documents the inference.
+    const { data: trainCfg, error: trainCfgError } = await supabase
+      .from('ro_trains')
+      .select('has_feed_meter, has_permeate_meter, has_reject_meter, uses_em_meter, em_all_streams, em_stream_feed, em_stream_permeate, em_stream_reject')
+      .eq('id', trainId)
+      .single();
+    if (trainCfgError) { setSaving(false); toast.error(friendlyError(trainCfgError)); return; }
+
+    const str = (k: string) => (vals[k] !== '' && vals[k] !== undefined ? vals[k] : '');
+    const meterFlags = trainMeterFlags(trainCfg);
+    const emFlagsCfg = trainEmFlags(trainCfg);
+    const meterReadings = {
+      feed:     str('feed_meter'),
+      permeate: str('permeate_meter'),
+      reject:   str('reject_meter'),
+    };
+    const emReadings = {
+      feed:     str('feed_flow'),
+      permeate: str('permeate_flow'),
+      reject:   str('reject_flow'),
+    };
+
+    const unmeasuredStreams = missingMeasuredStreams(meterFlags, emFlagsCfg, meterReadings, emReadings);
+    if (unmeasuredStreams.length >= 2) {
+      setSaving(false);
+      toast.error(
+        `${unmeasuredStreams.map((s) => s[0].toUpperCase() + s.slice(1)).join(' and ')}: two or more configured water flow streams would have no reading after this edit — ` +
+        `all configured meters are required (at most one may be inferred). Cannot save.`,
+        { duration: 8000 },
+      );
+      return;
+    }
+    const measuredCount = countMeasuredStreams(meterFlags, emFlagsCfg, meterReadings, emReadings);
+    if (measuredCount < 2) {
+      setSaving(false);
+      toast.error(
+        `At least 2 of the 3 water flow streams (Feed, Permeate, Reject) must remain measured ` +
+        `(meter reading, or EM flow above 0) for water balance. Currently only ${measuredCount} is measured. Cannot save.`,
+        { duration: 8000 },
+      );
+      return;
+    }
+    // ──────────────────────────────────────────────────────────────────────────
 
     const payload: Database['public']['Tables']['ro_train_readings']['Update'] = {
       reading_datetime: new Date(dt).toISOString(),
