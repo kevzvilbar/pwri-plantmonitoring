@@ -20,8 +20,6 @@
 --   Run PREVIEW first to verify match count.
 --   Run BACKUP before applying.
 --   Run on STAGING before production.
---   The norm_status = 'pending_review' line floods Data Corrections with 959
---   rows. Remove / comment it out if you do not want that.
 --
 -- ─────────────────────────────────────────────────────────────────────────────
 -- STEP 1: PREVIEW  (read-only, verify count and distribution)
@@ -80,9 +78,7 @@ SET
   incomplete_reason = COALESCE(
     incomplete_reason,
     'Historical: reject EM flow typed as 0 — reject and inferred feed cleared for review'
-  ),
-  -- REMOVE THE LINE BELOW if you do not want 959 pending_review flags:
-  norm_status       = CASE WHEN norm_status = 'normal' THEN 'pending_review' ELSE norm_status END
+  )
 WHERE reject_flow = 0
   AND feed_flow IS NOT NULL
   AND feed_flow > 0
@@ -101,3 +97,4 @@ WHERE reject_flow = 0
   AND recovery_pct BETWEEN 99 AND 101
   AND reject_meter IS NULL;
 -- Expected: 0
+
