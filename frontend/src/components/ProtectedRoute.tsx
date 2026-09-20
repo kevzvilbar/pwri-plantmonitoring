@@ -1,4 +1,4 @@
-import { ReactNode, useEffect, useState } from 'react';
+import { ReactNode, useEffect } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { OPERATOR_DESIGNATION } from '@/components/DesignationCombobox';
@@ -21,15 +21,24 @@ export const OPERATOR_ALLOWED_PATHS = [
   '/alerts',  // Added: Operators receive alarms and need to triage them
 ];
 
+// The toast is a side effect, so it lives in an effect, never in render.
+// (Firing it during render, together with a setState, re-rendered until React
+// threw "Too many re-renders" and posted ~100 toasts.) The fixed `id` makes
+// sonner dedupe it if StrictMode runs the effect twice.
+function AccessDenied() {
+  useEffect(() => {
+    toast.error('Access restricted', {
+      id: 'access-denied',
+      description: 'You do not have permission to view this page.',
+      duration: 3000,
+    });
+  }, []);
+  return <Navigate to="/" replace />;
+}
+
 export function ProtectedRoute({ children }: { children: ReactNode }) {
   const { user, loading, profile, roles } = useAuth();
   const loc = useLocation();
-  const [showAccessDenied, setShowAccessDenied] = useState(false);
-
-  useEffect(() => {
-    // Reset the flag when location changes
-    setShowAccessDenied(false);
-  }, [loc.pathname]);
 
   if (loading) {
     return <AppLoading className="min-h-screen text-muted-foreground" />;
@@ -57,20 +66,8 @@ export function ProtectedRoute({ children }: { children: ReactNode }) {
     const allowed = OPERATOR_ALLOWED_PATHS.some(
       (p) => p === '/' ? loc.pathname === '/' : loc.pathname.startsWith(p),
     );
-    if (!allowed) {
-      // Show a toast message before redirecting — never silently redirect
-      toast.error('Access restricted', {
-        description: 'You do not have permission to view this page.',
-        duration: 3000,
-      });
-      setShowAccessDenied(true);
-      return <Navigate to="/" replace />;
-    }
-  }
-
-  // If we just showed an access denied message, don't render children yet
-  if (showAccessDenied) {
-    return null;
+    // Never redirect silently: AccessDenied toasts, then sends them to /.
+    if (!allowed) return <AccessDenied />;
   }
 
   return <>{children}</>;
