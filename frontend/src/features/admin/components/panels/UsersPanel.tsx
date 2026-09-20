@@ -22,6 +22,9 @@ import { type SharedTileProps } from './UsersPanel/types';
 import { CreateUserDialog } from './UsersPanel/CreateUserDialog';
 import { ChangePasswordDialog } from './UsersPanel/ChangePasswordDialog';
 import { CardRoleSection, TableRoleSection } from './UsersPanel/UserSections';
+import { PendingApprovals } from './UsersPanel/PendingApprovals';
+import { PENDING_APPROVALS_COUNT_KEY } from '@/hooks/usePendingApprovalsCount';
+import type { StaffMember } from '@/features/admin/employees/types';
 
 export function UsersPanel() {
   const qc = useQueryClient();
@@ -60,6 +63,7 @@ export function UsersPanel() {
     qc.invalidateQueries({ queryKey: ['admin-users'] });
     qc.invalidateQueries({ queryKey: ['admin-user-roles'] });
     qc.invalidateQueries({ queryKey: ['staff'] });
+    qc.invalidateQueries({ queryKey: PENDING_APPROVALS_COUNT_KEY });
   };
 
   const updateDesignation = async (uid: string, designation: string) => {
@@ -81,10 +85,11 @@ export function UsersPanel() {
     [staff],
   );
 
-  const pendingCount = useMemo(
-    () => ((staff ?? []) as any[]).filter((s) => s.confirmed === false || s.status === 'Pending').length,
+  const pendingUsers = useMemo(
+    () => ((staff ?? []) as any[]).filter((s) => s.confirmed === false || s.status === 'Pending'),
     [staff],
   );
+  const pendingCount = pendingUsers.length;
 
   const filtered = useMemo(() => {
     let list = (staff ?? []) as any[];
@@ -125,6 +130,8 @@ export function UsersPanel() {
 
   return (
     <div className="space-y-5">
+      <PendingApprovals pending={pendingUsers as StaffMember[]} onApprove={approveUser} />
+
       <div className="flex gap-2 items-center">
         <div className="relative flex-1">
           <Search className="h-3.5 w-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />

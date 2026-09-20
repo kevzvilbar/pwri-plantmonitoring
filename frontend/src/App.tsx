@@ -29,6 +29,7 @@ const Compliance = lazy(() => import("./pages/Compliance"));
 const Exports = lazy(() => import("./pages/Exports"));
 const Admin = lazy(() => import("./pages/Admin"));
 const Profile = lazy(() => import("./pages/Profile"));
+const Help = lazy(() => import("./pages/Help"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 const PlantTopology = lazy(() => import("./pages/PlantTopology"));
 const DataAnalysis  = lazy(() => import("./pages/DataAnalysis"));
@@ -146,6 +147,7 @@ const App = () => (
                   <Route path="/alerts" element={<Alerts />} />
                   <Route path="/admin" element={<Admin />} />
                   <Route path="/profile" element={<Profile />} />
+                  <Route path="/help" element={<Help />} />
                   {/* Legacy redirect shim — Chemical Dosing moved to RO Trains */}
                   <Route path="/chemicals" element={<Chemicals />} />
                 </Route>

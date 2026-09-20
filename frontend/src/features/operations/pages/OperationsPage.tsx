@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useMemo } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -16,17 +16,13 @@ import { ProductForm }        from '../components/product/ProductSection';
 import { PowerForm }          from '../components/power/PowerSection';
 import { PageHeader }         from '@/components/PageHeader';
 import { CanLink } from '@/components/CanLink';
+import { useUrlTab } from '@/hooks/useUrlTab';
 import { useCan } from '@/hooks/usePermission';
 import { cn } from '@/lib/utils';
 
-const TAB_ALIASES: Record<string, string> = {
-  locator: 'locator', locators: 'locator',
-  well: 'well', wells: 'well',
-  product: 'product', production: 'product',
-  blending: 'blending', bypass: 'blending',
-  power: 'power',
-};
-const VALID_TABS = new Set(['locator', 'well', 'product', 'blending', 'power']);
+const OPERATIONS_TABS = ['locator', 'well', 'product', 'blending', 'power'] as const;
+// Older links use the plural or alternate names.
+const OPERATIONS_TAB_ALIASES = { locators: 'locator', wells: 'well', production: 'product', bypass: 'blending' } as const;
 
 import { getCurrentShift } from '@/lib/shifts';
 
@@ -35,27 +31,14 @@ export default function Operations() {
   const can = useCan();
   // P2-1: the ribbon hides entirely when the user can open none of its links.
   const showRibbon = can('data_corrections') || can('manager_scorecard') || can('network_topology');
-  const [searchParams, setSearchParams] = useSearchParams();
-  const urlTab = TAB_ALIASES[(searchParams.get('tab') || '').toLowerCase()] ?? 'locator';
-  const [tab, setTab] = useState<string>(urlTab);
+  const [searchParams] = useSearchParams();  // ?highlight= is read by the forms below
+  const [tab, handleTabChange] = useUrlTab('tab', OPERATIONS_TABS, 'locator', { aliases: OPERATIONS_TAB_ALIASES });
 
   // P5-2: the active plant comes from the global picker. There is no longer a
   // `plants?.[0]` fallback: with "All plants" and several to choose from the
   // tab counts stay blank until a plant is chosen, instead of quietly showing
   // the first plant's numbers above forms that show nothing.
   const { plantId: activePlantId } = useActivePlant();
-
-  useEffect(() => {
-    if (urlTab !== tab) setTab(urlTab);
-  }, [urlTab, tab]);
-
-  const handleTabChange = (next: string) => {
-    if (!VALID_TABS.has(next)) return;
-    setTab(next);
-    const sp = new URLSearchParams(searchParams);
-    sp.set('tab', next);
-    setSearchParams(sp, { replace: true });
-  };
 
   const shiftInfo = useMemo(() => getCurrentShift(), []);
 

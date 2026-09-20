@@ -38,8 +38,9 @@ export interface NavItem {
   /** Slot in the mobile bottom bar, left to right. Items without a priority
    *  are listed in the "More" sheet. */
   readonly priority?: number;
-  /** Live indicator rendered next to the item (see NavItemBadge). */
-  readonly badge?: 'alerts';
+  /** Live indicator rendered next to the item (see NavItemBadge). `approvals`
+   *  is the count of accounts waiting for an Admin; only Admins see it. */
+  readonly badge?: 'alerts' | 'approvals';
 }
 
 export interface NavGroup {
@@ -100,7 +101,7 @@ const NAV_GROUPS: readonly NavGroup[] = [
       { id: 'employees', modules: ['employees'], label: MODULE_LABELS.employees, route: '/employees', icon: Users },
       // Anyone who can view any admin tab gets the link; AdminPage gates each
       // tab itself (Managers land on Plants, not Users).
-      { id: 'admin', modules: ['admin_users', 'admin_plants', 'admin_audit'], label: ADMIN_CONSOLE_LABEL, route: '/admin', icon: ShieldAlert },
+      { id: 'admin', modules: ['admin_users', 'admin_plants', 'admin_audit'], label: ADMIN_CONSOLE_LABEL, route: '/admin', icon: ShieldAlert, badge: 'approvals' },
     ],
   },
 ];

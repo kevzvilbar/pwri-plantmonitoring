@@ -1,15 +1,16 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { usePlants } from '@/hooks/usePlants';
 import { useAuth } from '@/hooks/useAuth';
+import { useUrlTab } from '@/hooks/useUrlTab';
 import { toast } from 'sonner';
 import { friendlyError } from '@/lib/supabaseErrors';
 import { logPlantEdit } from '../shared';
 
 type PlantTab = 'locators' | 'wells' | 'product' | 'trains' | 'power' | 'configuration';
-const VALID_PLANT_TABS = new Set<PlantTab>(['locators', 'wells', 'product', 'trains', 'power', 'configuration']);
+const PLANT_TABS = ['locators', 'wells', 'product', 'trains', 'power', 'configuration'] as const satisfies readonly PlantTab[];
 
 /** `wellId` is the `:wellId` of `/plants/:id/wells/:wellId` (P5-3), when that route is open. */
 export function usePlantDetail(plantId: string, wellId: string | null = null) {
@@ -19,13 +20,9 @@ export function usePlantDetail(plantId: string, wellId: string | null = null) {
   const qc = useQueryClient();
   const plant = plants?.find((p: any) => p.id === plantId);
 
-  const [searchParams, setSearchParams] = useSearchParams();
-  const urlTab = searchParams.get('tab') as PlantTab | null;
-  const [tab, setTabState] = useState<PlantTab>(urlTab && VALID_PLANT_TABS.has(urlTab) ? urlTab : 'locators');
-  useEffect(() => {
-    if (urlTab && VALID_PLANT_TABS.has(urlTab) && urlTab !== tab) setTabState(urlTab);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [urlTab]);
+  const [searchParams] = useSearchParams();
+  // Picking a tab by hand also drops ?highlight=, which named a row on the tab being left.
+  const [urlTab, setUrlTab] = useUrlTab('tab', PLANT_TABS, 'locators', { clearOnChange: ['highlight'] });
   const setTab = (next: PlantTab) => {
     // A well page is a child of the Wells tab. Picking any tab leaves it: go to
     // the plant with that tab, rather than rewriting a query string on a URL
@@ -34,11 +31,7 @@ export function usePlantDetail(plantId: string, wellId: string | null = null) {
       navigate(`/plants/${plantId}?tab=${next}`);
       return;
     }
-    setTabState(next);
-    const sp = new URLSearchParams(searchParams);
-    sp.set('tab', next);
-    sp.delete('highlight');
-    setSearchParams(sp, { replace: true });
+    setUrlTab(next);
   };
   const highlightId = searchParams.get('highlight');
 
@@ -142,7 +135,7 @@ export function usePlantDetail(plantId: string, wellId: string | null = null) {
     plant,
     trainCounts,
     // On a well route the Wells tab is active by definition.
-    tab: wellId ? ('wells' as PlantTab) : tab,
+    tab: wellId ? ('wells' as PlantTab) : urlTab,
     setTab,
     highlightId,
     editingInfo,

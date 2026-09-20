@@ -1,5 +1,4 @@
-import { useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useUrlTab } from '@/hooks/useUrlTab';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { LayoutGrid, Recycle } from 'lucide-react';
 import { ROTrainIcon, ChemicalsIcon } from '@/components/icons/water-icons';
@@ -19,12 +18,12 @@ import { PretreatmentAndROLog } from './pretreatment/PretreatmentAndROLog';
 // Mirrors the ?tab= pattern already used by operations/index.tsx, so alerts
 // (Dashboard.tsx) and notifications can deep-link straight to a tab instead
 // of always landing on Overview.
-const VALID_TABS = new Set(['overview', 'pretreat-ro', 'cip', 'chemical-dosing']);
+const RO_TRAIN_TABS = ['overview', 'pretreat-ro', 'cip', 'chemical-dosing'] as const;
 
 export default function ROTrains() {
-  const [searchParams, setSearchParams] = useSearchParams();
-  const urlTab = VALID_TABS.has(searchParams.get('tab') || '') ? searchParams.get('tab')! : 'overview';
-  const [tab, setTab] = useState<string>(urlTab);
+  // A tab picked by hand should not keep the ?train= deep link of an earlier
+  // alert click: confusing once the operator has moved on to another train.
+  const [tab, handleTabChange] = useUrlTab('tab', RO_TRAIN_TABS, 'overview', { clearOnChange: ['train'] });
 
   const { selectedPlantId } = useAppStore();
   const { data: plants } = usePlants();
@@ -125,22 +124,6 @@ export default function ROTrains() {
   const avgRejection = rejReadings.length
     ? rejReadings.reduce((s: number, v: number) => s + v, 0) / rejReadings.length
     : null;
-
-  // Keep local tab state in sync if the URL changes from outside this
-  // component (e.g. clicking another alert while already on this page).
-  useEffect(() => { if (urlTab !== tab) setTab(urlTab); }, [urlTab]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const handleTabChange = (next: string) => {
-    if (!VALID_TABS.has(next)) return;
-    setTab(next);
-    const sp = new URLSearchParams(searchParams);
-    sp.set('tab', next);
-    // Manual tab clicks shouldn't also carry over a train/plant deep-link
-    // from a previous alert click — that's confusing once the operator has
-    // moved on to a different train.
-    sp.delete('train');
-    setSearchParams(sp, { replace: true });
-  };
 
   return (
     <div className="space-y-4 animate-fade-in">

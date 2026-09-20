@@ -8,7 +8,7 @@ import {
   DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuItem,
 } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { ChevronDown, UserCheck, UserCog, LogOut } from 'lucide-react';
+import { BookOpen, ChevronDown, UserCheck, UserCog, LogOut } from 'lucide-react';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 
@@ -251,6 +251,9 @@ export function OperatorSwitcher() {
         {/* Actions */}
         <DropdownMenuItem onClick={() => navigate('/profile')} className="gap-2 text-xs py-1.5">
           <UserCog className="h-3.5 w-3.5" /> My profile
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => navigate('/help')} className="gap-2 text-xs py-1.5">
+          <BookOpen className="h-3.5 w-3.5" /> Help &amp; Manual
         </DropdownMenuItem>
         <DropdownMenuItem onClick={signOut} className="text-danger gap-2 text-xs py-1.5">
           <LogOut className="h-3.5 w-3.5" /> Sign out

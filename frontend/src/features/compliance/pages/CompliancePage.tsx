@@ -20,7 +20,7 @@ export {
 } from '../types';
 
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { useTabPersist } from '@/hooks/useTabPersist';
+import { useUrlTab } from '@/hooks/useUrlTab';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { PageHeader } from '@/components/PageHeader';
 import {
@@ -56,6 +56,8 @@ import { FleetMatrix } from '../components/FleetMatrix';
 import { ThresholdEditor } from '../components/ThresholdEditor';
 import { WhatIfSimulator } from '../components/WhatIfSimulator';
 
+const COMPLIANCE_TABS = ['status', 'fleet', 'thresholds', 'whatif'] as const;
+
 export default function CompliancePage() {
   const { data: plants }    = usePlants();
   const { selectedPlantId, setSelectedPlantId } = useAppStore();
@@ -69,9 +71,7 @@ export default function CompliancePage() {
   const [evaluating, setEvaluating] = useState(false);
   const [result, setResult]     = useState<EvalResult | null>(null);
   const [overrideMetrics, setOverrideMetrics] = useState<Record<string, string>>({});
-  const [complianceTab, setComplianceTab] = useTabPersist<'status' | 'fleet' | 'thresholds' | 'whatif'>(
-    'tab:compliance', 'status',
-  );
+  const [complianceTab, setComplianceTab] = useUrlTab('tab', COMPLIANCE_TABS, 'status');
   const [dailyRows, setDailyRows]           = useState<DailyRow[]>([]);
   const [prevMetrics, setPrevMetrics]       = useState<Record<string, number | undefined>>({});
   const [previewMetrics, setPreviewMetrics] = useState<Record<string, number | undefined> | null>(null);
@@ -329,7 +329,7 @@ export default function CompliancePage() {
       </Card>
 
       {/* Tabs */}
-      <Tabs value={complianceTab} onValueChange={(v) => setComplianceTab(v as typeof complianceTab)}>
+      <Tabs value={complianceTab} onValueChange={setComplianceTab}>
         <TabsList className="grid grid-cols-2 sm:grid-cols-4 gap-1 h-auto sm:h-10 w-full">
           <TabsTrigger value="status" className="gap-1.5 text-xs">
             <ShieldCheck className="h-3.5 w-3.5" />

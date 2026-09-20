@@ -1,17 +1,18 @@
-import React, { useMemo } from 'react';
+import { useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import { Card } from '@/components/ui/card';
 import { Users, AlertCircle, CheckCircle2, GitBranch } from 'lucide-react';
 import { DirectoryStats } from '../components/DirectoryStats';
-import { PendingApprovals } from '../components/PendingApprovals';
 import { OrgChart, HierarchyLegend } from '../components/OrgChart';
-import { AppManual } from '../components/AppManual';
 import { StaffMember } from '../types';
-import { useAuth } from '@/hooks/useAuth';
+import { useCan } from '@/hooks/usePermission';
 import { usePlants } from '@/hooks/usePlants';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 
-function RegisterInfo() {
+/** Directory overview and reporting tree. Accounts are approved in Admin →
+ *  Users; this tab only reports how many are waiting. */
+function OrgChartTab() {
   const { data: plants = [] } = usePlants();
 
   const { data: staff = [] } = useQuery<StaffMember[]>({
@@ -38,12 +39,20 @@ function RegisterInfo() {
     },
   });
 
-  const { isAdmin } = useAuth();
+  const canApprove = useCan()('admin_users');
   const pending = useMemo(() => staff.filter((s) => s.status === 'Pending'), [staff]);
+
+  const pendingPill = (
+    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-2xs font-bold bg-warn-soft text-warn border border-warn/40 shadow-2xs animate-pulse">
+      <AlertCircle className="h-3.5 w-3.5" />
+      {pending.length} Pending Approval{pending.length > 1 ? 's' : ''}
+      {canApprove && <span aria-hidden="true"> · Review →</span>}
+    </span>
+  );
 
   return (
     <div className="space-y-3">
-      {/* ── 1. Reconciled Directory & Governance Overview Card ── */}
+      {/* ── 1. Directory & Governance Overview Card ── */}
       <Card className="overflow-hidden border-border/80 shadow-xs">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-4 py-2.5 border-b border-border/70 bg-muted/10">
           <div className="flex items-center gap-2">
@@ -52,39 +61,24 @@ function RegisterInfo() {
             <span className="text-2xs text-muted-foreground hidden sm:inline">· Active personnel &amp; access status</span>
           </div>
 
-          {/* Inline Governance Status Badge */}
+          {/* Governance status: a count for everyone, a way to act on it for Admins */}
           <div className="flex items-center gap-2 shrink-0">
             {pending.length === 0 ? (
               <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-2xs font-semibold bg-accent-soft text-accent border border-accent/25 shadow-2xs">
                 <CheckCircle2 className="h-3.5 w-3.5" />
                 All Accounts Active (0 Pending)
               </span>
+            ) : canApprove ? (
+              <Link to="/admin?tab=users" aria-label={`${pending.length} pending approvals: review in Admin Users`}>
+                {pendingPill}
+              </Link>
             ) : (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-2xs font-bold bg-warn-soft text-warn border border-warn/40 shadow-2xs animate-pulse">
-                <AlertCircle className="h-3.5 w-3.5" />
-                {pending.length} Pending Approval{pending.length > 1 ? 's' : ''}
-              </span>
+              pendingPill
             )}
           </div>
         </div>
 
-        <div className="p-3 sm:p-3.5 space-y-3">
-          {/* Actionable Pending Approvals Banner — only appears when pending accounts exist */}
-          {pending.length > 0 && isAdmin && (
-            <div className="p-3 rounded-xl border border-warn/40 bg-warn-soft/60 space-y-2">
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-xs font-bold text-warn flex items-center gap-1.5">
-                  <AlertCircle className="h-3.5 w-3.5 shrink-0" />
-                  Action Required: Pending Account Registrations
-                </span>
-                <span className="text-3xs font-mono font-bold text-warn bg-warn/15 px-1.5 py-0.5 rounded">
-                  {pending.length} waiting
-                </span>
-              </div>
-              <PendingApprovals staff={staff} />
-            </div>
-          )}
-
+        <div className="p-3 sm:p-3.5">
           {/* Compact Telemetry & Role Grid */}
           <DirectoryStats staff={staff} roles={roles} plants={plants} />
         </div>
@@ -104,12 +98,8 @@ function RegisterInfo() {
           <OrgChart staff={staff} roles={roles} plants={plants} hideLegend />
         </div>
       </Card>
-
-      {/* ── 3. Operations Manual (Rendered directly without redundant double-card wrap) ── */}
-      <AppManual />
     </div>
   );
 }
 
-
-export { RegisterInfo as InfoTab };
+export { OrgChartTab };

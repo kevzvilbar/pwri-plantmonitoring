@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { useTabPersist } from '@/hooks/useTabPersist';
+import { useUrlTab } from '@/hooks/useUrlTab';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -31,8 +31,10 @@ const FREQUENCIES = PMS_FREQUENCIES;
 type Frequency = typeof FREQUENCIES[number];
 const CATEGORIES = PMS_CATEGORIES;
 
+const MAINTENANCE_TABS = ['calendar', 'add', 'records'] as const;
+
 export default function Maintenance() {
-  const [tab, setTab] = useTabPersist<'calendar' | 'add' | 'records'>('tab:maintenance', 'calendar');
+  const [tab, setTab] = useUrlTab('tab', MAINTENANCE_TABS, 'calendar');
   const { selectedPlantId } = useAppStore();
   const { data: plants } = usePlants();
   const activePlant = plants?.find((p) => p.id === selectedPlantId) ?? plants?.[0];
@@ -74,7 +76,7 @@ export default function Maintenance() {
 
 
 
-      <Tabs value={tab} onValueChange={(v) => setTab(v as typeof tab)}>
+      <Tabs value={tab} onValueChange={setTab}>
         <TabsList className="grid grid-cols-3 w-full bg-muted/60 p-1 rounded-xl">
           <TabsTrigger value="calendar" className="flex items-center gap-1.5 font-semibold text-xs sm:text-sm">
             <Calendar className="h-3.5 w-3.5" />

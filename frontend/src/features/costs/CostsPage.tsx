@@ -1,4 +1,4 @@
-import { useSearchParams } from 'react-router-dom';
+import { useUrlTab } from '@/hooks/useUrlTab';
 import { useAuth } from '@/hooks/useAuth';
 import { usePermission } from '@/hooks/usePermission';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -11,11 +11,15 @@ import { Power } from './tabs/Power';
 import { Compare } from './tabs/Compare';
 import { BarChart2, Zap, TrendingUp, FlaskConical, Layers, DollarSign } from 'lucide-react';
 
+const COSTS_TABS = ['rollup', 'power', 'compare', 'prices', 'filters'] as const;
+const COSTS_TABS_WITH_BUDGET = [...COSTS_TABS, 'budget'] as const;
+
 export default function Costs() {
-  const [params, setParams] = useSearchParams();
-  const tab = params.get('tab') ?? 'rollup';
   const { isManager, isAdmin } = useAuth();
   const canViewBudget = usePermission('costs', 'budget');
+  // Budget is permission-gated: without it, the Dashboard's ?tab=budget link
+  // opens Rollup instead of an empty page.
+  const [tab, setTab] = useUrlTab('tab', canViewBudget ? COSTS_TABS_WITH_BUDGET : COSTS_TABS, 'rollup');
 
   return (
     <div className="space-y-4 animate-fade-in max-w-[1600px] mx-auto pb-10" data-testid="costs-page">
@@ -24,7 +28,7 @@ export default function Costs() {
         subtitle="Production cost, power bills & tariffs, chemical & filter prices"
       />
 
-      <Tabs value={tab} onValueChange={(v) => setParams({ tab: v })}>
+      <Tabs value={tab} onValueChange={setTab}>
         <TabsList className={`grid ${canViewBudget ? 'grid-cols-3 sm:grid-cols-6' : 'grid-cols-3 sm:grid-cols-5'} w-full h-auto sm:h-10 p-1 gap-1`}>
           <TabsTrigger value="rollup" className="gap-1.5">
             <BarChart2 className="h-3.5 w-3.5" />

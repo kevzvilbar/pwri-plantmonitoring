@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { useTabPersist } from '@/hooks/useTabPersist';
+import { useUrlTab } from '@/hooks/useUrlTab';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { PageHeader } from '@/components/PageHeader';
 import { ShieldAlert, PlusCircle, History as HistoryIcon } from 'lucide-react';
@@ -9,8 +9,10 @@ import { ReportForm, REPORT_INITIAL } from './ReportForm';
 import { IncidentHistory } from './IncidentHistory';
 import { useQueryClient } from '@tanstack/react-query';
 
+const INCIDENT_TABS = ['open', 'report', 'history'] as const;
+
 export default function Incidents() {
-  const [tab, setTab] = useTabPersist<'open' | 'report' | 'history'>('tab:incidents', 'open');
+  const [tab, setTab] = useUrlTab('tab', INCIDENT_TABS, 'open');
   const qc = useQueryClient();
   const { openIncidents, criticalHighCount } = useIncidentsData();
 
@@ -30,7 +32,7 @@ export default function Incidents() {
         </div>
       </div>
 
-      <Tabs value={tab} onValueChange={(v) => setTab(v as typeof tab)}>
+      <Tabs value={tab} onValueChange={setTab}>
         <TabsList className="grid grid-cols-3 w-full bg-muted/60 p-1 rounded-xl">
           <TabsTrigger value="open" className="flex items-center gap-1.5 font-semibold text-xs sm:text-sm">
             <ShieldAlert className="h-3.5 w-3.5" />

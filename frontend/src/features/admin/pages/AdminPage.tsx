@@ -1,4 +1,5 @@
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
+import { useUrlTab } from '@/hooks/useUrlTab';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/useAuth';
 import { usePermission } from '@/hooks/usePermission';
@@ -44,6 +45,8 @@ function AdminPanelFallback() {
   );
 }
 
+type AdminTab = 'users' | 'plants' | 'audit' | 'migrations' | 'roles';
+
 export default function AdminPage() {
   const { isAdmin, isManager, isDataAnalyst, loading } = useAuth();
   const navigate = useNavigate();
@@ -71,26 +74,16 @@ export default function AdminPage() {
   const canViewUsers = usePermission('admin_users', 'view');
   const canViewMigrations = usePermission('admin_migrations', 'view');
 
-  // P2-6: ROUTE_MAP emits /admin?tab=plants (and friends) but the page
-  // ignored them (<Tabs defaultValue=...>). Read + write ?tab=; unknown or
-  // disallowed tabs fall back to the default.
-  const [searchParams, setSearchParams] = useSearchParams();
-  const urlAdminTab = searchParams.get('tab');
-  const requestedTab = urlAdminTab === 'users' && canViewUsers
-    ? 'users'
-    : urlAdminTab === 'plants' || urlAdminTab === 'audit'
-      ? urlAdminTab
-      : urlAdminTab === 'migrations' && canViewMigrations
-        ? 'migrations'
-        : urlAdminTab === 'roles' && isAdmin
-          ? 'roles'
-          : null;
-  const adminTab = requestedTab ?? (canViewUsers ? 'users' : 'plants');
-  const setAdminTab = (next: string) => {
-    const sp = new URLSearchParams(searchParams);
-    sp.set('tab', next);
-    setSearchParams(sp, { replace: true });
-  };
+  // ?tab= accepts only tabs this user can see: a Manager opening
+  // /admin?tab=users lands on Plants, the same as with no tab at all.
+  const visibleAdminTabs: AdminTab[] = [
+    ...(canViewUsers ? (['users'] as const) : []),
+    'plants',
+    'audit',
+    ...(canViewMigrations ? (['migrations'] as const) : []),
+    ...(isAdmin ? (['roles'] as const) : []),
+  ];
+  const [adminTab, setAdminTab] = useUrlTab<AdminTab>('tab', visibleAdminTabs, canViewUsers ? 'users' : 'plants');
 
   if (loading) return <div className="p-4 text-sm text-muted-foreground">Loading…</div>;
 

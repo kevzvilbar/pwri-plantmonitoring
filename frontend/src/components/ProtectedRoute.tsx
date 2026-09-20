@@ -18,6 +18,7 @@ export const OPERATOR_ALLOWED_PATHS = [
   '/incidents',
   '/employees',
   '/profile',
+  '/help',  // The manual: opened from every role's avatar menu
   '/alerts',  // Added: Operators receive alarms and need to triage them
 ];
 

@@ -1,27 +1,21 @@
 import React, { useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { useTabPersist } from '@/hooks/useTabPersist';
+import { useUrlTab } from '@/hooks/useUrlTab';
 import { useQuery } from '@tanstack/react-query';
-import { Users, BarChart2, Info } from 'lucide-react';
+import { Users, BarChart2, GitBranch } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { usePresence } from '@/hooks/usePresence';
 import { usePlants } from '@/hooks/usePlants';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { StaffTab } from '../employees/tabs/StaffTab';
 import { KpiTab } from '../employees/tabs/KpiTab';
-import { InfoTab } from '../employees/tabs/InfoTab';
+import { OrgChartTab } from '../employees/tabs/OrgChartTab';
 import { StaffMember, getPresence } from '../employees/types';
 
-export default function EmployeesPage() {
-  const [searchParams] = useSearchParams();
-  const [tab, setTab] = useTabPersist<'staff' | 'kpi' | 'info'>('tab:employees', 'staff');
+const EMPLOYEE_TABS = ['staff', 'kpi', 'org-chart'] as const;
 
-  // Deep link (e.g. from the Dashboard's Data Completeness Radar) should win
-  // over whatever tab was last open in this session, not just the default.
-  useEffect(() => {
-    if (searchParams.get('tab') === 'kpi' && tab !== 'kpi') setTab('kpi');
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams]);
+export default function EmployeesPage() {
+  // "info" is this tab's old name; old links and bookmarks still land on it.
+  const [tab, setTab] = useUrlTab('tab', EMPLOYEE_TABS, 'staff', { aliases: { info: 'org-chart' } });
 
   const { data: plants = [] } = usePlants();
 
@@ -92,7 +86,7 @@ export default function EmployeesPage() {
         </div>
       </div>
 
-      <Tabs value={tab} onValueChange={(v) => setTab(v as typeof tab)}>
+      <Tabs value={tab} onValueChange={setTab}>
         <TabsList className="w-full sm:w-auto grid grid-cols-3 sm:inline-flex gap-0.5 p-1 rounded-xl">
           <TabsTrigger value="staff" className="flex items-center gap-1.5 rounded-lg data-[state=active]:shadow-sm">
             <Users className="h-3.5 w-3.5" />
@@ -107,16 +101,16 @@ export default function EmployeesPage() {
             <BarChart2 className="h-3.5 w-3.5" />
             <span>KPI</span>
           </TabsTrigger>
-          <TabsTrigger value="info" className="flex items-center gap-1.5 rounded-lg data-[state=active]:shadow-sm">
-            <Info className="h-3.5 w-3.5" />
-            <span>Info</span>
+          <TabsTrigger value="org-chart" className="flex items-center gap-1.5 rounded-lg data-[state=active]:shadow-sm">
+            <GitBranch className="h-3.5 w-3.5" />
+            <span>Org chart</span>
           </TabsTrigger>
         </TabsList>
         <TabsContent value="staff" className="mt-3"><StaffTab /></TabsContent>
         <TabsContent value="kpi" className="mt-3">
           <KpiTab staff={staff} roles={roles} plants={plants} />
         </TabsContent>
-        <TabsContent value="info" className="mt-3"><InfoTab /></TabsContent>
+        <TabsContent value="org-chart" className="mt-3"><OrgChartTab /></TabsContent>
       </Tabs>
     </div>
   );

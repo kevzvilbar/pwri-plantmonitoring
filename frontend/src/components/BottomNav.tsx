@@ -95,6 +95,11 @@ export function BottomNav() {
     </NavLink>
   );
 
+  // A badge on an item that only lives in the More sheet (Admin Console's
+  // pending approvals) would be invisible while the sheet is closed: More
+  // carries a dot for it.
+  const moreBadge = sheetGroups.flatMap((g) => g.items).find((i) => i.badge)?.badge;
+
   return (
     <nav
       className={cn(
@@ -117,7 +122,12 @@ export function BottomNav() {
         <Sheet>
           <SheetTrigger asChild>
             <button className="flex flex-col items-center justify-center gap-0.5 py-2 px-1 text-3xs font-medium text-muted-foreground hover:text-foreground">
-              <Menu className="h-[18px] w-[18px]" />
+              <span className="relative">
+                <Menu className="h-[18px] w-[18px]" />
+                {moreBadge && (
+                  <NavItemBadge kind={moreBadge} variant="dot" className="absolute -top-1 -right-1.5 ring-card" />
+                )}
+              </span>
               <span className="leading-none">More</span>
             </button>
           </SheetTrigger>
@@ -139,6 +149,7 @@ export function BottomNav() {
                       >
                         <r.icon className="h-4 w-4" />
                         {r.label}
+                        {r.badge && <NavItemBadge kind={r.badge} className="ml-auto" />}
                       </NavLink>
                     ))}
                   </div>
