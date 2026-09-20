@@ -197,10 +197,6 @@ export default function Operations() {
           </CanLink>
         </div>
 
-        <div className="text-3xs text-muted-foreground flex items-center gap-1 font-mono">
-          <span className="h-2 w-2 rounded-full bg-accent animate-pulse" />
-          <span>Data freshness validated</span>
-        </div>
       </div>
       )}
 

@@ -214,7 +214,7 @@ export default function Dashboard() {
         plantIds={plantIds}
         selectedPlantName={selectedPlantName}
         openIncidentCount={openIncidentCount}
-                secondsAgo={dataFreshness ? Math.max(0, Math.floor((Date.now() - dataFreshness.getTime()) / 1000)) : undefined}
+                lastReadingAt={dataFreshness}
         production={prodStats.production}
         dProduction={prodStats.dProduction}
         rawWaterVol={prodStats.rawWaterVol}

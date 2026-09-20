@@ -73,7 +73,7 @@ describe('AlertPanel cold open (P3-9)', () => {
     });
     expect(screen.queryByText('Checking plant systems…')).toBeNull();
     expect(screen.getAllByTestId('signal-title').map((e) => e.textContent))
-      .toEqual(['critical alarm']);
+      .toEqual(['critical alarm', 'info alarm']);
 
     // And an acknowledged alert carries who and when (P3-1/P3-3).
     act(() => useAlertStore.getState().acknowledgeAlert('c1', 'op-1'));

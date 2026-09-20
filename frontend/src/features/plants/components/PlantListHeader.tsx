@@ -1,18 +1,20 @@
-import { useMemo } from 'react';
 import { fmtNum } from '@/lib/calculations';
 import { Building2, Droplets } from 'lucide-react';
+import { describeFreshness } from '@/shared/freshness';
 
 export function PlantListHeader({
-  list, summaryCounts, secondsAgo, totalCapacity, roUtilPct, avgHealth,
+  list, summaryCounts, lastReadingAt, totalCapacity, roUtilPct, avgHealth,
 }: {
   list: any[];
   summaryCounts: any;
-  secondsAgo: number;
+  /** Timestamp of the latest RO-train reading across all displayed plants. Pass `null` when unknown/loading. */
+  lastReadingAt: Date | null;
   totalCapacity: number;
   roUtilPct: number;
   avgHealth: number;
 }) {
   const facilityCount = list?.length ?? 0;
+  const freshness = describeFreshness(lastReadingAt);
 
   return (
     <div className="rounded-2xl border border-border/70 bg-card p-4 sm:p-5 shadow-xs">
@@ -27,13 +29,25 @@ export function PlantListHeader({
               <h1 className="text-lg sm:text-xl font-bold tracking-tight text-foreground">
                 Water Production Facilities
               </h1>
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-3xs font-bold uppercase tracking-wider bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 shadow-2xs">
-                <span className="relative flex h-1.5 w-1.5">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-500 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
+              {freshness.tone === 'fresh' ? (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-3xs font-bold uppercase tracking-wider bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 shadow-2xs">
+                  <span className="relative flex h-1.5 w-1.5">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-500 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
+                  </span>
+                  Live Telemetry
                 </span>
-                Live Telemetry
-              </span>
+              ) : freshness.tone === 'aging' ? (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-3xs font-bold uppercase tracking-wider bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 shadow-2xs">
+                  <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-amber-500"></span>
+                  Aging Data
+                </span>
+              ) : freshness.tone === 'stale' ? (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-3xs font-bold uppercase tracking-wider bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20 shadow-2xs">
+                  <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-rose-500"></span>
+                  Stale Data
+                </span>
+              ) : null /* unknown: no badge while loading */}
             </div>
           </div>
 
@@ -42,14 +56,19 @@ export function PlantListHeader({
               <Droplets className="h-3 w-3 text-sky-500" />
               <span>{facilityCount} {facilityCount === 1 ? 'Facility' : 'Facilities'} Monitored</span>
             </span>
-            <span className="opacity-40">&bull;</span>
-                        <span className="inline-flex items-center gap-1 text-muted-foreground">
-              <span>Synced</span>
-              <strong className="text-foreground font-semibold font-mono">
-                {secondsAgo > 60 ? `${Math.floor(secondsAgo / 60)}m` : `${secondsAgo}s`}
-              </strong>
-              <span>ago</span>
-            </span>
+            {lastReadingAt !== null && (
+              <>
+                <span className="opacity-40">&bull;</span>
+                <span className={`inline-flex items-center gap-1 font-mono ${
+                  freshness.tone === 'fresh' ? 'text-emerald-600 dark:text-emerald-400'
+                  : freshness.tone === 'aging' ? 'text-amber-600 dark:text-amber-400'
+                  : freshness.tone === 'stale' ? 'text-rose-600 dark:text-rose-400'
+                  : 'text-muted-foreground'
+                }`}>
+                  {freshness.label}
+                </span>
+              </>
+            )}
           </div>
         </div>
 

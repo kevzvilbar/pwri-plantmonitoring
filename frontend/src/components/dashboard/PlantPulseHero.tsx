@@ -4,6 +4,8 @@ import { TrendBadge } from './StatCard';
 import { fmtNum } from '@/lib/calculations';
 import { usePlants } from '@/hooks/usePlants';
 import { useFleetStatus } from '@/hooks/useFleetStatus';
+import { useNow } from '@/hooks/useNow';
+import { describeFreshness } from '@/shared/freshness';
 import { format } from 'date-fns';
 import {
   History, ShieldAlert, Building2,
@@ -15,7 +17,8 @@ interface PlantPulseHeroProps {
   plantIds: string[];
   selectedPlantName: string;
   openIncidentCount?: number;
-  secondsAgo?: number;
+  /** Timestamp of the latest known reading. Pass `null` when unknown. */
+  lastReadingAt?: Date | null;
   production: number | null;
   dProduction: number | null;
   rawWaterVol?: number | null;
@@ -31,7 +34,7 @@ export function PlantPulseHero({
   plantIds,
   selectedPlantName,
   openIncidentCount = 0,
-  secondsAgo = 2,
+  lastReadingAt,
   production,
   dProduction,
   rawWaterVol,
@@ -44,6 +47,11 @@ export function PlantPulseHero({
 }: PlantPulseHeroProps) {
   const { data: plants } = usePlants();
   const [timeStr, setTimeStr] = useState('');
+
+  // Tick every 30 s so "X min ago" advances without a refetch (P4-5)
+  const now = useNow(30_000);
+  // Map timestamp → { label, tone } using shared freshness thresholds (P4-2)
+  const freshness = describeFreshness(lastReadingAt ?? null, now.getTime());
 
   // Live PHT Clock updated every 10 seconds
   useEffect(() => {
@@ -139,9 +147,19 @@ export function PlantPulseHero({
             </div>
 
                         <div className="text-3xs text-slate-300/90 flex items-center gap-1 pt-0.5 font-mono tabular-nums">
-              <Lamp tone="live" pulse size={5} />
-              <span className="text-emerald-400 font-semibold">
-                {secondsAgo !== undefined ? `Updated ${secondsAgo}s ago` : 'Live'}
+              {/* Lamp pulses only when data is truly fresh */}
+              <Lamp
+                tone={freshness.tone === 'fresh' ? 'live' : freshness.tone === 'aging' ? 'warn' : 'muted'}
+                pulse={freshness.tone === 'fresh'}
+                size={5}
+              />
+              <span className={
+                freshness.tone === 'fresh'   ? 'text-emerald-400 font-semibold'
+                : freshness.tone === 'aging' ? 'text-amber-400 font-semibold'
+                : freshness.tone === 'stale' ? 'text-rose-400 font-semibold'
+                : 'text-white/50'
+              }>
+                {freshness.label}
               </span>
               <span className="text-white/30">&bull;</span>
               <span>24h ({timeStr || '—'})</span>

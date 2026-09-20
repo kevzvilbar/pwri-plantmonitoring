@@ -94,9 +94,9 @@ export default function Plants() {
     },
     staleTime: 5 * 60_000,
   });
-  const realSecondsAgo = latestReading?.reading_datetime
-    ? Math.max(0, Math.floor((Date.now() - new Date(latestReading.reading_datetime).getTime()) / 1000))
-    : 0;
+  const lastReadingAt = latestReading?.reading_datetime
+    ? new Date(latestReading.reading_datetime)
+    : null;
   const qc = useQueryClient();
 
   const doAddPlant = async (form: AddPlantFormData) => {
@@ -170,7 +170,7 @@ export default function Plants() {
       <PlantListHeader
         list={list}
         summaryCounts={summaryCounts}
-        secondsAgo={realSecondsAgo}
+        lastReadingAt={lastReadingAt}
         totalCapacity={totalCapacity}
         roUtilPct={roUtilPct}
         avgHealth={avgHealth}
