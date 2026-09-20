@@ -24,6 +24,7 @@ interface BodyProps {
   hasPermeateData: boolean;
   consDates: string[];
   consEntities: { id: string; label: string }[];
+  consPivot: Map<string, Map<string, number>>;
   hasPermeateTab?: boolean;
   hasRejectTab?: boolean;
   roTrainPermeatePivot?: Map<string, Map<string, number>>;

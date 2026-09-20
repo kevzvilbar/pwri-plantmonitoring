@@ -1,6 +1,7 @@
 export * from './readingAudit';
 export * from './calculations';
 export * from './format';
+export { fmtNum } from './format';
 export * from './utils';
 export * from './supabaseErrors';
 export * from './deltaCache';

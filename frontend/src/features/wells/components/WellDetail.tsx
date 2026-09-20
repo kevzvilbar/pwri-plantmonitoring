@@ -148,7 +148,7 @@ export function WellDetail({ wellId, onBack }: { wellId: string; onBack: () => v
   }
   const isSurveyDue = daysSinceSurvey != null && daysSinceSurvey > 90;
 
-  let statusBadge = null;
+  let statusBadge: React.ReactNode = null;
   if (!latest) {
     statusBadge = (
       <Badge variant="outline" className="text-destructive bg-destructive/10 border-destructive/20 gap-1 text-2xs">

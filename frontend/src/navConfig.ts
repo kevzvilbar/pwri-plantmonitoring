@@ -26,10 +26,10 @@ export interface NavGroup {
 import {
   LayoutDashboard, Bell, Building2, Droplet,
   GitBranch, Wrench, AlertTriangle, Award,
-  PesoSignIcon, Users, ShieldCheck, ShieldAlert,
-  ClipboardCheck, FlaskConical, Download, Upload,
+  Users, ShieldCheck, ShieldAlert,
+  ClipboardCheck, FlaskConical, Download, Upload, Bot,
 } from 'lucide-react';
-import { ROTrainIcon as ROTrainIconComponent } from '@/components/icons/water-icons';
+import { ROTrainIcon as ROTrainIconComponent, PesoSignIcon } from '@/components/icons/water-icons';
 
 const ICON_MAP: Record<ModuleKey, ComponentType<{ className?: string }>> = {
   dashboard: LayoutDashboard,
@@ -52,6 +52,7 @@ const ICON_MAP: Record<ModuleKey, ComponentType<{ className?: string }>> = {
   admin_plants: Building2,
   admin_audit: ShieldAlert,
   admin_migrations: ShieldAlert,
+  ai_assistant: Bot,
   profile: LayoutDashboard,
 };
 
@@ -73,6 +74,10 @@ const ROUTE_MAP: Record<ModuleKey, string> = {
   data_analysis_review: '/data-analysis',
   data_corrections: '/data-corrections',
   admin_users: '/admin',
+  admin_plants: '/admin?tab=plants',
+  admin_audit: '/admin?tab=audit',
+  admin_migrations: '/admin?tab=migrations',
+  ai_assistant: '/admin?tab=ai_assistant',
   profile: '/profile',
 };
 
@@ -86,7 +91,7 @@ const GROUP_DEFS: { label: string; moduleKeys: ModuleKey[] }[] = [
   { label: 'Other', moduleKeys: ['compliance', 'costs', 'employees', 'data_exports', 'smart_import', 'profile'] },
 ];
 
-const MODULE_TO_GROUP: Record<ModuleKey, string> = {};
+const MODULE_TO_GROUP: Partial<Record<ModuleKey, string>> = {};
 for (const group of GROUP_DEFS) {
   for (const mk of group.moduleKeys) MODULE_TO_GROUP[mk] = group.label;
 }

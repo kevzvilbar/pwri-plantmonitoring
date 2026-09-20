@@ -195,7 +195,7 @@ export function ComplianceRadarCard({ plantIds }: Props) {
 
                   const renderSmoothRadar = (props: any) => {
                     const { points } = props;
-                    if (!points || points.length < 3) return null;
+                    if (!points || points.length < 3) return <path d="" />;
 
                     const lineGen = d3Line<{ x: number; y: number }>()
                       .x((d) => d.x)

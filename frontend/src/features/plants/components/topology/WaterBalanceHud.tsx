@@ -68,7 +68,7 @@ export function WaterBalanceHud({
             <span className="text-3xs font-mono text-muted-foreground animate-pulse hidden sm:inline">
               Syncing…
             </span>
-          ) : variancePct !== undefined ? (
+          ) : variancePct != null ? (
             <span
               className={cn(
                 'px-1.5 py-0.5 rounded text-3xs font-mono font-bold tracking-tight inline-flex items-center gap-0.5 shrink-0',

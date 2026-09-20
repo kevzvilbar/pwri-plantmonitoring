@@ -67,22 +67,25 @@ export default function Dashboard() {
   const [downtimeOpen, setDowntimeOpen] = useState(false);
     // ── Data freshness indicator ─────────────────────────────────────
   // Use React Query's dataUpdatedAt for real freshness instead of a fake
-  // setInterval counter. Shows "updated X min ago" when data is stale.
+  // Real data freshness from latest reading in Supabase
   const { data: latestReading } = useQuery({
-    queryKey: ['latest-reading'],
+    queryKey: ['latest-reading', selectedPlantId],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('readings')
-        .select('measured_at')
-        .order('measured_at', { ascending: false })
-        .limit(1)
-        .single();
+      let q = supabase
+        .from('ro_train_readings')
+        .select('reading_datetime')
+        .order('reading_datetime', { ascending: false })
+        .limit(1);
+      if (selectedPlantId) {
+        q = q.eq('plant_id', selectedPlantId);
+      }
+      const { data, error } = await q.maybeSingle();
       if (error) return null;
       return data;
     },
     staleTime: 5 * 60_000, // 5 minutes
   });
-  const dataFreshness = latestReading ? new Date(latestReading.measured_at) : null;
+  const dataFreshness = latestReading?.reading_datetime ? new Date(latestReading.reading_datetime) : null;
 
   // ── Compliance Thresholds (derived from compliance settings, per-plant or global) ──
   const thresholdScope = selectedPlantId || 'global';

@@ -282,7 +282,7 @@ export function useWellRowActions({
         p_table:       'well_readings',
         p_row_id:      savedRow.id,
         p_new_current: savedRow.current_reading,
-        p_admin_id:    userId ?? null,
+        p_admin_id:    userId ?? '',
         p_reason:      `Auto-approved on entry — ${guardReason ?? 'flagged'} check bypassed for Manager/Admin, logged for tracing`,
       });
       if (!autoErr) { isPending = false; autoApproved = true; }

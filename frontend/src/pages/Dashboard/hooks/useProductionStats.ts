@@ -54,7 +54,7 @@ export function useProductionStats({
     queryKey: ['dash-server-aggregates', plantIds, today, todayEnd, yesterday, yesterdayEnd, _localDateStr],
     queryFn: async () => {
       if (!plantIds.length) return null;
-      const { data, error } = await supabase.rpc('get_dashboard_aggregates', {
+      const { data, error } = await (supabase.rpc as any)('get_dashboard_aggregates', {
         p_plant_ids: plantIds,
         p_today_start: today,
         p_today_end: todayEnd,

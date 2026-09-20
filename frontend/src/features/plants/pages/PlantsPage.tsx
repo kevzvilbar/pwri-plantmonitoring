@@ -85,17 +85,17 @@ export default function Plants() {
     queryKey: ['plants-latest-reading'],
     queryFn: async () => {
       const { data } = await supabase
-        .from('readings')
-        .select('measured_at')
-        .order('measured_at', { ascending: false })
+        .from('ro_train_readings')
+        .select('reading_datetime')
+        .order('reading_datetime', { ascending: false })
         .limit(1)
-        .single();
+        .maybeSingle();
       return data;
     },
     staleTime: 5 * 60_000,
   });
-  const realSecondsAgo = latestReading
-    ? Math.max(0, Math.floor((Date.now() - new Date(latestReading.measured_at).getTime()) / 1000))
+  const realSecondsAgo = latestReading?.reading_datetime
+    ? Math.max(0, Math.floor((Date.now() - new Date(latestReading.reading_datetime).getTime()) / 1000))
     : 0;
   const qc = useQueryClient();
 

@@ -1,7 +1,7 @@
 import { ROTrainIcon } from '@/components/icons/water-icons';
 import { Droplet, Gauge, Zap } from 'lucide-react';
-import { ProductMetersStat } from '../config/ProductMeters';
-import { EnergySourceInline } from '../config/Appearance';
+import { ProductMetersStat } from './config/ProductMeters';
+import { EnergySourceInline } from './config/Appearance';
 import { fmtNum } from '@/lib/calculations';
 
 export function PlantDetailStats({ plant, trainCounts }: {

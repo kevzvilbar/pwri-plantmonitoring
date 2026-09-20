@@ -15,12 +15,12 @@ export function useTopBarState() {
   const { isMobile, state } = useSidebar();
   const sidebarCollapsed = state === 'collapsed';
   const { data: plants } = usePlants();
-        const {
+  const {
     selectedPlantId, setSelectedPlantId,
     setUnreadCount, unreadCount,
-    plantAlerts,
+    plantAlerts, clearAlerts,
     snoozeAlert, unsnoozeAlert, pruneSnooze,
-    acknowledgeAlert, resolveAlert, acknowledgeAll, resolveAll,  // New actions
+    acknowledgeAlert, resolveAlert, acknowledgeAll, resolveAll,
   } = useAppStore();
   const navigate = useNavigate();
   const qc = useQueryClient();

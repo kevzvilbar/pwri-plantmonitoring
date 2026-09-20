@@ -53,7 +53,7 @@ export function EditWellDialog({ well, onClose }: { well: any; onClose: () => vo
     const prevStatus = well.status;
     const nextStatus = well.status; // EditWellDialog doesn't change status — status changes via the toggle in the card
     const payload: Database['public']['Tables']['wells']['Update'] & {
-      gps_lat?: number | null; gps_lng?: number | null;
+      gps_lat?: number | null; gps_lng?: number | null; meter_rollover_max?: number | null;
     } = {
       name: form.name.trim(), diameter: form.diameter || null,
       drilling_depth_m: form.drilling_depth_m ? +form.drilling_depth_m : null,
