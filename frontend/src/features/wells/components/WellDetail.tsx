@@ -48,8 +48,10 @@ import type { NormalizedReplacement, ReplacementDetailHost } from '@/components/
 import { EditElectricMeterDialog, EditHydraulicDialog, HydraulicHistoryDialog } from './WellDialogs';
 import { deleteWellMeterReplacement } from '@/lib/meterReplacementDelete';
 import { useAuth } from '@/hooks/useAuth';
+import { WellUnavailable } from './WellUnavailable';
+import { resolveWellView } from '../lib/wellRoutes';
 
-export function WellDetail({ wellId, onBack }: { wellId: string; onBack: () => void }) {
+export function WellDetail({ wellId, plantId, onBack }: { wellId: string; /** The plant in the URL; a well from another plant is treated as not found. */ plantId?: string; onBack: () => void }) {
   const qc = useQueryClient();
   const { isManager } = useAuth();
   const [replaceOpen, setReplaceOpen] = useState(false);
@@ -65,9 +67,16 @@ export function WellDetail({ wellId, onBack }: { wellId: string; onBack: () => v
   const [deletingRepl, setDeletingRepl] = useState(false);
   const [editElectricOpen, setEditElectricOpen] = useState(false);
 
-  const { data: well } = useQuery({
+  // P5-3: the well now comes from a URL, so "no such row" is a normal outcome.
+  // maybeSingle() gives null for that; a real failure throws so it can be told
+  // apart from "not found" instead of both spinning forever.
+  const { data: well, isLoading: wellLoading, isError: wellError, refetch: refetchWell } = useQuery({
     queryKey: ['well', wellId],
-    queryFn: async () => (await supabase.from('wells').select('*').eq('id', wellId).single()).data,
+    queryFn: async () => {
+      const { data, error } = await supabase.from('wells').select('*').eq('id', wellId).maybeSingle();
+      if (error) throw error;
+      return data;
+    },
   });
   const { data: pms } = useQuery({
     queryKey: ['well-pms', wellId],
@@ -116,11 +125,15 @@ export function WellDetail({ wellId, onBack }: { wellId: string; onBack: () => v
     },
   });
 
-  if (!well) return (
+  const view = resolveWellView({ well: well as { plant_id?: string | null } | null | undefined, isLoading: wellLoading, isError: wellError, plantId });
+  if (view === 'loading') return (
     <div className="flex items-center gap-2 p-6 text-sm text-muted-foreground">
       <Loader2 className="h-4 w-4 animate-spin" /> Loading…
     </div>
   );
+  if (view === 'not-found' || view === 'error' || !well) {
+    return <WellUnavailable kind={view === 'error' ? 'error' : 'not-found'} onBack={onBack} onRetry={() => { void refetchWell(); }} />;
+  }
 
   const latest = pms?.[0];
   const drillingDepth = (latest as any)?.drilling_depth_m ?? (well as any).drilling_depth_m;

@@ -3,6 +3,8 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { usePlants } from '@/hooks/usePlants';
+import { useActivePlant } from '@/hooks/useActivePlant';
+import { useOnPlantChange } from '@/hooks/useOnPlantChange';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { format } from 'date-fns';
 import { ALERTS } from '@/lib/calculations';
@@ -14,7 +16,7 @@ export function usePowerFormState() {
   const { data: plants } = usePlants();
   const isMobile = useIsMobile();
 
-  const [plantId, setPlantId] = useState('');
+  const { plantId } = useActivePlant();
   const [reading, setReading] = useState('');
   const [solarReading, setSolarReading] = useState('');
   const [dt, setDt] = useState(format(new Date(), "yyyy-MM-dd'T'HH:mm"));
@@ -35,6 +37,20 @@ export function usePowerFormState() {
   const [gapMeterTarget, setGapMeterTarget] = useState<{ type: 'solar' | 'grid'; idx: number } | null>(null);
   const [gapSaving, setGapSaving] = useState(false);
   const [savingMeter, setSavingMeter] = useState<string | null>(null);
+
+  // The plant is global (P5-2), so it can change under this form. Drop anything
+  // typed for the previous plant so it cannot be submitted against the new one.
+  // This used to live in the header's own plant-change handler.
+  useOnPlantChange(plantId, () => {
+    setEditingId(null);
+    setMultiplierInput('');
+    setReading('');
+    setSolarReading('');
+    setGridMeterReadings(['', '', '', '', '']);
+    setSolarMeterReadings(['', '', '', '', '']);
+    setPowerAnomaly(null);
+    setAnomalyRemark('');
+  });
 
   const setGridMeterReading = (idx: number, val: string) =>
     setGridMeterReadings(prev => { const next = [...prev]; next[idx] = val; return next; });
@@ -247,7 +263,7 @@ export function usePowerFormState() {
   const dailyEffective = daily != null ? daily * effectiveMultiplier : null;
 
   return {
-    plantId, setPlantId,
+    plantId,
     reading, setReading,
     solarReading, setSolarReading,
     dt, setDt,

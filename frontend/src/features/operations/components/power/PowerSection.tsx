@@ -52,7 +52,7 @@ export function PowerForm() {
     qc,
   } = state;
 
-  const { submitMeter, handlePlantChange } = actions;
+  const { submitMeter } = actions;
 
   // Human label for the meter the gap-reason dialog is currently targeting
   // (null when the dialog is closed), used to title the meter-scoped dialog.
@@ -65,7 +65,6 @@ export function PowerForm() {
       <Card className="p-4 space-y-4">
         <PowerFormHeader
           plantId={plantId}
-          handlePlantChange={handlePlantChange}
           setImportOpen={setImportOpen}
           isAdmin={isAdmin}
           isManager={isManager}

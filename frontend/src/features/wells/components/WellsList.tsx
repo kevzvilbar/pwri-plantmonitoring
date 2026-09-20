@@ -30,20 +30,26 @@ import { EntityHistoryChart, MeterDetailButton } from '@/pages/plants/charts/Ent
 import { CollapsibleSection, GridPylonIcon, usePlantMeterConfig, logStatusChange } from '@/pages/plants/shared';
 import { AddWellDialog, EditWellDialog, EditElectricMeterDialog, EditHydraulicDialog, WellCsvImportDialog } from './WellDialogs';
 import { WellDetail } from './WellDetail';
+import { useWellNavigation } from '../hooks/useWellNavigation';
 import { useWellsList, PAGE_SIZE } from './WellsList/useWellsList';
 import { WellCard } from './WellsList/WellCard';
 
-export function WellsList({ plantId, highlightId }: { plantId: string; highlightId?: string | null }) {
+export function WellsList({ plantId, highlightId, activeWellId }: {
+  plantId: string;
+  highlightId?: string | null;
+  /** The `:wellId` of `/plants/:id/wells/:wellId`. When set, the detail view replaces the list. */
+  activeWellId?: string | null;
+}) {
   const {
     isAdmin, isManager, qc,
     wells, latestWellReadings, latestByWellId, wellCardRefs, wellPulseId,
-    wellOfflineTarget, wellOfflineBusy, blendingSet, detail, selectedWell, selected,
+    wellOfflineTarget, wellOfflineBusy, blendingSet, selectedWell, selected,
     bulkDeleteOpen, bulkReason, bulkBusy, blendingBusy, powerBusy, adding,
     wellDeleteTarget, wellDeleteReason, wellDeleteBusy, editingWell, showWellCsv,
     meterCfg, getWellElectricMode, plant,
     toggle, toggleAll, toggleWellStatus, toggleWellElectric, toggleBlending,
     doWellDelete, doBulkDelete, applyWellStatusChange,
-    setDetail, setSelectedWell, setSelected,
+    setSelectedWell, setSelected,
     setBulkDeleteOpen, setBulkReason, setBulkBusy,
     setWellOfflineTarget, setWellOfflineBusy,
     setAdding, setEditingWell, setShowWellCsv,
@@ -52,6 +58,7 @@ export function WellsList({ plantId, highlightId }: { plantId: string; highlight
   } = useWellsList(plantId, highlightId);
 
   const navigate = useNavigate();
+  const { openWell, backToWells } = useWellNavigation(plantId);
 
   const handleCardClick = (w: any) => {
     setSelectedWell(selectedWell === w.id ? null : w.id);
@@ -63,10 +70,10 @@ export function WellsList({ plantId, highlightId }: { plantId: string; highlight
 
   const handleEdit = (w: any) => { setEditingWell(w); };
   const handleDelete = (w: any) => { setWellDeleteTarget(w); setWellDeleteReason(''); };
-  const handleDetail = (id: string) => { setDetail(id); };
+  const handleDetail = (id: string) => { openWell(id); };
   const handleNavOperations = (w: any) => { navigate(`/operations?tab=well&highlight=${w.id}`); };
 
-  if (detail) return <WellDetail wellId={detail} onBack={() => setDetail(null)} />;
+  if (activeWellId) return <WellDetail wellId={activeWellId} plantId={plantId} onBack={backToWells} />;
   return (
     <div className="space-y-2">
       <div className="flex justify-between items-center gap-2">

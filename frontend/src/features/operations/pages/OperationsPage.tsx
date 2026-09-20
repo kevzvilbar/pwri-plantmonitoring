@@ -2,8 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { useAppStore } from '@/store/appStore';
-import { usePlants } from '@/hooks/usePlants';
+import { useActivePlant } from '@/hooks/useActivePlant';
 import { Button } from '@/components/ui/button';
 import {
   MapPin, Droplet, Zap, Upload, Download, ClipboardCheck,
@@ -40,10 +39,11 @@ export default function Operations() {
   const urlTab = TAB_ALIASES[(searchParams.get('tab') || '').toLowerCase()] ?? 'locator';
   const [tab, setTab] = useState<string>(urlTab);
 
-  const { data: plants } = usePlants();
-  const selectedPlantId = useAppStore((s) => s.selectedPlantId);
-  const activePlant = plants?.find((p) => p.id === selectedPlantId) ?? plants?.[0];
-  const activePlantId = activePlant?.id ?? '';
+  // P5-2: the active plant comes from the global picker. There is no longer a
+  // `plants?.[0]` fallback: with "All plants" and several to choose from the
+  // tab counts stay blank until a plant is chosen, instead of quietly showing
+  // the first plant's numbers above forms that show nothing.
+  const { plantId: activePlantId } = useActivePlant();
 
   useEffect(() => {
     if (urlTab !== tab) setTab(urlTab);
@@ -189,7 +189,7 @@ export default function Operations() {
               variant="ghost"
               size="sm"
               className="h-7 px-2 text-2xs font-semibold hover:bg-background"
-              onClick={() => navigate(selectedPlantId ? `/topology?plant=${selectedPlantId}` : '/topology')}
+              onClick={() => navigate(activePlantId ? `/topology?plant=${activePlantId}` : '/topology')}
             >
               <Layers className="h-3.5 w-3.5 mr-1 text-kpi-ro" />
               Plant Topology &rarr;

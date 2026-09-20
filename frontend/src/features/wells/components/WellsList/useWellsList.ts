@@ -23,7 +23,6 @@ export function useWellsList(plantId: string, highlightId?: string | null) {
   const [wellDeleteTarget, setWellDeleteTarget] = useState<any>(null);
   const [wellOfflineTarget, setWellOfflineTarget] = useState<any>(null);
   const [wellOfflineBusy, setWellOfflineBusy] = useState(false);
-  const [detail, setDetail] = useState<string | null>(null);
   const [selectedWell, setSelectedWell] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
@@ -246,7 +245,6 @@ export function useWellsList(plantId: string, highlightId?: string | null) {
     }
   };
 
-  const setDetailWell = (id: string | null) => setDetail(id);
   const setEditWell = (w: any) => setEditingWell(w);
   const setDeleteWell = (w: any) => { setWellDeleteTarget(w); setWellDeleteReason(''); };
   const setNavOperations = (w: any) => navigate(`/operations?tab=well&highlight=${w.id}`);
@@ -254,13 +252,13 @@ export function useWellsList(plantId: string, highlightId?: string | null) {
   return {
     isAdmin, isManager, qc,
     wells, latestWellReadings, latestByWellId, wellCardRefs, wellPulseId,
-    wellOfflineTarget, wellOfflineBusy, blendingSet, detail, selectedWell, selected,
+    wellOfflineTarget, wellOfflineBusy, blendingSet, selectedWell, selected,
     bulkDeleteOpen, bulkReason, bulkBusy, blendingBusy, powerBusy, adding,
     wellDeleteTarget, wellDeleteReason, wellDeleteBusy, editingWell, showWellCsv,
     meterCfg, getWellElectricMode, plant,
     toggle, toggleAll, toggleWellStatus, toggleWellElectric, toggleBlending,
     doWellDelete, doBulkDelete, applyWellStatusChange,
-    setDetail: setDetailWell, setSelectedWell, setSelected,
+    setSelectedWell, setSelected,
     setBulkDeleteOpen, setBulkReason, setBulkBusy,
     setWellOfflineTarget, setWellOfflineBusy,
     setAdding, setEditingWell: setEditWell, setShowWellCsv,

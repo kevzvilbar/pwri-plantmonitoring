@@ -1,12 +1,9 @@
-import { useCallback } from 'react';
-import { PlantSelector } from '@/components/PlantSelector';
+import { ActivePlantChip } from '@/components/ActivePlantChip';
 import { Button } from '@/components/ui/button';
-import { Label } from '@/components/ui/label';
 import { Upload } from 'lucide-react';
 
 interface PowerFormHeaderProps {
   plantId: string;
-  handlePlantChange: (v: string) => void;
   setImportOpen: (v: boolean) => void;
   isAdmin: boolean;
   isManager: boolean;
@@ -16,7 +13,6 @@ interface PowerFormHeaderProps {
 
 export function PowerFormHeader({
   plantId,
-  handlePlantChange,
   setImportOpen,
   isAdmin,
   isManager,
@@ -25,10 +21,7 @@ export function PowerFormHeader({
 }: PowerFormHeaderProps) {
   return (
     <div className="flex items-end gap-3">
-      <div className="flex-1 space-y-1.5">
-        <Label htmlFor="powersection-plant" className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Plant</Label>
-        <PlantSelector value={plantId} onChange={handlePlantChange} id="powersection-plant" />
-      </div>
+      <ActivePlantChip className="flex-1" />
       {prevRow?.is_estimated && (
         <span
           className="inline-flex items-center gap-1 text-2xs font-semibold px-2.5 py-1 rounded-full bg-warn-soft text-warn border border-warn/40"

@@ -171,16 +171,6 @@ export function usePowerFormActions(state: ReturnType<typeof import('./usePowerF
     } catch { /* non-critical */ }
   };
 
-  const handlePlantChange = useCallback((v: string) => {
-    state.setPlantId(v);
-    setEditingId(null);
-    state.setMultiplierInput('');
-    setReading('');
-    setSolarReading('');
-    setGridMeterReadings(['', '', '', '', '']);
-    setSolarMeterReadings(['', '', '', '', '']);
-  }, [state]);
-
   const displayHistory = useMemo(() => {
     if (!state.history?.length) return [];
     return state.history.map((r: any, i: number) => {
@@ -212,7 +202,6 @@ export function usePowerFormActions(state: ReturnType<typeof import('./usePowerF
     submit,
     startEdit,
     saveMultiplierToConfig,
-    handlePlantChange,
     displayHistory,
   };
 }

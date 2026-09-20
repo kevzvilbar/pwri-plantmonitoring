@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
-import { PlantSelector } from '@/components/PlantSelector';
+import { ActivePlantChip } from '@/components/ActivePlantChip';
+import { useActivePlant } from '@/hooks/useActivePlant';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -50,7 +51,7 @@ export function BlendingForm() {
   const isMobile = useIsMobile();
   const { user, isAdmin, isManager, isDataAnalyst } = useAuth();
   const { data: plants } = usePlants();
-  const [plantId, setPlantId] = useState('');
+  const { plantId } = useActivePlant();
   const [importOpen, setImportOpen] = useState(false);
   const plantName = plants?.find((p: any) => p.id === plantId)?.name ?? '';
 
@@ -245,10 +246,7 @@ export function BlendingForm() {
     <div className="space-y-3">
       <Card className="p-4">
         <div className="flex items-end gap-3">
-          <div className="flex-1 space-y-1.5">
-            <Label htmlFor="blendingsection-plant" className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Plant</Label>
-            <PlantSelector value={plantId} onChange={setPlantId} id="blendingsection-plant" />
-          </div>
+          <ActivePlantChip className="flex-1" />
           {(isAdmin || isManager || isDataAnalyst) && plantId && (
             <Button
               size="sm" variant="outline"

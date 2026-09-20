@@ -131,6 +131,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setProfile(null);
         setOperatorProfile(null);
         setActiveOperatorIdRef.current(null); // use ref, not reactive setter
+        // P5-2: the plant picker is per person. Covers expiry and sign-out from
+        // another tab, which never pass through signOut() below.
+        usePlantStore.getState().setSelectedPlantId(null);
         setRoles([]);
         setIsRecovery(false);
         setLoading(false);
@@ -159,6 +162,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = async () => {
     setActiveOperatorIdRef.current(null);
+    // P5-2: do not leave this person's plant selected for the next one on a
+    // shared device.
+    usePlantStore.getState().setSelectedPlantId(null);
     await supabase.auth.signOut();
   };
 

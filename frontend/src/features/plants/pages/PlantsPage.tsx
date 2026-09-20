@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { deltaCache } from '@/lib/deltaCache';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -30,6 +30,7 @@ import { PlantHeroBanner }                           from '../components/PlantHe
 import { PlantTelemetryChart }                       from '../components/charts/PlantTelemetryChart';
 import { usePlantSummary } from '../hooks/usePlantSummary';
 import { usePlantDetail } from '../hooks/usePlantDetail';
+import { usePlantRouteSync } from '../hooks/usePlantRouteSync';
 import { PlantList } from '../components/PlantList';
 import { PlantListHeader } from '../components/PlantListHeader';
 import { PlantDetailTabs } from '../components/PlantDetailTabs';
@@ -44,7 +45,7 @@ export interface AddPlantFormData {
 }
 
 export default function Plants() {
-  const { id } = useParams();
+  const { id, wellId } = useParams();
   const { selectedPlantId } = useAppStore();
   const { isManager, user: currentUser } = useAuth();
 
@@ -57,19 +58,10 @@ export default function Plants() {
     : visiblePlants;
   const navigate = useNavigate();
 
-  // ── Follow the universal plant picker (TopBar) ────────────────────────────
-  // The facility cockpit (/plants/:id) is driven entirely by the route param,
-  // so switching plants in the top bar previously had no effect while a
-  // specific facility was open. Navigate to the newly selected facility, or
-  // back to the list if the picker is cleared to "All plants".
-  const lastSyncedPlantRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (selectedPlantId === lastSyncedPlantRef.current) return;
-    lastSyncedPlantRef.current = selectedPlantId;
-    if (!id) return;
-    if (selectedPlantId && selectedPlantId !== id) navigate(`/plants/${selectedPlantId}`);
-    else if (!selectedPlantId) navigate('/plants');
-  }, [selectedPlantId, id, navigate]);
+  // P5-2: /plants/:id and the universal plant picker (TopBar) stay in step in
+  // both directions. Opening a facility makes it the active plant; changing
+  // the picker while one is open moves to the new facility (or the list).
+  usePlantRouteSync(id);
 
   const { data: summaryCounts } = usePlantSummary();
 
@@ -125,7 +117,7 @@ export default function Plants() {
     navigate(`/plants/${data!.id}`);
   };
 
-  if (id) return <PlantDetail plantId={id} />;
+  if (id) return <PlantDetail plantId={id} wellId={wellId ?? null} />;
 
   const totalCapacity = list?.reduce((s, p) => s + (p.design_capacity_m3 ?? 0), 0) ?? 0;
   const activePlants  = list?.filter(p => p.status === 'Active').length ?? 0;
@@ -204,13 +196,13 @@ export default function Plants() {
   );
 }
 
-function PlantDetail({ plantId }: { plantId: string }) {
+function PlantDetail({ plantId, wellId }: { plantId: string; wellId: string | null }) {
   const navigate = useNavigate();
   const {
     plant, trainCounts, tab, setTab, highlightId,
     editingInfo, setEditingInfo, infoSaving, infoForm, setInfoForm,
     openInfoEdit, saveInfo, isManager,
-  } = usePlantDetail(plantId);
+  } = usePlantDetail(plantId, wellId);
 
   if (!plant) return <div>Plant not found.</div>;
 
@@ -260,7 +252,7 @@ function PlantDetail({ plantId }: { plantId: string }) {
       <PlantDetailTabs tab={tab} onTabChange={setTab} />
 
       <div className={tab === 'locators' ? undefined : 'hidden'}><LocatorsList plantId={plantId} highlightId={tab === 'locators' ? highlightId : null} /></div>
-      <div className={tab === 'wells'    ? undefined : 'hidden'}><WellsList plantId={plantId} highlightId={tab === 'wells' ? highlightId : null} /></div>
+      <div className={tab === 'wells'    ? undefined : 'hidden'}><WellsList plantId={plantId} highlightId={tab === 'wells' ? highlightId : null} activeWellId={wellId} /></div>
       <div className={tab === 'product'  ? undefined : 'hidden'}><ProductMetersCard plant={plant} highlightId={tab === 'product' ? highlightId : null} /></div>
       <div className={tab === 'trains'   ? undefined : 'hidden'}><TrainsList plantId={plantId} /></div>
       <div className={tab === 'power'    ? undefined : 'hidden'}><PowerMetersCard plant={plant} /></div>

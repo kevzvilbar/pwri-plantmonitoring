@@ -126,6 +126,8 @@ const App = () => (
                   <Route path="/" element={<Dashboard />} />
                   <Route path="/plants" element={<Plants />} />
                   <Route path="/plants/:id" element={<Plants />} />
+                  {/* P5-3: a well's detail page is a child route of its plant */}
+                  <Route path="/plants/:id/wells/:wellId" element={<Plants />} />
                   <Route path="/operations" element={<Operations />} />
                   <Route path="/ro-trains" element={<ROTrains />} />
                   {/* ── NEW ── */}

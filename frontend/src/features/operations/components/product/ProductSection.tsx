@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { PlantSelector } from '@/components/PlantSelector';
+import { ActivePlantChip } from '@/components/ActivePlantChip';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useQueryClient } from '@tanstack/react-query';
@@ -55,7 +55,6 @@ export function ProductForm({ highlightId }: { highlightId?: string | null } = {
 
   const {
     plantId,
-    setPlantId,
     importOpen,
     setImportOpen,
     meters,
@@ -146,10 +145,7 @@ export function ProductForm({ highlightId }: { highlightId?: string | null } = {
     <div className="space-y-3">
       <Card className="p-4">
         <div className="flex items-end gap-3">
-          <div className="flex-1 space-y-1.5">
-            <Label htmlFor="productsection-plant" className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Plant</Label>
-            <PlantSelector value={plantId} onChange={setPlantId} id="productsection-plant" />
-          </div>
+          <ActivePlantChip className="flex-1" />
           {canEdit && plantId && (
             <Button
               size="sm" variant="outline"

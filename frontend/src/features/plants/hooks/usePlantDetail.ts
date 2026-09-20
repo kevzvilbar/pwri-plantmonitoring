@@ -11,7 +11,8 @@ import { logPlantEdit } from '../shared';
 type PlantTab = 'locators' | 'wells' | 'product' | 'trains' | 'power' | 'configuration';
 const VALID_PLANT_TABS = new Set<PlantTab>(['locators', 'wells', 'product', 'trains', 'power', 'configuration']);
 
-export function usePlantDetail(plantId: string) {
+/** `wellId` is the `:wellId` of `/plants/:id/wells/:wellId` (P5-3), when that route is open. */
+export function usePlantDetail(plantId: string, wellId: string | null = null) {
   const navigate = useNavigate();
   const { data: plants } = usePlants();
   const { isManager, user } = useAuth();
@@ -26,6 +27,13 @@ export function usePlantDetail(plantId: string) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [urlTab]);
   const setTab = (next: PlantTab) => {
+    // A well page is a child of the Wells tab. Picking any tab leaves it: go to
+    // the plant with that tab, rather than rewriting a query string on a URL
+    // that still names a well.
+    if (wellId) {
+      navigate(`/plants/${plantId}?tab=${next}`);
+      return;
+    }
     setTabState(next);
     const sp = new URLSearchParams(searchParams);
     sp.set('tab', next);
@@ -133,7 +141,8 @@ export function usePlantDetail(plantId: string) {
   return {
     plant,
     trainCounts,
-    tab,
+    // On a well route the Wells tab is active by definition.
+    tab: wellId ? ('wells' as PlantTab) : tab,
     setTab,
     highlightId,
     editingInfo,

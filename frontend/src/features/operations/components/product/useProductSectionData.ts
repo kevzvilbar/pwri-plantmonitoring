@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { usePlants } from '@/hooks/usePlants';
+import { useActivePlant } from '@/hooks/useActivePlant';
 import { useAuth } from '@/hooks/useAuth';
 import { format } from 'date-fns';
 import { computeRollingAverageRateFromDeltas, type VolumePoint } from '@/lib/flowRateGuards';
@@ -27,7 +28,7 @@ export function useProductSectionData({
 }) {
   const qc = useQueryClient();
   const { data: plants } = usePlants();
-  const [plantId, setPlantId] = useState('');
+  const { plantId } = useActivePlant();
   const [importOpen, setImportOpen] = useState(false);
   const rowRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const [pulseId, setPulseId] = useState<string | null>(null);
@@ -241,7 +242,6 @@ export function useProductSectionData({
 
   return {
     plantId,
-    setPlantId,
     importOpen,
     setImportOpen,
     meters,

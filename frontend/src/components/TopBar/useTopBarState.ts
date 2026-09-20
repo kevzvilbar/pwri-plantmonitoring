@@ -5,6 +5,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useAppStore } from '@/store/appStore';
 import { usePlants } from '@/hooks/usePlants';
 import { useVisiblePlants } from '@/hooks/useVisiblePlants';
+import { usePlantSelectionGuard } from '@/hooks/usePlantSelectionGuard';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useSidebar } from '@/components/ui/sidebar';
@@ -34,6 +35,8 @@ export function useTopBarState() {
   // P5-1 (D5): one visibility rule shared with the Alerts page, the alert
   // runtime, the Plants page and the Dashboard.
   const { plants: visiblePlants, needsAssignment } = useVisiblePlants();
+  // P5-2: drop a persisted plant selection this user cannot see.
+  usePlantSelectionGuard();
 
   const { data: notificationsData } = useQuery({
     queryKey: ['notifications', user?.id],
