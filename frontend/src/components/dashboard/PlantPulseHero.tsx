@@ -67,8 +67,10 @@ export function PlantPulseHero({
   // Filtered plant list (kept for onSelectPlant drill-down below).
   // Memoized so the fleet hook receives a referentially stable id array
   // (its TanStack key is derived from the joined ids).
+  // `plantIds` is authoritative (D5): an empty list means no plants, not "all"
+  // — otherwise a user with no visible plants would see every plant's status.
   const activePlants = useMemo(
-    () => (plants ?? []).filter((p) => !plantIds.length || plantIds.includes(p.id)),
+    () => (plants ?? []).filter((p) => plantIds.includes(p.id)),
     [plants, plantIds],
   );
 

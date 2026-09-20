@@ -8,8 +8,17 @@ vi.mock('react-router-dom', async (orig) => {
   const actual = await orig<typeof import('react-router-dom')>();
   return { ...actual, useNavigate: () => mockNavigate };
 });
+// P5-1 (D5): a non-privileged user with no assignments sees NO plants, so this
+// fixture has to be assigned one for the panel to reach its normal empty
+// states. Mutable so the unassigned case can be exercised below.
+let assignedPlants: string[] = ['p1'];
 vi.mock('@/hooks/useAuth', () => ({
-  useAuth: () => ({ user: { id: 'op-1' }, profile: { plant_assignments: [] }, roles: ['Operator'] }),
+  useAuth: () => ({
+    user: { id: 'op-1' },
+    profile: { plant_assignments: [...assignedPlants] },
+    roles: ['Operator'],
+    loading: false,
+  }),
 }));
 vi.mock('@/hooks/usePlants', () => ({ usePlants: () => ({ data: [{ id: 'p1', name: 'Plant 1' }] }) }));
 vi.mock('@/hooks/useCustomRoles', () => ({ useMyCustomRole: () => ({ data: null }) }));
@@ -54,6 +63,7 @@ const renderPanel = () =>
  *  and sensors operating normally" before anything had been evaluated. */
 describe('AlertPanel cold open (P3-9)', () => {
   beforeEach(() => {
+    assignedPlants = ['p1'];
     useAlertStore.setState({
       plantAlerts: [], snoozeMap: {}, serverStatusByKey: {}, alertsReady: false,
     });
@@ -85,5 +95,24 @@ describe('AlertPanel cold open (P3-9)', () => {
     act(() => useAlertStore.setState({ alertsReady: true }));
     expect(screen.getByText('No active alarms')).toBeInTheDocument();
     expect(screen.getByText('All plant systems and sensors operating normally')).toBeInTheDocument();
+  });
+
+  // P5-1 (D5): "no plants" must not be dressed up as either "checking" (it
+  // never will finish) or "all clear" (nothing was evaluated).
+  it('tells an unassigned user to ask an admin, not "Checking…" or "operating normally"', () => {
+    assignedPlants = [];
+    renderPanel();
+    expect(screen.getByText('No plants assigned')).toBeInTheDocument();
+    expect(screen.getByText('Ask an admin to assign a plant to your account')).toBeInTheDocument();
+    expect(screen.queryByText('Checking plant systems…')).toBeNull();
+    expect(screen.queryByText('All plant systems and sensors operating normally')).toBeNull();
+  });
+
+  it('still says "No plants assigned" for an unassigned user after a computation flag lands', () => {
+    assignedPlants = [];
+    renderPanel();
+    act(() => useAlertStore.setState({ alertsReady: true }));
+    expect(screen.getByText('No plants assigned')).toBeInTheDocument();
+    expect(screen.queryByText('No active alarms')).toBeNull();
   });
 });

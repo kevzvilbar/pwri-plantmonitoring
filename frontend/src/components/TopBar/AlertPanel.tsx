@@ -26,6 +26,7 @@ export function AlertPanel() {
     unreadCount,
     plantAlerts,
     alertsReady,
+    needsAssignment,
     totalBadge,
     sortedAlerts,
     criticalAlerts,
@@ -273,7 +274,12 @@ export function AlertPanel() {
                   {/* P2-7: never claim "operating normally" before the first
                       computation finishes — a cold open on a non-Dashboard
                       page would otherwise lie. */}
-                  {alertsReady ? (
+                  {needsAssignment ? (
+                    <>
+                      <p className="text-xs font-bold text-foreground">No plants assigned</p>
+                      <p className="text-2xs text-muted-foreground">Ask an admin to assign a plant to your account</p>
+                    </>
+                  ) : alertsReady ? (
                     <>
                       <p className="text-xs font-bold text-foreground">No active alarms</p>
                       <p className="text-2xs text-muted-foreground">All plant systems and sensors operating normally</p>

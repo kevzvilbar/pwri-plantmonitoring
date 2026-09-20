@@ -9,7 +9,6 @@ export interface Notification {
 }
 
 export const EMPTY_NOTIFICATIONS: Notification[] = [];
-export const EMPTY_PLANTS: Array<{ id: string; name: string }> = [];
 
 export const sevTier = (severity: string) => {
   switch (severity) {

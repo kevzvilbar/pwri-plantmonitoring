@@ -4,14 +4,15 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useAppStore } from '@/store/appStore';
 import { usePlants } from '@/hooks/usePlants';
+import { useVisiblePlants } from '@/hooks/useVisiblePlants';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useSidebar } from '@/components/ui/sidebar';
-import { Notification, SevTier, EMPTY_NOTIFICATIONS, EMPTY_PLANTS } from './types';
+import { Notification, SevTier, EMPTY_NOTIFICATIONS } from './types';
 import { sevTier } from './helpers';
 
 export function useTopBarState() {
-  const { user, profile } = useAuth();
+  const { user } = useAuth();
   const { isMobile, state } = useSidebar();
   const sidebarCollapsed = state === 'collapsed';
   const { data: plants } = usePlants();
@@ -30,13 +31,9 @@ export function useTopBarState() {
   const [tierFilter, setTierFilter] = useState<'all' | 'critical' | 'warning' | 'info'>('all');
   const [isRinging, setIsRinging] = useState(false);
 
-  const visiblePlants = useMemo(() => {
-    if (!plants) return EMPTY_PLANTS;
-    if (profile?.plant_assignments?.length) {
-      return plants.filter((p) => profile.plant_assignments.includes(p.id));
-    }
-    return plants;
-  }, [plants, profile?.plant_assignments]);
+  // P5-1 (D5): one visibility rule shared with the Alerts page, the alert
+  // runtime, the Plants page and the Dashboard.
+  const { plants: visiblePlants, needsAssignment } = useVisiblePlants();
 
   const { data: notificationsData } = useQuery({
     queryKey: ['notifications', user?.id],
@@ -139,6 +136,7 @@ export function useTopBarState() {
     tierFilter,
     setTierFilter,
     visiblePlants,
+    needsAssignment,
     notifs,
     unreadCount,
     setUnreadCount,

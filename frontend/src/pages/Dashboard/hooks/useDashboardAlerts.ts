@@ -138,8 +138,16 @@ export function useDashboardAlerts({
   });
   const chemInv = propChemInv ?? internalChemInv;
 
+  // P5-1 (D5): the feed is scoped by `plantIds` — the caller's visible plants,
+  // already narrowed by the picker — not by `selectedPlantId` alone. It used to
+  // filter only when a plant was picked, so with "All plants" (or any user with
+  // no plants) it pulled downtime / blending / compliance alerts for every
+  // plant in the system. An empty list now means "nothing", never "all".
+  // Keyed by the ids so a plant change refetches; the ['alerts-feed'] prefix
+  // that other code invalidates still matches.
+  const feedPlantKey = plantIds.join(',');
   const { data: internalFeed } = useQuery<{ count: number; alerts: any[] }>({
-    queryKey: ['alerts-feed', selectedPlantId],
+    queryKey: ['alerts-feed', feedPlantKey],
     queryFn: async () => {
       const days = 30;
       const since = format(subDays(new Date(), Math.max(1, days)), 'yyyy-MM-dd');
@@ -148,7 +156,7 @@ export function useDashboardAlerts({
       let qDt = supabase.from('downtime_events')
         .select('id, plant_id, subsystem, duration_hrs, event_date')
         .gte('event_date', since);
-      if (selectedPlantId) qDt = qDt.eq('plant_id', selectedPlantId);
+      qDt = qDt.in('plant_id', plantIds);
       const { data: dtRows, error: dtErr } = await qDt;
       if (dtErr) throw dtErr;
       const eventsByDay = new Map<string, any[]>();
@@ -181,7 +189,7 @@ export function useDashboardAlerts({
       let qBe = supabase.from('blending_events')
         .select('id, plant_id, well_name, volume_m3, event_date')
         .gte('event_date', sinceBlending).order('event_date', { ascending: false }).limit(50);
-      if (selectedPlantId) qBe = qBe.eq('plant_id', selectedPlantId);
+      qBe = qBe.in('plant_id', plantIds);
       const { data: beRows, error: beErr } = await qBe;
       if (beErr) throw beErr;
       (beRows ?? []).forEach((d) => {
@@ -197,7 +205,7 @@ export function useDashboardAlerts({
       let qSnap = supabase.from('compliance_snapshots')
         .select('plant_id, evaluated_at, violations')
         .order('evaluated_at', { ascending: false }).limit(20);
-      if (selectedPlantId) qSnap = qSnap.eq('plant_id', selectedPlantId);
+      qSnap = qSnap.in('plant_id', plantIds);
       const { data: snapRows, error: snapErr } = await qSnap;
       if (snapErr) throw snapErr;
       const seen = new Set<string>();
@@ -228,7 +236,7 @@ export function useDashboardAlerts({
       const capped = alerts.slice(0, 80);
       return { count: capped.length, alerts: capped };
     },
-    enabled: !propFeedAlerts,
+    enabled: !propFeedAlerts && plantIds.length > 0,
     retry: false,
     staleTime: 5 * 60_000,
     refetchInterval: 5 * 60_000,

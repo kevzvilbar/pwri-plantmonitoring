@@ -4,7 +4,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAppStore } from '@/store/appStore';
-import { usePlants } from '@/hooks/usePlants';
+import { useVisiblePlants } from '@/hooks/useVisiblePlants';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -46,12 +46,11 @@ export interface AddPlantFormData {
 export default function Plants() {
   const { id } = useParams();
   const { selectedPlantId } = useAppStore();
-  const { data: plants } = usePlants();
-  const { isManager, profile, user: currentUser } = useAuth();
+  const { isManager, user: currentUser } = useAuth();
 
-  const visiblePlants = isManager
-    ? (plants ?? [])
-    : (plants?.filter(p => profile?.plant_assignments?.includes(p.id)) ?? []);
+  // P5-1 (D5): the shared visibility rule. This page used to gate on
+  // `isManager` alone, which treated Data Analysts like Operators.
+  const { plants: visiblePlants, needsAssignment } = useVisiblePlants();
 
   const list = selectedPlantId
     ? visiblePlants.filter(p => p.id === selectedPlantId)
@@ -178,6 +177,7 @@ export default function Plants() {
 
       <PlantList
         plants={list}
+        needsAssignment={needsAssignment}
         filteredList={filteredList}
         summaryCounts={summaryCounts}
         isManager={isManager}

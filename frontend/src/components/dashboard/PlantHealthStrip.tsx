@@ -16,7 +16,10 @@ function statusToLampTone(status: FleetStatus): LampTone {
 }
 
 interface Props {
-  /** Plant IDs currently visible on the dashboard (respects global filter) */
+  /**
+   * Plant IDs to show: what the user may see (D5), narrowed by the global
+   * picker. Authoritative — an empty list shows nothing, never "all plants".
+   */
   plantIds: string[];
   onSelectPlant?: (plantId: string) => void;
 }
@@ -27,7 +30,7 @@ export function PlantHealthStrip({ plantIds, onSelectPlant }: Props) {
   const { lastByPlant, statusOf } = useFleetStatus(plantIds);
 
   const visiblePlants = useMemo(
-    () => (plants ?? []).filter((p) => !plantIds.length || plantIds.includes(p.id)),
+    () => (plants ?? []).filter((p) => plantIds.includes(p.id)),
     [plants, plantIds],
   );
 

@@ -11,6 +11,7 @@ import { ConfirmBulkDialog } from './components/ConfirmBulkDialog';
 import { useAlertActorNames } from './hooks/useAlertActorNames';
 import { alertStatusLine } from './lib/alertStatusLine';
 import { useAuth } from '@/hooks/useAuth';
+import { NoPlantsAssigned } from '@/components/NoPlantsAssigned';
 import { MAX_SNOOZE_MS } from './hooks/useAlertEvents';
 
 export default function Alerts() {
@@ -23,7 +24,7 @@ export default function Alerts() {
     statusFilter, setStatusFilter,
     plantFilter, setPlantFilter,
     searchQuery, setSearchQuery,
-    plantAlerts, visiblePlants, plantNameById,
+    plantAlerts, visiblePlants, needsAssignment, plantNameById,
     filteredPlantAlerts, filteredLogs,
     criticalCount, warningCount, infoCount, unreadLogsCount,
     plantAlertsLength, notifsLength,
@@ -60,6 +61,8 @@ export default function Alerts() {
         title="Alert & Notification Center"
         subtitle="Unified operations alarm triage, telemetry anomaly surveillance, and system event log."
       />
+
+      {needsAssignment && <NoPlantsAssigned />}
 
       <KpiCards
         activeView={activeView} tierFilter={tierFilter} setActiveView={setActiveView} setTierFilter={setTierFilter}

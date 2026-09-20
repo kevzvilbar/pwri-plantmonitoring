@@ -5,9 +5,10 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { usePlants } from '@/hooks/usePlants';
+import { useVisiblePlants } from '@/hooks/useVisiblePlants';
 import { useAlertStore } from '@/store/alertStore';
 import { useDebounce } from '@/hooks/useDebounce';
-import { sevTier, EMPTY_NOTIFICATIONS, EMPTY_PLANTS, type Notification } from '../lib/constants';
+import { sevTier, EMPTY_NOTIFICATIONS, type Notification } from '../lib/constants';
 import { useAuditedAlertActions } from './useAuditedAlertActions';
 import { effectiveAlertStatus } from '../lib/alertStatus';
 import type { AlertStatus } from '@/store/alertStore';
@@ -17,7 +18,7 @@ export type StatusFilter = 'all' | AlertStatus;
 export function useAlerts() {
   const navigate = useNavigate();
   const qc = useQueryClient();
-  const { user, profile } = useAuth();
+  const { user } = useAuth();
   const { data: plants } = usePlants();
   const { plantAlerts, snoozeMap, serverStatusByKey } = useAlertStore();
 
@@ -29,13 +30,8 @@ export function useAlerts() {
   const [searchQuery, setSearchQuery] = useState('');
   const debouncedSearchQuery = useDebounce(searchQuery, 250);
 
-  const visiblePlants = useMemo(() => {
-    if (!plants) return EMPTY_PLANTS;
-    if (profile?.plant_assignments?.length) {
-      return plants.filter((p) => profile.plant_assignments.includes(p.id));
-    }
-    return plants;
-  }, [plants, profile?.plant_assignments]);
+  // P5-1 (D5): the shared visibility rule. Feeds the plant filter dropdown.
+  const { plants: visiblePlants, needsAssignment } = useVisiblePlants();
 
   const plantNameById = useMemo(() => {
     const m = new Map<string, string>();
@@ -137,7 +133,7 @@ export function useAlerts() {
     statusFilter, setStatusFilter,
     plantFilter, setPlantFilter,
     searchQuery, setSearchQuery,
-    plantAlerts, visiblePlants, plantNameById,
+    plantAlerts, visiblePlants, needsAssignment, plantNameById,
     notificationsData, logsLoading, notifs,
     filteredPlantAlerts, filteredLogs,
     criticalCount, warningCount, infoCount, unreadLogsCount,

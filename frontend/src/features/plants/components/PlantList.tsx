@@ -1,8 +1,11 @@
 import { Search, Droplet } from 'lucide-react';
 import { PlantCard } from './PlantCard';
+import { NoPlantsAssigned } from '@/components/NoPlantsAssigned';
 
 export type PlantListProps = {
   plants: any[];
+  /** D5: user is not in the all-plants group and has no assignments. */
+  needsAssignment?: boolean;
   filteredList: any[];
   summaryCounts: any;
   isManager: boolean;
@@ -12,7 +15,7 @@ export type PlantListProps = {
   setStatusFilter: (v: 'all' | 'Active' | 'Inactive') => void;
 };
 
-export function PlantList({ plants, filteredList, summaryCounts, isManager, onNavigate, onInspect, setSearch, setStatusFilter }: PlantListProps) {
+export function PlantList({ plants, needsAssignment = false, filteredList, summaryCounts, isManager, onNavigate, onInspect, setSearch, setStatusFilter }: PlantListProps) {
   return (
     <div className="stagger-grid space-y-3">
       {filteredList?.map((p, idx) => (
@@ -27,7 +30,9 @@ export function PlantList({ plants, filteredList, summaryCounts, isManager, onNa
         />
       ))}
 
-      {!plants?.length && (
+      {!plants?.length && needsAssignment && <NoPlantsAssigned />}
+
+      {!plants?.length && !needsAssignment && (
         <div className="flex flex-col items-center gap-2 py-10 text-center text-muted-foreground text-sm rounded-xl border border-dashed border-border/60">
           <Droplet className="h-8 w-8 opacity-30" />
           <span>No plants visible</span>

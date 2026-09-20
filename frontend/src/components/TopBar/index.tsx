@@ -21,6 +21,7 @@ export function TopBar() {
     selectedPlantId,
     setSelectedPlantId,
     visiblePlants,
+    needsAssignment,
     unreadCount,
     panelOpen,
     setPanelOpen,
@@ -64,9 +65,12 @@ export function TopBar() {
         </div>
 
         <div className="flex justify-center">
+          {/* D5: a user with no plants gets a disabled picker that says so,
+              not an "All plants" that silently means everything. */}
           <Select
-            value={selectedPlantId ?? 'all'}
+            value={needsAssignment ? '' : (selectedPlantId ?? 'all')}
             onValueChange={(v) => setSelectedPlantId(v === 'all' ? null : v)}
+            disabled={needsAssignment}
           >
             <SelectTrigger
               className={cn(
@@ -77,7 +81,7 @@ export function TopBar() {
                 '[&>span]:text-topbar-foreground [&>svg]:text-topbar-muted',
               )}
             >
-              <SelectValue placeholder="Select plant" />
+              <SelectValue placeholder={needsAssignment ? 'No plants assigned' : 'Select plant'} />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All plants</SelectItem>

@@ -5,6 +5,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { usePlantStore } from '@/store/plantStore';
 import { useChartStore } from '@/store/chartStore';
 import { usePlants } from '@/hooks/usePlants';
+import { useVisiblePlants } from '@/hooks/useVisiblePlants';
+import { NoPlantsAssigned } from '@/components/NoPlantsAssigned';
 import { format, subDays } from 'date-fns';
 import { DowntimeEventsModal } from '@/components/DowntimeEventsModal';
 import { DashboardViewMode, VIEW_MODE_KEY, pctDelta } from '@/components/dashboard/types';
@@ -153,11 +155,16 @@ export default function Dashboard() {
     };
   };
 
+  // P5-1 (D5): scope to the plants this user may see (this page used to take
+  // every plant regardless of assignment), then narrow by the picker. The
+  // result is the same set <AlertsRuntime /> computes alarms for, so the two
+  // share React Query keys instead of fetching twice.
+  const { plants: allowedPlants, needsAssignment } = useVisiblePlants();
   const visiblePlants = useMemo(
-    () => (selectedPlantId ? plants?.filter((p) => p.id === selectedPlantId) : plants),
-    [plants, selectedPlantId],
+    () => (selectedPlantId ? allowedPlants.filter((p) => p.id === selectedPlantId) : allowedPlants),
+    [allowedPlants, selectedPlantId],
   );
-  const plantIds = visiblePlants?.map((p) => p.id) ?? [];
+  const plantIds = visiblePlants.map((p) => p.id);
 
   // Bug 4 fix: build today/yesterday boundaries in UTC using the local calendar date,
   // so that readings entered at e.g. 08:00 PST (= 00:00 UTC) are not pushed into yesterday.
@@ -206,6 +213,17 @@ export default function Dashboard() {
   // instance only, or useTrainAutoOffline writes duplicate status-log rows.
 
   const selectedPlantName = (selectedPlantId ? plants?.find(p => p.id === selectedPlantId)?.name : null) || 'All Production Facilities';
+
+  // D5: with no plants, an empty `plantIds` is not "no filter". PlantPulseHero
+  // and PlantHealthStrip both read [] as "show every plant", so an unassigned
+  // user gets the explanation instead of those widgets.
+  if (needsAssignment) {
+    return (
+      <div className="space-y-3 animate-fade-in">
+        <NoPlantsAssigned />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-3 animate-fade-in">

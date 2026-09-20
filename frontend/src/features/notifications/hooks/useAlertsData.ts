@@ -18,32 +18,24 @@ import { useMemo } from 'react';
 import { format, subDays } from 'date-fns';
 import { usePlantStore } from '@/store/plantStore';
 import { useAlertStore } from '@/store/alertStore';
-import { useAuth } from '@/hooks/useAuth';
-import { usePlants } from '@/hooks/usePlants';
+import { useVisiblePlants } from '@/hooks/useVisiblePlants';
 import { useProductionStats, useQualityStats, usePowerStats, useDashboardAlerts } from '@/pages/Dashboard/hooks';
 
 export function useAlertsData() {
   const selectedPlantId = usePlantStore((s) => s.selectedPlantId);
   const addAlerts = useAlertStore((s) => s.addAlerts);
   const clearConditionAlerts = useAlertStore((s) => s.clearConditionAlerts);
-  const { profile } = useAuth();
-  const { data: plants } = usePlants();
 
-  // Same plant-scoping rule as ProtectedRoute / the TopBar selector: a user
-  // with explicit assignments sees those plants, otherwise everything.
-  const visiblePlants = useMemo(() => {
-    if (!plants) return undefined;
-    if (profile?.plant_assignments?.length) {
-      return plants.filter((p) => profile.plant_assignments!.includes(p.id));
-    }
-    return plants;
-  }, [plants, profile?.plant_assignments]);
+  // P5-1 (D5): the same visibility rule as the TopBar, Alerts page, Plants
+  // page and Dashboard. The alarm set is computed only for plants the user
+  // may see, narrowed further by the global plant picker.
+  const { plants: visiblePlants } = useVisiblePlants();
 
   const scopedPlants = useMemo(
-    () => (selectedPlantId ? visiblePlants?.filter((p) => p.id === selectedPlantId) : visiblePlants),
+    () => (selectedPlantId ? visiblePlants.filter((p) => p.id === selectedPlantId) : visiblePlants),
     [visiblePlants, selectedPlantId],
   );
-  const plantIds = scopedPlants?.map((p) => p.id) ?? [];
+  const plantIds = scopedPlants.map((p) => p.id);
   const plantIdsKey = plantIds.join(',');
 
   // Same UTC-safe day boundaries as Dashboard.tsx (Bug 4 fix there): build

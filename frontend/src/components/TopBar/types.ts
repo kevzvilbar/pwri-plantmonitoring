@@ -11,4 +11,3 @@ export interface Notification {
 export type SevTier = 'critical' | 'warning' | 'info';
 
 export const EMPTY_NOTIFICATIONS: Notification[] = [];
-export const EMPTY_PLANTS: Array<{ id: string; name: string }> = [];
