@@ -2,7 +2,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
-  Bell, BellOff, CheckCheck, FileText, Search, Trash2,
+  Bell, BellOff, CheckCheck, CheckCircle2, FileText, Search, Trash2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -22,9 +22,10 @@ interface ControlConsoleProps {
   infoCount: number;
   unreadLogsCount: number;
   notifsLength: number;
-  visiblePlants: Array<{ id: string; name: string }>;
+    visiblePlants: Array<{ id: string; name: string }>;
   onSnoozeAll: () => void;
-  onClearAll: () => void;
+  onAcknowledgeAll: () => void;
+  onResolveAll: () => void;
   onMarkAllRead: () => void;
 }
 
@@ -32,7 +33,7 @@ export function ControlConsole({
   activeView, setActiveView, tierFilter, setTierFilter,
   plantFilter, setPlantFilter, searchQuery, setSearchQuery,
   plantAlertsLength, criticalCount, warningCount, infoCount, unreadLogsCount, notifsLength,
-  visiblePlants, onSnoozeAll, onClearAll, onMarkAllRead,
+  visiblePlants, onSnoozeAll, onAcknowledgeAll, onResolveAll, onMarkAllRead,
 }: ControlConsoleProps) {
   return (
     <div className="bg-card border border-border/80 p-3 sm:p-3.5 rounded-2xl space-y-3 shadow-xs">
@@ -66,16 +67,20 @@ export function ControlConsole({
           </button>
         </div>
 
-        <div className="w-full sm:w-auto flex items-center justify-end sm:justify-start gap-2">
+                <div className="w-full sm:w-auto flex items-center justify-end sm:justify-start gap-2">
           {activeView === 'active' && plantAlertsLength > 0 && (
             <>
               <Button size="sm" variant="outline" onClick={onSnoozeAll} className="flex-1 sm:flex-initial h-8 gap-1.5 text-xs border-border/80">
                 <BellOff className="h-3.5 w-3.5 text-warn" />
                 <span>Snooze all (1h)</span>
               </Button>
-              <Button size="sm" variant="outline" onClick={onClearAll} className="flex-1 sm:flex-initial h-8 gap-1.5 text-xs text-danger hover:bg-danger-soft border-danger/30 hover:border-danger/60">
-                <Trash2 className="h-3.5 w-3.5" />
-                <span>Dismiss all</span>
+              <Button size="sm" variant="outline" onClick={onAcknowledgeAll} className="flex-1 sm:flex-initial h-8 gap-1.5 text-xs text-info hover:bg-info-soft border-info/30 hover:border-info/60">
+                <CheckCircle2 className="h-3.5 w-3.5 text-info" />
+                <span>Acknowledge all</span>
+              </Button>
+              <Button size="sm" variant="outline" onClick={onResolveAll} className="flex-1 sm:flex-initial h-8 gap-1.5 text-xs text-success hover:bg-success-soft border-success/30 hover:border-success/60">
+                <CheckCheck className="h-3.5 w-3.5 text-success" />
+                <span>Resolve all</span>
               </Button>
             </>
           )}

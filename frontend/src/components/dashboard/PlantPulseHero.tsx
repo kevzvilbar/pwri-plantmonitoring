@@ -138,11 +138,11 @@ export function PlantPulseHero({
               {dProduction !== null && <TrendBadge delta={dProduction} />}
             </div>
 
-            <div className="text-3xs text-slate-300/90 flex items-center gap-1 pt-0.5 font-mono tabular-nums">
+                        <div className="text-3xs text-slate-300/90 flex items-center gap-1 pt-0.5 font-mono tabular-nums">
               <Lamp tone="live" pulse size={5} />
-              <span className="text-emerald-400 font-semibold">Live</span>
-              <span className="text-white/30">&bull;</span>
-              <span>{secondsAgo}s ago</span>
+              <span className="text-emerald-400 font-semibold">
+                {secondsAgo !== undefined ? `Updated ${secondsAgo}s ago` : 'Live'}
+              </span>
               <span className="text-white/30">&bull;</span>
               <span>24h ({timeStr || '—'})</span>
             </div>

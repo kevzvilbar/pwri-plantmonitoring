@@ -65,11 +65,24 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const [modal, setModal] = useState<null | { metric: string; title: string }>(null);
   const [downtimeOpen, setDowntimeOpen] = useState(false);
-  const [secondsAgo, setSecondsAgo] = useState(2);
-  useEffect(() => {
-    const timer = setInterval(() => setSecondsAgo(s => (s % 20) + 1), 1000);
-    return () => clearInterval(timer);
-  }, []);
+    // ── Data freshness indicator ─────────────────────────────────────
+  // Use React Query's dataUpdatedAt for real freshness instead of a fake
+  // setInterval counter. Shows "updated X min ago" when data is stale.
+  const { data: latestReading } = useQuery({
+    queryKey: ['latest-reading'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('readings')
+        .select('measured_at')
+        .order('measured_at', { ascending: false })
+        .limit(1)
+        .single();
+      if (error) return null;
+      return data;
+    },
+    staleTime: 5 * 60_000, // 5 minutes
+  });
+  const dataFreshness = latestReading ? new Date(latestReading.measured_at) : null;
 
   // ── Compliance Thresholds (derived from compliance settings, per-plant or global) ──
   const thresholdScope = selectedPlantId || 'global';
@@ -215,7 +228,7 @@ export default function Dashboard() {
         plantIds={plantIds}
         selectedPlantName={selectedPlantName}
         openIncidentCount={openIncidentCount}
-        secondsAgo={secondsAgo}
+                secondsAgo={dataFreshness ? Math.max(0, Math.floor((Date.now() - dataFreshness.getTime()) / 1000)) : undefined}
         production={prodStats.production}
         dProduction={prodStats.dProduction}
         rawWaterVol={prodStats.rawWaterVol}

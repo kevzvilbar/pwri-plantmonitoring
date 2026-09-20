@@ -1,14 +1,15 @@
 import React from 'react';
 import { toast } from 'sonner';
 import { PageHeader } from '@/components/PageHeader';
-import { Card } from '@/components/ui/card';
 import { useAlerts } from './hooks/useAlerts';
 import { KpiCards } from './components/KpiCards';
 import { ControlConsole } from './components/ControlConsole';
 import { ActiveAlertsList } from './components/ActiveAlertsList';
 import { SystemLogsList } from './components/SystemLogsList';
+import { useAuth } from '@/hooks/useAuth';
 
 export default function Alerts() {
+  const { user } = useAuth();
   const {
     navigate,
     activeView, setActiveView,
@@ -20,8 +21,11 @@ export default function Alerts() {
     criticalCount, warningCount, infoCount, unreadLogsCount,
     plantAlertsLength, notifsLength,
     markAllRead, deleteNotification,
-    removeAlerts, clearAlerts, snoozeAlert,
+    snoozeAlert, acknowledgeAlert, resolveAlert, acknowledgeAll, resolveAll,
   } = useAlerts();
+
+  // Get current user id for acknowledge/resolve audit trail
+  const userId = user?.id ?? 'unknown';
 
   return (
     <div className="space-y-5 pb-12">
@@ -45,9 +49,13 @@ export default function Alerts() {
           plantAlerts.forEach((a) => snoozeAlert(a.id, 60 * 60 * 1000));
           toast.success('All active alerts snoozed for 1 hour');
         }}
-        onClearAll={() => {
-          clearAlerts();
-          toast.success('All active alerts dismissed');
+        onAcknowledgeAll={() => {
+          acknowledgeAll(userId);
+          toast.success('All alerts acknowledged');
+        }}
+        onResolveAll={() => {
+          resolveAll(userId);
+          toast.success('All alerts resolved');
         }}
         onMarkAllRead={markAllRead}
       />
@@ -62,9 +70,13 @@ export default function Alerts() {
               snoozeAlert(id, ms);
               toast.success(`Alert snoozed for ${ms === 3600000 ? '1 hour' : '24 hours'}`);
             }}
-            onDismiss={(id) => {
-              removeAlerts([id]);
-              toast.success('Alert dismissed');
+            onAcknowledge={(id) => {
+              acknowledgeAlert(id, userId);
+              toast.success('Alert acknowledged');
+            }}
+            onResolve={(id) => {
+              resolveAlert(id, userId);
+              toast.success('Alert resolved');
             }}
           />
         )}

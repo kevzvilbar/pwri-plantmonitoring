@@ -8,11 +8,12 @@ interface ActiveAlertsListProps {
   plantNameById: Map<string, string>;
   onNavigate: (path: string) => void;
   onSnooze: (id: string, ms: number) => void;
-  onDismiss: (id: string) => void;
+  onAcknowledge: (id: string) => void;
+  onResolve: (id: string) => void;
 }
 
 export function ActiveAlertsList({
-  filteredPlantAlerts, plantNameById, onNavigate, onSnooze, onDismiss,
+  filteredPlantAlerts, plantNameById, onNavigate, onSnooze, onAcknowledge, onResolve,
 }: ActiveAlertsListProps) {
   if (filteredPlantAlerts.length > 0) {
     return (
@@ -36,7 +37,8 @@ export function ActiveAlertsList({
               linkPath={alert.linkPath ?? undefined}
               onNavigate={(path) => onNavigate(path)}
               onSnooze={(ms) => onSnooze(alert.id, ms)}
-              onDismiss={() => onDismiss(alert.id)}
+              onAcknowledge={() => onAcknowledge(alert.id)}
+              onResolve={() => onResolve(alert.id)}
             />
           );
         })}

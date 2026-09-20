@@ -8,7 +8,7 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
-import { MoreVertical, Clock, X, ArrowUpRight, Copy } from 'lucide-react';
+import { MoreVertical, Clock, X, ArrowUpRight, Copy, CheckCircle2, CheckCheck } from 'lucide-react';
 import { toast } from 'sonner';
 
 export type SignalTone = 'critical' | 'warning' | 'info' | 'good' | 'live' | 'muted';
@@ -35,6 +35,8 @@ export interface SignalProps {
   linkPath?: string;
   onNavigate?: (path: string) => void;
   onSnooze?: (durationMs: number) => void;
+  onAcknowledge?: () => void;  // New: Proper acknowledge action
+  onResolve?: () => void;      // New: Proper resolve action
   onDismiss?: () => void;
   actions?: SignalAction[];
   className?: string;
@@ -120,11 +122,13 @@ export function Signal({
   icon: Icon,
   pulse,
   plantName,
-  source,
+    source,
   timestamp,
   linkPath,
   onNavigate,
   onSnooze,
+  onAcknowledge,
+  onResolve,
   onDismiss,
   actions = [],
   className,
@@ -240,7 +244,7 @@ export function Signal({
   }
 
   // ── VARIANT: Card (Default) ────────────────────────────────────────────────
-  const hasActions = onSnooze || onDismiss || actions.length > 0;
+    const hasActions = onSnooze || onAcknowledge || onDismiss || actions.length > 0;
   const isClickable = !!linkPath || !!onNavigate;
 
   return (
@@ -348,6 +352,24 @@ export function Signal({
                       </DropdownMenuItem>
                     )}
 
+                                        {onAcknowledge && (
+                      <DropdownMenuItem
+                        onClick={onAcknowledge}
+                        className="text-xs flex items-center gap-2 cursor-pointer py-1.5 text-info hover:text-info hover:bg-info/10"
+                      >
+                        <CheckCircle2 className="h-3.5 w-3.5 text-info" />
+                        <span>Acknowledge</span>
+                      </DropdownMenuItem>
+                    )}
+                    {onResolve && (
+                      <DropdownMenuItem
+                        onClick={onResolve}
+                        className="text-xs flex items-center gap-2 cursor-pointer py-1.5 text-success hover:text-success hover:bg-success/10"
+                      >
+                        <CheckCheck className="h-3.5 w-3.5 text-success" />
+                        <span>Resolve</span>
+                      </DropdownMenuItem>
+                    )}
                     {onDismiss && (
                       <>
                         <DropdownMenuSeparator />

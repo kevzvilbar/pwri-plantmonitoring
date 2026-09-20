@@ -7,7 +7,7 @@ import { Signal } from '@/components/ui/Signal';
 import { getAlertIcon, sevTier } from './helpers';
 
 export function AlertPanel() {
-  const {
+    const {
     panelOpen,
     setPanelOpen,
     activeTab,
@@ -28,8 +28,10 @@ export function AlertPanel() {
     markAllRead,
     deleteNotification,
     snoozeAlert,
-    removeAlerts,
-    clearAlerts,
+    acknowledgeAlert,
+    resolveAlert,
+    acknowledgeAll,
+    resolveAll,
     navigate,
   } = useTopBarState();
 
@@ -56,7 +58,7 @@ export function AlertPanel() {
             )}
           </div>
 
-          <div className="flex items-center gap-1 shrink-0 ml-auto">
+                    <div className="flex items-center gap-1 shrink-0 ml-auto">
             {activeTab === 'active' && sortedAlerts.length > 0 && (
               <>
                 <button
@@ -74,13 +76,26 @@ export function AlertPanel() {
                 <button
                   type="button"
                   onClick={() => {
-                    clearAlerts();
-                    toast.success('All alerts dismissed');
+                    // Use acknowledgeAll instead of clearing alerts silently
+                    // Record who and when for audit trail
+                    acknowledgeAll('current-user');
+                    toast.success('All alerts acknowledged');
+                  }}
+                  className="text-2xs px-2 py-1 rounded-md text-muted-foreground hover:text-primary hover:bg-primary-soft transition-colors font-medium min-h-[32px] sm:min-h-[28px]"
+                  title="Acknowledge all alerts (records who and when)"
+                >
+                  Acknowledge all
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    resolveAll('current-user');
+                    toast.success('All alerts resolved');
                   }}
                   className="text-2xs px-2 py-1 rounded-md text-muted-foreground hover:text-danger hover:bg-danger-soft transition-colors font-medium min-h-[32px] sm:min-h-[28px]"
-                  title="Dismiss all alerts"
+                  title="Resolve all alerts (records who and when)"
                 >
-                  Dismiss all
+                  Resolve all
                 </button>
               </>
             )}
@@ -201,7 +216,7 @@ export function AlertPanel() {
               const plantName = plantNameById.get(alert.plantId);
 
               return (
-                <Signal
+                                <Signal
                   key={alert.id}
                   variant="card"
                   tone={tier}
@@ -220,9 +235,19 @@ export function AlertPanel() {
                     snoozeAlert(alert.id, ms);
                     toast.success(`Alert snoozed for ${ms === 3600000 ? '1 hour' : '24 hours'}`);
                   }}
+                  onAcknowledge={() => {
+                    acknowledgeAlert(alert.id, 'current-user');
+                    toast.success('Alert acknowledged');
+                  }}
+                  onResolve={() => {
+                    resolveAlert(alert.id, 'current-user');
+                    toast.success('Alert resolved');
+                  }}
                   onDismiss={() => {
-                    removeAlerts([alert.id]);
-                    toast.success('Alert dismissed');
+                    // Deprecated: use onAcknowledge/onResolve instead
+                    // This is kept for backward compatibility but shows proper messaging
+                    acknowledgeAlert(alert.id, 'current-user');
+                    toast.success('Alert acknowledged');
                   }}
                 />
               );

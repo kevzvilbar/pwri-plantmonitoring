@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useLocation, useNavigationType } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Logomark } from '@/components/icons/Logomark';
@@ -12,9 +12,17 @@ export default function Auth() {
   const { user, loading, isRecovery } = useAuth();
   const [activeTab, setActiveTab] = useState<'signin' | 'signup'>('signin');
   const [pendingNotice, setPendingNotice] = useState<{ email: string; count: number } | null>(null);
+  const location = useLocation();
+
+  // Read the "from" location that ProtectedRoute saved when redirecting to /auth.
+  // After successful authentication, redirect back there instead of always '/'.
+  // This preserves deep links from emails, alert deep-links, etc.
+  const from = (location.state as { from?: { pathname?: string; search?: string } })?.from;
+  const redirectTo = from?.pathname ?? '/';
 
   if (loading) return <AppLoading className="min-h-screen" />;
-  if (user && !isRecovery) return <Navigate to="/" replace />;
+  // Use redirectTo after login instead of hardcoded '/'
+  if (user && !isRecovery) return <Navigate to={redirectTo} replace />;
   return (
     <div
       className="min-h-screen lg:flex"

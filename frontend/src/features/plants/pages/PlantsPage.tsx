@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { deltaCache } from '@/lib/deltaCache';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAppStore } from '@/store/appStore';
 import { usePlants } from '@/hooks/usePlants';
@@ -76,14 +76,27 @@ export default function Plants() {
 
   const [search,       setSearch]       = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'Active' | 'Inactive'>('all');
-  const [showAddPlant, setShowAddPlant] = useState(false);
+    const [showAddPlant, setShowAddPlant] = useState(false);
   const [addPlantBusy, setAddPlantBusy] = useState(false);
   const [inspectedPlant, setInspectedPlant] = useState<any | null>(null);
-  const [secondsAgo, setSecondsAgo] = useState(3);
-  useEffect(() => {
-    const timer = setInterval(() => setSecondsAgo(s => (s % 20) + 1), 1000);
-    return () => clearInterval(timer);
-  }, []);
+
+  // Use React Query for real freshness instead of fake setInterval
+  const { data: latestReading } = useQuery({
+    queryKey: ['plants-latest-reading'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('readings')
+        .select('measured_at')
+        .order('measured_at', { ascending: false })
+        .limit(1)
+        .single();
+      return data;
+    },
+    staleTime: 5 * 60_000,
+  });
+  const realSecondsAgo = latestReading
+    ? Math.max(0, Math.floor((Date.now() - new Date(latestReading.measured_at).getTime()) / 1000))
+    : 0;
   const qc = useQueryClient();
 
   const doAddPlant = async (form: AddPlantFormData) => {
@@ -157,7 +170,7 @@ export default function Plants() {
       <PlantListHeader
         list={list}
         summaryCounts={summaryCounts}
-        secondsAgo={secondsAgo}
+        secondsAgo={realSecondsAgo}
         totalCapacity={totalCapacity}
         roUtilPct={roUtilPct}
         avgHealth={avgHealth}

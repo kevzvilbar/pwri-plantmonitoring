@@ -3,7 +3,7 @@ import {
   LayoutDashboard, Building2, Droplet, Wrench, AlertTriangle,
   Users, Download, Upload, ShieldCheck, ShieldAlert,
   GitBranch, FlaskConical, ChevronLeft, ChevronRight,
-  ClipboardCheck, Award } from 'lucide-react';
+  ClipboardCheck, Award, Bell } from 'lucide-react';
 // Icon-audit fix: RO Trains now uses the purpose-built ROTrainIcon instead
 // of the generic gear/Cog glyph, matching TrainsList and the mobile nav.
 import { ROTrainIcon, PesoSignIcon } from '@/components/icons/water-icons';
@@ -13,131 +13,126 @@ import {
   SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar,
 } from '@/components/ui/sidebar';
 import { useAuth } from '@/hooks/useAuth';
-import { OPERATOR_DESIGNATION } from '@/components/DesignationCombobox';
-import { OPERATOR_ALLOWED_PATHS } from '@/components/ProtectedRoute';
-import { isOperatorOnly } from '@/lib/permissions';
+import { hasPermission, type Role } from '@/lib/permissions';
 import { cn } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+
+// New 6-group structure organized by user task (from navConfig.ts GROUP_DEFS)
+// Overview | Assets | Daily Logs | Review | Admin | Other
 
 type SidebarItem = {
   to: string;
   label: string;
-  // `any` rather than `typeof LayoutDashboard`: this list now mixes lucide
-  // icons with the custom water-icon components (e.g. ROTrainIcon), same as
-  // the existing `icon: any` convention in BottomNav.tsx / StatCard.tsx.
   icon: any;
   end?: boolean;
+  show?: boolean;  // Set by permission check
 };
+
 type SidebarGroup = { label: string; items: SidebarItem[] };
 
-const groups: SidebarGroup[] = [
-  {
-    label: 'Overview',
-    items: [
-      { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
-      { to: '/compliance', label: 'Compliance', icon: ShieldCheck },
-    ],
-  },
-  {
-    label: 'Operations',
-    items: [
-      { to: '/plants', label: 'Plants', icon: Building2 },
-      // Icon-audit fix: was `Activity` here, which mismatched the mobile
-      // bottom nav's `Droplet` for the same /operations route — and Activity
-      // is otherwise reserved for the "production vs. consumption" chart
-      // concept elsewhere in the app (DataSummaryModal, NRWGaugeCard,
-      // EntityHistoryChart), so it doubly didn't belong here.
-      { to: '/operations', label: 'Wells & Locators', icon: Droplet },
-      { to: '/ro-trains', label: 'RO Trains', icon: ROTrainIcon },
-      { to: '/topology', label: 'Network Topology', icon: GitBranch },
-    ],
-  },
-  {
-    label: 'Maintenance',
-    items: [
-      { to: '/maintenance', label: 'PM Schedule', icon: Wrench },
-      { to: '/incidents', label: 'Incidents', icon: AlertTriangle },
-    ],
-  },
-  {
-    label: 'Finance',
-    items: [
-      { to: '/costs', label: 'Costs & Tariffs', icon: PesoSignIcon },
-    ],
-  },
-];
+// Build groups dynamically based on permissions
+function buildSidebarGroups(roles: Role[]): SidebarGroup[] {
+  const groups: SidebarGroup[] = [];
 
-// Admin Console stays Admin-only.
-const adminOnlyGroup: SidebarGroup = {
-  label: 'Admin',
-  items: [
-    { to: '/admin', label: 'Admin Console', icon: ShieldAlert },
-  ],
-};
+  // Overview: Dashboard + Alerts (always visible)
+  const overviewItems: SidebarItem[] = [
+    { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
+  ];
+  // Add Alerts if visible (it's now in OPERATOR_ALLOWED_PATHS)
+  if (hasPermission(roles, 'alerts', 'view')) {
+    overviewItems.push({ to: '/alerts', label: 'Alerts', icon: Bell });
+  }
+  groups.push({ label: 'Overview', items: overviewItems });
 
-// Data Analysis & Review + Data Corrections + Manager Scorecard — visible to
-// Admin, Manager, and Data Analyst (all three pages gate access to
-// isAdmin || isManager || isDataAnalyst).
-const dataAnalysisGroup: SidebarGroup = {
-  label: 'Analysis',
-  items: [
-    { to: '/data-analysis', label: 'Data Analysis & Review', icon: FlaskConical },
-    { to: '/data-corrections', label: 'Data Corrections', icon: ClipboardCheck },
-    { to: '/manager-scorecard', label: 'Manager Scorecard', icon: Award },
-  ],
-};
+  // Assets: Plants + Network Topology
+  const assetsItems: SidebarItem[] = [];
+  if (hasPermission(roles, 'plants', 'view')) {
+    assetsItems.push({ to: '/plants', label: 'Plants', icon: Building2 });
+  }
+  if (hasPermission(roles, 'network_topology', 'view')) {
+    assetsItems.push({ to: '/topology', label: 'Network Topology', icon: GitBranch });
+  }
+  if (assetsItems.length > 0) {
+    groups.push({ label: 'Assets', items: assetsItems });
+  }
 
-const dataGroup: SidebarGroup = {
-  label: 'Data',
-  items: [
-    { to: '/exports', label: 'Data Exports', icon: Download },
-    { to: '/import', label: 'Smart Import', icon: Upload },
-  ],
-};
+  // Daily Logs: Operations + RO Trains + PM + Incidents (the shift loop)
+  const dailyLogsItems: SidebarItem[] = [];
+  if (hasPermission(roles, 'operations', 'view')) {
+    dailyLogsItems.push({ to: '/operations', label: 'Daily Readings', icon: Droplet });
+  }
+  if (hasPermission(roles, 'ro_trains', 'view')) {
+    dailyLogsItems.push({ to: '/ro-trains', label: 'RO Trains', icon: ROTrainIcon });
+  }
+  if (hasPermission(roles, 'pm_schedule', 'view')) {
+    dailyLogsItems.push({ to: '/maintenance', label: 'PM Schedule', icon: Wrench });
+  }
+  if (hasPermission(roles, 'incidents', 'view')) {
+    dailyLogsItems.push({ to: '/incidents', label: 'Incidents', icon: AlertTriangle });
+  }
+  if (dailyLogsItems.length > 0) {
+    groups.push({ label: 'Daily Logs', items: dailyLogsItems });
+  }
 
-const sharedGroup: SidebarGroup = {
-  label: 'Team',
-  items: [
-    { to: '/employees', label: 'Employees', icon: Users },
-  ],
-};
+  // Review: Data Analysis + Data Corrections + Manager Scorecard
+  const reviewItems: SidebarItem[] = [];
+  if (hasPermission(roles, 'data_analysis_review', 'view')) {
+    reviewItems.push({ to: '/data-analysis', label: 'Data Analysis & Review', icon: FlaskConical });
+  }
+  if (hasPermission(roles, 'data_corrections', 'view')) {
+    reviewItems.push({ to: '/data-corrections', label: 'Data Corrections', icon: ClipboardCheck });
+  }
+  if (hasPermission(roles, 'manager_scorecard', 'view')) {
+    reviewItems.push({ to: '/manager-scorecard', label: 'Manager Scorecard', icon: Award });
+  }
+  if (reviewItems.length > 0) {
+    groups.push({ label: 'Review', items: reviewItems });
+  }
 
-function filterGroupForOperator(group: SidebarGroup): SidebarGroup | null {
-  const items = group.items.filter((item) => {
-    const path = item.to.split('?')[0];
-    return OPERATOR_ALLOWED_PATHS.some(
-      (allowed) => allowed === '/' ? path === '/' : path.startsWith(allowed),
-    );
-  });
-  return items.length > 0 ? { ...group, items } : null;
+  // Admin: Only for Admin role
+  const adminItems: SidebarItem[] = [];
+  if (hasPermission(roles, 'admin_users', 'view')) {
+    adminItems.push({ to: '/admin', label: 'Admin Console', icon: ShieldAlert });
+  }
+  if (adminItems.length > 0) {
+    groups.push({ label: 'Admin', items: adminItems });
+  }
+
+  // Other: Compliance + Costs + Employees + Exports + Import + Profile
+  const otherItems: SidebarItem[] = [];
+  if (hasPermission(roles, 'compliance', 'view')) {
+    otherItems.push({ to: '/compliance', label: 'Compliance', icon: ShieldCheck });
+  }
+  if (hasPermission(roles, 'costs', 'view')) {
+    otherItems.push({ to: '/costs', label: 'Costs & Tariffs', icon: PesoSignIcon });
+  }
+  if (hasPermission(roles, 'employees', 'view')) {
+    otherItems.push({ to: '/employees', label: 'Employees', icon: Users });
+  }
+  if (hasPermission(roles, 'data_exports', 'view')) {
+    otherItems.push({ to: '/exports', label: 'Data Exports', icon: Download });
+  }
+  if (hasPermission(roles, 'smart_import', 'view')) {
+    otherItems.push({ to: '/import', label: 'Smart Import', icon: Upload });
+  }
+  // Profile is always visible (UNCONFIGURABLE_MODULES)
+  otherItems.push({ to: '/profile', label: 'Profile', icon: LayoutDashboard });
+  if (otherItems.length > 0) {
+    groups.push({ label: 'Other', items: otherItems });
+  }
+
+  return groups;
 }
 
 export function AppSidebar() {
   const { state, toggleSidebar } = useSidebar();
   const collapsed = state === 'collapsed';
   const { pathname } = useLocation();
-  const { isAdmin, isManager, isDataAnalyst, profile, roles } = useAuth();
+  const { profile, roles } = useAuth();
 
-  // Was missing the !isElevated guard ProtectedRoute has — an elevated user
-  // with a stale designation='Operator' field would get the restricted nav
-  // even though every route was actually open to them. isOperatorOnly is the
-  // single corrected definition; see permissions.test.ts.
-  const isOperator = isOperatorOnly(roles, profile?.designation, OPERATOR_DESIGNATION);
-
-  let visibleGroups: SidebarGroup[];
-  if (isOperator) {
-    visibleGroups = [...groups, sharedGroup]
-      .map(filterGroupForOperator)
-      .filter((g): g is SidebarGroup => g !== null);
-  } else if (isAdmin) {
-    visibleGroups = [...groups, sharedGroup, dataGroup, dataAnalysisGroup, adminOnlyGroup];
-  } else if (isDataAnalyst) {
-    visibleGroups = [...groups, sharedGroup, dataGroup, dataAnalysisGroup, adminOnlyGroup];
-  } else if (isManager) {
-    visibleGroups = [...groups, sharedGroup, dataGroup, dataAnalysisGroup];
-  } else {
-    visibleGroups = [...groups, sharedGroup];
-  }
+  // Build sidebar groups dynamically based on permissions
+  // This replaces the old hardcoded role-based groups
+  const visibleGroups = buildSidebarGroups(roles as Role[]);
 
   return (
     <Sidebar collapsible="icon">

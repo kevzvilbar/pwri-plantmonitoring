@@ -49,7 +49,8 @@ describe('Alerts & Notification System UI', () => {
       const setPlantFilter = vi.fn();
       const setSearchQuery = vi.fn();
       const onSnoozeAll = vi.fn();
-      const onClearAll = vi.fn();
+      const onAcknowledgeAll = vi.fn();
+      const onResolveAll = vi.fn();
       const onMarkAllRead = vi.fn();
 
       render(
@@ -70,7 +71,8 @@ describe('Alerts & Notification System UI', () => {
           notifsLength={10}
           visiblePlants={[{ id: 'plant-1', name: 'Guizo Plant' }]}
           onSnoozeAll={onSnoozeAll}
-          onClearAll={onClearAll}
+          onAcknowledgeAll={onAcknowledgeAll}
+          onResolveAll={onResolveAll}
           onMarkAllRead={onMarkAllRead}
         />
       );
@@ -78,15 +80,20 @@ describe('Alerts & Notification System UI', () => {
       expect(screen.getByText(/Active Alarms/i)).toBeInTheDocument();
       expect(screen.getByText(/System Log/i)).toBeInTheDocument();
       expect(screen.getByText(/Snooze all/i)).toBeInTheDocument();
-      expect(screen.getByText(/Dismiss all/i)).toBeInTheDocument();
+      expect(screen.getByText(/Acknowledge all/i)).toBeInTheDocument();
+      expect(screen.getByText(/Resolve all/i)).toBeInTheDocument();
 
       // Click snooze all
       fireEvent.click(screen.getByText(/Snooze all/i));
       expect(onSnoozeAll).toHaveBeenCalled();
 
-      // Click dismiss all
-      fireEvent.click(screen.getByText(/Dismiss all/i));
-      expect(onClearAll).toHaveBeenCalled();
+      // Click acknowledge all
+      fireEvent.click(screen.getByText(/Acknowledge all/i));
+      expect(onAcknowledgeAll).toHaveBeenCalled();
+
+      // Click resolve all
+      fireEvent.click(screen.getByText(/Resolve all/i));
+      expect(onResolveAll).toHaveBeenCalled();
 
       // Typing in search
       const searchInput = screen.getByPlaceholderText(/Search by title/i);
@@ -96,7 +103,7 @@ describe('Alerts & Notification System UI', () => {
   });
 
   describe('ActiveAlertsList', () => {
-    it('renders alert list cards and handles dismiss/snooze/navigate', () => {
+    it('renders alert list cards and handles acknowledge/resolve/snooze/navigate', () => {
       const mockAlerts = [
         {
           id: 'alert-1',
@@ -112,7 +119,8 @@ describe('Alerts & Notification System UI', () => {
       const plantNames = new Map([['p-1', 'Guizo Plant']]);
       const onNavigate = vi.fn();
       const onSnooze = vi.fn();
-      const onDismiss = vi.fn();
+      const onAcknowledge = vi.fn();
+      const onResolve = vi.fn();
 
       render(
         <ActiveAlertsList
@@ -120,7 +128,8 @@ describe('Alerts & Notification System UI', () => {
           plantNameById={plantNames}
           onNavigate={onNavigate}
           onSnooze={onSnooze}
-          onDismiss={onDismiss}
+          onAcknowledge={onAcknowledge}
+          onResolve={onResolve}
         />
       );
 
@@ -142,7 +151,8 @@ describe('Alerts & Notification System UI', () => {
           plantNameById={new Map()}
           onNavigate={vi.fn()}
           onSnooze={vi.fn()}
-          onDismiss={vi.fn()}
+          onAcknowledge={vi.fn()}
+          onResolve={vi.fn()}
         />
       );
 

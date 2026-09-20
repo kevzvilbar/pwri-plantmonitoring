@@ -1,24 +1,14 @@
+import { Navigate } from 'react-router-dom';
+
 /**
  * Chemical Dosing has moved into the RO Trains page
  * under the "Chemical Dosing" tab.
  *
- * This file is kept as a redirect shim so any existing route
- * (/chemicals) still renders something graceful instead of crashing.
+ * This is a proper redirect (not a static page) so:
+ * - It uses the router's basename (/pwri-plantmonitoring/ on Vercel)
+ * - It deep-links to the Chemical Dosing tab, not Overview
+ * - It preserves SPA navigation (no full page reload)
  */
 export default function Chemicals() {
-  return (
-    <div className="flex flex-col items-center justify-center min-h-[40vh] gap-3 text-center p-6">
-      <p className="text-lg font-semibold">Chemical Dosing has moved</p>
-      <p className="text-sm text-muted-foreground max-w-xs">
-        You can now find Chemical Dosing inside{' '}
-        <strong>RO Trains &amp; Pre-Treatment</strong> → <strong>Chemical Dosing</strong> tab.
-      </p>
-      <a
-        href="/ro-trains"
-        className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
-      >
-        Go to RO Trains →
-      </a>
-    </div>
-  );
+  return <Navigate to="/ro-trains?tab=chemical-dosing" replace />;
 }

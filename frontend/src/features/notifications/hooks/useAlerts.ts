@@ -16,7 +16,7 @@ export function useAlerts() {
   const { user, profile } = useAuth();
   const { data: plants } = usePlants();
   const { selectedPlantId, setSelectedPlantId } = usePlantStore();
-  const { plantAlerts, removeAlerts, clearAlerts, snoozeAlert } = useAlertStore();
+    const { plantAlerts, snoozeAlert, acknowledgeAlert, resolveAlert, acknowledgeAll, resolveAll } = useAlertStore();
 
   const [activeView, setActiveView] = useState<'active' | 'logs'>('active');
   const [tierFilter, setTierFilter] = useState<'all' | 'critical' | 'warning' | 'info'>('all');
@@ -117,7 +117,7 @@ export function useAlerts() {
   const infoCount = useMemo(() => plantAlerts.filter((a) => sevTier(a.severity) === 'info').length, [plantAlerts]);
   const unreadLogsCount = useMemo(() => notifs.filter((n) => !n.read).length, [notifs]);
 
-  return {
+    return {
     navigate,
     activeView, setActiveView,
     tierFilter, setTierFilter,
@@ -129,6 +129,10 @@ export function useAlerts() {
     criticalCount, warningCount, infoCount, unreadLogsCount,
     plantAlertsLength: plantAlerts.length, notifsLength: notifs.length,
     markAllRead, deleteNotification,
-    removeAlerts, clearAlerts, snoozeAlert,
+    snoozeAlert,
+    acknowledgeAlert,
+    resolveAlert,
+    acknowledgeAll,
+    resolveAll,
   };
 }

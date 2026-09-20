@@ -43,9 +43,11 @@ export function PlantListHeader({
               <span>{facilityCount} {facilityCount === 1 ? 'Facility' : 'Facilities'} Monitored</span>
             </span>
             <span className="opacity-40">&bull;</span>
-            <span className="inline-flex items-center gap-1 text-muted-foreground">
+                        <span className="inline-flex items-center gap-1 text-muted-foreground">
               <span>Synced</span>
-              <strong className="text-foreground font-semibold font-mono">{secondsAgo}s</strong>
+              <strong className="text-foreground font-semibold font-mono">
+                {secondsAgo > 60 ? `${Math.floor(secondsAgo / 60)}m` : `${secondsAgo}s`}
+              </strong>
               <span>ago</span>
             </span>
           </div>

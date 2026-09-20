@@ -1,6 +1,6 @@
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
-  LayoutDashboard, Menu,
+  LayoutDashboard, Menu, Bell,
   Building2, Droplet,
   Wrench, AlertTriangle, Users, Download, Upload, ShieldCheck,
   ShieldAlert,
@@ -13,149 +13,135 @@ import {
 import { ROTrainIcon, PesoSignIcon } from '@/components/icons/water-icons';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
-import { OPERATOR_DESIGNATION } from '@/components/DesignationCombobox';
-import { OPERATOR_ALLOWED_PATHS } from '@/components/ProtectedRoute';
-import { isOperatorOnly } from '@/lib/permissions';
+import { hasPermission, type Role } from '@/lib/permissions';
 import {
   Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger,
 } from '@/components/ui/sheet';
 
 // Priority items for mobile bottom nav (Dashboard centered).
-// Wells + Locators are combined into a single entry on mobile so the bottom
-// bar fits a 5-icon layout (Plants · Wells & Locators · Dashboard · RO Trains · More).
+// Suggested: Readings · RO trains · Dashboard · Alerts · More
+// Plants moves into More (it's a registry operators visit less often)
 type Priority = {
   to: string;
   label: string;
-  // Optional shorter label for the bottom-nav column itself, where a
-  // 5-column phone-width layout leaves little room. The full `label` is
-  // still used as the button's aria-label so screen readers get the
-  // unabbreviated name — only the visible column text is shortened.
   mobileLabel?: string;
   icon: any;
   match?: string[];
-  // Optional precise active check: returns true when the current `tab` query
-  // value (lower-cased) is one of the given values. Preferred over loose
-  // substring matching against the full URL.
   matchTabValues?: string[];
 };
 
+// Left side: Plants + Daily Readings (Wells & Locators)
 const leftPriority: Priority[] = [
   { to: '/plants', label: 'Plants', icon: Building2 },
   {
     to: '/operations?tab=wells',
-    label: 'Wells & Locators',
-    // "Wells & Locators" at text-2xs was the tightest fit in the row by a
-    // wide margin — this frees enough width to raise the whole row from
-    // 10px to 11px (see renderPriority) without any label wrapping.
-    mobileLabel: 'Wells',
+    label: 'Daily Readings',
+    // Renamed from "Wells & Locators" — the page holds Wells, Locators, Product, Blending, Power
+    mobileLabel: 'Readings',
     icon: Droplet,
     match: ['/operations'],
-    // Accept both plural deep-link values and the singular values that
-    // Operations writes back when the user manually clicks a tab.
-    matchTabValues: ['well', 'wells', 'locator', 'locators'],
+    matchTabValues: ['well', 'wells', 'locator', 'locators', 'product', 'blending', 'power'],
   },
 ];
+
+// Right side: RO Trains
 const rightPriority: Priority[] = [
   { to: '/ro-trains', label: 'RO Trains', icon: ROTrainIcon },
 ];
 
-// Items hidden behind the side sheet
-const sideSheetGroups = [
-  {
-    title: 'Overview',
-    items: [
-      { to: '/compliance', label: 'Compliance', icon: ShieldCheck },
-      { to: '/topology', label: 'Network Topology', icon: GitBranch },
-    ],
-  },
-  {
-    title: 'Maintenance',
-    items: [
-      { to: '/maintenance', label: 'PM Schedule', icon: Wrench },
-      { to: '/incidents', label: 'Incidents', icon: AlertTriangle },
-    ],
-  },
-  {
-    title: 'Finance',
-    items: [
-      { to: '/costs', label: 'Costs & Tariffs', icon: PesoSignIcon },
-    ],
-  },
-];
+// Items hidden behind the side sheet - organized by the new 6-group structure
+// with permission-based visibility
+function buildSideSheetGroups(roles: Role[]): { title: string; items: { to: string; label: string; icon: any }[] }[] {
+  const groups: { title: string; items: { to: string; label: string; icon: any }[] }[] = [];
 
-// Admin Console stays Admin-only.
-const adminOnlyGroup = {
-  title: 'Admin',
-  items: [
-    { to: '/admin', label: 'Admin Console', icon: ShieldAlert },
-  ],
-};
+  // Overview: Alerts (if permission allows)
+  const overviewItems: { to: string; label: string; icon: any }[] = [];
+  if (hasPermission(roles, 'alerts', 'view')) {
+    overviewItems.push({ to: '/alerts', label: 'Alerts', icon: Bell });
+  }
+  if (overviewItems.length > 0) {
+    groups.push({ title: 'Overview', items: overviewItems });
+  }
 
-// Data import/export — visible to Admins AND Managers
-const dataGroup = {
-  title: 'Data',
-  items: [
-    { to: '/exports', label: 'Data Exports', icon: Download },
-    { to: '/import', label: 'Smart Import', icon: Upload },
-  ],
-};
+  // Assets: Network Topology
+  const assetsItems: { to: string; label: string; icon: any }[] = [];
+  if (hasPermission(roles, 'network_topology', 'view')) {
+    assetsItems.push({ to: '/topology', label: 'Network Topology', icon: GitBranch });
+  }
+  if (assetsItems.length > 0) {
+    groups.push({ title: 'Assets', items: assetsItems });
+  }
 
-// Data Analysis & Review + Data Corrections + Manager Scorecard — visible to
-// Admins, Data Analysts, and Managers (all three pages gate canView to
-// isAdmin || isDataAnalyst || isManager).
-const dataAnalysisGroup = {
-  title: 'Analysis',
-  items: [
-    { to: '/data-analysis', label: 'Data Analysis & Review', icon: FlaskConical },
-    { to: '/data-corrections', label: 'Data Corrections', icon: ClipboardCheck },
-    { to: '/manager-scorecard', label: 'Manager Scorecard', icon: Award },
-  ],
-};
+  // Daily Logs: PM Schedule + Incidents
+  const dailyLogsItems: { to: string; label: string; icon: any }[] = [];
+  if (hasPermission(roles, 'pm_schedule', 'view')) {
+    dailyLogsItems.push({ to: '/maintenance', label: 'PM Schedule', icon: Wrench });
+  }
+  if (hasPermission(roles, 'incidents', 'view')) {
+    dailyLogsItems.push({ to: '/incidents', label: 'Incidents', icon: AlertTriangle });
+  }
+  if (dailyLogsItems.length > 0) {
+    groups.push({ title: 'Daily Logs', items: dailyLogsItems });
+  }
 
-// Always visible (all roles)
-const teamGroup = {
-  title: 'Team',
-  items: [
-    { to: '/employees', label: 'Employees', icon: Users },
-  ],
-};
+  // Review: Data Analysis + Data Corrections + Manager Scorecard
+  const reviewItems: { to: string; label: string; icon: any }[] = [];
+  if (hasPermission(roles, 'data_analysis_review', 'view')) {
+    reviewItems.push({ to: '/data-analysis', label: 'Data Analysis', icon: FlaskConical });
+  }
+  if (hasPermission(roles, 'data_corrections', 'view')) {
+    reviewItems.push({ to: '/data-corrections', label: 'Data Corrections', icon: ClipboardCheck });
+  }
+  if (hasPermission(roles, 'manager_scorecard', 'view')) {
+    reviewItems.push({ to: '/manager-scorecard', label: 'Manager Scorecard', icon: Award });
+  }
+  if (reviewItems.length > 0) {
+    groups.push({ title: 'Review', items: reviewItems });
+  }
+
+  // Other: Compliance + Costs + Employees + Exports + Import + Profile
+  const otherItems: { to: string; label: string; icon: any }[] = [];
+  if (hasPermission(roles, 'compliance', 'view')) {
+    otherItems.push({ to: '/compliance', label: 'Compliance', icon: ShieldCheck });
+  }
+  if (hasPermission(roles, 'costs', 'view')) {
+    otherItems.push({ to: '/costs', label: 'Costs & Tariffs', icon: PesoSignIcon });
+  }
+  if (hasPermission(roles, 'employees', 'view')) {
+    otherItems.push({ to: '/employees', label: 'Employees', icon: Users });
+  }
+  if (hasPermission(roles, 'data_exports', 'view')) {
+    otherItems.push({ to: '/exports', label: 'Data Exports', icon: Download });
+  }
+  if (hasPermission(roles, 'smart_import', 'view')) {
+    otherItems.push({ to: '/import', label: 'Smart Import', icon: Upload });
+  }
+  // Profile is always accessible
+  otherItems.push({ to: '/profile', label: 'Profile', icon: LayoutDashboard });
+  if (otherItems.length > 0) {
+    groups.push({ title: 'Other', items: otherItems });
+  }
+
+  // Admin: Only for Admin role
+  if (hasPermission(roles, 'admin_users', 'view')) {
+    groups.push({
+      title: 'Admin',
+      items: [{ to: '/admin', label: 'Admin Console', icon: ShieldAlert }],
+    });
+  }
+
+  return groups;
+}
 
 export function BottomNav() {
   const { pathname, search } = useLocation();
   const navigate = useNavigate();
-  const { isAdmin, isManager, isDataAnalyst, profile, roles } = useAuth();
+  const { profile, roles } = useAuth();
   const fullPath = pathname + search;
 
-  // Was missing the !isElevated guard ProtectedRoute has — see AppSidebar.tsx
-  // for the same fix and permissions.test.ts for the covering test.
-  const isOperator = isOperatorOnly(roles, profile?.designation, OPERATOR_DESIGNATION);
-
-  // For operators: filter every sheet group's items to allowed paths only,
-  // then drop empty groups. This also removes Finance/AI/Compliance/Admin entirely.
-  const filterGroupForOperator = (group: typeof teamGroup) => {
-    const items = group.items.filter((item) => {
-      const path = item.to.split('?')[0];
-      return OPERATOR_ALLOWED_PATHS.some(
-        (allowed) => allowed === '/' ? path === '/' : path.startsWith(allowed),
-      );
-    });
-    return items.length > 0 ? { ...group, items } : null;
-  };
-
-  let visibleGroups: typeof sideSheetGroups;
-  if (isOperator) {
-    visibleGroups = [...sideSheetGroups, teamGroup]
-      .map(filterGroupForOperator)
-      .filter((g): g is typeof teamGroup => g !== null);
-  } else if (isAdmin) {
-    visibleGroups = [...sideSheetGroups, teamGroup, dataGroup, dataAnalysisGroup, adminOnlyGroup];
-  } else if (isDataAnalyst) {
-    visibleGroups = [...sideSheetGroups, teamGroup, dataGroup, dataAnalysisGroup, adminOnlyGroup];
-  } else if (isManager) {
-    visibleGroups = [...sideSheetGroups, teamGroup, dataGroup, dataAnalysisGroup];
-  } else {
-    visibleGroups = [...sideSheetGroups, teamGroup];
-  }
+  // Build bottom nav groups dynamically based on permissions
+  // This replaces the old hardcoded role-based groups
+  const visibleGroups = buildSideSheetGroups(roles as Role[]);
 
   const isPriorityActive = (item: Priority) => {
     const target = item.to.split('?')[0];

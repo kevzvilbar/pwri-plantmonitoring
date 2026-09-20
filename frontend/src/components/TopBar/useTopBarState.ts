@@ -15,11 +15,12 @@ export function useTopBarState() {
   const { isMobile, state } = useSidebar();
   const sidebarCollapsed = state === 'collapsed';
   const { data: plants } = usePlants();
-  const {
+        const {
     selectedPlantId, setSelectedPlantId,
     setUnreadCount, unreadCount,
-    plantAlerts, removeAlerts, clearAlerts,
-    snoozeAlert, pruneSnooze,
+    plantAlerts,
+    snoozeAlert, unsnoozeAlert, pruneSnooze,
+    acknowledgeAlert, resolveAlert, acknowledgeAll, resolveAll,  // New actions
   } = useAppStore();
   const navigate = useNavigate();
   const qc = useQueryClient();
@@ -123,7 +124,7 @@ export function useTopBarState() {
     return sortedAlerts;
   }, [tierFilter, sortedAlerts, criticalAlerts, warningAlerts, infoAlerts]);
 
-  return {
+    return {
     panelOpen,
     setPanelOpen,
     activeTab,
@@ -146,8 +147,11 @@ export function useTopBarState() {
     markAllRead,
     deleteNotification,
     snoozeAlert,
-    removeAlerts,
-    clearAlerts,
+    unsnoozeAlert,  // Added
+    acknowledgeAlert,
+    resolveAlert,
+        acknowledgeAll,
+    resolveAll,
     isMobile,
     sidebarCollapsed,
     selectedPlantId,

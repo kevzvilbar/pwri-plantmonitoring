@@ -8,14 +8,15 @@ export type { Role };
 // actual behavior (ProtectedRoute, page-level canEdit checks, etc.)
 // drifts from what's declared here.
 //
-// Not covered yet: per-plant scoping (plant_assignments) and the
-// "redirected" outcome for Data Analyst on Admin Console → Plants/Audit.
-// Those stay as-is in Admin.tsx for now — see REDIRECTS below.
+// Nav components (AppSidebar, BottomNav) should derive their items from
+// this matrix via hasPermission() / usePermission() rather than hand-coding
+// role lists. See navConfig.ts for the generated navigation config.
 
 export type Action = 'view' | 'edit' | 'budget' | 'delete';
 
 export type ModuleKey =
   | 'dashboard'
+  | 'alerts'  // Added: Alerts is now a first-class nav item
   | 'ai_assistant'
   | 'compliance'
   | 'plants'
@@ -40,7 +41,7 @@ export type ModuleKey =
 // Display order + labels for the roles editor and any other UI that needs
 // to render "every module" (mirrors Appendix A's row order).
 export const MODULE_ORDER: readonly ModuleKey[] = [
-  'dashboard', 'ai_assistant', 'compliance', 'plants', 'operations', 'ro_trains',
+  'dashboard', 'alerts', 'ai_assistant', 'compliance', 'plants', 'operations', 'ro_trains',
   'network_topology', 'pm_schedule', 'incidents', 'manager_scorecard', 'costs', 'employees',
   'data_exports', 'smart_import', 'data_analysis_review', 'data_corrections',
   'admin_users', 'admin_plants', 'admin_audit', 'admin_migrations', 'profile',
@@ -48,10 +49,11 @@ export const MODULE_ORDER: readonly ModuleKey[] = [
 
 export const MODULE_LABELS: Record<ModuleKey, string> = {
   dashboard: 'Dashboard',
+  alerts: 'Alerts',  // Added: first-class nav item with badge support
   ai_assistant: 'AI Assistant',
   compliance: 'Compliance',
   plants: 'Plants',
-  operations: 'Operations',
+  operations: 'Daily Readings',  // Renamed from 'Operations' — page holds Wells, Locators, Product, Blending, Power
   ro_trains: 'RO Trains',
   network_topology: 'Network Topology',
   pm_schedule: 'PM Schedule',
@@ -78,6 +80,7 @@ const MANAGE: readonly Role[] = ['Manager', 'Admin'];
 
 export const PERMISSION_MATRIX: Record<ModuleKey, ModulePermissions> = {
   dashboard: { view: ALL },
+  alerts: { view: ALL },  // All roles can view alerts — they're the ones receiving the alarms
   ai_assistant: { view: ELEVATED },
   // edit matches admin_write_thresholds RLS policy on compliance_thresholds
   // exactly (supabase/migrations/20260515_supabase_only_and_data_analysis.sql)

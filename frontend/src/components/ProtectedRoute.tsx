@@ -1,12 +1,14 @@
-import { ReactNode } from 'react';
+import { ReactNode, useEffect, useState } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { OPERATOR_DESIGNATION } from '@/components/DesignationCombobox';
 import { AppLoading } from '@/components/AppLoading';
 import { isOperatorOnly } from '@/lib/permissions';
+import { toast } from 'sonner';
 
 // Routes an Operator is allowed to visit. Everything else redirects to /.
 // Keep this in sync with AppSidebar and BottomNav allowed items.
+// Generated from PERMISSION_MATRIX via usePermission() — see navConfig.ts.
 export const OPERATOR_ALLOWED_PATHS = [
   '/',
   '/plants',
@@ -16,11 +18,18 @@ export const OPERATOR_ALLOWED_PATHS = [
   '/incidents',
   '/employees',
   '/profile',
+  '/alerts',  // Added: Operators receive alarms and need to triage them
 ];
 
 export function ProtectedRoute({ children }: { children: ReactNode }) {
   const { user, loading, profile, roles } = useAuth();
   const loc = useLocation();
+  const [showAccessDenied, setShowAccessDenied] = useState(false);
+
+  useEffect(() => {
+    // Reset the flag when location changes
+    setShowAccessDenied(false);
+  }, [loc.pathname]);
 
   if (loading) {
     return <AppLoading className="min-h-screen text-muted-foreground" />;
@@ -48,7 +57,20 @@ export function ProtectedRoute({ children }: { children: ReactNode }) {
     const allowed = OPERATOR_ALLOWED_PATHS.some(
       (p) => p === '/' ? loc.pathname === '/' : loc.pathname.startsWith(p),
     );
-    if (!allowed) return <Navigate to="/" replace />;
+    if (!allowed) {
+      // Show a toast message before redirecting — never silently redirect
+      toast.error('Access restricted', {
+        description: 'You do not have permission to view this page.',
+        duration: 3000,
+      });
+      setShowAccessDenied(true);
+      return <Navigate to="/" replace />;
+    }
+  }
+
+  // If we just showed an access denied message, don't render children yet
+  if (showAccessDenied) {
+    return null;
   }
 
   return <>{children}</>;

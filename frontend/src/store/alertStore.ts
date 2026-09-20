@@ -15,6 +15,30 @@ export interface PlantAlert {
   timestamp: number; // Date.now()
   /** Optional in-app route to navigate to on click — e.g. the train's log page. */
   linkPath?: string;
+  /** Optional user who acknowledged this alert */
+  acknowledgedBy?: string;
+  /** When the alert was acknowledged */
+  acknowledgedAt?: number;
+  /** Optional user who resolved this alert */
+  resolvedBy?: string;
+  /** When the alert was resolved */
+  resolvedAt?: number;
+}
+
+export type AlertStatus = 'active' | 'acknowledged' | 'resolved' | 'snoozed';
+
+export function getAlertStatus(alert: PlantAlert, snoozeMap: SnoozeMap): AlertStatus {
+  const snoozeExpiry = snoozeMap[alert.id];
+  if (snoozeExpiry != null && snoozeExpiry > Date.now()) {
+    return 'snoozed';
+  }
+  if (alert.resolvedAt != null) {
+    return 'resolved';
+  }
+  if (alert.acknowledgedAt != null) {
+    return 'acknowledged';
+  }
+  return 'active';
 }
 
 export type SnoozeMap = Record<string, number>;
@@ -34,11 +58,20 @@ export interface AlertState {
   snoozeAlert: (id: string, durationMs?: number) => void;
   unsnoozeAlert: (id: string) => void;
   pruneSnooze: () => void;
+
+  // New: Proper acknowledge/resolve actions
+  acknowledgeAlert: (id: string, userId: string) => void;
+  resolveAlert: (id: string, userId: string) => void;
+  acknowledgeAll: (userId: string) => void;
+  resolveAll: (userId: string) => void;
+  
+  // Selector for getting alert status
+  getAlertStatus: (alert: PlantAlert) => AlertStatus;
 }
 
 export const useAlertStore = create<AlertState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       plantAlerts: [],
       addAlerts: (incoming) =>
         set((s) => {
@@ -54,6 +87,8 @@ export const useAlertStore = create<AlertState>()(
         }),
       removeAlerts: (ids) =>
         set((s) => {
+          // NOTE: This function's name is misleading — it actually snoozes for 5 min
+          // Consider renaming to snoozeAlertShort or refactoring to proper dismiss
           const dismissSnoozeExpiry = Date.now() + 5 * 60 * 1000;
           const updatedSnooze: SnoozeMap = { ...s.snoozeMap };
           ids.forEach((id) => { updatedSnooze[id] = dismissSnoozeExpiry; });
@@ -85,11 +120,49 @@ export const useAlertStore = create<AlertState>()(
           }
           return { snoozeMap: next };
         }),
+
+      // New: Proper acknowledge — records who and when, no time limit
+      acknowledgeAlert: (id, userId) =>
+        set((s) => ({
+          plantAlerts: s.plantAlerts.map((a) =>
+            a.id === id
+              ? { ...a, acknowledgedBy: userId, acknowledgedAt: Date.now() }
+              : a
+          ),
+        })),
+      // New: Proper resolve — records who and when, clears the alert
+      resolveAlert: (id, userId) =>
+        set((s) => ({
+          plantAlerts: s.plantAlerts.map((a) =>
+            a.id === id
+              ? { ...a, resolvedBy: userId, resolvedAt: Date.now() }
+              : a
+          ),
+        })),
+      acknowledgeAll: (userId) =>
+        set((s) => ({
+          plantAlerts: s.plantAlerts.map((a) =>
+            a.acknowledgedAt == null && a.resolvedAt == null
+              ? { ...a, acknowledgedBy: userId, acknowledgedAt: Date.now() }
+              : a
+          ),
+        })),
+      resolveAll: (userId) =>
+        set((s) => ({
+          plantAlerts: s.plantAlerts.map((a) =>
+            a.resolvedAt == null
+              ? { ...a, resolvedBy: userId, resolvedAt: Date.now() }
+              : a
+          ),
+        })),
+      getAlertStatus: (alert) => getAlertStatus(alert, get().snoozeMap),
     }),
     {
       name: 'pwri-alert-state',
       partialize: (s) => ({
         snoozeMap: s.snoozeMap,
+        // Note: plantAlerts themselves are NOT persisted — they're recomputed on mount
+        // Only snoozeMap persists so snoozes survive page reloads
       }),
     }
   )
