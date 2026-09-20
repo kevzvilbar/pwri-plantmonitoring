@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { usePlantMeterConfig } from '@/pages/plants/shared';
-import { TWO_HOURS_MS } from '@/lib/autoOfflineThreshold';
+import { isReadingGapStale } from '@/lib/autoOfflineThreshold';
 import { computeROMeterAverageRates } from '@/lib/roReadingGuards';
 
 export interface PretreatmentData {
@@ -87,6 +87,29 @@ export function usePretreatmentData(
     },
   });
 
+  // Newest "was actually running — failed to encode" attestation for this train.
+  // It vouches for the train up to covered_until without inserting a reading
+  // row, so staleness below must be measured from it, not just from the last
+  // reading — otherwise the form stays locked right after the attestation is
+  // filed. Errors resolve to null (no attestation → the pre-existing behaviour)
+  // rather than throwing, so a not-yet-migrated table can't leave the form in
+  // its loading skeleton while react-query retries.
+  const { data: latestUptimeReport, isLoading: isUptimeReportLoading } = useQuery({
+    queryKey: ['ro-uptime-report-latest', trainId],
+    enabled: !!trainId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('ro_train_uptime_reports' as any)
+        .select('covered_until')
+        .eq('train_id', trainId)
+        .order('covered_until', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (error) return null;
+      return data as { covered_until: string } | null;
+    },
+  });
+
   const prevFeedMeter = prevReadings?.feed_meter ?? null;
   const prevPermMeter = prevReadings?.permeate_meter ?? null;
   const prevRejMeter = prevReadings?.reject_meter ?? null;
@@ -107,14 +130,14 @@ export function usePretreatmentData(
   // to be an inline two-hour millisecond literal; it must agree with the
   // auto-offline flagger or the operator sees a locked Offline form while
   // train cards still read Running (or vice versa).
-  const isPastTwoHoursMissing = !lastReadingTime || (Date.now() - new Date(lastReadingTime).getTime() >= TWO_HOURS_MS);
+  const isPastTwoHoursMissing = isReadingGapStale(lastReadingTime, latestUptimeReport?.covered_until);
   const isEffectivelyOffline = train
     ? (train.status === 'Offline' || (train.status !== 'Maintenance' && isPastTwoHoursMissing))
     : false;
   // True while we still don't know the train's real last-reading time. The caller should
   // avoid locking in an Online/Offline default from isEffectivelyOffline until this settles,
   // since prevReadings/prevPretreatReadings resolve independently of the `trains` query.
-  const isStatusLoading = !!trainId && (isPrevReadingsLoading || isPrevPretreatLoading);
+  const isStatusLoading = !!trainId && (isPrevReadingsLoading || isPrevPretreatLoading || isUptimeReportLoading);
   // Average flow rates (10-day rolling)
   // Key is deliberately NOT ['ro-spark', trainId]: Overview.tsx caches a different
   // shape under ['ro-spark', trainIds.join(',')], which is the very same key for a

@@ -142,6 +142,7 @@ export async function reportTrainRunningExemption(
   qc.invalidateQueries({ queryKey: ['ro-trains'] });
   qc.invalidateQueries({ queryKey: ['train-status-log'] });
   qc.invalidateQueries({ queryKey: ['train-latest-status-log'] });
+  qc.invalidateQueries({ queryKey: ['ro-uptime-report-latest'] });
   qc.invalidateQueries({ queryKey: ['train-hourly-gaps'] });
   qc.invalidateQueries({ queryKey: ['train-gaps'] });
 }

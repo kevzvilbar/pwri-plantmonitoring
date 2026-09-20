@@ -31,3 +31,36 @@ export const ONE_HOUR_MS = 60 * 60 * 1000;
  *  several call sites (deriveTrainStatus, isPastTwoHoursMissing) think in
  *  milliseconds. */
 export const TWO_HOURS_MS = AUTO_OFFLINE_THRESHOLD_HOURS * ONE_HOUR_MS;
+
+/**
+ * True when the train has gone AUTO_OFFLINE_THRESHOLD_HOURS or longer without
+ * data, i.e. the auto-offline staleness rule applies to it.
+ *
+ * Staleness is measured from the later of:
+ *   - the last real reading, and
+ *   - the end (covered_until) of the newest "was actually running — failed to
+ *     encode" attestation (ro_train_uptime_reports).
+ *
+ * Without the second term the RO log form stays locked right after the
+ * operator files that attestation: filing it deliberately inserts NO reading
+ * row (readings come in the next save, once the form unlocks), so the last
+ * reading is still hours old and the form kept treating the train as
+ * offline — demanding downtime reason / Back Online At for downtime that,
+ * by the operator's own attestation, never happened.
+ *
+ * An attestation is not a reading and not a standing exemption: it only
+ * vouches for the train up to covered_until, so the 2h clock restarts from
+ * there and the train goes stale again if no reading follows.
+ */
+export function isReadingGapStale(
+  lastReadingAt: string | null | undefined,
+  attestedUntil: string | null | undefined,
+  nowMs: number = Date.now(),
+): boolean {
+  const toMs = (v: string | null | undefined): number => {
+    const t = v ? new Date(v).getTime() : NaN;
+    return Number.isFinite(t) ? t : 0;
+  };
+  const latest = Math.max(toMs(lastReadingAt), toMs(attestedUntil));
+  return latest === 0 || nowMs - latest >= TWO_HOURS_MS;
+}
