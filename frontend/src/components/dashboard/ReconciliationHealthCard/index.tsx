@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils';
 import { fmtNum } from '@/lib/calculations';
 import { C_PERMEATE, C_PRODUCT_METER } from '@/lib/chartColors';
 import { usePlantStore } from '@/store/plantStore';
+import { usePermission } from '@/hooks/usePermission';
 import { useReconciliationHealthTotals } from './useReconciliationHealthTotals';
 import { formatRangeLabel } from '../types';
 import type { ReconciliationStatus } from '@/lib/waterBalanceReconciliation';
@@ -41,6 +42,8 @@ function VolumeBar({
 
 export function ReconciliationHealthCard({ plantIds }: { plantIds: string[] }) {
   const navigate = useNavigate();
+  // Plant Topology is not open to Operators, who still see this card.
+  const canOpenTopology = usePermission('network_topology', 'view');
   const setSelectedPlantId = usePlantStore((s) => s.setSelectedPlantId);
   const {
     rows, isLoading, error, chartRange, chartFrom, chartTo, startKey, endKey,
@@ -123,8 +126,9 @@ export function ReconciliationHealthCard({ plantIds }: { plantIds: string[] }) {
                 <button
                   key={plantId}
                   onClick={() => goToPlant(plantId)}
-                  title="Open this plant's full reconciliation ledger in Plant Topology"
-                  className="w-full flex flex-col gap-1.5 rounded-lg border border-border/40 bg-muted/20 hover:bg-muted/40 px-2.5 py-2 text-left transition-colors cursor-pointer"
+                  disabled={!canOpenTopology}
+                  title={canOpenTopology ? "Open this plant's full reconciliation ledger in Plant Topology" : 'Requires Plant Topology access'}
+                  className="w-full flex flex-col gap-1.5 rounded-lg border border-border/40 bg-muted/20 hover:bg-muted/40 disabled:hover:bg-muted/20 px-2.5 py-2 text-left transition-colors cursor-pointer disabled:cursor-default"
                 >
                   <span className="flex items-center justify-between gap-2">
                     <span className="text-xs font-medium truncate">{plantName}</span>

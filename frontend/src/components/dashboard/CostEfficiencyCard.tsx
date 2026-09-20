@@ -18,6 +18,7 @@ import { fmtNum } from '@/lib/calculations';
 import { useCostComposition } from '@/hooks/useCostComposition';
 import { useMonthlyOpex, opexVarianceTone } from '@/hooks/useOpexBudget';
 import { useAppStore } from '@/store/appStore';
+import { usePermission } from '@/hooks/usePermission';
 import { formatRangeLabel, rangeKeyToDays } from './types';
 import { format, subDays, parseISO } from 'date-fns';
 import { useQuery } from '@tanstack/react-query';
@@ -31,6 +32,8 @@ interface CostEfficiencyCardProps {
 
 export function CostEfficiencyCard({ plantIds }: CostEfficiencyCardProps) {
   const navigate = useNavigate();
+  // /costs is closed to Operators, who still see this card on the Dashboard.
+  const canOpenCosts = usePermission('costs', 'view');
 
   const chartRange = useAppStore((s) => s.chartRange);
   const chartFrom = useAppStore((s) => s.chartFrom);
@@ -177,6 +180,8 @@ export function CostEfficiencyCard({ plantIds }: CostEfficiencyCardProps) {
             variant="ghost"
             size="sm"
             onClick={() => navigate('/costs?tab=rollup')}
+            disabled={!canOpenCosts}
+            title={canOpenCosts ? undefined : 'Requires Costs access'}
             className="h-6 px-2 text-2xs text-muted-foreground hover:text-foreground hover:bg-muted gap-1 shrink-0 font-medium"
           >
             <span>Rollup Details</span>
@@ -336,7 +341,9 @@ export function CostEfficiencyCard({ plantIds }: CostEfficiencyCardProps) {
           <button
             type="button"
             onClick={() => navigate('/costs?tab=power')}
-            className="text-3xs font-medium text-primary hover:underline"
+            disabled={!canOpenCosts}
+            title={canOpenCosts ? undefined : 'Requires Costs access'}
+            className="text-3xs font-medium text-primary hover:underline disabled:opacity-50 disabled:no-underline disabled:cursor-not-allowed"
           >
             Tariff Table →
           </button>
@@ -344,7 +351,9 @@ export function CostEfficiencyCard({ plantIds }: CostEfficiencyCardProps) {
           <button
             type="button"
             onClick={() => navigate('/costs?tab=budget')}
-            className="text-3xs font-medium text-primary hover:underline"
+            disabled={!canOpenCosts}
+            title={canOpenCosts ? undefined : 'Requires Costs access'}
+            className="text-3xs font-medium text-primary hover:underline disabled:opacity-50 disabled:no-underline disabled:cursor-not-allowed"
           >
             Budget Plan →
           </button>

@@ -35,9 +35,12 @@ function sourceFiles(dir: string): string[] {
 }
 
 // navigate('/x') · navigate("/x") · navigate(`/x/${id}`) · <Navigate to="/x"> · <Link to={`/x`}>
+// · route-shaped object properties: { route: '/x' } (nav items), { linkPath: '/x' } (alerts),
+//   { to: '/x' }, { href: '/x' }
 const TARGET_RES = [
   /\bnavigate\(\s*(?:'([^']*)'|"([^"]*)"|`([^`]*)`)/g,
   /<(?:Navigate|Link|NavLink)\s[^>]*?\bto=(?:"([^"]*)"|'([^']*)'|\{`([^`]*)`\})/g,
+  /\b(?:route|linkPath|to|href):\s*(?:'([^']*)'|"([^"]*)"|`([^`]*)`)/g,
 ];
 
 /** "/plants/${id}?tab=x#y" -> "/plants/x": drop expressions first (they may contain "?"), then query and hash. */
@@ -85,4 +88,16 @@ describe('in-app navigation targets', () => {
       .map(([chapter, route]) => `${chapter}: ${route}`);
     expect(broken).toEqual([]);
   });
+
+  // Nav items and alert links are object properties, not navigate() calls: a typo
+  // in navConfig's `route:` would put a dead link in the sidebar.
+  it('also scans route-shaped properties, where the nav items live', () => {
+    const navTargets = literalTargets(path.join(SRC, 'navConfig.ts'));
+    expect(navTargets).toContain('/data-corrections');
+    expect(navTargets.length).toBeGreaterThan(10);
+  });
+
+  // This file proves a target EXISTS, not that the user can OPEN it: an Operator
+  // is sent to "/" with a toast from every page outside ProtectedRoute's list.
+  // See components/dashboard/OperatorDeadEnds.test.tsx for that half.
 });

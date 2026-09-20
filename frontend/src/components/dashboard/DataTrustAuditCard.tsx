@@ -33,6 +33,8 @@ export function DataTrustAuditCard({ plantIds }: DataTrustAuditCardProps) {
   // a read-only card — the "Review Queue" buttons must not lead to a page
   // that toasts "Access restricted" and bounces them to /.
   const canReviewCorrections = usePermission('data_corrections', 'view');
+  // Compliance is closed to Operators too, and three controls below lead to it.
+  const canOpenCompliance = usePermission('compliance', 'view');
 
   const chartRange = useAppStore((s) => s.chartRange);
   const chartFrom = useAppStore((s) => s.chartFrom);
@@ -86,7 +88,7 @@ export function DataTrustAuditCard({ plantIds }: DataTrustAuditCardProps) {
         target: '0 unreviewed flags',
         status: totalPendingFlags > 0 ? ('warn' as const) : ('accent' as const),
         statusLabel: totalPendingFlags > 0 ? `${totalPendingFlags} Flagged` : 'Clean',
-        onClick: () => navigate('/data-corrections'),
+        onClick: canReviewCorrections ? () => navigate('/data-corrections') : undefined,
         icon: ShieldAlert,
       },
       {
@@ -96,11 +98,11 @@ export function DataTrustAuditCard({ plantIds }: DataTrustAuditCardProps) {
         target: '0 regulatory breaches',
         status: 'accent' as const,
         statusLabel: 'Verified',
-        onClick: () => navigate('/compliance'),
+        onClick: canOpenCompliance ? () => navigate('/compliance') : undefined,
         icon: Activity,
       },
     ];
-  }, [hasReconAlert, hasReconMarginal, totalPendingFlags, navigate]);
+  }, [hasReconAlert, hasReconMarginal, totalPendingFlags, navigate, canReviewCorrections, canOpenCompliance]);
 
   // Overall Trust Grade Calculation
   const passedGates = gates.filter((g) => g.status === 'accent').length;
@@ -203,7 +205,10 @@ export function DataTrustAuditCard({ plantIds }: DataTrustAuditCardProps) {
             return (
               <div
                 key={gate.id}
-                className="flex items-center justify-between p-2 rounded-md bg-muted/15 border border-border/30 hover:bg-muted/30 transition-colors cursor-pointer"
+                className={cn(
+                  'flex items-center justify-between p-2 rounded-md bg-muted/15 border border-border/30 transition-colors',
+                  gate.onClick && 'hover:bg-muted/30 cursor-pointer',
+                )}
                 onClick={gate.onClick}
               >
                 <div className="flex items-center gap-2 min-w-0">
@@ -281,6 +286,8 @@ export function DataTrustAuditCard({ plantIds }: DataTrustAuditCardProps) {
           size="sm"
           className="h-auto p-0 text-xs font-medium text-primary hover:text-primary/90 hover:underline"
           onClick={() => navigate('/compliance')}
+          disabled={!canOpenCompliance}
+          title={canOpenCompliance ? undefined : 'Requires Compliance access'}
         >
           Open Compliance Hub →
         </Button>

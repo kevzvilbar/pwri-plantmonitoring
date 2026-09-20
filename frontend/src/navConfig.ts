@@ -118,13 +118,22 @@ export function buildNavConfig(can: Can): NavGroup[] {
 
 /**
  * Can the user open `route` from a link that is not in the nav (a button in the
- * manual, say)? Routes that have a nav item follow that item's modules, so this
- * can never disagree with what the sidebar shows. Routes with no nav item
- * (/profile, /help) are open to every signed-in user.
+ * manual, say)? A route that belongs to a nav item follows that item's modules,
+ * so this can never disagree with what the sidebar shows. A route that belongs
+ * to no nav item (/profile, /help) is open to every signed-in user.
+ *
+ * `route` may be a full in-app URL. The query string, the hash and a trailing
+ * slash are ignored ("/costs?tab=rollup" is the Costs page), and a sub-route
+ * belongs to the nav item above it ("/plants/abc" is Plants). Comparing the raw
+ * string instead would let "/costs?tab=rollup" match no nav item and fall
+ * through to "open to everyone".
  */
 export function canOpenRoute(route: string, can: Can): boolean {
-  const item = NAV_GROUPS.flatMap((g) => g.items).find((i) => i.route === route);
-  return item ? item.modules.some((m) => can(m, 'view')) : true;
+  const pathname = route.split(/[?#]/)[0].replace(/\/+$/, '') || '/';
+  const owner = NAV_GROUPS.flatMap((g) => g.items)
+    .filter((i) => i.route === pathname || (i.route !== '/' && pathname.startsWith(`${i.route}/`)))
+    .sort((a, b) => b.route.length - a.route.length)[0];
+  return owner ? owner.modules.some((m) => can(m, 'view')) : true;
 }
 
 export function isNavItemActive(item: NavItem, pathname: string): boolean {

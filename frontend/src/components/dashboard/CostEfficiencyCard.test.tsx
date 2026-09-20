@@ -5,6 +5,10 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter } from 'react-router-dom';
 import { CostEfficiencyCard } from './CostEfficiencyCard';
 
+// The card now calls usePermission() (→ useAuth + useMyCustomRole). Admin can open /costs.
+vi.mock('@/hooks/useAuth', () => ({ useAuth: vi.fn(() => ({ roles: ['Admin'] })) }));
+vi.mock('@/hooks/useCustomRoles', () => ({ useMyCustomRole: vi.fn(() => ({ data: null })) }));
+
 // Mock Supabase
 vi.mock('@/integrations/supabase/client', () => {
   const createChain = () => {

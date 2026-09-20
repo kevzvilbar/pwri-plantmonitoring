@@ -103,8 +103,8 @@ export const partVII : BookPart =   {
             <H3>Approving and managing users</H3>
             <P>
               New sign-ups arrive as Pending, defaulting internally to the Operator role. Waiting accounts are
-              queued at the top of Admin Console &rarr; Users, and the Admin Console item in the navigation shows a
-              count badge while any are waiting. An Admin reviews the account, sets its real role, and approves it,
+              queued at the top of Admin Console &rarr; Users, and the Admin Console item in the navigation shows
+              Admins a count badge while any are waiting. An Admin reviews the account, sets its real role, and approves it,
               at which point the person can sign in immediately.
               An Admin can also create a user directly, skipping self-signup entirely, for someone who can&rsquo;t
               register themselves. Existing users, grouped by role, offer row actions to change their role,
