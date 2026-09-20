@@ -29,11 +29,29 @@ describe('selectAttentionAlerts', () => {
     const snoozeMap = { 'live-snooze': now + 60_000, 'expired-snooze': now - 1 };
     expect(selectAttentionAlerts(list, snoozeMap).map((a) => a.id)).toEqual(['expired-snooze']);
   });
+
+  it('excludes an alert the audit trail says another user acknowledged (P3-3)', () => {
+    // A second user acknowledged 'a' — this browser has no local fields for it,
+    // only what AlertsRuntime pulled from alert_events.
+    const list = [alert('a', 'critical'), alert('b', 'critical')];
+    expect(selectAttentionAlerts(list, {}, { a: 'acknowledged' }).map((x) => x.id)).toEqual(['b']);
+  });
+
+  it('excludes an alert the audit trail says was resolved (P3-3)', () => {
+    const list = [alert('a', 'critical'), alert('b', 'warning')];
+    expect(selectAttentionAlerts(list, {}, { a: 'resolved' }).map((x) => x.id)).toEqual(['b']);
+  });
+
+  it('brings an alert back into the count when a reopen event lands', () => {
+    // Someone acknowledged it, then reopened it — derived status is 'active'.
+    const list = [alert('a', 'critical')];
+    expect(selectAttentionAlerts(list, {}, { a: 'active' }).map((x) => x.id)).toEqual(['a']);
+  });
 });
 
 describe('useAlertBadge', () => {
   beforeEach(() => {
-    useAlertStore.setState({ plantAlerts: [], snoozeMap: {} });
+    useAlertStore.setState({ plantAlerts: [], snoozeMap: {}, serverStatusByKey: {} });
   });
 
   it('is empty when there are no alerts', () => {
@@ -58,5 +76,18 @@ describe('useAlertBadge', () => {
 
     act(() => useAlertStore.getState().acknowledgeAlert('c1', 'user-1'));
     expect(result.current).toEqual({ count: 1, hasCritical: false });
+  });
+
+  it('drops an alert once the audit trail reports it handled (P3-9)', () => {
+    const { result } = renderHook(() => useAlertBadge());
+    act(() => useAlertStore.getState().addAlerts([alert('c1', 'critical'), alert('w1', 'warning')]));
+    expect(result.current.count).toBe(2);
+
+    // AlertsRuntime applied what another user did 30 seconds ago.
+    act(() => useAlertStore.getState().setServerStatuses({ c1: 'acknowledged' }));
+    expect(result.current).toEqual({ count: 1, hasCritical: false });
+
+    act(() => useAlertStore.getState().setServerStatuses({ c1: 'resolved', w1: 'resolved' }));
+    expect(result.current).toEqual({ count: 0, hasCritical: false });
   });
 });

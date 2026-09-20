@@ -1,5 +1,8 @@
 import { Activity, Bell, BellOff, BellRing, CheckCircle2, ChevronRight, FileText } from 'lucide-react';
 import { toast } from 'sonner';
+import { useAlertActorNames } from '@/features/notifications/hooks/useAlertActorNames';
+import { useAuditedAlertActions } from '@/features/notifications/hooks/useAuditedAlertActions';
+import { alertStatusLine } from '@/features/notifications/lib/alertStatusLine';
 import { useTopBarState } from './useTopBarState';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -7,7 +10,12 @@ import { Signal } from '@/components/ui/Signal';
 import { getAlertIcon, sevTier } from './helpers';
 
 export function AlertPanel() {
-    const {
+  // P3-2/P3-5: the bell writes an alert_events row on every action, same as
+  // the triage page — there is no path that updates the store without
+  // persisting the event.
+  const { ackAlert, ackAll, resolveWithNote, snoozeMany, snoozableIds } = useAuditedAlertActions();
+  const actorNames = useAlertActorNames();
+  const {
     panelOpen,
     setPanelOpen,
     activeTab,
@@ -28,11 +36,6 @@ export function AlertPanel() {
     plantNameById,
     markAllRead,
     deleteNotification,
-    snoozeAlert,
-    acknowledgeAlert,
-    resolveAlert,
-    acknowledgeAll,
-    resolveAll,
     navigate,
   } = useTopBarState();
 
@@ -65,11 +68,18 @@ export function AlertPanel() {
                 <button
                   type="button"
                   onClick={() => {
-                    sortedAlerts.forEach((a) => snoozeAlert(a.id, 60 * 60 * 1000));
-                    toast.success('All alerts snoozed for 1 hour');
+                    snoozeMany(snoozableIds, 60 * 60 * 1000);
+                    toast.success(
+                      snoozableIds.length === sortedAlerts.length
+                        ? 'All alerts snoozed for 1 hour'
+                        : `${snoozableIds.length} snoozed for 1 hour (critical alarms stay on)`,
+                    );
                   }}
-                  className="flex items-center gap-1 text-2xs px-2 py-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors font-medium min-h-[32px] sm:min-h-[28px]"
-                  title="Snooze all active alerts for 1 hour"
+                  disabled={snoozableIds.length === 0}
+                  className="flex items-center gap-1 text-2xs px-2 py-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors font-medium min-h-[32px] sm:min-h-[28px] disabled:opacity-40 disabled:cursor-not-allowed"
+                  title={snoozableIds.length === 0
+                    ? 'All current alerts are critical — they cannot be snoozed'
+                    : 'Snooze all active alerts for 1 hour (critical alarms excluded)'}
                 >
                   <BellOff className="h-3 w-3 text-warn" />
                   <span>Snooze all</span>
@@ -79,7 +89,7 @@ export function AlertPanel() {
                   onClick={() => {
                     // Use acknowledgeAll instead of clearing alerts silently
                     // Record who and when for audit trail
-                    acknowledgeAll('current-user');
+                    ackAll();
                     toast.success('All alerts acknowledged');
                   }}
                   className="text-2xs px-2 py-1 rounded-md text-muted-foreground hover:text-primary hover:bg-primary-soft transition-colors font-medium min-h-[32px] sm:min-h-[28px]"
@@ -90,7 +100,9 @@ export function AlertPanel() {
                 <button
                   type="button"
                   onClick={() => {
-                    resolveAll('current-user');
+                    sortedAlerts.forEach((a) => {
+                      resolveWithNote(a.id, 'Bulk resolve from bell panel');
+                    });
                     toast.success('All alerts resolved');
                   }}
                   className="text-2xs px-2 py-1 rounded-md text-muted-foreground hover:text-danger hover:bg-danger-soft transition-colors font-medium min-h-[32px] sm:min-h-[28px]"
@@ -227,29 +239,27 @@ export function AlertPanel() {
                   plantName={plantName}
                   source={alert.source}
                   timestamp={alert.timestamp}
+                  statusLine={alertStatusLine(alert, actorNames) ?? undefined}
                   linkPath={alert.linkPath ?? undefined}
                   onNavigate={(path) => {
                     setPanelOpen(false);
                     navigate(path);
                   }}
                   onSnooze={(ms) => {
-                    snoozeAlert(alert.id, ms);
+                    snoozeMany([alert.id], ms);
                     toast.success(`Alert snoozed for ${ms === 3600000 ? '1 hour' : '24 hours'}`);
                   }}
                   onAcknowledge={() => {
-                    acknowledgeAlert(alert.id, 'current-user');
+                    ackAlert(alert.id);
                     toast.success('Alert acknowledged');
                   }}
                   onResolve={() => {
-                    resolveAlert(alert.id, 'current-user');
+                    resolveWithNote(alert.id, 'Resolved from bell panel');
                     toast.success('Alert resolved');
                   }}
-                  onDismiss={() => {
-                    // Deprecated: use onAcknowledge/onResolve instead
-                    // This is kept for backward compatibility but shows proper messaging
-                    acknowledgeAlert(alert.id, 'current-user');
-                    toast.success('Alert acknowledged');
-                  }}
+                  // P3-6: the deprecated onDismiss path is gone. "Dismiss" was
+                  // a silent 5-minute snooze under a name that read like a
+                  // delete; acknowledge (audited) is the honest replacement.
                 />
               );
             })}

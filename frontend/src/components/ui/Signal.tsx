@@ -32,12 +32,14 @@ export interface SignalProps {
   plantName?: string;
   source?: string;
   timestamp?: string | number | Date;
+  /** P3-3: "Acknowledged by X · 14:02" line under the description. */
+  statusLine?: React.ReactNode;
   linkPath?: string;
   onNavigate?: (path: string) => void;
   onSnooze?: (durationMs: number) => void;
   onAcknowledge?: () => void;  // New: Proper acknowledge action
   onResolve?: () => void;      // New: Proper resolve action
-  onDismiss?: () => void;
+  onDismiss?: () => void;      // Deprecated: kept for SystemLog rows only
   actions?: SignalAction[];
   className?: string;
   children?: React.ReactNode;
@@ -124,6 +126,7 @@ export function Signal({
   plantName,
     source,
   timestamp,
+  statusLine,
   linkPath,
   onNavigate,
   onSnooze,
@@ -392,6 +395,13 @@ export function Signal({
           {description && (
             <p className="text-xs text-muted-foreground leading-snug mb-2 font-normal line-clamp-2">
               {description}
+            </p>
+          )}
+
+          {/* P3-3: who/when line — rendered by both bell and Alerts page. */}
+          {statusLine && (
+            <p className="text-2xs text-muted-foreground font-medium mb-2">
+              {statusLine}
             </p>
           )}
 

@@ -69,7 +69,8 @@ export interface PowerReadingAlertRow {
 export interface DashboardAlertsParams {
   selectedPlantId: string | null;
   addAlerts: (alerts: PlantAlert[]) => void;
-  removeAlerts: (ids: string[]) => void;
+  /** P3-6: removes alerts whose condition has cleared (was `removeAlerts`). */
+  clearConditionAlerts: (ids: string[]) => void;
   plants: { id: string; name?: string | null; code?: string | null }[] | undefined;
   plantIds: string[];
   latestRO: ROAlertReading[] | undefined;
@@ -95,7 +96,7 @@ export interface DashboardAlertsParams {
 export function useDashboardAlerts({
   selectedPlantId,
   addAlerts,
-  removeAlerts,
+  clearConditionAlerts,
   plants,
   plantIds,
   latestRO,
@@ -441,7 +442,7 @@ export function useDashboardAlerts({
         timestamp:   Date.now(),
       });
     } else {
-      removeAlerts(['nrw-threshold']);
+      clearConditionAlerts(['nrw-threshold']);
     }
 
     const latestPerTrain = new Map<string, ROAlertReading>();

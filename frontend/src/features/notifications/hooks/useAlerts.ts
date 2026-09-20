@@ -1,25 +1,30 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { usePlants } from '@/hooks/usePlants';
-import { usePlantStore } from '@/store/plantStore';
 import { useAlertStore } from '@/store/alertStore';
 import { useDebounce } from '@/hooks/useDebounce';
-import { toast } from 'sonner';
 import { sevTier, EMPTY_NOTIFICATIONS, EMPTY_PLANTS, type Notification } from '../lib/constants';
+import { useAuditedAlertActions } from './useAuditedAlertActions';
+import { effectiveAlertStatus } from '../lib/alertStatus';
+import type { AlertStatus } from '@/store/alertStore';
+
+export type StatusFilter = 'all' | AlertStatus;
 
 export function useAlerts() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const { user, profile } = useAuth();
   const { data: plants } = usePlants();
-  const { selectedPlantId, setSelectedPlantId } = usePlantStore();
-    const { plantAlerts, snoozeAlert, acknowledgeAlert, resolveAlert, acknowledgeAll, resolveAll } = useAlertStore();
+  const { plantAlerts, snoozeMap, serverStatusByKey } = useAlertStore();
 
   const [activeView, setActiveView] = useState<'active' | 'logs'>('active');
   const [tierFilter, setTierFilter] = useState<'all' | 'critical' | 'warning' | 'info'>('all');
+  // P3-3: Active / Acknowledged / Snoozed / Resolved filter over derived status.
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'acknowledged' | 'snoozed' | 'resolved'>('all');
   const [plantFilter, setPlantFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const debouncedSearchQuery = useDebounce(searchQuery, 250);
@@ -81,6 +86,11 @@ export function useAlerts() {
         if (plantFilter !== 'all' && alert.plantId !== plantFilter) return false;
         const tier = sevTier(alert.severity);
         if (tierFilter !== 'all' && tier !== tierFilter) return false;
+        // P3-3: the status filter runs over the audit trail when it has landed,
+        // falling back to the local fields while it loads.
+        if (statusFilter !== 'all' && effectiveAlertStatus(alert, snoozeMap, serverStatusByKey) !== statusFilter) {
+          return false;
+        }
         if (debouncedSearchQuery.trim()) {
           const q = debouncedSearchQuery.toLowerCase();
           const pName = plantNameById.get(alert.plantId) || '';
@@ -96,7 +106,7 @@ export function useAlerts() {
         const order = { critical: 0, warning: 1, info: 2 };
         return (order[sevTier(a.severity)] - order[sevTier(b.severity)]) || (b.timestamp - a.timestamp);
       });
-  }, [plantAlerts, plantFilter, tierFilter, debouncedSearchQuery, plantNameById]);
+  }, [plantAlerts, plantFilter, tierFilter, statusFilter, snoozeMap, serverStatusByKey, debouncedSearchQuery, plantNameById]);
 
   const filteredLogs = useMemo(() => {
     return notifs.filter((n) => {
@@ -117,10 +127,14 @@ export function useAlerts() {
   const infoCount = useMemo(() => plantAlerts.filter((a) => sevTier(a.severity) === 'info').length, [plantAlerts]);
   const unreadLogsCount = useMemo(() => notifs.filter((n) => !n.read).length, [notifs]);
 
+  // ── P3-2: audited actions — local store update + one alert_events row ──────
+  const { ackAlert, ackAll, resolveWithNote, snoozeMany, snoozableIds } = useAuditedAlertActions();
+
     return {
     navigate,
     activeView, setActiveView,
     tierFilter, setTierFilter,
+    statusFilter, setStatusFilter,
     plantFilter, setPlantFilter,
     searchQuery, setSearchQuery,
     plantAlerts, visiblePlants, plantNameById,
@@ -129,10 +143,7 @@ export function useAlerts() {
     criticalCount, warningCount, infoCount, unreadLogsCount,
     plantAlertsLength: plantAlerts.length, notifsLength: notifs.length,
     markAllRead, deleteNotification,
-    snoozeAlert,
-    acknowledgeAlert,
-    resolveAlert,
-    acknowledgeAll,
-    resolveAll,
+    // P3-2: audited actions (local store update + one alert_events row)
+    ackAlert, ackAll, resolveWithNote, snoozeMany, snoozableIds,
   };
 }

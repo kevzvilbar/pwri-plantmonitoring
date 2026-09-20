@@ -11,6 +11,7 @@ export { SystemLogsList } from './components/SystemLogsList';
 // Hooks
 export { useAlerts } from './hooks/useAlerts';
 export { usePushNotifications } from './hooks/usePushNotifications';
+export { useAlertActorNames } from './hooks/useAlertActorNames';
 
 // Lib
 export * from './lib/pushNotification';

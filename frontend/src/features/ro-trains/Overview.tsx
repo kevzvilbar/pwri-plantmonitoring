@@ -16,7 +16,7 @@ import { PlantPicker } from './shared/PlantPicker';
 
 // ─── Overview Dashboard ───────────────────────────────────────────────────────
 export function Overview() {
-  const { selectedPlantId, setSelectedPlantId, addAlerts, removeAlerts } = useAppStore();
+  const { selectedPlantId, setSelectedPlantId, addAlerts, clearConditionAlerts } = useAppStore();
   const [plantId, setPlantId] = useState(selectedPlantId ?? '');
   const [statusFilter, setStatusFilter] = useState<'All' | 'Running' | 'Maintenance' | 'Offline'>('All');
   const [viewMode, setViewMode] = useState<'compact' | 'diagnostics'>('diagnostics');
@@ -115,7 +115,7 @@ export function Overview() {
   useEffect(() => {
     if (!plantId) return;
     if (highTDSTrains.length === 0) {
-      removeAlerts((trains ?? []).map((t: any) => `high-tds-${t.id}`));
+      clearConditionAlerts((trains ?? []).map((t: any) => `high-tds-${t.id}`));
       return;
     }
     addAlerts(highTDSTrains.map((t: any) => ({

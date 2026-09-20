@@ -11,6 +11,7 @@ import { useTrainDataRealtime } from '@/hooks/useTrainDataRealtime';
 import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 import { PullToRefreshIndicator } from './PullToRefresh';
 import { ShiftHandoverModal } from './ShiftHandoverModal';
+import { AlertsRuntime } from '@/features/notifications/AlertsRuntime';
 import { useQueryClient } from '@tanstack/react-query';
 import { ErrorBoundary } from './ErrorBoundary';
 
@@ -112,6 +113,10 @@ export function AppShell() {
 
       {/* Realtime INSERT subscriptions for the train tables; renders nothing */}
       <TrainRealtimeMount />
+
+      {/* P3-7: computes alarms on every route + syncs the alert_events audit
+          trail into the store. Must be the ONLY mount of this. */}
+      <AlertsRuntime />
 
       {/* Global Operator Shift Monitoring & Handover Verification */}
       <ShiftHandoverModal />

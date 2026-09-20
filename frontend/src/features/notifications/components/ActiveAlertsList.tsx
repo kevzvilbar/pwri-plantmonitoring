@@ -2,10 +2,13 @@ import { Card } from '@/components/ui/card';
 import { CheckCircle2 } from 'lucide-react';
 import { Signal } from '@/components/ui/Signal';
 import { getAlertIcon, sevTier } from '../lib/constants';
+import { alertStatusLine } from '../lib/alertStatusLine';
 
 interface ActiveAlertsListProps {
   filteredPlantAlerts: any[];
   plantNameById: Map<string, string>;
+  /** user id → display name, for the "Acknowledged by X · 14:02" line (P3-3). */
+  actorNames: Map<string, string>;
   onNavigate: (path: string) => void;
   onSnooze: (id: string, ms: number) => void;
   onAcknowledge: (id: string) => void;
@@ -13,7 +16,7 @@ interface ActiveAlertsListProps {
 }
 
 export function ActiveAlertsList({
-  filteredPlantAlerts, plantNameById, onNavigate, onSnooze, onAcknowledge, onResolve,
+  filteredPlantAlerts, plantNameById, actorNames, onNavigate, onSnooze, onAcknowledge, onResolve,
 }: ActiveAlertsListProps) {
   if (filteredPlantAlerts.length > 0) {
     return (
@@ -34,11 +37,16 @@ export function ActiveAlertsList({
               plantName={plantName}
               source={alert.source}
               timestamp={alert.timestamp}
+              // P3-3: who handled it and when. Renders nothing while active.
+              statusLine={alertStatusLine(alert, actorNames) ?? undefined}
               linkPath={alert.linkPath ?? undefined}
               onNavigate={(path) => onNavigate(path)}
               onSnooze={(ms) => onSnooze(alert.id, ms)}
               onAcknowledge={() => onAcknowledge(alert.id)}
               onResolve={() => onResolve(alert.id)}
+              // P3-6: no onDismiss. "Dismiss" was a silent 5-minute snooze
+              // under a name that read like a delete; acknowledge/resolve are
+              // the honest vocabulary now.
             />
           );
         })}

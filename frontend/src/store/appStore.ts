@@ -2,7 +2,7 @@
 // This file re-exports all state and actions so existing imports don't break.
 export { usePlantStore, type PlantState } from './plantStore';
 export { useChartStore, type ChartState } from './chartStore';
-export { useAlertStore, type AlertState, type PlantAlert, type PlantAlertSeverity, type SnoozeMap, isAlertSnoozed } from './alertStore';
+export { useAlertStore, type AlertState, type PlantAlert, type PlantAlertSeverity, type SnoozeMap, type ServerStatusMap, isAlertSnoozed } from './alertStore';
 export { useThemeStore, type ThemeState } from './themeStore';
 
 import { usePlantStore } from './plantStore';

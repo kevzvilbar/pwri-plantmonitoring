@@ -27,11 +27,27 @@ export interface PlantAlert {
 
 export type AlertStatus = 'active' | 'acknowledged' | 'resolved' | 'snoozed';
 
-export function getAlertStatus(alert: PlantAlert, snoozeMap: SnoozeMap): AlertStatus {
+/** alert_key → status derived from the `alert_events` audit trail (P3-2). */
+export type ServerStatusMap = Record<string, AlertStatus>;
+
+export function getAlertStatus(
+  alert: PlantAlert,
+  snoozeMap: SnoozeMap,
+  serverStatusByKey: ServerStatusMap = {},
+): AlertStatus {
+  // 1. A live local snooze wins: the user just tapped it and the write may
+  //    still be in flight (or queued offline), so this is the freshest signal.
   const snoozeExpiry = snoozeMap[alert.id];
   if (snoozeExpiry != null && snoozeExpiry > Date.now()) {
     return 'snoozed';
   }
+  // 2. Otherwise the server's latest event is the truth — it is what lets an
+  //    acknowledgement survive a reload and be visible to a second user, and
+  //    it can also send an alert back to 'active' (a 'reopened' event).
+  const server = serverStatusByKey[alert.id];
+  if (server) return server;
+  // 3. Fall back to whatever this browser set locally (pre-migration, or the
+  //    statuses query hasn't landed yet).
   if (alert.resolvedAt != null) {
     return 'resolved';
   }
@@ -54,9 +70,19 @@ export interface AlertState {
    *  say "Checking plant systems…" until then — never "operating normally". */
   alertsReady: boolean;
   addAlerts: (alerts: PlantAlert[]) => void;
-  removeAlerts: (ids: string[]) => void;
+  /** P3-6: removes alerts whose *condition* has cleared. Renamed from the old
+   *  `removeAlerts`, which snoozed for 5 minutes under a name that read like a
+   *  delete. This one really does remove — no snooze side effect — because the
+   *  caller has already re-evaluated the underlying reading. */
+  clearConditionAlerts: (ids: string[]) => void;
   clearAlerts: () => void;
-  
+
+  /** alert_key → status from the alert_events audit trail (P3-2). Written by
+   *  AlertsRuntime; read by getAlertStatus so the nav badge counts only
+   *  unacknowledged alerts without every consumer fetching the table. */
+  serverStatusByKey: ServerStatusMap;
+  setServerStatuses: (next: ServerStatusMap) => void;
+
   snoozeMap: SnoozeMap;
   snoozeAlert: (id: string, durationMs?: number) => void;
   unsnoozeAlert: (id: string) => void;
@@ -77,29 +103,59 @@ export const useAlertStore = create<AlertState>()(
     (set, get) => ({
       plantAlerts: [],
       alertsReady: false,
+      serverStatusByKey: {},
+      setServerStatuses: (next) => set({ serverStatusByKey: next }),
       addAlerts: (incoming) =>
         set((s) => {
           const now = Date.now();
           const dedupedIncoming = new Map<string, typeof incoming[0]>();
           incoming.forEach((a) => dedupedIncoming.set(a.id, a));
+          // P3-4/P3-5 (D2): drop alerts the user already acted on. The recompute
+          // only knows the live condition, so without this an acknowledged or
+          // resolved alert would re-enter the list on the very next tick —
+          // which is exactly why "Resolve all" looked cosmetic before.
           const active = Array.from(dedupedIncoming.values()).filter((a) => {
             const expiry = s.snoozeMap[a.id];
-            return expiry == null || expiry <= now;
+            if (expiry != null && expiry > now) return false;
+            return !s.serverStatusByKey[a.id] || s.serverStatusByKey[a.id] === 'active';
           });
-          const kept = s.plantAlerts.filter((a) => !active.find((n) => n.id === a.id));
-          return { plantAlerts: [...kept, ...active], alertsReady: true };
+          // P3-4: merge by id and preserve status set on the stored object.
+          // The recompute only knows live conditions, so a fresh copy of an
+          // id we already hold would wipe acknowledgedBy/resolvedBy. Keep the
+          // stored status fields; refresh everything else (title, severity…).
+          const byId = new Map(s.plantAlerts.map((a) => [a.id, a]));
+          const merged = active.map((a) => {
+            const prev = byId.get(a.id);
+            if (!prev) return a;
+            return {
+              ...a,
+              acknowledgedBy: prev.acknowledgedBy,
+              acknowledgedAt: prev.acknowledgedAt,
+              resolvedBy: prev.resolvedBy,
+              resolvedAt: prev.resolvedAt,
+              // P3-5 (D2): a resolve suppresses re-firing until the value
+              // changes. The recompute pushes a new timestamp each tick; if
+              // the condition were still true and we kept the new timestamp,
+              // a resolved alert would look fresh again. Keep the stored
+              // timestamp for acknowledged/resolved alerts.
+              timestamp:
+                prev.acknowledgedAt != null || prev.resolvedAt != null
+                  ? prev.timestamp
+                  : a.timestamp,
+            };
+          });
+          const mergedIds = new Set(merged.map((a) => a.id));
+          const kept = s.plantAlerts.filter((a) => !mergedIds.has(a.id));
+          return { plantAlerts: [...kept, ...merged], alertsReady: true };
         }),
-      removeAlerts: (ids) =>
+      clearConditionAlerts: (ids) =>
         set((s) => {
-          // NOTE: This function's name is misleading — it actually snoozes for 5 min
-          // Consider renaming to snoozeAlertShort or refactoring to proper dismiss
-          const dismissSnoozeExpiry = Date.now() + 5 * 60 * 1000;
-          const updatedSnooze: SnoozeMap = { ...s.snoozeMap };
-          ids.forEach((id) => { updatedSnooze[id] = dismissSnoozeExpiry; });
-          return {
-            plantAlerts: s.plantAlerts.filter((a) => !ids.includes(a.id)),
-            snoozeMap: updatedSnooze,
-          };
+          // The caller has re-evaluated the reading and the condition is gone,
+          // so the alarm should leave the list outright. The old `removeAlerts`
+          // instead snoozed for 5 minutes, which both hid a still-true alarm
+          // and silently punched a hole in the list.
+          const gone = new Set(ids);
+          return { plantAlerts: s.plantAlerts.filter((a) => !gone.has(a.id)) };
         }),
       clearAlerts: () => set({ plantAlerts: [] }),
 
@@ -159,14 +215,16 @@ export const useAlertStore = create<AlertState>()(
               : a
           ),
         })),
-      getAlertStatus: (alert) => getAlertStatus(alert, get().snoozeMap),
+      getAlertStatus: (alert) => getAlertStatus(alert, get().snoozeMap, get().serverStatusByKey),
     }),
     {
       name: 'pwri-alert-state',
       partialize: (s) => ({
         snoozeMap: s.snoozeMap,
-        // Note: plantAlerts themselves are NOT persisted — they're recomputed on mount
-        // Only snoozeMap persists so snoozes survive page reloads
+        // Note: plantAlerts themselves are NOT persisted — they're recomputed on mount.
+        // Only snoozeMap persists so snoozes survive page reloads.
+        // serverStatusByKey is always refetched from alert_events on mount, so
+        // persisting it would only risk showing a stale acknowledgement.
       }),
     }
   )

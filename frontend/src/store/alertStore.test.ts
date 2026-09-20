@@ -16,6 +16,8 @@ describe('useAlertStore', () => {
     useAlertStore.setState({
       plantAlerts: [],
       snoozeMap: {},
+      serverStatusByKey: {},
+      alertsReady: false,
     });
     vi.useFakeTimers();
   });
@@ -28,12 +30,71 @@ describe('useAlertStore', () => {
     const state = useAlertStore.getState();
     expect(state.plantAlerts).toEqual([]);
     expect(state.snoozeMap).toEqual({});
+    expect(state.serverStatusByKey).toEqual({});
+    expect(state.alertsReady).toBe(false);
+  });
+
+  it('flips alertsReady on the first computation (P2-7)', () => {
+    expect(useAlertStore.getState().alertsReady).toBe(false);
+    useAlertStore.getState().addAlerts([]);
+    expect(useAlertStore.getState().alertsReady).toBe(true);
+  });
+
+  it('should not re-add an alert the audit trail has acknowledged (P3-2)', () => {
+    // A second user acknowledged this alert 30s ago. The recompute still sees
+    // the live condition, but the event must win.
+    useAlertStore.getState().setServerStatuses({ 'alert-1': 'acknowledged' });
+    useAlertStore.getState().addAlerts([mockAlert]);
+    expect(useAlertStore.getState().plantAlerts).toHaveLength(0);
+  });
+
+  it('should not re-add an alert the audit trail has resolved (P3-5, D2)', () => {
+    useAlertStore.getState().setServerStatuses({ 'alert-1': 'resolved' });
+    useAlertStore.getState().addAlerts([mockAlert]);
+    expect(useAlertStore.getState().plantAlerts).toHaveLength(0);
+  });
+
+  it('drops a locally acknowledged alert instead of resurrecting it (P3-4)', () => {
+    useAlertStore.getState().addAlerts([mockAlert]);
+    useAlertStore.getState().acknowledgeAlert('alert-1', 'u1');
+    expect(useAlertStore.getState().plantAlerts).toHaveLength(1);
+
+    // Next recompute pushes a fresh copy of the same id…
+    useAlertStore.getState().addAlerts([
+      { ...mockAlert, timestamp: Date.now() + 1000, title: 'Still breaching' },
+    ]);
+    const kept = useAlertStore.getState().plantAlerts;
+    expect(kept).toHaveLength(1);
+    // …and the acknowledgement survives it.
+    expect(kept[0].acknowledgedBy).toBe('u1');
+    // The recompute must not refresh the timestamp of a handled alert, or the
+    // list would sort it back to the top as if it had just fired again.
+    expect(kept[0].timestamp).toBe(mockAlert.timestamp);
+  });
+
+  it('keeps a merged copy unacknowledged when nothing had acted (P3-4)', () => {
+    useAlertStore.getState().addAlerts([mockAlert]);
+    useAlertStore.getState().addAlerts([{ ...mockAlert, timestamp: Date.now() + 1000 }]);
+    // No status was set, so the refreshed timestamp is the point of the merge.
+    expect(useAlertStore.getState().plantAlerts[0].timestamp).toBe(Date.now() + 1000);
+    expect(useAlertStore.getState().plantAlerts[0].acknowledgedBy).toBeUndefined();
+  });
+
+  it('removeAlerts is gone; clearConditionAlerts removes without snoozing (P3-6)', () => {
+    useAlertStore.getState().addAlerts([mockAlert]);
+    const store = useAlertStore.getState() as unknown as { removeAlerts?: unknown };
+    expect(store.removeAlerts).toBeUndefined();
+
+    useAlertStore.getState().clearConditionAlerts(['alert-1']);
+    expect(useAlertStore.getState().plantAlerts).toHaveLength(0);
+    // No snooze side effect — the condition really did clear.
+    expect(useAlertStore.getState().snoozeMap['alert-1']).toBeUndefined();
   });
 
   it('should add alerts and deduplicate by id', () => {
     useAlertStore.getState().addAlerts([mockAlert]);
     expect(useAlertStore.getState().plantAlerts).toHaveLength(1);
-    
+
     // Add same alert, should dedupe
     useAlertStore.getState().addAlerts([{ ...mockAlert, title: 'Updated' }]);
     expect(useAlertStore.getState().plantAlerts).toHaveLength(1);
@@ -46,13 +107,17 @@ describe('useAlertStore', () => {
     expect(useAlertStore.getState().plantAlerts).toHaveLength(0);
   });
 
-  it('should remove alerts and add them to snoozeMap with 5 min expiration', () => {
+  it('getAlertStatus prefers the audit trail, but a live local snooze wins first (P3-3)', () => {
     useAlertStore.getState().addAlerts([mockAlert]);
-    useAlertStore.getState().removeAlerts(['alert-1']);
-    const state = useAlertStore.getState();
-    expect(state.plantAlerts).toHaveLength(0);
-    expect(state.snoozeMap['alert-1']).toBeGreaterThan(Date.now());
-    expect(state.snoozeMap['alert-1']).toBeLessThanOrEqual(Date.now() + 5 * 60 * 1000);
+    useAlertStore.getState().acknowledgeAlert('alert-1', 'u1');
+    useAlertStore.getState().setServerStatuses({ 'alert-1': 'active' });
+
+    // The reopened event sends it back to active despite the local ack.
+    expect(useAlertStore.getState().getAlertStatus(mockAlert)).toBe('active');
+
+    // A live local snooze beats the audit trail.
+    useAlertStore.getState().snoozeAlert('alert-1', 60_000);
+    expect(useAlertStore.getState().getAlertStatus(mockAlert)).toBe('snoozed');
   });
 
   it('should clear alerts', () => {

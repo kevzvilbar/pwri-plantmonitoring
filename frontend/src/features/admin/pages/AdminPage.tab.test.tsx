@@ -14,11 +14,11 @@ vi.mock('@/integrations/supabase/client', () => ({
   supabase: { from: () => ({ select: () => ({ count: 'exact', head: true }) }) },
 }));
 vi.mock('@tanstack/react-query', () => ({ useQuery: () => ({ data: 0 }) }));
-vi.mock('../components/panels/UsersPanel', () => ({ UsersPanel: () => null }), { virtual: true });
-vi.mock('../components/panels/PlantsPanel', () => ({ PlantsPanel: () => null }), { virtual: true });
-vi.mock('../components/panels/AuditLogPanel', () => ({ AuditLogPanel: () => null }), { virtual: true });
-vi.mock('../components/panels/MigrationsPanel', () => ({ MigrationsPanel: () => null }), { virtual: true });
-vi.mock('../components/panels/RolesPanel', () => ({ RolesPanel: () => null }), { virtual: true });
+vi.mock('../components/panels/UsersPanel', () => ({ UsersPanel: () => null }));
+vi.mock('../components/panels/PlantsPanel', () => ({ PlantsPanel: () => null }));
+vi.mock('../components/panels/AuditLogPanel', () => ({ AuditLogPanel: () => null }));
+vi.mock('../components/panels/MigrationsPanel', () => ({ MigrationsPanel: () => null }));
+vi.mock('../components/panels/RolesPanel', () => ({ RolesPanel: () => null }));
 
 import AdminPage from '@/features/admin/pages/AdminPage';
 

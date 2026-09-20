@@ -146,6 +146,47 @@ export type Database = {
         }
         Relationships: []
       }
+      alert_events: {
+        Row: {
+          action: string
+          alert_key: string
+          created_at: string
+          id: string
+          note: string | null
+          plant_id: string | null
+          snooze_until: string | null
+          user_id: string
+        }
+        Insert: {
+          action: string
+          alert_key: string
+          created_at?: string
+          id?: string
+          note?: string | null
+          plant_id?: string | null
+          snooze_until?: string | null
+          user_id?: string
+        }
+        Update: {
+          action?: string
+          alert_key?: string
+          created_at?: string
+          id?: string
+          note?: string | null
+          plant_id?: string | null
+          snooze_until?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "alert_events_plant_id_fkey"
+            columns: ["plant_id"]
+            isOneToOne: false
+            referencedRelation: "plants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       archived_plant_data: {
         Row: {
           archived_at: string
@@ -6084,6 +6125,10 @@ export type Database = {
       }
       fn_sweep_derived_meters_for_date: {
         Args: { p_date: string }
+        Returns: Json
+      }
+      get_alert_statuses: {
+        Args: { p_plant_ids?: string[] }
         Returns: Json
       }
       get_all_staff_profiles: {

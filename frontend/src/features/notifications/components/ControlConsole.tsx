@@ -12,6 +12,9 @@ interface ControlConsoleProps {
   setActiveView: (view: 'active' | 'logs') => void;
   tierFilter: string;
   setTierFilter: (tier: 'all' | 'critical' | 'warning' | 'info') => void;
+  /** P3-3: Active / Acknowledged / Snoozed / Resolved. */
+  statusFilter: string;
+  setStatusFilter: (status: 'all' | 'active' | 'acknowledged' | 'snoozed' | 'resolved') => void;
   plantFilter: string;
   setPlantFilter: (filter: string) => void;
   searchQuery: string;
@@ -23,17 +26,27 @@ interface ControlConsoleProps {
   unreadLogsCount: number;
   notifsLength: number;
     visiblePlants: Array<{ id: string; name: string }>;
+  /** P3-5: how many alerts a bulk snooze would actually touch. */
+  snoozableCount: number;
   onSnoozeAll: () => void;
   onAcknowledgeAll: () => void;
   onResolveAll: () => void;
   onMarkAllRead: () => void;
 }
 
+const STATUS_FILTERS: Array<{ key: 'active' | 'acknowledged' | 'snoozed' | 'resolved'; label: string; activeClass: string }> = [
+  { key: 'active', label: 'Active', activeClass: 'bg-primary text-primary-foreground shadow-2xs' },
+  { key: 'acknowledged', label: 'Acknowledged', activeClass: 'bg-info text-white shadow-2xs' },
+  { key: 'snoozed', label: 'Snoozed', activeClass: 'bg-warn text-warn-foreground shadow-2xs' },
+  { key: 'resolved', label: 'Resolved', activeClass: 'bg-success text-white shadow-2xs' },
+];
+
 export function ControlConsole({
   activeView, setActiveView, tierFilter, setTierFilter,
+  statusFilter, setStatusFilter,
   plantFilter, setPlantFilter, searchQuery, setSearchQuery,
   plantAlertsLength, criticalCount, warningCount, infoCount, unreadLogsCount, notifsLength,
-  visiblePlants, onSnoozeAll, onAcknowledgeAll, onResolveAll, onMarkAllRead,
+  visiblePlants, snoozableCount, onSnoozeAll, onAcknowledgeAll, onResolveAll, onMarkAllRead,
 }: ControlConsoleProps) {
   return (
     <div className="bg-card border border-border/80 p-3 sm:p-3.5 rounded-2xl space-y-3 shadow-xs">
@@ -70,7 +83,14 @@ export function ControlConsole({
                 <div className="w-full sm:w-auto flex items-center justify-end sm:justify-start gap-2">
           {activeView === 'active' && plantAlertsLength > 0 && (
             <>
-              <Button size="sm" variant="outline" onClick={onSnoozeAll} className="flex-1 sm:flex-initial h-8 gap-1.5 text-xs border-border/80">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={onSnoozeAll}
+                disabled={snoozableCount === 0}
+                title={snoozableCount === 0 ? 'All current alerts are critical — they cannot be snoozed' : undefined}
+                className="flex-1 sm:flex-initial h-8 gap-1.5 text-xs border-border/80 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
                 <BellOff className="h-3.5 w-3.5 text-warn" />
                 <span>Snooze all (1h)</span>
               </Button>
@@ -112,6 +132,26 @@ export function ControlConsole({
           </button>
         </div>
 
+        {/* P3-3: status filter — the four states an alert can actually be in. */}
+        {activeView === 'active' && (
+          <div className="sm:col-span-3 flex items-center gap-1 overflow-x-auto p-0.5 scrollbar-none">
+            {STATUS_FILTERS.map((s) => (
+              <button
+                key={s.key}
+                type="button"
+                onClick={() => setStatusFilter(statusFilter === s.key ? 'all' : s.key)}
+                data-testid={`status-filter-${s.key}`}
+                className={cn(
+                  'px-2 py-1 rounded-lg text-2xs font-semibold transition-all whitespace-nowrap',
+                  statusFilter === s.key ? s.activeClass : 'text-muted-foreground hover:bg-muted',
+                )}
+              >
+                {s.label}
+              </button>
+            ))}
+          </div>
+        )}
+
         {activeView === 'active' && (
           <div className="sm:col-span-3">
             <Select value={plantFilter} onValueChange={setPlantFilter}>
@@ -128,7 +168,7 @@ export function ControlConsole({
           </div>
         )}
 
-        <div className={cn(activeView === 'active' ? 'sm:col-span-5' : 'sm:col-span-8', 'relative')}>
+        <div className={cn('sm:col-span-2', activeView !== 'active' && 'sm:col-span-8', 'relative')}>
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
           <Input type="text" placeholder="Search by title, equipment, source, plant…" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="h-8 pl-8 text-xs bg-muted/30 border-border/70" />
         </div>

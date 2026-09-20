@@ -18,7 +18,7 @@ export function useTopBarState() {
   const {
     selectedPlantId, setSelectedPlantId,
     setUnreadCount, unreadCount,
-    plantAlerts, clearAlerts, alertsReady,
+    plantAlerts, alertsReady,
     snoozeAlert, unsnoozeAlert, pruneSnooze,
     acknowledgeAlert, resolveAlert, acknowledgeAll, resolveAll,
   } = useAppStore();
@@ -61,7 +61,6 @@ export function useTopBarState() {
     if (unreadCount !== nextUnreadCount) setUnreadCount(nextUnreadCount);
   }, [nextUnreadCount, setUnreadCount, unreadCount]);
 
-  useEffect(() => { clearAlerts(); }, [selectedPlantId]);
   useEffect(() => { pruneSnooze(); }, []);
 
   const prevCriticalIdsRef = useRef<string[]>([]);
@@ -103,14 +102,22 @@ export function useTopBarState() {
     return m;
   }, [plants]);
 
-  const totalBadge = unreadCount + plantAlerts.length;
+  // ── P3-8: no clearAlerts() on plant change. Alerts carry plantId, so both
+  // the TopBar bell and the Alerts page filter by the selector instead of
+  // destroying state (which also wiped acknowledgedBy/resolvedBy).
+  const scopedAlerts = useMemo(() => {
+    if (!selectedPlantId) return plantAlerts;
+    return plantAlerts.filter((a) => !a.plantId || a.plantId === selectedPlantId);
+  }, [plantAlerts, selectedPlantId]);
+
+  const totalBadge = unreadCount + scopedAlerts.length;
 
   const sortedAlerts = useMemo(() =>
-    [...plantAlerts].sort((a, b) => {
+    [...scopedAlerts].sort((a, b) => {
       const order: Record<SevTier, number> = { critical: 0, warning: 1, info: 2 };
       return (order[sevTier(a.severity)] - order[sevTier(b.severity)]) || (b.timestamp - a.timestamp);
     }),
-  [plantAlerts]);
+  [scopedAlerts]);
 
   const criticalAlerts = useMemo(() => sortedAlerts.filter(a => sevTier(a.severity) === 'critical'), [sortedAlerts]);
   const warningAlerts  = useMemo(() => sortedAlerts.filter(a => sevTier(a.severity) === 'warning'), [sortedAlerts]);

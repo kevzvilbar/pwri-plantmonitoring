@@ -4,7 +4,6 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { usePlantStore } from '@/store/plantStore';
 import { useChartStore } from '@/store/chartStore';
-import { useAlertStore } from '@/store/alertStore';
 import { usePlants } from '@/hooks/usePlants';
 import { format, subDays } from 'date-fns';
 import { DowntimeEventsModal } from '@/components/DowntimeEventsModal';
@@ -18,7 +17,6 @@ import {
   usePowerStats,
   useQualityStats,
   useCostStats,
-  useDashboardAlerts,
 } from './Dashboard/hooks';
 import { ActionCenter } from './Dashboard/ActionCenter';
 import { OverviewCluster } from './Dashboard/OverviewCluster';
@@ -46,13 +44,11 @@ import { TrendModal } from '@/components/dashboard/TrendChartWrappers';
 
 
 export default function Dashboard() {
-  // Use fine-grained selectors so Dashboard only re-renders when selectedPlantId
-  // changes — NOT when addAlerts updates plantAlerts in the store.
-  // Without selectors, every addAlerts() call would re-render Dashboard →
-  // re-run the useEffect → call addAlerts() again → infinite loop (React #185).
+  // Fine-grained selectors so the Dashboard does not re-render on every alert
+  // store change. NOTE P3-7: the alarm computation itself now lives in
+  // <AlertsRuntime /> (AppShell), so this page no longer reads addAlerts /
+  // clearConditionAlerts at all.
   const selectedPlantId = usePlantStore((s) => s.selectedPlantId);
-  const addAlerts       = useAlertStore((s) => s.addAlerts);
-  const removeAlerts    = useAlertStore((s) => s.removeAlerts);
   const chartRange      = useChartStore((s) => s.chartRange);
   const chartFrom       = useChartStore((s) => s.chartFrom);
   const chartTo         = useChartStore((s) => s.chartTo);
@@ -202,25 +198,12 @@ export default function Dashboard() {
     todayPowerCostPeso: powerStats.powerCostPeso,
   });
 
-  // ── Domain 5: Dashboard Alerts (thresholds, gaps, spikes → global alertStore)
-  useDashboardAlerts({
-    selectedPlantId,
-    addAlerts,
-    removeAlerts,
-    plants,
-    plantIds,
-    latestRO: qualityStats.latestRO,
-    roAvgFlowByTrain: qualityStats.roAvgFlowByTrain,
-    recentPretreatment: qualityStats.recentPretreatment,
-    latestPumpReadings: qualityStats.latestPumpReadings,
-    powerAvgByPlant: powerStats.powerAvgByPlant,
-    prevPowerRowByPlant: powerStats.prevPowerRowByPlant,
-    todayPower: powerStats.todayPower,
-    powerIsStale: powerStats.powerIsStale,
-    nrw: prodStats.nrw,
-    nrwBreached: prodStats.nrwBreached,
-    qualityTrainMeta2: qualityStats.qualityTrainMeta2,
-  });
+  // ── Domain 5: Dashboard Alerts ──────────────────────────────────────────────
+  // P3-7: the alarm computation moved to <AlertsRuntime /> in AppShell so that a
+  // cold open on any route (not just this one) evaluates alarms instead of
+  // showing "All plant systems and sensors operating normally" without having
+  // checked anything. Do NOT re-add useDashboardAlerts() here — one mounted
+  // instance only, or useTrainAutoOffline writes duplicate status-log rows.
 
   const selectedPlantName = (selectedPlantId ? plants?.find(p => p.id === selectedPlantId)?.name : null) || 'All Production Facilities';
 
