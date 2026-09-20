@@ -538,7 +538,12 @@ export function useDashboardAlerts({
           source:      'Chemical Inventory',
           plantId:     c.plant_id ?? selectedPlantId ?? '',
           timestamp:   Date.now(),
-          linkPath:    '/chemicals',
+          // P2-3: /chemicals is outside OPERATOR_ALLOWED_PATHS, so an
+          // operator tapping this alert bounced to / with an "Access
+          // restricted" toast. Chemical Dosing lives in RO Trains, which
+          // every role can open. /chemicals stays as a redirect shim for
+          // old bookmarks (see pages/Chemicals.tsx).
+          linkPath:    '/ro-trains?tab=chemical-dosing',
         });
       }
     });

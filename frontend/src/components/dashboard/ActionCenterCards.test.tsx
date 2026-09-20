@@ -26,6 +26,15 @@ vi.mock('@/hooks/usePlants', () => ({
   })),
 }));
 
+// P2-2 added usePermission() (→ useAuth + useMyCustomRole) to this card.
+// These mocks keep the pre-existing tests on the default-allow path.
+vi.mock('@/hooks/useAuth', () => ({
+  useAuth: vi.fn(() => ({ roles: ['Manager'] })),
+}));
+vi.mock('@/hooks/useCustomRoles', () => ({
+  useMyCustomRole: vi.fn(() => ({ data: null })),
+}));
+
 function renderWithProviders(ui: React.ReactElement) {
   const queryClient = new QueryClient({
     defaultOptions: {

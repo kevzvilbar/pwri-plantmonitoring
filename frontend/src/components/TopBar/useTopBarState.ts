@@ -18,7 +18,7 @@ export function useTopBarState() {
   const {
     selectedPlantId, setSelectedPlantId,
     setUnreadCount, unreadCount,
-    plantAlerts, clearAlerts,
+    plantAlerts, clearAlerts, alertsReady,
     snoozeAlert, unsnoozeAlert, pruneSnooze,
     acknowledgeAlert, resolveAlert, acknowledgeAll, resolveAll,
   } = useAppStore();
@@ -136,6 +136,7 @@ export function useTopBarState() {
     unreadCount,
     setUnreadCount,
     plantAlerts,
+    alertsReady,
     totalBadge,
     sortedAlerts,
     criticalAlerts,

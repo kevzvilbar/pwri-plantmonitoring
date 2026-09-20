@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { usePermission } from '@/hooks/usePermission';
 import { FileSearch, CheckCircle2 } from 'lucide-react';
 
 // The tables DataCorrections.tsx treats as sources of truth for norm_status —
@@ -22,6 +23,12 @@ interface Props {
 // as ReadingCoverageCard / PMDueSoonCard.
 export function PendingReviewCard({ plantIds }: Props) {
   const navigate = useNavigate();
+  // P2-2: read-only for roles that cannot open /data-corrections — the rows
+  // render as plain divs (no click) and the footer button is disabled.
+  const canReview = usePermission('data_corrections', 'view');
+  const goReview = () => {
+    if (canReview) navigate('/data-corrections');
+  };
 
   const { data: pendingData = { total: 0, wells: 0, locators: 0, productMeters: 0, corrections: 0 } } = useQuery({
     queryKey: ['dashboard-pending-review-count', plantIds],
@@ -84,8 +91,10 @@ export function PendingReviewCard({ plantIds }: Props) {
           <Button
             variant="link"
             size="sm"
-            className="h-auto p-0 text-xs font-medium text-primary hover:text-primary/90 hover:underline"
-            onClick={() => navigate('/data-corrections')}
+            className="h-auto p-0 text-xs font-medium text-primary hover:text-primary/90 hover:underline disabled:text-muted-foreground disabled:no-underline"
+            onClick={goReview}
+            disabled={!canReview}
+            title={canReview ? undefined : 'Requires Data Corrections access'}
           >
             Review history →
           </Button>
@@ -131,7 +140,9 @@ export function PendingReviewCard({ plantIds }: Props) {
             <div
               key={r.label}
               className="flex items-center justify-between p-2 rounded-md bg-muted/20 border border-border/30 hover:bg-muted/30 transition-colors cursor-pointer"
-              onClick={() => navigate('/data-corrections')}
+              onClick={goReview}
+              role={canReview ? 'button' : undefined}
+              aria-disabled={canReview ? undefined : true}
             >
               <div className="flex items-center gap-2 min-w-0">
                 <span
@@ -162,8 +173,10 @@ export function PendingReviewCard({ plantIds }: Props) {
         <Button
           variant="link"
           size="sm"
-          className="h-auto p-0 text-xs font-medium text-primary hover:text-primary/90 hover:underline"
-          onClick={() => navigate('/data-corrections')}
+          className="h-auto p-0 text-xs font-medium text-primary hover:text-primary/90 hover:underline disabled:text-muted-foreground disabled:no-underline"
+          onClick={goReview}
+          disabled={!canReview}
+          title={canReview ? undefined : 'Requires Data Corrections access'}
         >
           Review flagged readings →
         </Button>

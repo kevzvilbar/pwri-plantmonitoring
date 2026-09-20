@@ -17,6 +17,7 @@ import { usePendingCount, useCorrectionRequestsCount, useEditHistory } from '@/d
 import { useReconciliationHealthTotals } from '@/components/dashboard/ReconciliationHealthCard/useReconciliationHealthTotals';
 import { ComplianceRadarCard } from '@/components/dashboard/ComplianceRadarCard';
 import { useAppStore } from '@/store/appStore';
+import { usePermission } from '@/hooks/usePermission';
 import { formatRangeLabel, rangeKeyToDays } from './types';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
@@ -28,6 +29,10 @@ interface DataTrustAuditCardProps {
 export function DataTrustAuditCard({ plantIds }: DataTrustAuditCardProps) {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'gates' | 'radar'>('gates');
+  // P2-2: roles without data_corrections view (e.g. Operator, Technician) get
+  // a read-only card — the "Review Queue" buttons must not lead to a page
+  // that toasts "Access restricted" and bounces them to /.
+  const canReviewCorrections = usePermission('data_corrections', 'view');
 
   const chartRange = useAppStore((s) => s.chartRange);
   const chartFrom = useAppStore((s) => s.chartFrom);
@@ -184,6 +189,8 @@ export function DataTrustAuditCard({ plantIds }: DataTrustAuditCardProps) {
             size="sm"
             className="h-7 text-2xs px-2 shrink-0 font-medium border-border/70 hover:bg-muted/40"
             onClick={() => navigate('/data-corrections')}
+            disabled={!canReviewCorrections}
+            title={canReviewCorrections ? undefined : 'Requires Data Corrections access'}
           >
             Review Queue →
           </Button>
@@ -230,7 +237,9 @@ export function DataTrustAuditCard({ plantIds }: DataTrustAuditCardProps) {
             <button
               type="button"
               onClick={() => navigate('/data-corrections?tab=history')}
-              className="text-primary hover:underline font-medium"
+              disabled={!canReviewCorrections}
+              title={canReviewCorrections ? undefined : 'Requires Data Corrections access'}
+              className="text-primary hover:underline font-medium disabled:text-muted-foreground disabled:no-underline disabled:cursor-not-allowed"
             >
               Full log →
             </button>

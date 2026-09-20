@@ -50,6 +50,9 @@ export const isAlertSnoozed = (snoozeMap: SnoozeMap, id: string): boolean => {
 
 export interface AlertState {
   plantAlerts: PlantAlert[];
+  /** True once the first computation has run. P2-7: the bell empty state must
+   *  say "Checking plant systems…" until then — never "operating normally". */
+  alertsReady: boolean;
   addAlerts: (alerts: PlantAlert[]) => void;
   removeAlerts: (ids: string[]) => void;
   clearAlerts: () => void;
@@ -73,6 +76,7 @@ export const useAlertStore = create<AlertState>()(
   persist(
     (set, get) => ({
       plantAlerts: [],
+      alertsReady: false,
       addAlerts: (incoming) =>
         set((s) => {
           const now = Date.now();
@@ -83,7 +87,7 @@ export const useAlertStore = create<AlertState>()(
             return expiry == null || expiry <= now;
           });
           const kept = s.plantAlerts.filter((a) => !active.find((n) => n.id === a.id));
-          return { plantAlerts: [...kept, ...active] };
+          return { plantAlerts: [...kept, ...active], alertsReady: true };
         }),
       removeAlerts: (ids) =>
         set((s) => {

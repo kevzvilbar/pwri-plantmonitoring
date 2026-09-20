@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/useAuth';
 import { usePermission } from '@/hooks/usePermission';
@@ -71,6 +71,27 @@ export default function AdminPage() {
   const canViewUsers = usePermission('admin_users', 'view');
   const canViewMigrations = usePermission('admin_migrations', 'view');
 
+  // P2-6: ROUTE_MAP emits /admin?tab=plants (and friends) but the page
+  // ignored them (<Tabs defaultValue=...>). Read + write ?tab=; unknown or
+  // disallowed tabs fall back to the default.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const urlAdminTab = searchParams.get('tab');
+  const requestedTab = urlAdminTab === 'users' && canViewUsers
+    ? 'users'
+    : urlAdminTab === 'plants' || urlAdminTab === 'audit'
+      ? urlAdminTab
+      : urlAdminTab === 'migrations' && canViewMigrations
+        ? 'migrations'
+        : urlAdminTab === 'roles' && isAdmin
+          ? 'roles'
+          : null;
+  const adminTab = requestedTab ?? (canViewUsers ? 'users' : 'plants');
+  const setAdminTab = (next: string) => {
+    const sp = new URLSearchParams(searchParams);
+    sp.set('tab', next);
+    setSearchParams(sp, { replace: true });
+  };
+
   if (loading) return <div className="p-4 text-sm text-muted-foreground">Loading…</div>;
 
   if (!isManager && !isDataAnalyst) {
@@ -118,6 +139,7 @@ export default function AdminPage() {
 
   const canManageRoles = isAdmin;
   const tabCount = canViewUsers ? 5 : 2;
+  void tabCount;
 
   return (
     <div className="space-y-3.5 animate-fade-in font-sans" data-testid="admin-page">
@@ -186,7 +208,7 @@ export default function AdminPage() {
         </div>
       </div>
 
-      <Tabs defaultValue={canViewUsers ? 'users' : 'plants'}>
+      <Tabs value={adminTab} onValueChange={setAdminTab}>
         <TabsList className="grid grid-cols-2 sm:grid-cols-5 gap-1 h-auto sm:h-10 w-full">
           <TabsTrigger value="users" disabled={!canViewUsers} data-testid="admin-tab-users" className="gap-1.5 text-xs">
             <Users className="h-3.5 w-3.5" /> Users ({usersCount})

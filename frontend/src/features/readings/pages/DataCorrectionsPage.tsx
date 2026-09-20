@@ -15,6 +15,7 @@
  */
 
 import { useAuth } from '@/hooks/useAuth';
+import { useSearchParams } from 'react-router-dom';
 import { Card } from '@/components/ui/card';
 import { PageHeader } from '@/components/PageHeader';
 import { Badge } from '@/components/ui/badge';
@@ -32,6 +33,21 @@ import { OperatorStatsTab } from '../dataCorrections/tabs/OperatorStatsTab';
 
 export default function DataCorrectionsPage() {
   const { isAdmin, isManager, isDataAnalyst } = useAuth();
+  // P2-4: the Dashboard links to /data-corrections?tab=history, but the page
+  // ignored it (<Tabs defaultValue="pending">). Read + write ?tab= with a
+  // validity guard so unknown values fall back to pending.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const VALID_TABS = ['pending', 'inbox', 'history', 'operators'] as const;
+  type CorrectionTab = (typeof VALID_TABS)[number];
+  const urlTab = searchParams.get('tab');
+  const tab: CorrectionTab = (VALID_TABS as readonly string[]).includes(urlTab ?? '')
+    ? (urlTab as CorrectionTab)
+    : 'pending';
+  const setTab = (next: CorrectionTab) => {
+    const sp = new URLSearchParams(searchParams);
+    sp.set('tab', next);
+    setSearchParams(sp, { replace: true });
+  };
   const { data: pendingCount = 0 } = usePendingCount();
   const { data: corrReqsCount = 0 } = useCorrectionRequestsCount();
   const { data: inboxCount = 0 } = useInboxCount();
@@ -55,7 +71,7 @@ export default function DataCorrectionsPage() {
         subtitle="Review flagged readings, approve operator requested corrections, retract errors, and track data quality in one place."
       />
 
-      <Tabs defaultValue="pending">
+      <Tabs value={tab} onValueChange={(v) => setTab(v as CorrectionTab)}>
         <TabsList className="grid grid-cols-2 sm:grid-cols-4 gap-1 h-auto sm:h-10 w-full">
           <TabsTrigger value="pending" className="gap-1.5 text-xs">
             <ClipboardCheck className="h-3.5 w-3.5" />

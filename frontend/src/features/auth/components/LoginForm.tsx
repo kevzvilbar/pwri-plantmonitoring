@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { z } from 'zod';
 import { supabase } from '@/integrations/supabase/client';
 import { useAppStore } from '@/store/appStore';
@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { ChevronLeft, Users, Eye, EyeOff } from 'lucide-react';
 import { OPERATOR_DESIGNATION } from '@/components/DesignationCombobox';
+import { getPostLoginPath } from '../getPostLoginPath';
 import { EmailConfirmationNotice, PendingNotice } from './EmailConfirmation';
 import { ForgotPasswordForm } from './PasswordResetForm';
 
@@ -63,6 +64,13 @@ export function SignInForm({
   onClearNotice?: () => void;
 }) {
   const navigate = useNavigate();
+  const location = useLocation();
+  // P2-5: return to the deep link ProtectedRoute saved (pathname + search +
+  // hash), not bare '/'. Open-redirect-safe via getPostLoginPath.
+  const postLoginPath = getPostLoginPath(
+    (location.state as { from?: { pathname?: string; search?: string; hash?: string } })?.from,
+    '/',
+  );
   const [busy, setBusy] = useState(false);
   const [email, setEmail] = useState(initialEmail);
   const [password, setPassword] = useState('');
@@ -133,11 +141,11 @@ export function SignInForm({
         }
       }
       toast.success(`Welcome, ${ownProfile.first_name ?? ownProfile.username}!`);
-      navigate('/');
+      navigate(postLoginPath);
       return;
     }
 
-    navigate('/');
+    navigate(postLoginPath);
   };
 
   const handlePickUsername = (u: PickEntry) => {
@@ -150,7 +158,7 @@ export function SignInForm({
       username: u.username,
       plantId: signedInPlantId,
     });
-    navigate('/');
+    navigate(postLoginPath);
   };
 
   if (view === 'forgot') return <ForgotPasswordForm onBack={() => setView('signin')} />;

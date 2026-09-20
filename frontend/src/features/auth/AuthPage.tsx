@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { Navigate, useLocation, useNavigationType } from 'react-router-dom';
+import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
+import { getPostLoginPath } from './getPostLoginPath';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Logomark } from '@/components/icons/Logomark';
 import { AppLoading } from '@/components/AppLoading';
@@ -16,9 +17,10 @@ export default function Auth() {
 
   // Read the "from" location that ProtectedRoute saved when redirecting to /auth.
   // After successful authentication, redirect back there instead of always '/'.
-  // This preserves deep links from emails, alert deep-links, etc.
-  const from = (location.state as { from?: { pathname?: string; search?: string } })?.from;
-  const redirectTo = from?.pathname ?? '/';
+  // This preserves deep links from emails, alert deep-links, etc. P2-5: keep
+  // search + hash, and reject open redirects via getPostLoginPath.
+  const from = (location.state as { from?: { pathname?: string; search?: string; hash?: string } })?.from;
+  const redirectTo = getPostLoginPath(from, '/');
 
   if (loading) return <AppLoading className="min-h-screen" />;
   // Use redirectTo after login instead of hardcoded '/'

@@ -16,6 +16,8 @@ import { BlendingForm }       from '../components/blending/BlendingSection';
 import { ProductForm }        from '../components/product/ProductSection';
 import { PowerForm }          from '../components/power/PowerSection';
 import { PageHeader }         from '@/components/PageHeader';
+import { CanLink } from '@/components/CanLink';
+import { useCan } from '@/hooks/usePermission';
 import { cn } from '@/lib/utils';
 
 const TAB_ALIASES: Record<string, string> = {
@@ -31,6 +33,9 @@ import { getCurrentShift } from '@/lib/shifts';
 
 export default function Operations() {
   const navigate = useNavigate();
+  const can = useCan();
+  // P2-1: the ribbon hides entirely when the user can open none of its links.
+  const showRibbon = can('data_corrections') || can('manager_scorecard') || can('network_topology');
   const [searchParams, setSearchParams] = useSearchParams();
   const urlTab = TAB_ALIASES[(searchParams.get('tab') || '').toLowerCase()] ?? 'locator';
   const [tab, setTab] = useState<string>(urlTab);
@@ -119,25 +124,31 @@ export default function Operations() {
               <span className="text-muted-foreground text-3xs font-mono">({shiftInfo.timeRange})</span>
             </div>
 
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-8 px-2.5 text-xs gap-1.5 font-medium"
-              onClick={() => navigate('/import')}
-            >
-              <Upload className="h-3.5 w-3.5 text-primary" />
-              <span>Import</span>
-            </Button>
+            {/* P2-1: Operators have no smart_import view — never show a button
+                that ends in an "Access restricted" toast. */}
+            <CanLink module="smart_import">
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 px-2.5 text-xs gap-1.5 font-medium"
+                onClick={() => navigate('/import')}
+              >
+                <Upload className="h-3.5 w-3.5 text-primary" />
+                <span>Import</span>
+              </Button>
+            </CanLink>
 
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-8 px-2.5 text-xs gap-1.5 font-medium"
-              onClick={() => navigate('/exports')}
-            >
-              <Download className="h-3.5 w-3.5 text-accent" />
-              <span>Export</span>
-            </Button>
+            <CanLink module="data_exports">
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 px-2.5 text-xs gap-1.5 font-medium"
+                onClick={() => navigate('/exports')}
+              >
+                <Download className="h-3.5 w-3.5 text-accent" />
+                <span>Export</span>
+              </Button>
+            </CanLink>
           </div>
         }
       />
@@ -145,43 +156,53 @@ export default function Operations() {
 
 
       {/* ── Quick Jump Utility Ribbon ── */}
+      {/* P2-1: each ribbon link is gated; the whole ribbon hides when the
+          user can open none of them (e.g. Operator without overrides). */}
+      {showRibbon && (
       <div className="flex flex-wrap items-center justify-between gap-2.5 p-2 rounded-xl bg-muted/30 border border-border/60 text-xs">
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-3xs font-bold uppercase tracking-wider text-muted-foreground">Operations Tools:</span>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 px-2 text-2xs font-semibold hover:bg-background"
-            onClick={() => navigate('/data-corrections')}
-          >
-            <ClipboardCheck className="h-3.5 w-3.5 mr-1 text-primary" />
-            Data Corrections &rarr;
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 px-2 text-2xs font-semibold hover:bg-background"
-            onClick={() => navigate('/manager-scorecard')}
-          >
-            <Activity className="h-3.5 w-3.5 mr-1 text-accent" />
-            Manager Scorecard &rarr;
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 px-2 text-2xs font-semibold hover:bg-background"
-            onClick={() => navigate(selectedPlantId ? `/topology?plant=${selectedPlantId}` : '/topology')}
-          >
-            <Layers className="h-3.5 w-3.5 mr-1 text-kpi-ro" />
-            Plant Topology &rarr;
-          </Button>
+          <CanLink module="data_corrections">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2 text-2xs font-semibold hover:bg-background"
+              onClick={() => navigate('/data-corrections')}
+            >
+              <ClipboardCheck className="h-3.5 w-3.5 mr-1 text-primary" />
+              Data Corrections &rarr;
+            </Button>
+          </CanLink>
+          <CanLink module="manager_scorecard">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2 text-2xs font-semibold hover:bg-background"
+              onClick={() => navigate('/manager-scorecard')}
+            >
+              <Activity className="h-3.5 w-3.5 mr-1 text-accent" />
+              Manager Scorecard &rarr;
+            </Button>
+          </CanLink>
+          <CanLink module="network_topology">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2 text-2xs font-semibold hover:bg-background"
+              onClick={() => navigate(selectedPlantId ? `/topology?plant=${selectedPlantId}` : '/topology')}
+            >
+              <Layers className="h-3.5 w-3.5 mr-1 text-kpi-ro" />
+              Plant Topology &rarr;
+            </Button>
+          </CanLink>
         </div>
 
-                <div className="text-3xs text-muted-foreground flex items-center gap-1 font-mono">
+        <div className="text-3xs text-muted-foreground flex items-center gap-1 font-mono">
           <span className="h-2 w-2 rounded-full bg-accent animate-pulse" />
           <span>Data freshness validated</span>
         </div>
       </div>
+      )}
 
       {/* ── Tab Navigation Bar ── */}
       <div className="flex gap-1.5 p-1.5 bg-muted/60 border border-border/70 rounded-2xl w-full shadow-inner">

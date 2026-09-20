@@ -17,6 +17,7 @@ export function AlertPanel() {
     notifs,
     unreadCount,
     plantAlerts,
+    alertsReady,
     totalBadge,
     sortedAlerts,
     criticalAlerts,
@@ -259,8 +260,20 @@ export function AlertPanel() {
                   <CheckCircle2 className="h-5 w-5" />
                 </div>
                 <div className="space-y-0.5">
-                  <p className="text-xs font-bold text-foreground">No active alarms</p>
-                  <p className="text-2xs text-muted-foreground">All plant systems and sensors operating normally</p>
+                  {/* P2-7: never claim "operating normally" before the first
+                      computation finishes — a cold open on a non-Dashboard
+                      page would otherwise lie. */}
+                  {alertsReady ? (
+                    <>
+                      <p className="text-xs font-bold text-foreground">No active alarms</p>
+                      <p className="text-2xs text-muted-foreground">All plant systems and sensors operating normally</p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-xs font-bold text-foreground">Checking plant systems…</p>
+                      <p className="text-2xs text-muted-foreground">Loading the latest readings and alarms</p>
+                    </>
+                  )}
                 </div>
               </div>
             )}
