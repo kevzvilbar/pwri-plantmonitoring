@@ -7,8 +7,8 @@ import { isOperatorOnly } from '@/lib/permissions';
 import { toast } from 'sonner';
 
 // Routes an Operator is allowed to visit. Everything else redirects to /.
-// Keep this in sync with AppSidebar and BottomNav allowed items.
-// Generated from PERMISSION_MATRIX via usePermission() — see navConfig.ts.
+// Maintained by hand: it is NOT derived from PERMISSION_MATRIX. navConfig.test.ts
+// fails if a nav item an Operator can see has a route missing from this list.
 export const OPERATOR_ALLOWED_PATHS = [
   '/',
   '/plants',

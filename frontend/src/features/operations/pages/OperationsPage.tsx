@@ -108,7 +108,7 @@ export default function Operations() {
   return (
     <div className="space-y-4 animate-fade-in max-w-[1600px] mx-auto pb-10">
       <PageHeader
-        title="Operations Control"
+        title="Daily Readings"
         titleIcon={<Activity className="h-5 w-5 text-primary" />}
         subtitle="Daily telemetry logs, flow rates, and active bypass management"
         actions={

@@ -8,9 +8,10 @@ export type { Role };
 // actual behavior (ProtectedRoute, page-level canEdit checks, etc.)
 // drifts from what's declared here.
 //
-// Nav components (AppSidebar, BottomNav) should derive their items from
-// this matrix via hasPermission() / usePermission() rather than hand-coding
-// role lists. See navConfig.ts for the generated navigation config.
+// Nav components (AppSidebar, BottomNav) render useNavGroups(), which is
+// navConfig.ts filtered through useCan(). Do not hand-code role lists, and do
+// not call hasPermission() directly to show or hide UI: it ignores custom-role
+// overrides. Use useCan() / usePermission() (hooks/usePermission.ts).
 
 export type Action = 'view' | 'edit' | 'budget' | 'delete';
 

@@ -1,148 +1,121 @@
 /**
- * Navigation configuration generated from PERMISSION_MATRIX.
+ * Navigation structure: the single source for what AppSidebar and BottomNav
+ * render. Plain data plus one pure builder.
  *
- * This is the single source for what appears in AppSidebar and BottomNav.
- * Both components import from here instead of hand-coding role lists.
+ * This file knows nothing about roles. Callers pass a `Can` predicate (see
+ * `useCan()` in hooks/usePermission.ts), so custom-role overrides from
+ * Admin → Roles hide nav items the same way they gate pages.
+ *
+ * Route guarding is separate: ProtectedRoute.OPERATOR_ALLOWED_PATHS.
+ * navConfig.test.ts fails if an item an Operator can see is missing there.
  */
 
-import { hasPermission, MODULE_LABELS, type ModuleKey, type Role } from '@/lib/permissions';
-import { ComponentType } from 'react';
+import type { ComponentType } from 'react';
+import {
+  LayoutDashboard, Bell, ShieldCheck, Droplet, Wrench, AlertTriangle,
+  Building2, GitBranch, FlaskConical, ClipboardCheck, Award,
+  Download, Upload, Users, ShieldAlert,
+} from 'lucide-react';
+import { ROTrainIcon, PesoSignIcon } from '@/components/icons/water-icons';
+import { MODULE_LABELS, type Action, type ModuleKey } from '@/lib/permissions';
+
+/** Same shape as `hasPermission(roles, moduleKey, action)` with roles bound. */
+export type Can = (moduleKey: ModuleKey, action?: Action) => boolean;
 
 export interface NavItem {
-  route: string;
-  moduleKey: ModuleKey;
-  label: string;
-  icon: ComponentType<{ className?: string }>;
-  matchPaths?: string[];
-  matchTabValues?: string[];
+  /** Stable key: React key and test assertions. */
+  readonly id: string;
+  readonly label: string;
+  /** Shorter label for the mobile bottom bar, when `label` is too wide. */
+  readonly mobileLabel?: string;
+  readonly route: string;
+  readonly icon: ComponentType<{ className?: string }>;
+  /** Item is visible when the user can view ANY of these modules. */
+  readonly modules: readonly ModuleKey[];
+  /** Highlight only on an exact path match (used for '/'). Otherwise the
+   *  route and anything beneath it (e.g. /plants/:id) counts as active. */
+  readonly end?: boolean;
+  /** Slot in the mobile bottom bar, left to right. Items without a priority
+   *  are listed in the "More" sheet. */
+  readonly priority?: number;
+  /** Live indicator rendered next to the item (see NavItemBadge). */
+  readonly badge?: 'alerts';
 }
 
 export interface NavGroup {
-  label: string;
-  items: NavItem[];
+  readonly label: string;
+  readonly items: readonly NavItem[];
 }
 
-// Icon map - keeps icons consistent across sidebar and bottom nav
-import {
-  LayoutDashboard, Bell, Building2, Droplet,
-  GitBranch, Wrench, AlertTriangle, Award,
-  Users, ShieldCheck, ShieldAlert,
-  ClipboardCheck, FlaskConical, Download, Upload, Bot,
-} from 'lucide-react';
-import { ROTrainIcon as ROTrainIconComponent, PesoSignIcon } from '@/components/icons/water-icons';
+// "Admin Console" is one page over several modules (admin_users, admin_plants,
+// admin_audit, ...), so it has no single MODULE_LABELS entry.
+const ADMIN_CONSOLE_LABEL = 'Admin Console';
 
-const ICON_MAP: Record<ModuleKey, ComponentType<{ className?: string }>> = {
-  dashboard: LayoutDashboard,
-  alerts: Bell,
-  compliance: ShieldCheck,
-  plants: Building2,
-  operations: Droplet,
-  ro_trains: ROTrainIconComponent,
-  network_topology: GitBranch,
-  pm_schedule: Wrench,
-  incidents: AlertTriangle,
-  manager_scorecard: Award,
-  costs: PesoSignIcon,
-  employees: Users,
-  data_exports: Download,
-  smart_import: Upload,
-  data_analysis_review: FlaskConical,
-  data_corrections: ClipboardCheck,
-  admin_users: ShieldAlert,
-  admin_plants: Building2,
-  admin_audit: ShieldAlert,
-  admin_migrations: ShieldAlert,
-  ai_assistant: Bot,
-  profile: LayoutDashboard,
-};
-
-const ROUTE_MAP: Record<ModuleKey, string> = {
-  dashboard: '/',
-  alerts: '/alerts',
-  compliance: '/compliance',
-  plants: '/plants',
-  operations: '/operations',
-  ro_trains: '/ro-trains',
-  network_topology: '/topology',
-  pm_schedule: '/maintenance',
-  incidents: '/incidents',
-  manager_scorecard: '/manager-scorecard',
-  costs: '/costs',
-  employees: '/employees',
-  data_exports: '/exports',
-  smart_import: '/import',
-  data_analysis_review: '/data-analysis',
-  data_corrections: '/data-corrections',
-  admin_users: '/admin',
-  admin_plants: '/admin?tab=plants',
-  admin_audit: '/admin?tab=audit',
-  admin_migrations: '/admin?tab=migrations',
-  ai_assistant: '/admin?tab=ai_assistant',
-  profile: '/profile',
-};
-
-// 6 groups organized by user task (down from 8)
-const GROUP_DEFS: { label: string; moduleKeys: ModuleKey[] }[] = [
-  { label: 'Overview', moduleKeys: ['dashboard', 'alerts'] },
-  { label: 'Assets', moduleKeys: ['plants', 'network_topology'] },
-  { label: 'Daily Logs', moduleKeys: ['operations', 'ro_trains', 'pm_schedule', 'incidents'] },
-  { label: 'Review', moduleKeys: ['data_analysis_review', 'data_corrections', 'manager_scorecard'] },
-  { label: 'Admin', moduleKeys: ['admin_users'] },
-  { label: 'Other', moduleKeys: ['compliance', 'costs', 'employees', 'data_exports', 'smart_import', 'profile'] },
+// Group order and membership follow the target navigation in
+// docs/NAV-IA-REMEDIATION-PLAN.md (Appendix A).
+const NAV_GROUPS: readonly NavGroup[] = [
+  {
+    label: 'Overview',
+    items: [
+      { id: 'dashboard', modules: ['dashboard'], label: MODULE_LABELS.dashboard, route: '/', icon: LayoutDashboard, end: true, priority: 3 },
+      { id: 'alerts', modules: ['alerts'], label: MODULE_LABELS.alerts, route: '/alerts', icon: Bell, priority: 4, badge: 'alerts' },
+      { id: 'compliance', modules: ['compliance'], label: MODULE_LABELS.compliance, route: '/compliance', icon: ShieldCheck },
+    ],
+  },
+  {
+    label: 'Daily Logs',
+    items: [
+      { id: 'operations', modules: ['operations'], label: MODULE_LABELS.operations, mobileLabel: 'Readings', route: '/operations', icon: Droplet, priority: 1 },
+      { id: 'ro-trains', modules: ['ro_trains'], label: MODULE_LABELS.ro_trains, route: '/ro-trains', icon: ROTrainIcon, priority: 2 },
+      { id: 'pm-schedule', modules: ['pm_schedule'], label: MODULE_LABELS.pm_schedule, route: '/maintenance', icon: Wrench },
+      { id: 'incidents', modules: ['incidents'], label: MODULE_LABELS.incidents, route: '/incidents', icon: AlertTriangle },
+    ],
+  },
+  {
+    label: 'Assets',
+    items: [
+      { id: 'plants', modules: ['plants'], label: MODULE_LABELS.plants, route: '/plants', icon: Building2 },
+      { id: 'topology', modules: ['network_topology'], label: MODULE_LABELS.network_topology, route: '/topology', icon: GitBranch },
+    ],
+  },
+  {
+    label: 'Review',
+    items: [
+      { id: 'data-analysis', modules: ['data_analysis_review'], label: MODULE_LABELS.data_analysis_review, route: '/data-analysis', icon: FlaskConical },
+      { id: 'data-corrections', modules: ['data_corrections'], label: MODULE_LABELS.data_corrections, route: '/data-corrections', icon: ClipboardCheck },
+      { id: 'manager-scorecard', modules: ['manager_scorecard'], label: MODULE_LABELS.manager_scorecard, route: '/manager-scorecard', icon: Award },
+    ],
+  },
+  {
+    label: 'Reports & Data',
+    items: [
+      { id: 'costs', modules: ['costs'], label: MODULE_LABELS.costs, route: '/costs', icon: PesoSignIcon },
+      { id: 'exports', modules: ['data_exports'], label: MODULE_LABELS.data_exports, route: '/exports', icon: Download },
+      { id: 'import', modules: ['smart_import'], label: MODULE_LABELS.smart_import, route: '/import', icon: Upload },
+    ],
+  },
+  {
+    label: 'Team & Admin',
+    items: [
+      { id: 'employees', modules: ['employees'], label: MODULE_LABELS.employees, route: '/employees', icon: Users },
+      // Anyone who can view any admin tab gets the link; AdminPage gates each
+      // tab itself (Managers land on Plants, not Users).
+      { id: 'admin', modules: ['admin_users', 'admin_plants', 'admin_audit'], label: ADMIN_CONSOLE_LABEL, route: '/admin', icon: ShieldAlert },
+    ],
+  },
 ];
 
-const MODULE_TO_GROUP: Partial<Record<ModuleKey, string>> = {};
-for (const group of GROUP_DEFS) {
-  for (const mk of group.moduleKeys) MODULE_TO_GROUP[mk] = group.label;
+/** Groups (and their items) the user can view. Empty groups are dropped. */
+export function buildNavConfig(can: Can): NavGroup[] {
+  return NAV_GROUPS
+    .map((group) => ({
+      label: group.label,
+      items: group.items.filter((item) => item.modules.some((m) => can(m, 'view'))),
+    }))
+    .filter((group) => group.items.length > 0);
 }
 
-/**
- * Build navigation groups for a given role's permissions.
- * Only modules where the user has 'view' permission appear.
- */
-export function buildNavConfig(roles: string[] | Role[]): NavGroup[] {
-  const groups: NavGroup[] = [];
-
-  for (const groupDef of GROUP_DEFS) {
-    const items: NavItem[] = [];
-
-    for (const moduleKey of groupDef.moduleKeys) {
-      if (hasPermission(roles as Role[], moduleKey as ModuleKey, 'view') && !moduleKey.startsWith('admin_')) {
-        items.push({
-          route: ROUTE_MAP[moduleKey],
-          moduleKey,
-          label: MODULE_LABELS[moduleKey],
-          icon: ICON_MAP[moduleKey],
-          matchPaths: getMatchPaths(moduleKey),
-          matchTabValues: getMatchTabValues(moduleKey),
-        });
-      }
-    }
-
-    if (items.length > 0) {
-      groups.push({ label: groupDef.label, items });
-    }
-  }
-
-  return groups;
-}
-
-function getMatchPaths(moduleKey: ModuleKey): string[] | undefined {
-  switch (moduleKey) {
-    case 'operations': return ['/operations'];
-    case 'plants': return ['/plants', '/plants/'];
-    default: return undefined;
-  }
-}
-
-function getMatchTabValues(moduleKey: ModuleKey): string[] | undefined {
-  switch (moduleKey) {
-    case 'operations': return ['well', 'wells', 'locator', 'locators', 'product', 'blending', 'power'];
-    case 'ro_trains': return ['overview', 'pretreat-ro', 'chemical-dosing', 'pretreat'];
-    default: return undefined;
-  }
-}
-
-export function getGroupForModule(moduleKey: ModuleKey): string {
-  return MODULE_TO_GROUP[moduleKey] ?? 'Other';
+export function isNavItemActive(item: NavItem, pathname: string): boolean {
+  if (item.end) return pathname === item.route;
+  return pathname === item.route || pathname.startsWith(`${item.route}/`);
 }

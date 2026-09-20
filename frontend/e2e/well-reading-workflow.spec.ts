@@ -27,8 +27,8 @@ test.describe('Well Reading Workflow', () => {
   test('navigates to Operations and shows Wells tab with well rows', async ({ page }) => {
     await page.goto('/operations');
 
-    // Operations Control page rendered
-    await expect(page.locator('text=Operations Control')).toBeVisible({ timeout: 15_000 });
+    // Daily Readings page rendered (heading, not bare text: the nav link has the same label)
+    await expect(page.getByRole('heading', { name: 'Daily Readings' })).toBeVisible({ timeout: 15_000 });
 
     // Wells tab is present in the tab bar
     const wellsTab = page.locator('button:has-text("Wells")');

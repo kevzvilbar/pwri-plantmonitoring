@@ -1,138 +1,24 @@
 import { NavLink, useLocation } from 'react-router-dom';
-import {
-  LayoutDashboard, Building2, Droplet, Wrench, AlertTriangle,
-  Users, Download, Upload, ShieldCheck, ShieldAlert,
-  GitBranch, FlaskConical, ChevronLeft, ChevronRight,
-  ClipboardCheck, Award, Bell } from 'lucide-react';
-// Icon-audit fix: RO Trains now uses the purpose-built ROTrainIcon instead
-// of the generic gear/Cog glyph, matching TrainsList and the mobile nav.
-import { ROTrainIcon, PesoSignIcon } from '@/components/icons/water-icons';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Logomark } from '@/components/icons/Logomark';
 import {
   Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent, SidebarGroupLabel,
   SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar,
 } from '@/components/ui/sidebar';
-import { useAuth } from '@/hooks/useAuth';
-import { hasPermission, type Role } from '@/lib/permissions';
+import { NavItemBadge } from '@/components/NavItemBadge';
+import { useNavGroups } from '@/hooks/useNavGroups';
+import { isNavItemActive } from '@/navConfig';
 import { cn } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-
-// New 6-group structure organized by user task (from navConfig.ts GROUP_DEFS)
-// Overview | Assets | Daily Logs | Review | Admin | Other
-
-type SidebarItem = {
-  to: string;
-  label: string;
-  icon: any;
-  end?: boolean;
-  show?: boolean;  // Set by permission check
-};
-
-type SidebarGroup = { label: string; items: SidebarItem[] };
-
-// Build groups dynamically based on permissions
-function buildSidebarGroups(roles: Role[]): SidebarGroup[] {
-  const groups: SidebarGroup[] = [];
-
-  // Overview: Dashboard + Alerts (always visible)
-  const overviewItems: SidebarItem[] = [
-    { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
-  ];
-  // Add Alerts if visible (it's now in OPERATOR_ALLOWED_PATHS)
-  if (hasPermission(roles, 'alerts', 'view')) {
-    overviewItems.push({ to: '/alerts', label: 'Alerts', icon: Bell });
-  }
-  groups.push({ label: 'Overview', items: overviewItems });
-
-  // Assets: Plants + Network Topology
-  const assetsItems: SidebarItem[] = [];
-  if (hasPermission(roles, 'plants', 'view')) {
-    assetsItems.push({ to: '/plants', label: 'Plants', icon: Building2 });
-  }
-  if (hasPermission(roles, 'network_topology', 'view')) {
-    assetsItems.push({ to: '/topology', label: 'Network Topology', icon: GitBranch });
-  }
-  if (assetsItems.length > 0) {
-    groups.push({ label: 'Assets', items: assetsItems });
-  }
-
-  // Daily Logs: Operations + RO Trains + PM + Incidents (the shift loop)
-  const dailyLogsItems: SidebarItem[] = [];
-  if (hasPermission(roles, 'operations', 'view')) {
-    dailyLogsItems.push({ to: '/operations', label: 'Daily Readings', icon: Droplet });
-  }
-  if (hasPermission(roles, 'ro_trains', 'view')) {
-    dailyLogsItems.push({ to: '/ro-trains', label: 'RO Trains', icon: ROTrainIcon });
-  }
-  if (hasPermission(roles, 'pm_schedule', 'view')) {
-    dailyLogsItems.push({ to: '/maintenance', label: 'PM Schedule', icon: Wrench });
-  }
-  if (hasPermission(roles, 'incidents', 'view')) {
-    dailyLogsItems.push({ to: '/incidents', label: 'Incidents', icon: AlertTriangle });
-  }
-  if (dailyLogsItems.length > 0) {
-    groups.push({ label: 'Daily Logs', items: dailyLogsItems });
-  }
-
-  // Review: Data Analysis + Data Corrections + Manager Scorecard
-  const reviewItems: SidebarItem[] = [];
-  if (hasPermission(roles, 'data_analysis_review', 'view')) {
-    reviewItems.push({ to: '/data-analysis', label: 'Data Analysis & Review', icon: FlaskConical });
-  }
-  if (hasPermission(roles, 'data_corrections', 'view')) {
-    reviewItems.push({ to: '/data-corrections', label: 'Data Corrections', icon: ClipboardCheck });
-  }
-  if (hasPermission(roles, 'manager_scorecard', 'view')) {
-    reviewItems.push({ to: '/manager-scorecard', label: 'Manager Scorecard', icon: Award });
-  }
-  if (reviewItems.length > 0) {
-    groups.push({ label: 'Review', items: reviewItems });
-  }
-
-  // Admin: Only for Admin role
-  const adminItems: SidebarItem[] = [];
-  if (hasPermission(roles, 'admin_users', 'view')) {
-    adminItems.push({ to: '/admin', label: 'Admin Console', icon: ShieldAlert });
-  }
-  if (adminItems.length > 0) {
-    groups.push({ label: 'Admin', items: adminItems });
-  }
-
-  // Other: Compliance + Costs + Employees + Exports + Import + Profile
-  const otherItems: SidebarItem[] = [];
-  if (hasPermission(roles, 'compliance', 'view')) {
-    otherItems.push({ to: '/compliance', label: 'Compliance', icon: ShieldCheck });
-  }
-  if (hasPermission(roles, 'costs', 'view')) {
-    otherItems.push({ to: '/costs', label: 'Costs & Tariffs', icon: PesoSignIcon });
-  }
-  if (hasPermission(roles, 'employees', 'view')) {
-    otherItems.push({ to: '/employees', label: 'Employees', icon: Users });
-  }
-  if (hasPermission(roles, 'data_exports', 'view')) {
-    otherItems.push({ to: '/exports', label: 'Data Exports', icon: Download });
-  }
-  if (hasPermission(roles, 'smart_import', 'view')) {
-    otherItems.push({ to: '/import', label: 'Smart Import', icon: Upload });
-  }
-  // Profile is always visible (UNCONFIGURABLE_MODULES)
-  otherItems.push({ to: '/profile', label: 'Profile', icon: LayoutDashboard });
-  if (otherItems.length > 0) {
-    groups.push({ label: 'Other', items: otherItems });
-  }
-
-  return groups;
-}
 
 export function AppSidebar() {
   const { state, toggleSidebar } = useSidebar();
   const collapsed = state === 'collapsed';
   const { pathname } = useLocation();
-  const { profile, roles } = useAuth();
 
-  // Build sidebar groups dynamically based on permissions
-  // This replaces the old hardcoded role-based groups
-  const visibleGroups = buildSidebarGroups(roles as Role[]);
+  // Groups, order, labels and visibility all come from navConfig.ts via
+  // useNavGroups(); BottomNav renders the same groups.
+  const visibleGroups = useNavGroups();
 
   return (
     <Sidebar collapsible="icon">
@@ -205,12 +91,10 @@ export function AppSidebar() {
             <SidebarGroupContent>
               <SidebarMenu className="gap-px">
                 {g.items.map((item) => {
-                  const isActive = item.end
-                    ? pathname === item.to
-                    : pathname.startsWith(item.to.split('?')[0]);
+                  const isActive = isNavItemActive(item, pathname);
 
                   return (
-                    <SidebarMenuItem key={item.to}>
+                    <SidebarMenuItem key={item.id}>
                       {collapsed ? (
                         <Tooltip>
                           <TooltipTrigger asChild>
@@ -226,7 +110,7 @@ export function AppSidebar() {
                                 ],
                               )}
                             >
-                              <NavLink to={item.to} end={item.end}>
+                              <NavLink to={item.route} end={item.end} className="relative">
                                 <item.icon
                                   className={cn(
                                     'h-[15px] w-[15px] shrink-0 transition-colors duration-150',
@@ -235,6 +119,9 @@ export function AppSidebar() {
                                       : 'text-sidebar-foreground/45',
                                   )}
                                 />
+                                {item.badge && (
+                                  <NavItemBadge kind={item.badge} variant="dot" className="absolute top-1 right-1" />
+                                )}
                               </NavLink>
                             </SidebarMenuButton>
                           </TooltipTrigger>
@@ -249,7 +136,7 @@ export function AppSidebar() {
                           className="h-auto p-0 hover:bg-transparent active:bg-transparent focus-visible:ring-0"
                         >
                           <NavLink
-                            to={item.to}
+                            to={item.route}
                             end={item.end}
                             className={cn(
                               'flex items-center gap-2.5 w-full px-2 py-[5px] rounded-md',
@@ -271,6 +158,7 @@ export function AppSidebar() {
                               )}
                             />
                             <span className="truncate">{item.label}</span>
+                            {item.badge && <NavItemBadge kind={item.badge} className="ml-auto" />}
                           </NavLink>
                         </SidebarMenuButton>
                       )}
