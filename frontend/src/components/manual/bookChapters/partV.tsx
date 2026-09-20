@@ -12,7 +12,7 @@ export const partV : BookPart =   {
           <>
             <Lead>
               Employees is visible to every role, including Operators, and covers three tabs: Staff, KPI, and
-              Info.
+              Org chart.
             </Lead>
             <P>
               The <strong className="font-sans font-semibold not-italic">Staff</strong> tab lists every team
@@ -26,8 +26,10 @@ export const partV : BookPart =   {
               scorecard summarizing reading timeliness and completeness per employee over a selected period,
               green for everything logged, down through red for nothing, so a supervisor can spot who might
               need support at a glance. The{' '}
-              <strong className="font-sans font-semibold not-italic">Info</strong> tab carries this reader, plus
-              a reporting-tree org chart built from each person&rsquo;s immediate supervisor assignment.
+              <strong className="font-sans font-semibold not-italic">Org chart</strong> tab shows the reporting
+              tree, built from each person&rsquo;s immediate supervisor assignment. This manual no longer lives
+              here: open it from your avatar menu, under{' '}
+              <strong className="font-sans font-semibold not-italic">Help &amp; Manual</strong>.
             </P>
           </>
         ),

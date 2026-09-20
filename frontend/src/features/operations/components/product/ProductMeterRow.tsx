@@ -4,6 +4,7 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { usePermission } from '@/hooks/usePermission';
 import { CorrectionRequestDialog, type CorrectionTarget } from '@/components/CorrectionRequestDialog';
 import { ReplaceMeterDialog } from '@/pages/plants/locators/LocatorDialogs';
 import { ReasonDialog } from '@/components/ReasonDialog';
@@ -58,6 +59,9 @@ function ProductMeterRow({
 }) {
   const isMobile = useIsMobile();
   const navigate = useNavigate();
+  // Operators cannot open /data-corrections. A clickable chip would only end in
+  // an "Access restricted" toast, so for them it is a plain label.
+  const canReview = usePermission('data_corrections', 'view');
   const [reading, setReading] = useState('');
   const lastPrefilledProduct = useRef<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -283,8 +287,12 @@ function ProductMeterRow({
               latest?.norm_status === 'pending_review' && {
                 tone: 'warn',
                 label: 'Pending review',
-                title: 'This reading is flagged and awaiting review in Data Corrections.',
-                onClick: () => navigate('/corrections?tab=inbox'),
+                title: canReview
+                  ? 'This reading is flagged and awaiting review in Data Corrections.'
+                  : 'This reading is flagged and awaiting review by a Manager or Data Analyst.',
+                // Pending tab, not Inbox: Inbox lists norm_status = 'normal' readings
+                // with a negative volume, so a pending_review reading is never in it.
+                onClick: canReview ? () => navigate('/data-corrections?tab=pending') : undefined,
               },
               productionVolume != null && {
                 tone: productionVolume < 0 ? 'danger' : 'primary',
