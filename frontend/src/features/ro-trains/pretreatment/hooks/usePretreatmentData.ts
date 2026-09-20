@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { usePlantMeterConfig } from '@/pages/plants/shared';
 import { TWO_HOURS_MS } from '@/lib/autoOfflineThreshold';
+import { computeROMeterAverageRates } from '@/lib/roReadingGuards';
 
 export interface PretreatmentData {
   trains?: any[];
@@ -115,15 +116,19 @@ export function usePretreatmentData(
   // since prevReadings/prevPretreatReadings resolve independently of the `trains` query.
   const isStatusLoading = !!trainId && (isPrevReadingsLoading || isPrevPretreatLoading);
   // Average flow rates (10-day rolling)
+  // Key is deliberately NOT ['ro-spark', trainId]: Overview.tsx caches a different
+  // shape under ['ro-spark', trainIds.join(',')], which is the very same key for a
+  // single-train plant. The extra segment keeps the two apart while the
+  // ['ro-spark'] prefix invalidations elsewhere still match.
   const { data: avgFlowRates } = useQuery({
-    queryKey: ['ro-spark', trainId],
+    queryKey: ['ro-spark', 'meter-avg-10d', trainId],
     enabled: !!trainId,
     queryFn: async () => {
       const since = new Date();
       since.setDate(since.getDate() - 10);
       const { data, error } = await supabase
         .from('ro_train_readings' as any)
-        .select('reading_datetime, feed_meter, permeate_meter, reject_meter')
+        .select('reading_datetime, feed_meter, permeate_meter, reject_meter, norm_status')
         .eq('train_id', trainId)
         .gte('reading_datetime', since.toISOString())
         .order('reading_datetime', { ascending: true });
@@ -132,18 +137,12 @@ export function usePretreatmentData(
     },
   });
 
-  const avgFeedFlowRate = avgFlowRates?.length
-    ? avgFlowRates.reduce((sum: number, r: any) => sum + ((r as any).feed_meter ?? 0), 0) /
-      avgFlowRates.filter((r: any) => (r as any).feed_meter != null).length
-    : null;
-  const avgPermFlowRate = avgFlowRates?.length
-    ? avgFlowRates.reduce((sum: number, r: any) => sum + ((r as any).permeate_meter ?? 0), 0) /
-      avgFlowRates.filter((r: any) => (r as any).permeate_meter != null).length
-    : null;
-  const avgRejFlowRate = avgFlowRates?.length
-    ? avgFlowRates.reduce((sum: number, r: any) => sum + ((r as any).reject_meter ?? 0), 0) /
-      avgFlowRates.filter((r: any) => (r as any).reject_meter != null).length
-    : null;
+  // The *_meter columns are cumulative totalizer values — convert to per-pair
+  // flow rates (m³/hr) before averaging; never average the raw readings.
+  const avgRates = computeROMeterAverageRates(avgFlowRates ?? [], 10);
+  const avgFeedFlowRate = avgRates.feed;
+  const avgPermFlowRate = avgRates.permeate;
+  const avgRejFlowRate = avgRates.reject;
 
   // Previous meter end by unit (for AFM/MMF)
   const { data: prevUnitReadings } = useQuery({

@@ -69,6 +69,52 @@ export function computeROAverageFlowRate(points: RatePoint[], windowDays: number
 }
 
 /**
+ * ro_train_readings.norm_status values whose meter values must NOT feed the
+ * rolling-average baseline: a row flagged as a suspected spike (or already
+ * confirmed erroneous / retracted) would otherwise inflate the very average
+ * later readings get compared against. 'normalized' (a reviewer resolved it)
+ * and 'normal' / null stay in.
+ */
+const UNTRUSTED_NORM_STATUS = new Set(['pending_review', 'erroneous', 'retracted']);
+
+export interface ROMeterHistoryRow {
+  reading_datetime: string;
+  feed_meter?: number | string | null;
+  permeate_meter?: number | string | null;
+  reject_meter?: number | string | null;
+  norm_status?: string | null;
+}
+
+/**
+ * Feed / permeate / reject 10-day average FLOW RATE (m³/hr) from a train's
+ * recent ro_train_readings rows.
+ *
+ * The *_meter columns are CUMULATIVE totalizer values (e.g. 5,351,294), so
+ * averaging them directly yields a number in the millions that is not a flow
+ * rate at all. Each meter is converted to per-pair rates (Δvalue ÷ Δhours) by
+ * computeROAverageFlowRate first, and rows flagged as untrusted are dropped
+ * before pairing so the neighbours' pair correctly spans the gap.
+ */
+export function computeROMeterAverageRates(
+  rows: ROMeterHistoryRow[],
+  windowDays: number = 10,
+): Record<ROMeterKind, number | null> {
+  const trusted = rows.filter((r) => !UNTRUSTED_NORM_STATUS.has(r.norm_status ?? ''));
+  const rateFor = (col: 'feed_meter' | 'permeate_meter' | 'reject_meter') =>
+    computeROAverageFlowRate(
+      trusted
+        .filter((r) => r[col] != null)
+        .map((r) => ({ value: Number(r[col]), at: new Date(r.reading_datetime) })),
+      windowDays,
+    );
+  return {
+    feed: rateFor('feed_meter'),
+    permeate: rateFor('permeate_meter'),
+    reject: rateFor('reject_meter'),
+  };
+}
+
+/**
  * Classifies a newly computed meter delta against the train's own rolling
  * average flow rate for that meter. Returns the full DeviationResult (same
  * shape flowRateGuards.classifyDeviation returns everywhere else) plus a

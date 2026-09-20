@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   computeROAverageFlowRate,
+  computeROMeterAverageRates,
   evaluateROMeterSpike,
   evaluatePhaseImbalance,
   evaluatePhaseLoss,
@@ -24,6 +25,96 @@ describe('computeROAverageFlowRate', () => {
 
   it('returns null with fewer than two in-window points, same as the underlying rolling-average function', () => {
     expect(computeROAverageFlowRate([{ value: 10, at: hoursAgo(1) }], 10)).toBeNull();
+  });
+});
+
+describe('computeROMeterAverageRates', () => {
+  // Cumulative totalizer readings, one per day for the last 10 days, matching the
+  // RO vessel form in the bug report (permeate ≈ 5.35M, reject ≈ 459K).
+  const hoursAgo = (h: number) => new Date(Date.now() - h * 3_600_000).toISOString();
+  const PERM_PER_DAY = 3_400; // 141.67 m³/hr
+  const REJ_PER_DAY = 3_470;  // 144.58 m³/hr
+  const PERM_START = 5_351_294 - 9 * PERM_PER_DAY;
+  const REJ_START = 459_366 - 9 * REJ_PER_DAY;
+
+  const history = (extra: Partial<Record<number, Record<string, unknown>>> = {}) =>
+    Array.from({ length: 10 }, (_, k) => ({
+      // k = 0 is the oldest reading (9 days ago), k = 9 the newest (~1h ago)
+      reading_datetime: hoursAgo(24 * (9 - k) + 1),
+      feed_meter: null as number | null,
+      permeate_meter: PERM_START + k * PERM_PER_DAY,
+      reject_meter: REJ_START + k * REJ_PER_DAY,
+      norm_status: 'normal' as string | null,
+      ...(extra[k] ?? {}),
+    }));
+
+  it('regression: returns a FLOW RATE in m³/hr, not the mean of the raw cumulative meter values', () => {
+    const avg = computeROMeterAverageRates(history(), 10);
+    // The old inline reduce returned ~5,346,000 (permeate) / ~457,000 (reject) here.
+    expect(avg.permeate).toBeCloseTo(PERM_PER_DAY / 24, 3);
+    expect(avg.reject).toBeCloseTo(REJ_PER_DAY / 24, 3);
+    expect(avg.permeate!).toBeLessThan(1_000);
+    expect(avg.reject!).toBeLessThan(1_000);
+  });
+
+  it('regression: the reading from the bug report (101 m³ in 42.69 min) is no longer flagged', () => {
+    const avg = computeROMeterAverageRates(history(), 10);
+    const hours = 42.694266666 / 60;
+    const perm = evaluateROMeterSpike('permeate', 101, hours, avg.permeate);
+    const rej = evaluateROMeterSpike('reject', 103, hours, avg.reject);
+    expect(perm.rate).toBeCloseTo(141.9, 1);
+    expect(perm.tier).toBe('ok');
+    expect(rej.rate).toBeCloseTo(144.8, 1);
+    expect(rej.tier).toBe('ok');
+  });
+
+  it('returns null for an unmetered stream (no feed meter values at all)', () => {
+    expect(computeROMeterAverageRates(history(), 10).feed).toBeNull();
+  });
+
+  it('returns null for every meter when there is no history', () => {
+    expect(computeROMeterAverageRates([], 10)).toEqual({ feed: null, permeate: null, reject: null });
+  });
+
+  it('accepts numeric strings (PostgREST numeric columns can arrive as strings)', () => {
+    const rows = history().map((r) => ({
+      ...r,
+      permeate_meter: String(r.permeate_meter),
+      reject_meter: String(r.reject_meter),
+    }));
+    expect(computeROMeterAverageRates(rows, 10).permeate).toBeCloseTo(PERM_PER_DAY / 24, 3);
+  });
+
+  it('ignores readings older than the window', () => {
+    const rows = [
+      // 30 days ago, wildly different meter value — must not contribute
+      { reading_datetime: hoursAgo(24 * 30), permeate_meter: 1, norm_status: 'normal' },
+      ...history(),
+    ];
+    expect(computeROMeterAverageRates(rows, 10).permeate).toBeCloseTo(PERM_PER_DAY / 24, 3);
+  });
+
+  it('excludes rows flagged pending_review / erroneous / retracted so a mis-keyed value cannot inflate the baseline', () => {
+    // Reading k=5 mis-keyed 1,000,000 too high.
+    const badPerm = PERM_START + 5 * PERM_PER_DAY + 1_000_000;
+
+    // Sanity check on the test itself: unflagged, the spike DOES inflate the average.
+    const unflagged = computeROMeterAverageRates(history({ 5: { permeate_meter: badPerm } }), 10);
+    expect(unflagged.permeate!).toBeGreaterThan(10 * (PERM_PER_DAY / 24));
+
+    for (const status of ['pending_review', 'erroneous', 'retracted']) {
+      const flagged = computeROMeterAverageRates(
+        history({ 5: { permeate_meter: badPerm, norm_status: status } }),
+        10,
+      );
+      // The neighbours' pair spans the gap (48 h, 6,800 m³), so the rate is unchanged.
+      expect(flagged.permeate).toBeCloseTo(PERM_PER_DAY / 24, 3);
+    }
+  });
+
+  it("keeps 'normalized' and null norm_status rows in the baseline", () => {
+    const rows = history({ 3: { norm_status: 'normalized' }, 4: { norm_status: null } });
+    expect(computeROMeterAverageRates(rows, 10).permeate).toBeCloseTo(PERM_PER_DAY / 24, 3);
   });
 });
 
