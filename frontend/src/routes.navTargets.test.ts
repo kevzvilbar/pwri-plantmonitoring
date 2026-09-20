@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { CHAPTER_ROUTE_MAP } from '@/components/manual/chapterRoutes';
 
 // Regression guard for a bug found while finishing P5-5: ProductMeterRow sent
 // users to `/corrections?tab=inbox`. No such route exists (the page is
@@ -73,6 +74,15 @@ describe('in-app navigation targets', () => {
         }
       }
     }
+    expect(broken).toEqual([]);
+  });
+
+  // The scan above only sees navigate('/x') literals. The manual's "Open module"
+  // targets live in a lookup table, so check those values directly.
+  it('every manual chapter route (CHAPTER_ROUTE_MAP) resolves to a declared route', () => {
+    const broken = Object.entries(CHAPTER_ROUTE_MAP)
+      .filter(([, route]) => !routes.some((r) => r.test(toPathname(route))))
+      .map(([chapter, route]) => `${chapter}: ${route}`);
     expect(broken).toEqual([]);
   });
 });

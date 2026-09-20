@@ -7,32 +7,13 @@ import { BOOK_PARTS, type BookChapter } from './bookChapters';
 import { BookOpen, ChevronLeft, ChevronRight, Menu, Search, X, Printer, Bookmark, Copy, Check, ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
+import { useCan } from '@/hooks/usePermission';
+import { canOpenRoute } from '@/navConfig';
+import { CHAPTER_ROUTE_MAP, chapterLink } from './chapterRoutes';
 
 // Flat, numbered reading order
 const ALL_CHAPTERS: BookChapter[] = BOOK_PARTS.flatMap((p) => p.chapters);
 const TOTAL_CHAPTERS = ALL_CHAPTERS.length;
-
-// Mapping chapters to their respective in-app routes
-const CHAPTER_ROUTE_MAP: Record<string, string> = {
-  dashboard: '/',
-  plants: '/plants',
-  operations: '/operations',
-  'ro-trains': '/ro-trains',
-  topology: '/topology',
-  'pm-schedule': '/maintenance',
-  incidents: '/incidents',
-  costs: '/costs',
-  employees: '/employees',
-  'smart-import': '/import',
-  exports: '/exports',
-  'data-analysis': '/data-analysis',
-  'data-corrections': '/data-corrections',
-  'manager-scorecard': '/manager-scorecard',
-  'alerts-triage': '/alerts',
-  compliance: '/compliance',
-  'admin-console': '/admin',
-  profile: '/profile',
-};
 
 type BookReaderProps = {
   open: boolean;
@@ -75,7 +56,12 @@ export function BookReader({ open, onOpenChange, initialChapterId }: BookReaderP
   const prev = activeIndex > 0 ? ALL_CHAPTERS[activeIndex - 1] : null;
   const next = activeIndex < TOTAL_CHAPTERS - 1 ? ALL_CHAPTERS[activeIndex + 1] : null;
   const activePart = BOOK_PARTS.find((p) => p.chapters.some((c) => c.id === active.id))?.part ?? '';
-  const relatedRoute = CHAPTER_ROUTE_MAP[active.id];
+  // Offer "Open module" only when this user can actually open that page. An
+  // Operator reading the Data Corrections chapter would otherwise be sent to
+  // an "Access restricted" toast.
+  const can = useCan();
+  const chapterRoute = CHAPTER_ROUTE_MAP[active.id];
+  const relatedRoute = chapterRoute && canOpenRoute(chapterRoute, can) ? chapterRoute : undefined;
 
   const isBookmarked = bookmarks.includes(active.id);
 
@@ -93,8 +79,7 @@ export function BookReader({ open, onOpenChange, initialChapterId }: BookReaderP
   };
 
   const copyChapterLink = () => {
-    const url = `${window.location.origin}/employees?chapter=${active.id}`;
-    navigator.clipboard.writeText(url);
+    navigator.clipboard.writeText(chapterLink(active.id));
     setCopied(true);
     toast.success('Chapter link copied to clipboard');
     setTimeout(() => setCopied(false), 2000);

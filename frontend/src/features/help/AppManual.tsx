@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { BookOpen, CheckCircle2, Search } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 
@@ -12,6 +13,17 @@ function AppManual() {
   const [bookOpen, setBookOpen] = useState(false);
   const [initialChapterId, setInitialChapterId] = useState<string | undefined>(undefined);
   const [query, setQuery] = useState('');
+
+  // /help?chapter=<id> (what "Copy chapter link" produces) opens the book at
+  // that chapter. An unknown id is ignored and the page shows as usual.
+  const [searchParams] = useSearchParams();
+  const linkedChapter = searchParams.get('chapter');
+  useEffect(() => {
+    if (linkedChapter && ALL_MANUAL_CHAPTERS.some((c) => c.id === linkedChapter)) {
+      setInitialChapterId(linkedChapter);
+      setBookOpen(true);
+    }
+  }, [linkedChapter]);
 
   const openAt = (chapterId?: string) => {
     setInitialChapterId(chapterId);

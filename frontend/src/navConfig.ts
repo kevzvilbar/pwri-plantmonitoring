@@ -116,6 +116,17 @@ export function buildNavConfig(can: Can): NavGroup[] {
     .filter((group) => group.items.length > 0);
 }
 
+/**
+ * Can the user open `route` from a link that is not in the nav (a button in the
+ * manual, say)? Routes that have a nav item follow that item's modules, so this
+ * can never disagree with what the sidebar shows. Routes with no nav item
+ * (/profile, /help) are open to every signed-in user.
+ */
+export function canOpenRoute(route: string, can: Can): boolean {
+  const item = NAV_GROUPS.flatMap((g) => g.items).find((i) => i.route === route);
+  return item ? item.modules.some((m) => can(m, 'view')) : true;
+}
+
 export function isNavItemActive(item: NavItem, pathname: string): boolean {
   if (item.end) return pathname === item.route;
   return pathname === item.route || pathname.startsWith(`${item.route}/`);
