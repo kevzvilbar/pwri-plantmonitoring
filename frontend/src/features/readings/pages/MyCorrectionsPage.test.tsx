@@ -31,7 +31,7 @@ const APPROVED = req({
 });
 const REJECTED = req({
   id: 'x', status: 'rejected', rawStatus: 'rejected', title: 'Train 2', note: 'Photo attached to the log.',
-  resolvedByName: '@maria', resolvedAt: '2026-09-20T11:00:00Z', resolutionNote: 'The meter was re-read and the original value is right.',
+  resolvedByName: '@maria', resolvedAt: '2026-09-20T03:00:00Z', resolutionNote: 'The meter was re-read and the original value is right.',
 });
 
 function setQuery(over: Record<string, unknown>) {
