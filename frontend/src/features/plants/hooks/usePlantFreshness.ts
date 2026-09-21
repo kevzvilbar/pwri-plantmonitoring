@@ -116,3 +116,4 @@ export function usePlantFreshness(plantIds: string[]): UsePlantFreshnessResult {
     refetch,
   };
 }
+

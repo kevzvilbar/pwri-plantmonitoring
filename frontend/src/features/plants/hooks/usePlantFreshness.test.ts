@@ -128,3 +128,4 @@ describe('usePlantFreshness (P4-3 & P4-6)', () => {
     expect(res['plant-1']?.toISOString()).toBe('2026-09-21T09:00:00.000Z');
   });
 });
+
