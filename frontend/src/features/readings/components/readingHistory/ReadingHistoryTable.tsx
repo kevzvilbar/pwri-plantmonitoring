@@ -3,7 +3,7 @@ import React, { useMemo } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/useAuth';
 import { Loader2 } from 'lucide-react';
-import { canEditEntry } from '@/pages/ro-trains/helpers';
+import { canEditEntry } from '@/shared/readingAudit';
 import { getGridMeterVal, HistoryModule } from './types';
 import { HistoryCascadeConfirmDialog } from './HistoryCascadeConfirmDialog';
 import { useReadingHistoryActions } from './useReadingHistoryActions';

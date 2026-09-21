@@ -55,7 +55,7 @@ export function AppSidebar() {
               <span className="text-xs font-semibold text-sidebar-foreground tracking-tight group-hover:text-sidebar-primary transition-colors">
                 PWRI
               </span>
-              <span className="text-3xs text-sidebar-foreground/35 tracking-[0.1em] uppercase">
+              <span className="text-xs text-sidebar-foreground/35 tracking-[0.1em] uppercase">
                 Monitoring & Alert
               </span>
             </div>
@@ -79,7 +79,7 @@ export function AppSidebar() {
               <SidebarGroupLabel
                 className={cn(
                   'h-5 px-1.5 mb-0.5',
-                  'text-3xs font-bold tracking-[0.14em] uppercase select-none',
+                  'text-xs font-bold tracking-[0.14em] uppercase select-none',
                   'text-sidebar-foreground/30',
                   groupIdx > 0 && 'border-t border-sidebar-border/25 pt-2.5 mt-2',
                 )}

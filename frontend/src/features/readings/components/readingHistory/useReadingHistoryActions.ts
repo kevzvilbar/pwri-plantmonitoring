@@ -5,13 +5,13 @@ import { supabase } from '@/integrations/supabase/client';
 import { friendlyError } from '@/lib/supabaseErrors';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
-import { canEditEntry, logReadingEdit, diffFields } from '@/pages/ro-trains/helpers';
+import { canEditEntry, logReadingEdit, diffFields } from '@/shared/readingAudit';
 import { HistoryEditState, HistoryModule } from './types';
 import { resolveReason, isReasonComplete } from '@/lib/correctionReasons';
 import {
   invalidateLocatorDash, invalidateWellDash, invalidatePowerDash,
-} from '@/pages/operations/shared';
-import { ReplaceMeterDialog } from '@/pages/plants/locators/LocatorDialogs';
+} from '@/features/operations/shared';
+import { ReplaceMeterDialog } from '@/features/plants/components/locators/LocatorDialogs';
 
 export function useReadingHistoryActions(options: {
   module: HistoryModule;

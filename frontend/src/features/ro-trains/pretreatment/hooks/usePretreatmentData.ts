@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { usePlantMeterConfig } from '@/pages/plants/shared';
+import { usePlantMeterConfig } from '@/features/plants/shared';
 import { isReadingGapStale } from '@/lib/autoOfflineThreshold';
 import { computeROMeterAverageRates } from '@/lib/roReadingGuards';
 

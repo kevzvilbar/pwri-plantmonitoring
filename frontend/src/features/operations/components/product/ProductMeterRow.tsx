@@ -7,7 +7,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { usePermission } from '@/hooks/usePermission';
 import { CorrectionRequestDialog, type CorrectionTarget } from '@/components/CorrectionRequestDialog';
-import { ReplaceMeterDialog } from '@/pages/plants/locators/LocatorDialogs';
+import { ReplaceMeterDialog } from '@/features/plants/components/locators/LocatorDialogs';
 import { ReasonDialog } from '@/components/ReasonDialog';
 import { CorrectionReasonField } from '@/components/CorrectionReasonField';
 import { MetaStrip } from '@/components/operations/MetaStrip';
@@ -34,7 +34,7 @@ import { toast } from 'sonner';
 import { submitAnomalyRemark, isAnomalyRemarkValid } from '@/lib/anomalyRemarks';
 import { isReasonComplete, resolveReason } from '@/lib/correctionReasons';
 import { reasonCategoryLabel } from '@/lib/reasonCodes';
-import { logReadingEdit, diffFields, canEditEntry } from '@/pages/ro-trains/helpers';
+import { logReadingEdit, diffFields, canEditEntry } from '@/shared/readingAudit';
 import { logProductionCalc, invalidateProductMeterDash } from '../../shared';
 import {
   AlertCircle, Loader2, History, Gauge, CalendarClock, MessageCircleOff,

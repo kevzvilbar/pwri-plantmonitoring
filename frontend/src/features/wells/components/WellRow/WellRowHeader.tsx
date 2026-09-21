@@ -7,7 +7,7 @@ import { CalendarClock, MessageCircleOff, Pencil, X, History, Zap } from 'lucide
 import { fmtNum, lastReadingFreshness } from '@/lib/format';
 import { reasonCategoryLabel } from '@/lib/reasonCodes';
 import { cn } from '@/lib/utils';
-import { WELL_MAX_READINGS_PER_DAY } from '@/pages/operations/shared';
+import { WELL_MAX_READINGS_PER_DAY } from '@/features/operations/shared';
 import { AssetLink } from '@/components/AssetLink';
 
 interface WellRowHeaderProps {

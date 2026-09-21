@@ -7,7 +7,7 @@ import { PretreatCFChart } from '../../PretreatCFChart';
 import { PretreatHPPChart } from '../../PretreatHPPChart';
 import { TrainRODetailCharts } from '../../TrainRODetailCharts';
 import { MeterDetailButton } from '../../../charts/EntityHistoryChart';
-import { ReplaceTrainMeterDialog } from '@/pages/ro-trains/ReplaceTrainMeterDialog';
+import { ReplaceTrainMeterDialog } from '@/features/ro-trains/ReplaceTrainMeterDialog';
 import {
   ROTrainIcon, ChangeMeterIcon, MeterOdometerIcon, PressureGaugeIcon,
   HighPressurePumpIcon, BoosterPumpIcon, MediaFilterIcon, CartridgeFilterIcon, MembranePerformanceIcon,

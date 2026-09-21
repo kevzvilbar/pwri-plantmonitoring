@@ -37,7 +37,7 @@ import { friendlyError } from '@/lib/supabaseErrors';
 import { format } from 'date-fns';
 
 
-import { parseCsv, downloadTemplate, CsvPreviewTable } from '@/pages/plants/shared';
+import { parseCsv, downloadTemplate, CsvPreviewTable } from '@/features/plants/shared';
 
 export function EditWellDialog({ well, onClose }: { well: any; onClose: () => void }) {
   const [form, setForm] = useState({

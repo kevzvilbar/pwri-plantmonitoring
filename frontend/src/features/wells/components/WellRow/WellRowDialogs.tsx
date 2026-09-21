@@ -1,6 +1,6 @@
 import React from 'react';
 import { ReadingHistoryDialog } from '@/components/ReadingHistoryDialog';
-import { ReplaceMeterDialog } from '@/pages/plants/locators/LocatorDialogs';
+import { ReplaceMeterDialog } from '@/features/plants/components/locators/LocatorDialogs';
 import { ReasonDialog } from '@/components/ReasonDialog';
 
 interface WellRowDialogsProps {

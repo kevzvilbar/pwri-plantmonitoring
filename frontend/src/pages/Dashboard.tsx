@@ -139,8 +139,9 @@ export default function Dashboard() {
   // Returns the click handler for chart-bearing KPI cards. Behaviour:
   //   • sections → toggle this metric's collapsible chart (single-open, default)
   //   • popup    → open the TrendModal in a dialog
-  //   • inline   → auto-switch to sections mode and expand the clicked metric
-  //                (inline already shows charts; clicking gives a focused view)
+  //   • inline   → expand the clicked metric in place (inline already shows all
+  //                charts; clicking does not switch to sections or overwrite the
+  //                user's saved preference — P5-9).
   const handleMetricClick = (metric: string, title: string): (() => void) => {
     return () => {
       if (viewMode === 'sections') {
@@ -148,8 +149,8 @@ export default function Dashboard() {
       } else if (viewMode === 'popup') {
         setModal({ metric, title });
       } else {
-        // inline → switch to sections so the chart collapses into a focused view
-        persistViewMode('sections');
+        // inline → keep inline mode; just focus the clicked metric's chart in place.
+        // Do NOT persist a switch to 'sections' — that rewrites the saved preference.
         setExpandedMetric(metric);
       }
     };

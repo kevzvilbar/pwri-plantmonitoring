@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { usePlantMeterConfig } from '@/pages/plants/shared';
+import { usePlantMeterConfig } from '@/features/plants/shared';
 import { DEFAULT_CIP_CHEMICALS, CIP_BUILTIN_DB_MAP } from '@/features/ro-trains';
 import { toast } from 'sonner';
 import { friendlyError } from '@/lib/supabaseErrors';

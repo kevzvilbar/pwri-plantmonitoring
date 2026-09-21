@@ -45,7 +45,7 @@ export function BottomNav() {
           'flex flex-col items-center justify-center gap-0.5 py-2 px-1 transition-all',
           active
             ? 'text-primary text-xs font-semibold'
-            : 'text-muted-foreground/70 text-3xs font-medium hover:text-foreground',
+            : 'text-muted-foreground/70 text-xs font-medium hover:text-foreground',
         )}
       >
         <span className="relative">
@@ -71,13 +71,17 @@ export function BottomNav() {
       to={item.route}
       end={item.end}
       className={({ isActive }) => cn(
-        // px-0.5 not px-1 (unlike the other columns): "Dashboard" at
-        // 11px/semibold measures 58px in the real Inter font — with
-        // px-1's 8px of padding that's a ~2px overflow of the 56px
-        // budget on the narrowest realistic viewport (320px); px-0.5
-        // clears it with room to spare. Verified against Inter's actual
-        // metrics, not estimated — see BottomNav in the mobile UX audit.
-        'flex flex-col items-center justify-center gap-0.5 py-1 px-0.5 text-3xs font-semibold transition-colors -mt-3',
+        // px-0.5 not px-1 (unlike the other columns), and text-2xs not the
+        // text-xs the bar labels use: this is the widest label in the bar and
+        // the column has the least slack. At 320px the budget is ~56px;
+        // "Dashboard" at 12px/semibold is ~63px before any padding, so it
+        // overflows at text-xs. text-2xs (10px) clears the budget with px-0.5
+        // and is still a real step up from the 9px text-3xs this used to be.
+        // There is no 11px token in tailwind.config.ts's compact scale, and
+        // check-arbitrary-font-sizes.mjs keeps one-off text-[Npx] values out.
+        // Verified against Inter's actual metrics, not estimated — see
+        // BottomNav in the mobile UX audit.
+        'flex flex-col items-center justify-center gap-0.5 py-1 px-0.5 text-2xs font-semibold transition-colors -mt-3',
         isActive ? 'text-primary-foreground' : 'text-muted-foreground hover:text-foreground',
       )}
     >
@@ -121,7 +125,7 @@ export function BottomNav() {
         {/* Side sheet: everything without a bar slot */}
         <Sheet>
           <SheetTrigger asChild>
-            <button className="flex flex-col items-center justify-center gap-0.5 py-2 px-1 text-3xs font-medium text-muted-foreground hover:text-foreground">
+            <button className="flex flex-col items-center justify-center gap-0.5 py-2 px-1 text-xs font-medium text-muted-foreground hover:text-foreground">
               <span className="relative">
                 <Menu className="h-[18px] w-[18px]" />
                 {moreBadge && (
@@ -131,12 +135,16 @@ export function BottomNav() {
               <span className="leading-none">More</span>
             </button>
           </SheetTrigger>
-          <SheetContent side="right" className="w-72">
+          {/* P5-11: the sheet is a fixed, full-height panel, so it has to be a
+              flex column for the list below to scroll. With auto height the
+              div grew past the viewport bottom, and every item below the fold
+              — Plants, Admin Console — was clipped with no way to reach it. */}
+          <SheetContent side="right" className="w-72 flex flex-col">
             <SheetHeader><SheetTitle>More</SheetTitle></SheetHeader>
-            <div className="mt-4 space-y-4 overflow-y-auto">
+            <div className="mt-4 space-y-4 overflow-y-auto flex-1 min-h-0">
               {sheetGroups.map((group) => (
                 <div key={group.label}>
-                  <div className="text-3xs font-semibold uppercase tracking-wide text-muted-foreground px-2 mb-1">{group.label}</div>
+                  <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground px-2 mb-1">{group.label}</div>
                   <div className="flex flex-col gap-1">
                     {group.items.map((r) => (
                       <NavLink

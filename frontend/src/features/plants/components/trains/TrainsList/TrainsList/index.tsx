@@ -39,7 +39,7 @@ import { TrainRODetailCharts } from '../../TrainRODetailCharts';
 import { AddTrainDialog } from '../AddTrainDialog';
 import type { AddTrainFormData } from '../AddTrainDialog';
 import { TrainCsvImportDialog } from '../trainCsvImport';
-import { ReplaceTrainMeterDialog } from '@/pages/ro-trains/ReplaceTrainMeterDialog';
+import { ReplaceTrainMeterDialog } from '@/features/ro-trains/ReplaceTrainMeterDialog';
 import { parseCsv, downloadTemplate, CsvPreviewTable } from '../../../../shared';
 import { useTrainsListData } from './useTrainsListData';
 import { FleetHeader } from './FleetHeader';

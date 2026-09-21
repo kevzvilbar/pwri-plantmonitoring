@@ -17,6 +17,7 @@ import { PowerForm }          from '../components/power/PowerSection';
 import { PageHeader }         from '@/components/PageHeader';
 import { CanLink } from '@/components/CanLink';
 import { useUrlTab } from '@/hooks/useUrlTab';
+import { useRovingTabs } from '@/hooks/useRovingTabs';
 import { useCan } from '@/hooks/usePermission';
 import { cn } from '@/lib/utils';
 
@@ -92,6 +93,17 @@ export default function Operations() {
     { key: 'blending', label: 'Blending', count: null,         icon: Waves },
     { key: 'power',    label: 'Power',    count: null,         icon: Zap },
   ] as const;
+
+  // P5-11: this bar is hand-rolled buttons, not Radix <Tabs>, so it needs the
+  // roles and the roving tabindex that Radix would otherwise provide. Only the
+  // open tab's form is mounted below, hence singlePanel.
+  const tabs = useRovingTabs({
+    ids: OPERATIONS_TABS,
+    selected: tab,
+    onSelect: handleTabChange,
+    idPrefix: 'operations',
+    singlePanel: true,
+  });
 
   return (
     <div className="space-y-4 animate-fade-in max-w-[1600px] mx-auto pb-10">
@@ -184,7 +196,11 @@ export default function Operations() {
       )}
 
       {/* ── Tab Navigation Bar ── */}
-      <div className="flex gap-1.5 p-1.5 bg-muted/60 border border-border/70 rounded-2xl w-full shadow-inner">
+      <div
+        {...tabs.tablistProps}
+        aria-label="Reading type"
+        className="flex gap-1.5 p-1.5 bg-muted/60 border border-border/70 rounded-2xl w-full shadow-inner"
+      >
         {TAB_CONFIG.map(({ key, label, count, icon: Icon }) => {
           const active = tab === key;
           const tabColor =
@@ -197,6 +213,8 @@ export default function Operations() {
           return (
             <button
               key={key}
+              {...tabs.tabProps(key)}
+              type="button"
               onClick={() => handleTabChange(key)}
               style={active ? ({ '--tab-glow': tabColor } as React.CSSProperties) : undefined}
               className={cn(
@@ -222,7 +240,7 @@ export default function Operations() {
       </div>
 
       {/* ── Tab Content ── */}
-      <div>
+      <div {...tabs.panelProps(tab)}>
         {tab === 'locator'  && <LocatorReadingForm highlightId={tab === 'locator' ? searchParams.get('highlight') : null} />}
         {tab === 'well'     && <WellReadingForm highlightId={tab === 'well' ? searchParams.get('highlight') : null} />}
         {tab === 'product'  && <ProductForm highlightId={tab === 'product' ? searchParams.get('highlight') : null} />}

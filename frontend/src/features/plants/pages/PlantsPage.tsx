@@ -14,7 +14,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
 import { DeleteEntityMenu } from '@/components/DeleteEntityMenu';
-import { Trash2 } from 'lucide-react';
+import { Trash2, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 import { friendlyError } from '@/lib/supabaseErrors';
 import { PlantTelemetryDrawer } from '../components/PlantTelemetryDrawer';
@@ -33,7 +33,7 @@ import { usePlantDetail } from '../hooks/usePlantDetail';
 import { usePlantRouteSync } from '../hooks/usePlantRouteSync';
 import { PlantList } from '../components/PlantList';
 import { PlantListHeader } from '../components/PlantListHeader';
-import { PlantDetailTabs } from '../components/PlantDetailTabs';
+import { PlantDetailTabs, plantTabId, plantTabPanelId } from '../components/PlantDetailTabs';
 import { PlantInfoEditDialog } from '../components/PlantInfoEditDialog';
 
 export interface AddPlantFormData {
@@ -179,6 +179,18 @@ export default function Plants() {
         setStatusFilter={setStatusFilter}
       />
 
+      {isManager && (
+        <Button
+          type="button"
+          size="sm"
+          className="h-8 gap-1.5 text-xs shadow-sm w-full sm:w-auto"
+          onClick={() => setShowAddPlant(true)}
+        >
+          <Plus className="h-3.5 w-3.5" />
+          Add Plant
+        </Button>
+      )}
+
       <AddPlantDialog
         open={showAddPlant}
         onOpenChange={setShowAddPlant}
@@ -251,12 +263,54 @@ function PlantDetail({ plantId, wellId }: { plantId: string; wellId: string | nu
 
       <PlantDetailTabs tab={tab} onTabChange={setTab} />
 
-      <div className={tab === 'locators' ? undefined : 'hidden'}><LocatorsList plantId={plantId} highlightId={tab === 'locators' ? highlightId : null} /></div>
-      <div className={tab === 'wells'    ? undefined : 'hidden'}><WellsList plantId={plantId} highlightId={tab === 'wells' ? highlightId : null} activeWellId={wellId} /></div>
-      <div className={tab === 'product'  ? undefined : 'hidden'}><ProductMetersCard plant={plant} highlightId={tab === 'product' ? highlightId : null} /></div>
-      <div className={tab === 'trains'   ? undefined : 'hidden'}><TrainsList plantId={plantId} /></div>
-      <div className={tab === 'power'    ? undefined : 'hidden'}><PowerMetersCard plant={plant} /></div>
-      <div className={tab === 'configuration' ? undefined : 'hidden'}><PlantMeterConfigCard plant={plant} /></div>
+      <div
+        role="tabpanel"
+        id={plantTabPanelId('locators')}
+        aria-labelledby={plantTabId('locators')}
+        className={tab === 'locators' ? undefined : 'hidden'}
+      >
+        <LocatorsList plantId={plantId} highlightId={tab === 'locators' ? highlightId : null} />
+      </div>
+      <div
+        role="tabpanel"
+        id={plantTabPanelId('wells')}
+        aria-labelledby={plantTabId('wells')}
+        className={tab === 'wells' ? undefined : 'hidden'}
+      >
+        <WellsList plantId={plantId} highlightId={tab === 'wells' ? highlightId : null} activeWellId={wellId} />
+      </div>
+      <div
+        role="tabpanel"
+        id={plantTabPanelId('product')}
+        aria-labelledby={plantTabId('product')}
+        className={tab === 'product' ? undefined : 'hidden'}
+      >
+        <ProductMetersCard plant={plant} highlightId={tab === 'product' ? highlightId : null} />
+      </div>
+      <div
+        role="tabpanel"
+        id={plantTabPanelId('trains')}
+        aria-labelledby={plantTabId('trains')}
+        className={tab === 'trains' ? undefined : 'hidden'}
+      >
+        <TrainsList plantId={plantId} />
+      </div>
+      <div
+        role="tabpanel"
+        id={plantTabPanelId('power')}
+        aria-labelledby={plantTabId('power')}
+        className={tab === 'power' ? undefined : 'hidden'}
+      >
+        <PowerMetersCard plant={plant} />
+      </div>
+      <div
+        role="tabpanel"
+        id={plantTabPanelId('configuration')}
+        aria-labelledby={plantTabId('configuration')}
+        className={tab === 'configuration' ? undefined : 'hidden'}
+      >
+        <PlantMeterConfigCard plant={plant} />
+      </div>
 
       {editingInfo && (
         <PlantInfoEditDialog

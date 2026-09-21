@@ -61,7 +61,7 @@ export function useTopBarState() {
     if (unreadCount !== nextUnreadCount) setUnreadCount(nextUnreadCount);
   }, [nextUnreadCount, setUnreadCount, unreadCount]);
 
-  useEffect(() => { pruneSnooze(); }, []);
+  useEffect(() => { pruneSnooze(); }, [pruneSnooze]);
 
   const prevCriticalIdsRef = useRef<string[]>([]);
 

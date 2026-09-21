@@ -1,6 +1,6 @@
 import React from 'react';
 import { calc, fmtNum } from '@/lib/calculations';
-import { canEditEntry } from '@/pages/ro-trains/helpers';
+import { canEditEntry } from '@/shared/readingAudit';
 import { StatusPill } from '@/components/StatusPill';
 import { ReplPill } from '../ReplPill';
 import { Loader2, Pencil, X } from 'lucide-react';

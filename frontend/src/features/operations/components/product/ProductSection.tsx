@@ -43,7 +43,7 @@ import {
   clearDupDecisions, clearBulkDupDecision, ImportReadingsDialog, resolveImportDuplicate,
 } from '@/components/ReadingImportDialog';
 import { ReadingHistoryDialog } from '@/components/ReadingHistoryDialog';
-import { ReplaceMeterDialog } from '@/pages/plants/locators/LocatorDialogs';
+import { ReplaceMeterDialog } from '@/features/plants/components/locators/LocatorDialogs';
 import { useProductSectionData } from './useProductSectionData';
 import { AddProductMeterButton } from './AddProductMeterButton';
 import { MeterNameList } from './MeterNameList';

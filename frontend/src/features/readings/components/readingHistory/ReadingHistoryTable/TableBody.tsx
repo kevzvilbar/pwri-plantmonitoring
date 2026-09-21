@@ -1,5 +1,5 @@
 import React from 'react';
-import { canEditEntry } from '@/pages/ro-trains/helpers';
+import { canEditEntry } from '@/shared/readingAudit';
 import { PowerRow } from './PowerRow';
 import { StandardRow } from './StandardRow';
 import { calc } from '@/lib/calculations';

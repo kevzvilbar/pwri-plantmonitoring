@@ -35,7 +35,9 @@ function CountPill({
       aria-label={label}
       className={cn(
         'min-w-[17px] h-[17px] px-[3px] flex items-center justify-center rounded-full',
-        'text-3xs font-mono-num font-bold text-white leading-none',
+        // A count pill is 17px tall; text-xs (12px) leaves no vertical air in
+        // it. text-2xs (10px) is the count-pill size the rest of the app uses.
+        'text-2xs font-mono-num font-bold text-white leading-none',
         tone,
         className,
       )}

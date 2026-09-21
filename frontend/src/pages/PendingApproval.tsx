@@ -1,13 +1,16 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Hourglass, LogOut, RefreshCw } from 'lucide-react';
 
+const PROFILE_POLL_MS = 10_000;
+
 export default function PendingApproval() {
   const { profile, signOut, refreshProfile } = useAuth();
   const navigate = useNavigate();
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Auto-redirect when confirmed flips to true
   useEffect(() => {
@@ -15,6 +18,19 @@ export default function PendingApproval() {
       navigate('/', { replace: true });
     }
   }, [profile?.confirmed, navigate]);
+
+  // Poll the user's own profile row so the page continues automatically when
+  // an Admin approves the account (P5-8). Stop on unmount or once confirmed.
+  useEffect(() => {
+    if (profile?.confirmed === true) return;
+    timerRef.current = setInterval(() => {
+      refreshProfile();
+    }, PROFILE_POLL_MS);
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleRefresh = async () => {
     await refreshProfile();

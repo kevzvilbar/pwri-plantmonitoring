@@ -2,7 +2,7 @@ import React from 'react';
 import { fmtNum } from '@/lib/format';
 import { getGridMeterVal } from '../types';
 import { Loader2, Pencil, X } from 'lucide-react';
-import { GridPylonIcon } from '@/pages/operations/shared';
+import { GridPylonIcon } from '@/features/operations/shared';
 import { ReplPill } from '../ReplPill';
 
 interface PowerRowProps {

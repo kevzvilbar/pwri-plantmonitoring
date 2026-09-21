@@ -20,7 +20,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { StatusPill } from '@/components/StatusPill';
-import { ReplaceMeterDialog } from '@/pages/plants/locators/LocatorDialogs';
+import { ReplaceMeterDialog } from '@/features/plants/components/locators/LocatorDialogs';
 import { fmtNum, getCurrentPosition, isOffLocation, ALERTS } from '@/lib/calculations';
 import { fmtSaveToast, lastReadingFreshness } from '@/lib/format';
 import { findExistingReading } from '@/lib/duplicateCheck';

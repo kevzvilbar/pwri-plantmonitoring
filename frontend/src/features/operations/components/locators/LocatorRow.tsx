@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { CorrectionReasonField } from '@/components/CorrectionReasonField';
 import { StatusPill } from '@/components/StatusPill';
-import { ReplaceMeterDialog } from '@/pages/plants/locators/LocatorDialogs';
+import { ReplaceMeterDialog } from '@/features/plants/components/locators/LocatorDialogs';
 import { MetaStrip } from '@/components/operations/MetaStrip';
 import { MapPin, Pencil, X, Droplet, AlertCircle, AlertTriangle, Loader2, History, MessageCircleOff, CalendarClock, ShieldAlert, Lock, SquarePen } from 'lucide-react';
 import { OdometerRollerInput, MobileCarousel, type OdometerAlertState } from '@/components/OdometerRollerInput';
@@ -19,7 +19,7 @@ import {
 } from '../../shared';
 import { isReasonComplete, resolveReason } from '@/lib/correctionReasons';
 import { reasonCategoryLabel } from '@/lib/reasonCodes';
-import { logReadingEdit, diffFields } from '@/pages/ro-trains/helpers';
+import { logReadingEdit, diffFields } from '@/shared/readingAudit';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 import { fmtNum, getCurrentPosition, isOffLocation, ALERTS } from '@/lib/calculations';

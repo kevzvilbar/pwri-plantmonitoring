@@ -1,6 +1,6 @@
 import { supabase } from '@/integrations/supabase/client';
 import { normalizeDatetime, resolveImportDuplicate } from '@/components/ReadingImportDialog';
-import { logReadingEdit, diffFields } from '@/pages/ro-trains/helpers';
+import { logReadingEdit, diffFields } from '@/shared/readingAudit';
 import { friendlyError } from '@/lib/supabaseErrors';
 import { resolveReason } from '@/lib/correctionReasons';
 

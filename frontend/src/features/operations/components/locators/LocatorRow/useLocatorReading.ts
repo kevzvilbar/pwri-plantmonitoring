@@ -10,7 +10,7 @@ import { evaluateReadingGuard, SPIKE_MULTIPLIER, formatCooldown } from '@/lib/re
 import { computeRate, classifyDeviation } from '@/lib/flowRateGuards';
 import { submitAnomalyRemark, isAnomalyRemarkValid } from '@/lib/anomalyRemarks';
 import { isReasonComplete, resolveReason } from '@/lib/correctionReasons';
-import { logReadingEdit, diffFields } from '@/pages/ro-trains/helpers';
+import { logReadingEdit, diffFields } from '@/shared/readingAudit';
 import { format } from 'date-fns';
 import { fmtNum, getCurrentPosition, isOffLocation } from '@/lib/calculations';
 import { fmtSaveToast, lastReadingFreshness } from '@/lib/format';

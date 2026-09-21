@@ -2,7 +2,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/useAuth';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { format } from 'date-fns';
-import { ReplaceTrainMeterDialog } from '@/pages/ro-trains/ReplaceTrainMeterDialog';
+import { ReplaceTrainMeterDialog } from '@/features/ro-trains/ReplaceTrainMeterDialog';
 import { useOperatorLog } from './TrainOperatorLogModal/useOperatorLog.tsx';
 import { OperatorLogTable } from './TrainOperatorLogModal/OperatorLogTable';
 import { MeterReplacementDetailDialog } from '@/components/readingHistory/MeterReplacementDetailDialog';

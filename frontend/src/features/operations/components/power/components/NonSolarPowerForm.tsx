@@ -3,7 +3,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { OdometerRollerInput, MobileCarousel } from '@/components/OdometerRollerInput';
-import { GridPylonIcon } from '@/pages/operations/shared';
+import { GridPylonIcon } from '@/features/operations/shared';
 import { ChangeMeterIcon } from '@/components/icons/water-icons';
 import { History, Loader2, Zap, MessageCircleOff } from 'lucide-react';
 import { cn } from '@/lib/utils';

@@ -1,5 +1,5 @@
 import React from 'react';
-import { canEditEntry } from '@/pages/ro-trains/helpers';
+import { canEditEntry } from '@/shared/readingAudit';
 
 interface TableHeaderProps {
   module: string;

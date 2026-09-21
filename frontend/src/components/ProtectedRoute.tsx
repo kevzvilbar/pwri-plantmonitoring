@@ -7,8 +7,9 @@ import { isOperatorOnly } from '@/lib/permissions';
 import { toast } from 'sonner';
 
 // Routes an Operator is allowed to visit. Everything else redirects to /.
-// Maintained by hand: it is NOT derived from PERMISSION_MATRIX. navConfig.test.ts
-// fails if a nav item an Operator can see has a route missing from this list.
+// Maintained by hand; checked by navConfig.test.ts (P1-6) against
+// buildNavConfig output: an Operator-visible nav item whose route is missing
+// from this list fails the test. P1-7 would derive this from ROUTE_MAP +
 export const OPERATOR_ALLOWED_PATHS = [
   '/',
   '/plants',

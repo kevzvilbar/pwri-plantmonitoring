@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { ActivePlantChip } from '@/components/ActivePlantChip';
 import { useActivePlant } from '@/hooks/useActivePlant';
-import { useBlendingWells } from '@/pages/operations/shared';
+import { useBlendingWells } from '@/features/operations/shared';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -21,7 +21,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { StatusPill } from '@/components/StatusPill';
-import { ReplaceMeterDialog } from '@/pages/plants/locators/LocatorDialogs';
+import { ReplaceMeterDialog } from '@/features/plants/components/locators/LocatorDialogs';
 import { fmtNum, getCurrentPosition, isOffLocation, ALERTS } from '@/lib/calculations';
 import { fmtSaveToast, lastReadingFreshness } from '@/lib/format';
 import { findExistingReading } from '@/lib/duplicateCheck';
@@ -50,7 +50,7 @@ import {
   GridPylonIcon, WELL_MAX_READINGS_PER_DAY,
   formatCooldown, invalidateLocatorDash, invalidateWellDash, invalidateDashboard,
   invalidateProductMeterDash, invalidatePowerDash, invalidateRODash, invalidateChemDash,
-} from '@/pages/operations/shared';
+} from '@/features/operations/shared';
 import { ReasonDialog } from '@/components/ReasonDialog';
 import { reasonCategoryLabel } from '@/lib/reasonCodes';
 import { CorrectionReasonField } from '@/components/CorrectionReasonField';

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
-import { recalculateTrainDeltas } from '@/pages/ro-trains/helpers';
+import { recalculateTrainDeltas } from '@/features/ro-trains/helpers';
 import { type CorrectionRow } from '@/lib/regressionCorrection';
 import { toast } from 'sonner';
 import { friendlyError } from '@/lib/supabaseErrors';

@@ -1,13 +1,13 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import React from 'react';
 import { HistoryCascadeConfirmDialog } from '../HistoryCascadeConfirmDialog';
-import { ReplaceMeterDialog } from '@/pages/plants/locators/LocatorDialogs';
-import { PowerMeterChangeForm } from '@/pages/plants/config/sections/PowerMeterChangeForm';
+import { ReplaceMeterDialog } from '@/features/plants/components/locators/LocatorDialogs';
+import { PowerMeterChangeForm } from '@/features/plants/components/config/sections/PowerMeterChangeForm';
 import { MeterReplacementDetailDialog } from '../MeterReplacementDetailDialog';
 import { useMeterReplacementDetail } from '../useMeterReplacementDetail';
 import { replacementToInitial } from '../replacementEdit';
 import type { ReplacementDetailHost, ReplacementTarget } from '../replacementTypes';
-import { invalidateLocatorDash, invalidateWellDash, invalidatePowerDash } from '@/pages/operations/shared';
+import { invalidateLocatorDash, invalidateWellDash, invalidatePowerDash } from '@/features/operations/shared';
 
 interface TableDialogsProps {
   actions: any;
