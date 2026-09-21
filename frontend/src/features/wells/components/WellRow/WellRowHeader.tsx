@@ -3,11 +3,12 @@ import { useNavigate } from 'react-router-dom';
 import { StatusPill } from '@/components/StatusPill';
 import { MetaStrip } from '@/components/operations/MetaStrip';
 import { ControlCluster } from '@/components/operations/ControlCluster';
-import { CalendarClock, MessageCircleOff, Pencil, X, History, ArrowUpRight, Zap } from 'lucide-react';
+import { CalendarClock, MessageCircleOff, Pencil, X, History, Zap } from 'lucide-react';
 import { fmtNum, lastReadingFreshness } from '@/lib/format';
 import { reasonCategoryLabel } from '@/lib/reasonCodes';
 import { cn } from '@/lib/utils';
 import { WELL_MAX_READINGS_PER_DAY } from '@/pages/operations/shared';
+import { AssetLink } from '@/components/AssetLink';
 
 interface WellRowHeaderProps {
   well: any;
@@ -28,19 +29,18 @@ interface WellRowHeaderProps {
   gapReason: any | null | undefined;
   onGapReasonClick: () => void;
   freshDt?: string | null;
-  navigate: (to: string) => void;
   pulsing?: boolean;
 }
 
 export function WellRowHeader({
   well, plantId, todayCount, atLimit, customDt, onCustomDtChange, dtInputRef,
   editingId, lastToday, onStartEdit, onCancelEdit, onShowHistory, isManagerOrAdmin,
-  isBlending, isInSharedPowerGroup, gapReason, onGapReasonClick, freshDt, navigate, pulsing,
+  isBlending, isInSharedPowerGroup, gapReason, onGapReasonClick, freshDt, pulsing,
 }: WellRowHeaderProps) {
   return (
     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 px-4 py-3 bg-muted/20 border-b border-border/60">
       <div className="flex items-center gap-2 flex-wrap min-w-0 flex-1">
-        <span className="text-sm font-bold text-foreground break-words">{well.name}</span>
+        <AssetLink kind="well" plantId={plantId} id={well.id} name={well.name} className="text-sm font-bold text-foreground break-words" />
         <MetaStrip
           primary={
             (() => {
@@ -78,13 +78,6 @@ export function WellRowHeader({
               tone: 'warn',
               icon: Zap,
               label: 'Shared Power',
-            },
-          ].filter(Boolean)}
-          overflow={[
-            {
-              icon: ArrowUpRight,
-              label: 'Plant detail',
-              onClick: () => navigate(`/plants/${plantId}?tab=wells&highlight=${well.id}`),
             },
           ].filter(Boolean)}
           maxVisible={4}

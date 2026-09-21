@@ -1,5 +1,4 @@
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useWellRowActions } from './WellRow/useWellRowActions';
 import { WellRowHeader } from './WellRow/WellRowHeader';
@@ -28,7 +27,6 @@ export function WellRow({
   pulsing?: boolean;
 }) {
   const isMobile = useIsMobile();
-  const navigate = useNavigate();
 
   const actions = useWellRowActions({
     well, plantId, previousMeter, previousPower, previousDt, freshDt, avgVol,
@@ -58,7 +56,6 @@ export function WellRow({
         isInSharedPowerGroup={isInSharedPowerGroup}
         gapReason={gapReason} onGapReasonClick={() => actions.setGapDialogOpen(true)}
         freshDt={freshDt}
-        navigate={navigate}
         pulsing={pulsing}
       />
       <WellRowInputs

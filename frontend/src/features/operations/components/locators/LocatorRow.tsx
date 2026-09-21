@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { AssetLink } from '@/components/AssetLink';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,7 +9,7 @@ import { CorrectionReasonField } from '@/components/CorrectionReasonField';
 import { StatusPill } from '@/components/StatusPill';
 import { ReplaceMeterDialog } from '@/pages/plants/locators/LocatorDialogs';
 import { MetaStrip } from '@/components/operations/MetaStrip';
-import { MapPin, Pencil, X, Droplet, AlertCircle, AlertTriangle, Loader2, History, MessageCircleOff, CalendarClock, ShieldAlert, ArrowUpRight, Lock, SquarePen } from 'lucide-react';
+import { MapPin, Pencil, X, Droplet, AlertCircle, AlertTriangle, Loader2, History, MessageCircleOff, CalendarClock, ShieldAlert, Lock, SquarePen } from 'lucide-react';
 import { OdometerRollerInput, MobileCarousel, type OdometerAlertState } from '@/components/OdometerRollerInput';
 import { ReadingHistoryDialog } from '@/components/ReadingHistoryDialog';
 import {
@@ -46,7 +46,6 @@ function LocatorRow({
   rowRef?: (el: HTMLDivElement | null) => void;
   pulsing?: boolean;
 }) {
-  const navigate = useNavigate();
 
   const {
     reading, setReading, editingId, setEditingId, saving, setSaving,
@@ -121,7 +120,7 @@ function LocatorRow({
     >
       <div className="flex items-start justify-between gap-2 min-w-0">
         <div className="flex items-center gap-2 flex-wrap min-w-0 flex-1">
-          <span className="text-sm font-semibold text-foreground break-words">{locator.name}</span>
+          <AssetLink kind="locator" plantId={plantId} id={locator.id} name={locator.name} className="text-sm font-semibold text-foreground break-words" />
           <MetaStrip
             primary={
               <StatusPill tone={freshness.tone}>
@@ -155,13 +154,6 @@ function LocatorRow({
                 tone: 'warn',
                 icon: MapPin,
                 label: 'off-site',
-              },
-            ].filter(Boolean)}
-            overflow={[
-              {
-                icon: ArrowUpRight,
-                label: 'Plant detail',
-                onClick: () => navigate(`/plants/${plantId}?tab=locators&highlight=${locator.id}`),
               },
             ].filter(Boolean)}
             maxVisible={4}

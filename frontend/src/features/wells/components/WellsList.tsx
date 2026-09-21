@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { readingsPath } from '@/shared/assetLinks';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAppStore } from '@/store/appStore';
@@ -71,7 +72,7 @@ export function WellsList({ plantId, highlightId, activeWellId }: {
   const handleEdit = (w: any) => { setEditingWell(w); };
   const handleDelete = (w: any) => { setWellDeleteTarget(w); setWellDeleteReason(''); };
   const handleDetail = (id: string) => { openWell(id); };
-  const handleNavOperations = (w: any) => { navigate(`/operations?tab=well&highlight=${w.id}`); };
+  const handleNavOperations = (w: any) => { navigate(readingsPath('well', w.id)); };
 
   if (activeWellId) return <WellDetail wellId={activeWellId} plantId={plantId} onBack={backToWells} />;
   return (

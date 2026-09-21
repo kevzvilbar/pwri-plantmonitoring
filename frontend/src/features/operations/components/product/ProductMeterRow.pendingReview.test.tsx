@@ -86,3 +86,14 @@ describe('ProductMeterRow "Pending review" chip', () => {
     expect(mockNavigate).not.toHaveBeenCalled();
   });
 });
+
+// P5-7: the meter's name is a real link to its card in Plants. It replaces the
+// "Plant detail" item that used to sit inside the row's "..." menu.
+describe('ProductMeterRow asset link (P5-7)', () => {
+  it.each([['Manager'], ['Operator']])('for a %s: the meter name links to the meter in Plants', (role) => {
+    renderRow([role]);
+    const link = screen.getByRole('link', { name: 'Open Product Meter 1 in Plants' });
+    expect(link).toHaveAttribute('href', '/plants/p1?tab=product&highlight=m1');
+    expect(screen.queryByText('Plant detail')).toBeNull();
+  });
+});

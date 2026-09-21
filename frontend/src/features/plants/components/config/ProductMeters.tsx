@@ -39,6 +39,7 @@ import { AssignLocatorsDialog } from './sections/AssignLocatorsDialog';
 import { AddProductMeterDialog } from './sections/AddProductMeterDialog';
 import { ProductMeterNameInline } from './sections/ProductMeterNameInline';
 import { ProductMeterNameInlineBase } from './sections/ProductMeterNameInline';
+import { readingsPath } from '@/shared/assetLinks';
 
 export { ProductMetersStat } from './sections/ProductMetersStat';
 
@@ -298,13 +299,13 @@ export function ProductMetersCard({ plant, highlightId }: { plant: any; highligh
                       })()}
                       <button
                         type="button"
-                        onClick={() => navigate(`/operations?tab=product&highlight=${m.id}`)}
-                        title="Open this meter in Operations"
-                        aria-label="Open this meter in Operations"
+                        onClick={() => navigate(readingsPath('product', m.id))}
+                        title="Open this meter in Daily Readings"
+                        aria-label="Open this meter in Daily Readings"
                         className="inline-flex items-center gap-0.5 text-2xs font-medium text-muted-foreground hover:text-foreground bg-muted hover:bg-muted/80 px-1.5 py-0.5 rounded-full transition-colors"
                       >
                         <ArrowUpRight className="h-2.5 w-2.5" />
-                        Operations
+                        Daily Readings
                       </button>
                     </div>
                   </div>

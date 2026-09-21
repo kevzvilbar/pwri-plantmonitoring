@@ -15,6 +15,7 @@ vi.mock('@/lib/supabaseErrors', () => ({ friendlyError: (e: unknown) => String(e
 vi.mock('../shared', () => ({ logPlantEdit: vi.fn() }));
 
 import { usePlantDetail } from './usePlantDetail';
+import { assetPath } from '@/shared/assetLinks';
 
 const setup = (start: string) =>
   renderHook(() => ({ d: usePlantDetail('p1', null), loc: useLocation() }), {
@@ -48,5 +49,21 @@ describe('usePlantDetail tab (P5-4)', () => {
     const { result } = setup('/plants/p1?tab=locators&foo=1');
     act(() => result.current.d.setTab('power'));
     expect(new URLSearchParams(result.current.loc.search).get('foo')).toBe('1');
+  });
+});
+
+/**
+ * P5-7: the links on a Daily Readings row are built by assetPath(). Run what it
+ * builds through the real hook, so a change to a tab name here can't leave the
+ * link landing on the wrong tab with nothing highlighted.
+ */
+describe('usePlantDetail understands assetPath() links (P5-7)', () => {
+  it.each([
+    ['locator', 'locators'],
+    ['product', 'product'],
+  ] as const)('a %s link opens the %s tab with that card highlighted', (kind, tab) => {
+    const { result } = setup(assetPath(kind, 'p1', 'row-7'));
+    expect(result.current.d.tab).toBe(tab);
+    expect(result.current.d.highlightId).toBe('row-7');
   });
 });

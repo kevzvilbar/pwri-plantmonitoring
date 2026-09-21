@@ -96,9 +96,9 @@ export function WellCard({
                     </StatusPill>
                   );
                 })()}
-                <button type="button" onClick={onNavigateOperations} title="Open this well in Operations"
+                <button type="button" onClick={onNavigateOperations} title="Open this well in Daily Readings"
                   className="inline-flex items-center gap-0.5 text-2xs font-medium text-muted-foreground hover:text-foreground bg-muted hover:bg-muted/80 px-1.5 py-0.5 rounded-full transition-colors">
-                  <ArrowUpRight className="h-2.5 w-2.5" /> Operations
+                  <ArrowUpRight className="h-2.5 w-2.5" /> Daily Readings
                 </button>
               </div>
               <div className="text-xs text-muted-foreground flex items-center gap-2 flex-wrap">

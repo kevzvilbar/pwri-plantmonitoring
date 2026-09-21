@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { AssetLink } from '@/components/AssetLink';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -36,7 +37,7 @@ import { reasonCategoryLabel } from '@/lib/reasonCodes';
 import { logReadingEdit, diffFields, canEditEntry } from '@/pages/ro-trains/helpers';
 import { logProductionCalc, invalidateProductMeterDash } from '../../shared';
 import {
-  AlertCircle, Loader2, History, Gauge, CalendarClock, ArrowUpRight, MessageCircleOff,
+  AlertCircle, Loader2, History, Gauge, CalendarClock, MessageCircleOff,
   Droplet, Pencil, X
 } from 'lucide-react';
 import { ProductMeterHistoryDialog } from './ProductMeterHistoryDialog';
@@ -258,7 +259,7 @@ function ProductMeterRow({
       {/* Row 1: Name + Prioritized MetaStrip | compact date picker */}
       <div className="flex items-start justify-between gap-2 min-w-0">
         <div className="flex items-center gap-2 flex-wrap min-w-0 flex-1">
-          <span className="text-sm font-bold text-foreground break-words">{meter.name}</span>
+          <AssetLink kind="product" plantId={plantId} id={meter.id} name={meter.name} className="text-sm font-bold text-foreground break-words" />
           <MetaStrip
             primary={
               (() => {
@@ -299,13 +300,6 @@ function ProductMeterRow({
                 label: `Δ ${fmtNum(productionVolume, 2)} m³`,
               },
             ].filter(Boolean)}
-            overflow={[
-              {
-                icon: ArrowUpRight,
-                label: 'Plant detail',
-                onClick: () => navigate(`/plants/${plantId}?tab=product&highlight=${meter.id}`),
-              },
-            ]}
             maxVisible={4}
           />
         </div>

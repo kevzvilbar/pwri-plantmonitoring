@@ -12,6 +12,7 @@ import {
 import { ChangeMeterIcon } from '@/components/icons/water-icons';
 import { cn } from '@/lib/utils';
 import { lastReadingFreshness } from '@/lib/format';
+import { readingsPath } from '@/shared/assetLinks';
 
 export function LocatorCard({
   l,
@@ -136,14 +137,14 @@ export function LocatorCard({
                   type="button"
                   onClick={(e) => {
                     e.stopPropagation();
-                    navigate(`/operations?tab=locator&highlight=${l.id}`);
+                    navigate(readingsPath('locator', l.id));
                   }}
-                  title="Open this locator in Operations"
-                  aria-label="Open this locator in Operations"
+                  title="Open this locator in Daily Readings"
+                  aria-label="Open this locator in Daily Readings"
                   className="inline-flex items-center gap-1 text-2xs font-medium text-muted-foreground hover:text-foreground bg-muted/60 hover:bg-muted px-2 py-0.5 rounded-full transition-colors border border-border/50"
                 >
                   <ArrowUpRight className="h-2.5 w-2.5" />
-                  <span>Operations</span>
+                  <span>Daily Readings</span>
                 </button>
               </div>
             </div>

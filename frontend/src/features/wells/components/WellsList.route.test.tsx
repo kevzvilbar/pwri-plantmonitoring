@@ -26,8 +26,11 @@ const list = vi.hoisted(() => ({
 
 vi.mock('./WellsList/useWellsList', () => ({ useWellsList: () => list.state, PAGE_SIZE: 20 }));
 vi.mock('./WellsList/WellCard', () => ({
-  WellCard: ({ w, onSetDetail }: { w: { id: string; name: string }; onSetDetail: () => void }) => (
-    <button onClick={onSetDetail}>open {w.name}</button>
+  WellCard: ({ w, onSetDetail, onNavigateOperations }: { w: { id: string; name: string }; onSetDetail: () => void; onNavigateOperations: () => void }) => (
+    <>
+      <button onClick={onSetDetail}>open {w.name}</button>
+      <button onClick={onNavigateOperations}>readings {w.name}</button>
+    </>
   ),
 }));
 vi.mock('./WellDetail', () => ({
@@ -77,6 +80,7 @@ function App({ entries, index }: { entries: string[]; index?: number }) {
         <Route path="/plants/:id" element={<Host />} />
         <Route path="/plants/:id/wells/:wellId" element={<Host />} />
         <Route path="/elsewhere" element={<Host />} />
+        <Route path="/operations" element={<Host />} />
       </Routes>
     </MemoryRouter>
   );
@@ -126,5 +130,14 @@ describe('WellsList route wiring (P5-3)', () => {
     expect(seenPath).toBe('/plants/p1');
     expect(seenSearch).toBe('?tab=wells');
     expect(screen.getByRole('button', { name: 'open Well 1' })).toBeTruthy();
+  });
+});
+
+describe('WellsList link to Daily Readings (P5-7)', () => {
+  it('the Daily Readings pill on a well card opens that well\'s row', () => {
+    render(<App entries={['/plants/p1?tab=wells']} />);
+    click('readings Well 1');
+    expect(seenPath).toBe('/operations');
+    expect(seenSearch).toBe('?tab=well&highlight=w1');
   });
 });

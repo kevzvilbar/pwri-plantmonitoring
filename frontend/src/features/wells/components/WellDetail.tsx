@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -31,6 +32,7 @@ import {
   Layers,
   Activity,
   Plus,
+  ArrowUpRight,
 } from 'lucide-react';
 import { format, differenceInDays } from 'date-fns';
 import { fmtNum } from '@/lib/calculations';
@@ -50,6 +52,8 @@ import { deleteWellMeterReplacement } from '@/lib/meterReplacementDelete';
 import { useAuth } from '@/hooks/useAuth';
 import { WellUnavailable } from './WellUnavailable';
 import { resolveWellView } from '../lib/wellRoutes';
+import { CanLink } from '@/components/CanLink';
+import { readingsPath } from '@/shared/assetLinks';
 
 export function WellDetail({ wellId, plantId, onBack }: { wellId: string; /** The plant in the URL; a well from another plant is treated as not found. */ plantId?: string; onBack: () => void }) {
   const qc = useQueryClient();
@@ -258,9 +262,22 @@ export function WellDetail({ wellId, plantId, onBack }: { wellId: string; /** Th
 
   return (
     <div className="space-y-3">
-      <button onClick={onBack} className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors">
-        <ChevronLeft className="h-4 w-4" /> Back to Wells
-      </button>
+      <div className="flex items-center justify-between gap-2">
+        <button onClick={onBack} className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors">
+          <ChevronLeft className="h-4 w-4" /> Back to Wells
+        </button>
+        {/* P5-7: the way back to this well's row in Daily Readings. */}
+        <CanLink module="operations">
+          <Link
+            to={readingsPath('well', well.id)}
+            title="Open this well in Daily Readings"
+            className="inline-flex items-center gap-1 text-2xs font-medium text-muted-foreground hover:text-foreground bg-muted/60 hover:bg-muted px-2 py-0.5 rounded-full transition-colors border border-border/50"
+          >
+            <ArrowUpRight className="h-2.5 w-2.5" />
+            <span>Daily Readings</span>
+          </Link>
+        </CanLink>
+      </div>
 
       {/* Hero */}
       <Card className="p-3">
