@@ -159,8 +159,8 @@ export function useDashboardAlerts({
         .in('scope', scopes);
       if (error) return {};
       const map: Record<string, Thresholds> = {};
-      (data ?? []).forEach((row: any) => {
-        if (row.scope && row.thresholds) map[row.scope] = row.thresholds as Thresholds;
+      (data ?? []).forEach((row) => {
+        if (row.scope && row.thresholds) map[row.scope] = row.thresholds as unknown as Thresholds;
       });
       return map;
     },

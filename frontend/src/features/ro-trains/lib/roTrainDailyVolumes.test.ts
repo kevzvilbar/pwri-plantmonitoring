@@ -20,6 +20,46 @@ describe('recoveryFromVolumes', () => {
   });
 });
 
+describe('computeRoTrainDailyVolumes buckets by plant-local (Asia/Manila) day, not the host machine\'s', () => {
+  it('keeps two readings on separate Manila calendar days separate, even on a machine whose own local day would merge them', () => {
+    // 2026-09-01T10:00:00Z: 2026-09-01 18:00 in Manila (+8) AND 2026-09-01 03:00 in
+    // Los Angeles (PDT, -7) that day  both agree on '2026-09-01'.
+    // 2026-09-01T17:00:00Z: 2026-09-02 01:00 in Manila  the NEXT Manila day  but
+    // still 2026-09-01 10:00 in Los Angeles, the SAME LA day as the first reading.
+    // A host running in America/Los_Angeles is exactly the case that used to bucket
+    // both readings under '2026-09-01' and sum their volumes into one day.
+    const readings = [
+      { train_id: 'ro1', reading_datetime: '2026-09-01T10:00:00Z', permeate_today_m3: 100, feed_today_m3: 120, reject_today_m3: 20 },
+      { train_id: 'ro1', reading_datetime: '2026-09-01T17:00:00Z', permeate_today_m3: 50, feed_today_m3: 60, reject_today_m3: 10 },
+    ];
+    const result = computeRoTrainDailyVolumes(readings);
+    expect([...result.keys()].sort()).toEqual(['2026-09-01', '2026-09-02']);
+    expect(result.get('2026-09-01')?.get('ro1')).toEqual({ permeate: 100, feed: 120, reject: 20 });
+    expect(result.get('2026-09-02')?.get('ro1')).toEqual({ permeate: 50, feed: 60, reject: 10 });
+  });
+
+  it('a reading just before Manila midnight and one just after land on different days', () => {
+    const readings = [
+      // 2026-09-01 23:30 Manila
+      { train_id: 'ro1', reading_datetime: '2026-09-01T15:30:00Z', permeate_today_m3: 10, feed_today_m3: 10, reject_today_m3: 0 },
+      // 2026-09-02 00:30 Manila, one Manila hour later
+      { train_id: 'ro1', reading_datetime: '2026-09-01T16:30:00Z', permeate_today_m3: 20, feed_today_m3: 20, reject_today_m3: 0 },
+    ];
+    const result = computeRoTrainDailyVolumes(readings);
+    expect([...result.keys()].sort()).toEqual(['2026-09-01', '2026-09-02']);
+  });
+
+  it('skips a reading with an unparseable reading_datetime rather than bucketing it under "Invalid Date"', () => {
+    const readings = [
+      { train_id: 'ro1', reading_datetime: 'not-a-date', permeate_today_m3: 999, feed_today_m3: 999, reject_today_m3: 999 },
+      { train_id: 'ro1', reading_datetime: '2026-09-01T10:00:00Z', permeate_today_m3: 5, feed_today_m3: 5, reject_today_m3: 0 },
+    ];
+    const result = computeRoTrainDailyVolumes(readings);
+    expect([...result.keys()]).toEqual(['2026-09-01']);
+    expect(result.get('2026-09-01')?.get('ro1')).toEqual({ permeate: 5, feed: 5, reject: 0 });
+  });
+});
+
 describe('computeRoTrainDailyVolumes', () => {
   it('aggregates permeate/feed/reject volumes per train per day', () => {
     const readings = [

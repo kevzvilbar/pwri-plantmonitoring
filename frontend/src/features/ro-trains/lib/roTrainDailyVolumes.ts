@@ -7,8 +7,8 @@
 // day with only permeate + reject (no feed meter) still gets a feed estimate
 // via feed = permeate + reject, and a day with only permeate (no feed, no
 // reject) falls back to feed = permeate (reject = 0).
-import { format } from 'date-fns';
 import type { Database } from '@/integrations/supabase/types';
+import { fmtIsoDate } from '@/shared/format';
 
 export type ROTrainReadingRow = Database['public']['Tables']['ro_train_readings']['Row'];
 
@@ -72,7 +72,13 @@ export function computeRoTrainDailyVolumes(
     // Skip meter-replacement jumps: their delta represents old-meter→new-meter odometer jump
     if (r.is_meter_replacement) continue;
 
-    const dk = format(new Date(r.reading_datetime), 'yyyy-MM-dd');
+    // Bucketed in plant-local (Asia/Manila) time, not the runtime's own local
+    // timezone: a reading logged at 04:46 AM Manila (~20:46 UTC the day before)
+    // must land on the Manila calendar day it was actually taken, whatever
+    // timezone the server or the viewer's device happens to be in. See
+    // shared/format.ts's fmtIsoDate doc comment for the bug this avoids.
+    const dk = fmtIsoDate(r.reading_datetime);
+    if (!dk) continue; // an unparseable reading_datetime was already excluded above, but be defensive
     if (!acc.has(dk)) acc.set(dk, new Map());
     const tMap = acc.get(dk)!;
     let entry = tMap.get(r.train_id);

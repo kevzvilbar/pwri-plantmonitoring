@@ -92,7 +92,10 @@ describe('MyCorrectionsPage (P5-6)', () => {
       const card = cards()[0];
       expect(within(card).getByText('Well 3')).toBeTruthy();
       expect(card.textContent).toContain('Well · North Plant');
-      expect(card.textContent).toMatch(/reading of 20 Sep 26/);
+      // Formatted with the page's own formatter, so the machine's timezone cannot
+      // matter. (A hard-coded '20 Sep 26' only held in one timezone; see the
+      // 'resolvedAt' assertion further down, which was fixed this same way.)
+      expect(card.textContent).toContain(`reading of ${fmtDt('2026-09-20T06:00:00Z')}`);
       expect(within(card).getByLabelText(/change from 1,234\.00 to 1,243\.00, \+9\.00/i)).toBeTruthy();
       expect(card.textContent).toContain('Reason: Meter misread');
     });

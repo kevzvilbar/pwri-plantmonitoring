@@ -30,6 +30,25 @@ export interface UsePlantFreshnessResult {
  *   - P4-6: Plants without RO trains (only wells/locators/product meters) no longer show "no recent readings".
  *   - P4-3: A silent plant can no longer hide behind a single global reading from another plant.
  */
+/** The one shape this module needs from each `*_readings_latest` view. None of
+ *  the four are in the generated `Database` types (they're views, not tables
+ *  the generator covers), so the client is told just enough about them here
+ *  rather than reaching for `any`, which would also hide a typo in a column
+ *  name at every call site. */
+interface FreshnessRow {
+  plant_id: string;
+  reading_datetime: string | null;
+}
+
+/** One `*_readings_latest` view, queried for just `plant_id` and `reading_datetime`. */
+function queryLatestView(viewName: string, plantIds: string[]) {
+  return (
+    supabase.from(viewName as never) as unknown as {
+      select: (columns: string) => { in: (col: string, ids: string[]) => PromiseLike<{ data: FreshnessRow[] | null; error: unknown }> };
+    }
+  ).select('plant_id, reading_datetime').in('plant_id', plantIds);
+}
+
 export async function fetchPlantFreshness(plantIds: string[]): Promise<PlantFreshnessMap> {
   const map: PlantFreshnessMap = {};
   if (!plantIds.length) return map;
@@ -39,18 +58,10 @@ export async function fetchPlantFreshness(plantIds: string[]): Promise<PlantFres
   });
 
   const [roRes, wellRes, locRes, prodRes] = await Promise.allSettled([
-    (supabase.from('ro_train_readings_latest' as any) as any)
-      .select('plant_id, reading_datetime')
-      .in('plant_id', plantIds),
-    (supabase.from('well_readings_latest' as any) as any)
-      .select('plant_id, reading_datetime')
-      .in('plant_id', plantIds),
-    (supabase.from('locator_readings_latest' as any) as any)
-      .select('plant_id, reading_datetime')
-      .in('plant_id', plantIds),
-    (supabase.from('product_meter_readings_latest' as any) as any)
-      .select('plant_id, reading_datetime')
-      .in('plant_id', plantIds),
+    queryLatestView('ro_train_readings_latest', plantIds),
+    queryLatestView('well_readings_latest', plantIds),
+    queryLatestView('locator_readings_latest', plantIds),
+    queryLatestView('product_meter_readings_latest', plantIds),
   ]);
 
   const processRows = (rows: { plant_id: string; reading_datetime?: string | null }[] | null | undefined) => {
