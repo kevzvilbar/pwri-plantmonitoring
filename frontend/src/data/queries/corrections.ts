@@ -251,7 +251,7 @@ async function fetchEntityNames(table: SourceTable, entityIds: string[]): Promis
   return {};
 }
 
-async function fetchUsernames(userIds: string[]): Promise<Record<string, string>> {
+export async function fetchUsernames(userIds: string[]): Promise<Record<string, string>> {
   if (!userIds.length) return {};
   const { data: profiles } = await supabase
     .from('user_profiles')
@@ -266,7 +266,7 @@ async function fetchUsernames(userIds: string[]): Promise<Record<string, string>
   );
 }
 
-async function fetchPlantNames(plantIds: string[]): Promise<Record<string, string>> {
+export async function fetchPlantNames(plantIds: string[]): Promise<Record<string, string>> {
   if (!plantIds.length) return {};
   const { data: plants } = await supabase.from('plants').select('id, name').in('id', plantIds);
   return Object.fromEntries((plants ?? []).map(p => [p.id, p.name]));

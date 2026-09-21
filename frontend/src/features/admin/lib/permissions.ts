@@ -26,6 +26,7 @@ export type ModuleKey =
   | 'network_topology'
   | 'pm_schedule'
   | 'incidents'
+  | 'my_corrections'  // P5-6: the requester's side of a correction request
   | 'manager_scorecard'
   | 'costs'
   | 'employees'
@@ -43,7 +44,7 @@ export type ModuleKey =
 // to render "every module" (mirrors Appendix A's row order).
 export const MODULE_ORDER: readonly ModuleKey[] = [
   'dashboard', 'alerts', 'ai_assistant', 'compliance', 'plants', 'operations', 'ro_trains',
-  'network_topology', 'pm_schedule', 'incidents', 'manager_scorecard', 'costs', 'employees',
+  'network_topology', 'pm_schedule', 'incidents', 'my_corrections', 'manager_scorecard', 'costs', 'employees',
   'data_exports', 'smart_import', 'data_analysis_review', 'data_corrections',
   'admin_users', 'admin_plants', 'admin_audit', 'admin_migrations', 'profile',
 ];
@@ -59,6 +60,7 @@ export const MODULE_LABELS: Record<ModuleKey, string> = {
   network_topology: 'Network Topology',
   pm_schedule: 'PM Schedule',
   incidents: 'Incidents',
+  my_corrections: 'My Corrections',
   manager_scorecard: 'Manager Scorecard',
   costs: 'Costs & Tariffs',
   employees: 'Employees',
@@ -100,6 +102,10 @@ export const PERMISSION_MATRIX: Record<ModuleKey, ModulePermissions> = {
   network_topology: { view: ELEVATED, edit: MANAGE },
   pm_schedule: { view: ALL },
   incidents: { view: ALL },
+  // Anyone can raise a correction request (correction_requests_insert_own), so
+  // anyone can follow one up. Rows are filtered to the requester in the query;
+  // RLS alone would show a plant's users each other's requests.
+  my_corrections: { view: ALL },
   // Matches fn_manager_plant_scorecard's own has_role() check exactly
   // (supabase/migrations/20260807_manager_plant_scorecard.sql) — that RPC
   // is SECURITY DEFINER and independently rejects anyone outside

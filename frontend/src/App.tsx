@@ -30,6 +30,7 @@ const Exports = lazy(() => import("./pages/Exports"));
 const Admin = lazy(() => import("./pages/Admin"));
 const Profile = lazy(() => import("./pages/Profile"));
 const Help = lazy(() => import("./pages/Help"));
+const MyCorrections = lazy(() => import("./pages/MyCorrections"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 const PlantTopology = lazy(() => import("./pages/PlantTopology"));
 const DataAnalysis  = lazy(() => import("./pages/DataAnalysis"));
@@ -148,6 +149,7 @@ const App = () => (
                   <Route path="/admin" element={<Admin />} />
                   <Route path="/profile" element={<Profile />} />
                   <Route path="/help" element={<Help />} />
+                  <Route path="/my-corrections" element={<MyCorrections />} />
                   {/* Legacy redirect shim — Chemical Dosing moved to RO Trains */}
                   <Route path="/chemicals" element={<Chemicals />} />
                 </Route>

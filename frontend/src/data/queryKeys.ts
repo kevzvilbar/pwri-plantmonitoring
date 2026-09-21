@@ -49,6 +49,9 @@ export const queryKeys = {
     pending: () => ['corrections', 'pending'] as const,
     pendingCount: () => ['corrections', 'pending-count'] as const,
     requestsCount: () => ['corrections', 'requests-count'] as const,
+    /** The signed-in user's own requests (P5-6). `myRequestsAll` is the prefix, for invalidation. */
+    myRequestsAll: () => ['corrections', 'my-requests'] as const,
+    myRequests: (userId: string) => ['corrections', 'my-requests', userId] as const,
     inboxCount: () => ['corrections', 'inbox-count'] as const,
     inbox: () => ['corrections', 'inbox'] as const,
     requests: (status?: 'pending' | 'approved' | 'rejected') => ['corrections', 'requests', status ?? 'all'] as const,

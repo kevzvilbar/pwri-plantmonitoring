@@ -14,7 +14,7 @@ import type { ComponentType } from 'react';
 import {
   LayoutDashboard, Bell, ShieldCheck, Droplet, Wrench, AlertTriangle,
   Building2, GitBranch, FlaskConical, ClipboardCheck, Award,
-  Download, Upload, Users, ShieldAlert,
+  Download, Upload, Users, ShieldAlert, SquarePen,
 } from 'lucide-react';
 import { ROTrainIcon, PesoSignIcon } from '@/components/icons/water-icons';
 import { MODULE_LABELS, type Action, type ModuleKey } from '@/lib/permissions';
@@ -70,6 +70,8 @@ const NAV_GROUPS: readonly NavGroup[] = [
       { id: 'ro-trains', modules: ['ro_trains'], label: MODULE_LABELS.ro_trains, route: '/ro-trains', icon: ROTrainIcon, priority: 2 },
       { id: 'pm-schedule', modules: ['pm_schedule'], label: MODULE_LABELS.pm_schedule, route: '/maintenance', icon: Wrench },
       { id: 'incidents', modules: ['incidents'], label: MODULE_LABELS.incidents, route: '/incidents', icon: AlertTriangle },
+      // Same icon as the "Fix" button that creates a request.
+      { id: 'my-corrections', modules: ['my_corrections'], label: MODULE_LABELS.my_corrections, route: '/my-corrections', icon: SquarePen },
     ],
   },
   {

@@ -9,7 +9,8 @@ const canFor = (role: Role): Can => (moduleKey, action = 'view') => hasPermissio
 const shape = (role: Role) =>
   buildNavConfig(canFor(role)).map((g) => [g.label, g.items.map((i) => i.label)] as const);
 
-const DAILY_LOGS = ['Daily Readings', 'RO Trains', 'PM Schedule', 'Incidents'];
+// P5-6 added My Corrections: anyone can raise a correction request, so anyone can follow one up.
+const DAILY_LOGS = ['Daily Readings', 'RO Trains', 'PM Schedule', 'Incidents', 'My Corrections'];
 const REVIEW = ['Data Analysis & Review', 'Data Corrections', 'Manager Scorecard'];
 
 const EXPECTED: Record<Role, ReadonlyArray<readonly [string, string[]]>> = {
@@ -61,9 +62,9 @@ describe('buildNavConfig — exact output per role', () => {
     });
   }
 
-  it('item counts match the plan (8 / 11 / 17 / 16 / 17)', () => {
+  it('item counts match the plan (9 / 12 / 18 / 17 / 18)', () => {
     const count = (r: Role) => buildNavConfig(canFor(r)).reduce((n, g) => n + g.items.length, 0);
-    expect(ROLES.map(count)).toEqual([8, 11, 17, 16, 17]);
+    expect(ROLES.map(count)).toEqual([9, 12, 18, 17, 18]);
   });
 
   it('never has a group called Other, and Profile is not a nav item', () => {

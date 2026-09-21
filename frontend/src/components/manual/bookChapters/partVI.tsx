@@ -116,7 +116,9 @@ export const partVI : BookPart =   {
               edit: propose the correct value, pick the closest reason (meter misread, data-entry typo, wrong
               anchor reading, meter replaced, duplicate submission, wrong asset, or other), and add a short
               description. It lands in Pending for a reviewer, and you&rsquo;re notified of the outcome either
-              way.
+              way. Follow it up any time under{' '}
+              <strong className="font-sans font-semibold not-italic">Daily Logs &rarr; My Corrections</strong>, which
+              lists each request with its status and, for a rejection, the reviewer&rsquo;s reason.
             </P>
             <H3>Inbox, History, and Operators</H3>
             <P>

@@ -11,8 +11,11 @@
  */
 
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { queryKeys } from '@/data/queryKeys';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -50,6 +53,8 @@ const fmtNum = (n: number | null | undefined) =>
 
 export function CorrectionRequestDialog({ target, onClose, onSubmitted }: Props) {
   const { user } = useAuth();
+  const navigate = useNavigate();
+  const qc = useQueryClient();
   const [proposedValue, setProposedValue] = useState('');
   const [reason, setReason] = useState('');
   const [customReason, setCustomReason] = useState('');
@@ -106,9 +111,11 @@ export function CorrectionRequestDialog({ target, onClose, onSubmitted }: Props)
           performed_role: 'Operator',
         }) as any);
 
+      // P5-6: the request now shows up under My Corrections, and the toast says where.
+      void qc.invalidateQueries({ queryKey: queryKeys.corrections.myRequestsAll() });
       toast.info(
         `${target.entityName}: correction request submitted. Your supervisor has been notified.`,
-        { duration: 7000 },
+        { duration: 7000, action: { label: 'View', onClick: () => navigate('/my-corrections') } },
       );
       onSubmitted();
     } catch (e) {

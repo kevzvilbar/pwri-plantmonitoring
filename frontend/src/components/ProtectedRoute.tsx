@@ -19,6 +19,7 @@ export const OPERATOR_ALLOWED_PATHS = [
   '/employees',
   '/profile',
   '/help',  // The manual: opened from every role's avatar menu
+  '/my-corrections',  // Operators raise correction requests, so they follow them up
   '/alerts',  // Added: Operators receive alarms and need to triage them
 ];
 
