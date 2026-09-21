@@ -8,6 +8,7 @@ export type PlantListProps = {
   needsAssignment?: boolean;
   filteredList: any[];
   summaryCounts: any;
+  freshnessByPlant?: Record<string, Date | null>;
   isManager: boolean;
   onNavigate: (path: string) => void;
   onInspect: (plant: any) => void;
@@ -15,7 +16,18 @@ export type PlantListProps = {
   setStatusFilter: (v: 'all' | 'Active' | 'Inactive') => void;
 };
 
-export function PlantList({ plants, needsAssignment = false, filteredList, summaryCounts, isManager, onNavigate, onInspect, setSearch, setStatusFilter }: PlantListProps) {
+export function PlantList({
+  plants,
+  needsAssignment = false,
+  filteredList,
+  summaryCounts,
+  freshnessByPlant,
+  isManager,
+  onNavigate,
+  onInspect,
+  setSearch,
+  setStatusFilter,
+}: PlantListProps) {
   return (
     <div className="stagger-grid space-y-3">
       {filteredList?.map((p, idx) => (
@@ -23,6 +35,7 @@ export function PlantList({ plants, needsAssignment = false, filteredList, summa
           key={p.id}
           plant={p}
           summaryCounts={summaryCounts}
+          lastReadingAt={freshnessByPlant?.[p.id]}
           index={idx}
           onNavigate={onNavigate}
           onInspect={onInspect}

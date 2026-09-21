@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, within } from '@testing-library/react';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import type { MyCorrectionRequest } from '@/shared/myCorrections';
+import { fmtDt } from '@/features/readings/dataCorrections/types';
 
 /** P5-6: the operator's side of a correction request. */
 
@@ -116,7 +117,7 @@ describe('MyCorrectionsPage (P5-6)', () => {
       renderPage();
       const note = within(cards()[0]).getByRole('note');
       expect(note.textContent).toContain('Rejected by @maria');
-      expect(note.textContent).toContain('20 Sep 26 11:00');
+      expect(note.textContent).toContain(fmtDt('2026-09-20T03:00:00Z'));
       expect(note.textContent).toContain('The meter was re-read and the original value is right.');
     });
 

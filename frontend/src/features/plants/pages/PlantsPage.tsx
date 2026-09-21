@@ -17,6 +17,7 @@ import { DeleteEntityMenu } from '@/components/DeleteEntityMenu';
 import { Trash2, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 import { friendlyError } from '@/lib/supabaseErrors';
+import { usePlantFreshness } from '../hooks/usePlantFreshness';
 import { PlantTelemetryDrawer } from '../components/PlantTelemetryDrawer';
 import { CollapsibleSection, SummaryCount, GridPylonIcon, usePlantMeterConfig, logPlantEdit } from '../shared';
 import { LocatorsList }  from '../components/locators/LocatorsList';
@@ -71,23 +72,9 @@ export default function Plants() {
   const [addPlantBusy, setAddPlantBusy] = useState(false);
   const [inspectedPlant, setInspectedPlant] = useState<any | null>(null);
 
-  // Use React Query for real freshness instead of fake setInterval
-  const { data: latestReading } = useQuery({
-    queryKey: ['plants-latest-reading'],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from('ro_train_readings')
-        .select('reading_datetime')
-        .order('reading_datetime', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      return data;
-    },
-    staleTime: 5 * 60_000,
-  });
-  const lastReadingAt = latestReading?.reading_datetime
-    ? new Date(latestReading.reading_datetime)
-    : null;
+  // P4-3 & P4-6: unified per-plant freshness across RO trains, wells, locators, and product meters
+  const plantIds = useMemo(() => (list ?? []).map((p) => p.id), [list]);
+  const { freshnessByPlant, latestReadingAt, silentPlantIds } = usePlantFreshness(plantIds);
   const qc = useQueryClient();
 
   const doAddPlant = async (form: AddPlantFormData) => {
@@ -161,10 +148,11 @@ export default function Plants() {
       <PlantListHeader
         list={list}
         summaryCounts={summaryCounts}
-        lastReadingAt={lastReadingAt}
+        lastReadingAt={latestReadingAt}
         totalCapacity={totalCapacity}
         roUtilPct={roUtilPct}
         avgHealth={avgHealth}
+        silentCount={silentPlantIds.length}
       />
 
       <PlantList
@@ -172,6 +160,7 @@ export default function Plants() {
         needsAssignment={needsAssignment}
         filteredList={filteredList}
         summaryCounts={summaryCounts}
+        freshnessByPlant={freshnessByPlant}
         isManager={isManager}
         onNavigate={navigate}
         onInspect={setInspectedPlant}

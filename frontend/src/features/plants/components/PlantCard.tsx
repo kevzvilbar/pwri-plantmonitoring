@@ -6,6 +6,8 @@ import { fmtNum } from '@/lib/calculations';
 import { MarqueeText } from './MarqueeText';
 import { DeleteEntityMenu } from '@/components/DeleteEntityMenu';
 import { cn } from '@/lib/utils';
+import { describeFreshness } from '@/shared/freshness';
+import { useNow } from '@/hooks/useNow';
 
 function statBarColor(active: number, total: number) {
   if (total === 0) return { bar: 'bg-muted-foreground/30', textColor: 'text-muted-foreground', bg: 'bg-muted/40', border: 'border-border/40' };
@@ -148,13 +150,16 @@ function HealthGauge({ score, size = 64 }: { score: number; size?: number }) {
 export type PlantCardProps = {
   plant: any;
   summaryCounts: any;
+  lastReadingAt?: Date | null;
   index: number;
   onNavigate: (path: string) => void;
   onInspect: (plant: any) => void;
   isManager: boolean;
 };
 
-export function PlantCard({ plant, summaryCounts, onNavigate, onInspect, isManager }: PlantCardProps) {
+export function PlantCard({ plant, summaryCounts, lastReadingAt, onNavigate, onInspect, isManager }: PlantCardProps) {
+  const now = useNow(30_000);
+  const freshness = describeFreshness(lastReadingAt, now.getTime());
   const wells    = summaryCounts?.wells?.[plant.id]    ?? { active: 0, total: 0 };
   const locators = summaryCounts?.locators?.[plant.id] ?? { active: 0, total: 0 };
   const trains   = summaryCounts?.trains?.[plant.id]   ?? { active: 0, total: 0 };
@@ -222,6 +227,16 @@ export function PlantCard({ plant, summaryCounts, onNavigate, onInspect, isManag
                 Active Nominal
               </span>
             )}
+          </div>
+          <div className="flex items-center gap-1.5 text-3xs font-mono text-muted-foreground pt-0.5">
+            <span className={cn(
+              'h-1.5 w-1.5 rounded-full shrink-0',
+              freshness.tone === 'fresh' ? 'bg-emerald-500'
+              : freshness.tone === 'aging' ? 'bg-amber-500'
+              : freshness.tone === 'stale' ? 'bg-rose-500'
+              : 'bg-muted-foreground/40',
+            )} />
+            <span className="truncate">{freshness.label}</span>
           </div>
         </div>
 
@@ -362,6 +377,16 @@ export function PlantCard({ plant, summaryCounts, onNavigate, onInspect, isManag
                   Active Nominal
                 </span>
               )}
+            </div>
+            <div className="flex items-center gap-1.5 text-3xs font-mono text-muted-foreground pt-0.5">
+              <span className={cn(
+                'h-1.5 w-1.5 rounded-full shrink-0',
+                freshness.tone === 'fresh' ? 'bg-emerald-500'
+                : freshness.tone === 'aging' ? 'bg-amber-500'
+                : freshness.tone === 'stale' ? 'bg-rose-500'
+                : 'bg-muted-foreground/40',
+              )} />
+              <span className="truncate">{freshness.label}</span>
             </div>
           </div>
 

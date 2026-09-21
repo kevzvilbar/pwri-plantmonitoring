@@ -1,20 +1,23 @@
 import { fmtNum } from '@/lib/calculations';
 import { Building2, Droplets } from 'lucide-react';
 import { describeFreshness } from '@/shared/freshness';
+import { useNow } from '@/hooks/useNow';
 
 export function PlantListHeader({
-  list, summaryCounts, lastReadingAt, totalCapacity, roUtilPct, avgHealth,
+  list, summaryCounts, lastReadingAt, totalCapacity, roUtilPct, avgHealth, silentCount = 0,
 }: {
   list: any[];
   summaryCounts: any;
-  /** Timestamp of the latest RO-train reading across all displayed plants. Pass `null` when unknown/loading. */
+  /** Timestamp of the latest reading across all displayed plants. Pass `null` when unknown/loading. */
   lastReadingAt: Date | null;
   totalCapacity: number;
   roUtilPct: number;
   avgHealth: number;
+  silentCount?: number;
 }) {
   const facilityCount = list?.length ?? 0;
-  const freshness = describeFreshness(lastReadingAt);
+  const now = useNow(30_000);
+  const freshness = describeFreshness(lastReadingAt, now.getTime());
 
   return (
     <div className="rounded-2xl border border-border/70 bg-card p-4 sm:p-5 shadow-xs">
@@ -29,7 +32,12 @@ export function PlantListHeader({
               <h1 className="text-lg sm:text-xl font-bold tracking-tight text-foreground">
                 Water Production Facilities
               </h1>
-              {freshness.tone === 'fresh' ? (
+              {silentCount > 0 && facilityCount > 0 ? (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-3xs font-bold uppercase tracking-wider bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 shadow-2xs">
+                  <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-amber-500"></span>
+                  {silentCount} {silentCount === 1 ? 'Facility Silent' : 'Facilities Silent'}
+                </span>
+              ) : freshness.tone === 'fresh' ? (
                 <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-3xs font-bold uppercase tracking-wider bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 shadow-2xs">
                   <span className="relative flex h-1.5 w-1.5">
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-500 opacity-75"></span>
@@ -66,6 +74,14 @@ export function PlantListHeader({
                   : 'text-muted-foreground'
                 }`}>
                   {freshness.label}
+                </span>
+              </>
+            )}
+            {silentCount > 0 && (
+              <>
+                <span className="opacity-40">&bull;</span>
+                <span className="text-amber-600 dark:text-amber-400 font-mono font-medium">
+                  {silentCount} silent
                 </span>
               </>
             )}

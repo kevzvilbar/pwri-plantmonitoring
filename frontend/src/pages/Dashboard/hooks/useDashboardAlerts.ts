@@ -11,6 +11,7 @@ import type { PlantAlert, PlantAlertSeverity } from '@/store/alertStore';
 import { useReadingGaps, type ReadingGap, gapDescription } from '@/hooks/useReadingGaps';
 import { useTrainHourlyGaps, type TrainHourlyGap } from '@/hooks/useTrainHourlyGaps';
 import { useTrainAutoOffline, type TrainGap } from '@/hooks/useTrainAutoOffline';
+import { DEFAULT_THRESHOLDS, type Thresholds } from '@/features/compliance';
 
 export interface ROAlertReading {
   train_id?: string;
@@ -91,6 +92,7 @@ export interface DashboardAlertsParams {
   locatorGaps?: ReadingGap[];
   trainHourlyGaps?: TrainHourlyGap[];
   chemInv?: ChemInventoryAlertRow[];
+  thresholdsByPlant?: Record<string, Thresholds>;
 }
 
 export function useDashboardAlerts({
@@ -116,6 +118,7 @@ export function useDashboardAlerts({
   locatorGaps: propLocatorGaps,
   trainHourlyGaps: propTrainHourlyGaps,
   chemInv: propChemInv,
+  thresholdsByPlant: propThresholds,
 }: DashboardAlertsParams) {
   // Alert data hooks
   const internalTrainGaps = useTrainAutoOffline(plantIds);
@@ -146,6 +149,26 @@ export function useDashboardAlerts({
   // Keyed by the ids so a plant change refetches; the ['alerts-feed'] prefix
   // that other code invalidates still matches.
   const feedPlantKey = plantIds.join(',');
+  const { data: internalThresholds } = useQuery<Record<string, Thresholds>>({
+    queryKey: ['dash-compliance-thresholds', feedPlantKey],
+    queryFn: async () => {
+      const scopes = ['global', ...plantIds];
+      const { data, error } = await supabase
+        .from('compliance_thresholds')
+        .select('scope, thresholds')
+        .in('scope', scopes);
+      if (error) return {};
+      const map: Record<string, Thresholds> = {};
+      (data ?? []).forEach((row: any) => {
+        if (row.scope && row.thresholds) map[row.scope] = row.thresholds as Thresholds;
+      });
+      return map;
+    },
+    enabled: plantIds.length > 0 && !propThresholds,
+    staleTime: 5 * 60_000,
+    refetchInterval: 5 * 60_000,
+  });
+  const thresholdsByPlant = propThresholds ?? internalThresholds ?? {};
   const { data: internalFeed } = useQuery<{ count: number; alerts: any[] }>({
     queryKey: ['alerts-feed', feedPlantKey],
     queryFn: async () => {
@@ -383,6 +406,7 @@ export function useDashboardAlerts({
 
   useEffect(() => {
     const storeAlerts: PlantAlert[] = [];
+    const clearedConditionIds: string[] = [];
     const roLink = (pid?: string | null, trainId?: string | null) =>
       `/ro-trains?tab=pretreat-ro${pid ? `&plant=${pid}` : ''}${trainId ? `&train=${trainId}` : ''}`;
 
@@ -487,29 +511,40 @@ export function useDashboardAlerts({
           linkPath:    link,
         });
       }
-      const tds = r.permeate_tds ?? 0;
-      if (tds >= 600) {
+      const plantThresholds = thresholdsByPlant[pid] ?? thresholdsByPlant['global'] ?? DEFAULT_THRESHOLDS;
+      const permTdsMax = plantThresholds.permeate_tds_max ?? DEFAULT_THRESHOLDS.permeate_tds_max;
+      const permTdsWarn = permTdsMax * 0.9;
+      const tds = r.permeate_tds;
+      const critId = `tds-${r.train_id}-${r.train_number}`;
+      const warnId = `tds-warn-${r.train_id}-${r.train_number}`;
+      const legacyId = `high-tds-${r.train_id}`;
+
+      if (tds != null && tds > permTdsMax) {
         storeAlerts.push({
-          id:          `tds-${r.train_id}-${r.train_number}`,
+          id:          critId,
           severity:    'critical',
-          title:       `TDS alert: ${tds} ppm`,
-          description: `${trainLabel} — permeate TDS exceeded 600 ppm`,
+          title:       `High Permeate TDS: ${fmtNum(tds, 0)} ppm`,
+          description: `${trainLabel} — permeate TDS at ${fmtNum(tds, 0)} ppm exceeds ${permTdsMax} ppm limit`,
           source:      'RO Trains',
           plantId:     pid,
           timestamp:   Date.now(),
           linkPath:    link,
         });
-      } else if (tds >= 500) {
+        clearedConditionIds.push(warnId, legacyId);
+      } else if (tds != null && tds >= permTdsWarn) {
         storeAlerts.push({
-          id:          `tds-warn-${r.train_id}-${r.train_number}`,
+          id:          warnId,
           severity:    'warning',
-          title:       `TDS approaching limit: ${tds} ppm`,
-          description: `${trainLabel} — permeate TDS at ${tds} ppm (limit: 600 ppm)`,
+          title:       `TDS approaching limit: ${fmtNum(tds, 0)} ppm`,
+          description: `${trainLabel} — permeate TDS at ${fmtNum(tds, 0)} ppm (limit: ${permTdsMax} ppm)`,
           source:      'RO Trains',
           plantId:     pid,
           timestamp:   Date.now(),
           linkPath:    link,
         });
+        clearedConditionIds.push(critId, legacyId);
+      } else if (tds != null) {
+        clearedConditionIds.push(critId, warnId, legacyId);
       }
       if (r.permeate_ph != null && (r.permeate_ph < 6.5 || r.permeate_ph > 8.5)) {
         storeAlerts.push({
@@ -640,9 +675,13 @@ export function useDashboardAlerts({
       storeAlerts.forEach((a) => dedupedMap.set(a.id, a));
       addAlerts(Array.from(dedupedMap.values()));
     }
+
+    if (clearedConditionIds.length > 0) {
+      clearConditionAlerts(clearedConditionIds);
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [trainGaps, wellGaps, locatorGaps, trainHourlyGaps, latestRO, chemInv, feedAlerts, selectedPlantId, nrw, nrwBreached,
-      pretreatmentAlerts, pumpElectricalAlerts, roMeterSpikes, todayPower, powerIsStale, powerAvgByPlant, plantNameById]);
+      pretreatmentAlerts, pumpElectricalAlerts, roMeterSpikes, todayPower, powerIsStale, powerAvgByPlant, plantNameById, thresholdsByPlant]);
 
   return { plantNameById, roMeterSpikes, pretreatmentAlerts, pumpElectricalAlerts };
 }

@@ -16,7 +16,7 @@ import { PlantPicker } from './shared/PlantPicker';
 
 // ─── Overview Dashboard ───────────────────────────────────────────────────────
 export function Overview() {
-  const { selectedPlantId, setSelectedPlantId, addAlerts, clearConditionAlerts } = useAppStore();
+  const { selectedPlantId, setSelectedPlantId, clearConditionAlerts } = useAppStore();
   const [plantId, setPlantId] = useState(selectedPlantId ?? '');
   const [statusFilter, setStatusFilter] = useState<'All' | 'Running' | 'Maintenance' | 'Offline'>('All');
   const [viewMode, setViewMode] = useState<'compact' | 'diagnostics'>('diagnostics');
@@ -107,25 +107,13 @@ export function Overview() {
   }, [trainHourlyGaps]);
 
   const PERM_TDS_LIMIT = thresholds?.permeate_tds_max ?? DEFAULT_THRESHOLDS.permeate_tds_max;
-  const highTDSTrains  = (trains ?? []).filter((t: any) => {
-    const reading = lastReadings?.[t.id];
-    return reading?.permeate_tds != null && reading.permeate_tds > PERM_TDS_LIMIT;
-  });
-
   useEffect(() => {
-    if (!plantId) return;
-    if (highTDSTrains.length === 0) {
-      clearConditionAlerts((trains ?? []).map((t: any) => `high-tds-${t.id}`));
-      return;
-    }
-    addAlerts(highTDSTrains.map((t: any) => ({
-      id: `high-tds-${t.id}`, severity: 'critical' as const,
-      title: 'High Permeate TDS',
-      description: `Train ${t.train_number}${t.name ? ` (${t.name})` : ''}: ${fmtNum(lastReadings?.[t.id]?.permeate_tds, 0)} ppm — above ${PERM_TDS_LIMIT} ppm limit`,
-      source: 'RO Trains', plantId, timestamp: Date.now(),
-    })));
+    if (!plantId || !trains?.length) return;
+    // P3-7 / Bug 3 fix: TDS alarm evaluation is owned centrally by AlertsRuntime (useDashboardAlerts).
+    // Clear any lingering legacy high-tds alerts created by previous versions.
+    clearConditionAlerts((trains ?? []).map((t: any) => `high-tds-${t.id}`));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [highTDSTrains.length, plantId, PERM_TDS_LIMIT]);
+  }, [plantId, trains?.length]);
 
   const filtered = (trains ?? []).filter((t: any) => {
     const effectiveStatus = deriveTrainStatus(t, lastReadings?.[t.id]);
