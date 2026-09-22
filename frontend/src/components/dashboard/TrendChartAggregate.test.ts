@@ -5,8 +5,14 @@ import {
 } from './TrendChartAggregate';
 
 // Mon Aug 3 2026 .. Sun Aug 9 2026 is a clean ISO week — convenient fixture.
+//
+// Production builds a row's `isoDate` from a real reading instant, so its LOCAL
+// calendar date always matches the row (useTrendChartData: key = format(dt, ..),
+// isoDate = dt.toISOString(); one path even uses local noon "for stable sorting").
+// UTC midnight is NOT such an instant: it is the previous evening west of UTC,
+// which made these tests pass or fail depending on the machine's timezone.
 function daily(dateISO: string, fields: Record<string, unknown>): DailyTrendRow {
-  return { date: dateISO, isoDate: `${dateISO}T00:00:00.000Z`, ...fields };
+  return { date: dateISO, isoDate: new Date(`${dateISO}T12:00:00`).toISOString(), ...fields };
 }
 
 describe('buildTrendRows', () => {

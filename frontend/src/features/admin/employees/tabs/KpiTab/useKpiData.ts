@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { fmtIsoDate } from '@/lib/format';
 import { useQueryClient } from '@tanstack/react-query';
 import type { ScoreMatrix, ScoreMap2, EntityTypeScore, DayScore2, KpiRange2 } from './constants';
 import type { StaffMember } from '../../types';
@@ -91,35 +92,35 @@ function buildTeamMatrix(
   const tchemMap:  Record<string, number>       = {};
 
   wellReadings.forEach((r) => {
-    const day = r.reading_datetime.slice(0, 10);
+    const day = fmtIsoDate(r.reading_datetime);
     if (!daySet.has(day)) return;
     const tk = `${r.plant_id}:${day}`;
     (twellMap[tk] = twellMap[tk] ?? new Set()).add(r.well_id);
   });
 
   locReadings.forEach((r) => {
-    const day = r.reading_datetime.slice(0, 10);
+    const day = fmtIsoDate(r.reading_datetime);
     if (!daySet.has(day)) return;
     const tk = `${r.plant_id}:${day}`;
     (tlocMap[tk] = tlocMap[tk] ?? new Set()).add(r.locator_id);
   });
 
   roReadings.forEach((r) => {
-    const day = r.reading_datetime.slice(0, 10);
+    const day = fmtIsoDate(r.reading_datetime);
     if (!daySet.has(day)) return;
     const tk = `${r.plant_id}:${day}:${r.train_id}`;
     troMap[tk] = (troMap[tk] ?? 0) + 1;
   });
 
   meterReadings.forEach((r) => {
-    const day = r.reading_datetime.slice(0, 10);
+    const day = fmtIsoDate(r.reading_datetime);
     if (!daySet.has(day)) return;
     const tk = `${r.plant_id}:${day}`;
     (tmeterMap[tk] = tmeterMap[tk] ?? new Set()).add(r.meter_id);
   });
 
   powerReadings.forEach((r) => {
-    const day = r.reading_datetime.slice(0, 10);
+    const day = fmtIsoDate(r.reading_datetime);
     if (!daySet.has(day)) return;
     const tk = `${r.plant_id}:${day}`;
     if (r.daily_solar_kwh !== null) tsolarMap[tk] = (tsolarMap[tk] ?? 0) + 1;
@@ -127,7 +128,7 @@ function buildTeamMatrix(
   });
 
   chemReadings.forEach((r) => {
-    const day = r.log_datetime.slice(0, 10);
+    const day = fmtIsoDate(r.log_datetime);
     if (!daySet.has(day)) return;
     const tk = `${r.plant_id}:${day}`;
     tchemMap[tk] = (tchemMap[tk] ?? 0) + 1;
@@ -207,7 +208,7 @@ function buildIndividualMatrix(
   const roMap: Record<string, number> = {};
 
   wellReadings.forEach((r) => {
-    const day = r.reading_datetime.slice(0, 10);
+    const day = fmtIsoDate(r.reading_datetime);
     if (!daySet.has(day)) return;
     if (r.recorded_by) {
       opDutySet.add(`${r.recorded_by}:${r.plant_id}:${day}`);
@@ -215,7 +216,7 @@ function buildIndividualMatrix(
   });
 
   locReadings.forEach((r) => {
-    const day = r.reading_datetime.slice(0, 10);
+    const day = fmtIsoDate(r.reading_datetime);
     if (!daySet.has(day)) return;
     if (r.recorded_by) {
       opDutySet.add(`${r.recorded_by}:${r.plant_id}:${day}`);
@@ -223,7 +224,7 @@ function buildIndividualMatrix(
   });
 
   roReadings.forEach((r) => {
-    const day = r.reading_datetime.slice(0, 10);
+    const day = fmtIsoDate(r.reading_datetime);
     if (!daySet.has(day)) return;
     if (r.recorded_by) {
       opDutySet.add(`${r.recorded_by}:${r.plant_id}:${day}`);
@@ -233,7 +234,7 @@ function buildIndividualMatrix(
   });
 
   meterReadings.forEach((r) => {
-    const day = r.reading_datetime.slice(0, 10);
+    const day = fmtIsoDate(r.reading_datetime);
     if (!daySet.has(day)) return;
     if (r.recorded_by) {
       opDutySet.add(`${r.recorded_by}:${r.plant_id}:${day}`);
@@ -241,7 +242,7 @@ function buildIndividualMatrix(
   });
 
   powerReadings.forEach((r) => {
-    const day = r.reading_datetime.slice(0, 10);
+    const day = fmtIsoDate(r.reading_datetime);
     if (!daySet.has(day)) return;
     if (r.recorded_by) {
       opDutySet.add(`${r.recorded_by}:${r.plant_id}:${day}`);
@@ -249,7 +250,7 @@ function buildIndividualMatrix(
   });
 
   chemReadings.forEach((r) => {
-    const day = r.log_datetime.slice(0, 10);
+    const day = fmtIsoDate(r.log_datetime);
     if (!daySet.has(day)) return;
     if (r.recorded_by) {
       opDutySet.add(`${r.recorded_by}:${r.plant_id}:${day}`);
@@ -369,10 +370,14 @@ export function useKpiData(opts: UseKpiDataOptions): UseKpiDataResult {
 
   const days = useMemo(() => generateDays2(range), [range, refreshKey]);
   const since = useMemo(() => days[0] + 'T00:00:00+08:00', [days]);
-  const todayStr = useMemo(() => {
-    const d = new Date();
-    return d.toISOString().slice(0, 10);
-  }, []);
+  // Manila-anchored (fmtIsoDate), not UTC: a plain `.toISOString().slice(0, 10)`
+  // stays on YESTERDAY's date for the first 8 hours of every Manila day (Manila
+  // is UTC+8, so its midnight lands 8 hours before UTC's). During that window
+  // "today" would silently roll back a day: none of today's readings would
+  // count yet, wrongly crediting the day as at-target or the operator as pending
+  // rather than behind, and the elapsed-fraction pacing below would agree with
+  // the wrong day's target.
+  const todayStr = useMemo(() => fmtIsoDate(new Date()), []);
   const now = new Date();
   const nowManila = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Manila' }));
   const elapsedFraction = Math.min(1, Math.max(0, (nowManila.getHours() + nowManila.getMinutes() / 60) / 24));

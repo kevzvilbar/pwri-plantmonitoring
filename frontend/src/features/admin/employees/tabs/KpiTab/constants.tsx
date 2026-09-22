@@ -1,4 +1,9 @@
 import type { StaffMember, ReadingRecord, ChecklistExecution } from '../../types';
+// Bucketed in plant-local (Asia/Manila) time; see shared/format.ts's
+// fmtIsoDate doc comment for the day-early bug a UTC-based `.toISOString()
+// .slice(0, 10)` (what this file used to do, and what the KPI dashboard's
+// "today" would silently roll back to for the first 8 hours of every day).
+import { fmtIsoDate } from '@/lib/format';
 
 export type KpiRange2 = 'today' | 7 | 14 | 30 | 90 | 365;
 export type KpiViewMode = 'team' | 'individual';
@@ -157,6 +162,3 @@ export function generateDays2(range: KpiRange2): string[] {
   return days;
 }
 
-function fmtIsoDate(d: Date): string {
-  return d.toISOString().slice(0, 10);
-}

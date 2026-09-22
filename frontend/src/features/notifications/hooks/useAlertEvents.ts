@@ -46,6 +46,30 @@ export function getOutboxKey(userId?: string | null): string {
   return userId ? `${OUTBOX_KEY_PREFIX}${userId}` : LEGACY_OUTBOX_KEY;
 }
 
+/**
+ * Move whatever is still sitting in the pre-partition shared key into each
+ * row's own owner's key (a row with no `user_id` — queued before that field
+ * was even written — is adopted by whoever is signed in now, since that is
+ * who the server would have attributed it to).
+ *
+ * Without this, a row queued before this file started keying the outbox by
+ * user is invisible forever: `flushAlertEventOutbox` is only ever called with
+ * a signed-in user's id (see the hook below), which reads
+ * `${OUTBOX_KEY_PREFIX}<uid>`, never `LEGACY_OUTBOX_KEY`. The row is not lost
+ * to an error, it is simply never read again.
+ */
+function adoptLegacyOutbox(currentUserId: string): void {
+  const legacy = readOutbox(null);
+  if (legacy.length === 0) return;
+  const byOwner = new Map<string, AlertEventInsert[]>();
+  for (const row of legacy) {
+    const owner = row.user_id ?? currentUserId;
+    byOwner.set(owner, [...(byOwner.get(owner) ?? []), row]);
+  }
+  byOwner.forEach((rows, owner) => writeOutbox(owner, [...readOutbox(owner), ...rows]));
+  writeOutbox(null, []);
+}
+
 /** D2: snooze caps at 24 h and is never allowed for critical alerts. */
 export const MAX_SNOOZE_MS = 24 * 60 * 60 * 1000;
 
@@ -158,6 +182,7 @@ export async function persistEvent(row: AlertEventInsert, userId?: string | null
  * is preserved; drops non-retryable failures so the queue never gets permanently blocked.
  */
 export async function flushAlertEventOutbox(userId?: string | null): Promise<number> {
+  if (userId) adoptLegacyOutbox(userId);
   const queued = readOutbox(userId);
   if (queued.length === 0) return 0;
   let sent = 0;
