@@ -129,6 +129,10 @@ export function useProductionStats({
     staleTime: 10 * 60_000,
   });
 
+  // EGRESS: wellIds/todayWells/plantMeterConfigs used to run unconditionally
+  // (missing the needsClientFallback gate every sibling query already has),
+  // so they kept fetching full well_readings_clean row sets on a 5-min timer
+  // even once get_dashboard_aggregates succeeded and nothing read their output.
   const { data: wellIds = [] } = useQuery({
     queryKey: ['dash-well-ids', plantIds],
     queryFn: async () => {
@@ -137,7 +141,7 @@ export function useProductionStats({
       if (error) throw error;
       return (data ?? []).map((w) => w.id);
     },
-    enabled: plantIds.length > 0,
+    enabled: needsClientFallback && plantIds.length > 0,
     staleTime: 10 * 60_000,
   });
 
@@ -185,7 +189,7 @@ export function useProductionStats({
       if (fallbackErr) throw fallbackErr;
       return fallback ?? [];
     },
-    enabled: wellIds.length > 0,
+    enabled: needsClientFallback && wellIds.length > 0,
     staleTime: 5 * 60_000,
     refetchInterval: 5 * 60_000,
   });
@@ -228,7 +232,7 @@ export function useProductionStats({
       if (error) throw error;
       return data ?? [];
     },
-    enabled: plantIds.length > 0,
+    enabled: needsClientFallback && plantIds.length > 0,
     staleTime: 10 * 60_000,
   });
 

@@ -107,6 +107,38 @@ describe('useProductionStats — Server-Side Aggregations & Fallbacks', () => {
     expect(result.current.serverAggregates?.by_plant).toHaveLength(2);
   });
 
+  it('EGRESS: fires zero client-fallback table queries once the RPC succeeds', async () => {
+    // Regression test for the gap where wellIds/todayWells/plantMeterConfigs
+    // ran unconditionally (missing the needsClientFallback gate every sibling
+    // query already had), so a full well_readings_clean fetch kept firing on
+    // its 5-minute timer even though nothing read the result once the RPC
+    // succeeded. Every one of the 12 fallback queries in this hook must be
+    // gated the same way — this asserts none of their tables are touched.
+    (supabase.rpc as any).mockResolvedValueOnce({
+      data: {
+        raw_water_vol: 1, y_raw_water_vol: 1, production: 1, y_production: 1,
+        consumption: 1, y_consumption: 1, blending: 1, nrw: 1, y_nrw: 1, by_plant: [],
+      },
+      error: null,
+    });
+
+    const { result } = renderHook(() => useProductionStats(defaultParams), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => {
+      expect(result.current.serverAggregates).not.toBeNull();
+    });
+
+    const fallbackOnlyTables = [
+      'locators', 'wells', 'product_meters', 'plant_meter_config', 'ro_trains',
+      'locator_readings_clean', 'well_readings_clean', 'product_meter_readings',
+      'ro_train_readings', 'blending_events',
+    ];
+    const calledTables = (supabase.from as any).mock.calls.map((c: unknown[]) => c[0]);
+    expect(calledTables.filter((t: string) => fallbackOnlyTables.includes(t))).toEqual([]);
+  });
+
   it('falls back seamlessly to client computation if RPC returns an error', async () => {
     (supabase.rpc as any).mockResolvedValueOnce({
       data: null,
