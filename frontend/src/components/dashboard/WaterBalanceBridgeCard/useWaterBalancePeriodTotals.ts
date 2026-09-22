@@ -4,6 +4,7 @@ import { format, parseISO, startOfDay, subDays } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
 import { computeEntityDeltas } from '@/lib/entityDeltas';
 import { useAppStore } from '@/store/appStore';
+import { useROTrains } from '@/hooks/useROTrains';
 import { RANGE_DAYS, rangeKeyToDays, type RangeKey } from '../types';
 import type { WaterBalanceTotals } from './types';
 
@@ -64,24 +65,23 @@ function useWaterBalancePeriodTotals(plantIds: string[]) {
     [permeateConfig],
   );
 
-  const { data: roTrainMeta } = useQuery({
-    queryKey: ['wb-ro-train-ids', plantIds],
-    queryFn: async () => {
-      const { data } = await (supabase.from('ro_trains' as never) as any)
-        .select('id, plant_id, unit_type')
-        .in('plant_id', plantIds);
-      const rows = data ?? [];
-      const trainPlantMap = new Map<string, string>();
-      const trainUnitTypeMap = new Map<string, string>();
-      rows.forEach((t: any) => {
-        trainPlantMap.set(t.id, t.plant_id);
-        trainUnitTypeMap.set(t.id, t.unit_type ?? 'primary');
-      });
-      return { ids: rows.map((t: any) => t.id as string), trainPlantMap, trainUnitTypeMap };
-    },
-    enabled: hasPlants,
-    staleTime: 10 * 60_000,
-  });
+  // EGRESS: was its own ['wb-ro-train-ids', plantIds] query pulling
+  // id/plant_id/unit_type from ro_trains — an exact duplicate, by column
+  // shape, of useTrendChartQueries.ts and useProductionStats.ts, each
+  // fetching the same columns for the same plants under their own key.
+  // useROTrains fetches the full row (already cached 10 min for anyone
+  // else using it) and this just projects the 3 fields it needs from that
+  // shared cache entry instead of hitting Postgres a 4th time.
+  const { data: allTrains } = useROTrains(plantIds);
+  const roTrainMeta = useMemo(() => {
+    const trainPlantMap = new Map<string, string>();
+    const trainUnitTypeMap = new Map<string, string>();
+    (allTrains ?? []).forEach((t) => {
+      trainPlantMap.set(t.id, t.plant_id);
+      trainUnitTypeMap.set(t.id, t.unit_type ?? 'primary');
+    });
+    return { ids: (allTrains ?? []).map((t) => t.id), trainPlantMap, trainUnitTypeMap };
+  }, [allTrains]);
   const trainIds = roTrainMeta?.ids ?? [];
   const trainPlantMap = useMemo(
     () => roTrainMeta?.trainPlantMap ?? new Map<string, string>(),

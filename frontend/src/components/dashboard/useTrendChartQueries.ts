@@ -12,9 +12,11 @@
 // that file's original header comments for the "why" behind individual
 // queries (bug-fix notes, meter-replacement handling, etc.), which were left
 // in place on each query below exactly as they were.
+import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
+import { useROTrains } from '@/hooks/useROTrains';
 
 export function useTrendChartQueries({
   metric, plantIds, startISO, endISO, startKey, endKey,
@@ -312,25 +314,20 @@ export function useTrendChartQueries({
   // filtered by train_id. This mirrors the locator_readings fix above.
   // Also builds a trainId→plantId map used to route permeate_meter_delta back to
   // the correct plant when permeate_is_production is active.
-  const { data: _roTrainMeta } = useQuery({
-    queryKey: ['trend-ro-train-ids', plantIds],
-    queryFn: async () => {
-      if (!plantIds.length) return { ids: [] as string[], trainPlantMap: new Map<string, string>(), trainUnitTypeMap: new Map<string, string>() };
-      const { data } = await supabase.from('ro_trains')
-        .select('id, plant_id, unit_type')
-        .in('plant_id', plantIds);
-      const rows = data ?? [];
-      const trainPlantMap = new Map<string, string>();
-      const trainUnitTypeMap = new Map<string, string>();
-      rows.forEach((t) => {
-        trainPlantMap.set(t.id, t.plant_id);
-        trainUnitTypeMap.set(t.id, t.unit_type ?? 'primary');
-      });
-      return { ids: rows.map((t) => t.id as string), trainPlantMap, trainUnitTypeMap };
-    },
-    enabled: plantIds.length > 0,
-    staleTime: 10 * 60_000,
-  });
+  // EGRESS: was its own ['trend-ro-train-ids', plantIds] query pulling
+  // id/plant_id/unit_type from ro_trains — an exact duplicate, by column
+  // shape, of useWaterBalancePeriodTotals.ts and useProductionStats.ts.
+  // useROTrains's cached full-row fetch covers this projection too.
+  const { data: _roTrainRows } = useROTrains(plantIds);
+  const _roTrainMeta = useMemo(() => {
+    const trainPlantMap = new Map<string, string>();
+    const trainUnitTypeMap = new Map<string, string>();
+    (_roTrainRows ?? []).forEach((t) => {
+      trainPlantMap.set(t.id, t.plant_id);
+      trainUnitTypeMap.set(t.id, t.unit_type ?? 'primary');
+    });
+    return { ids: (_roTrainRows ?? []).map((t) => t.id), trainPlantMap, trainUnitTypeMap };
+  }, [_roTrainRows]);
   const _roTrainIdsForReadings = _roTrainMeta?.ids;
   const _trainPlantMap = _roTrainMeta?.trainPlantMap ?? new Map<string, string>();
   // Secondary (2nd-pass) units — e.g. Potable-RO, Refilling-RO — draw their
