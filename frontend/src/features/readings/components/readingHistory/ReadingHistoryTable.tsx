@@ -5,6 +5,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { Loader2 } from 'lucide-react';
 import { canEditEntry } from '@/shared/readingAudit';
 import { getGridMeterVal, HistoryModule } from './types';
+import { filterPlausibleRows } from './filterPlausibleRows';
 import { HistoryCascadeConfirmDialog } from './HistoryCascadeConfirmDialog';
 import { useReadingHistoryActions } from './useReadingHistoryActions';
 import { ReadingHistoryEditForm } from './ReadingHistoryEditForm';
@@ -39,42 +40,10 @@ export function ReadingHistoryTable(props: any) {
       ? +gridMultipliers[idx]
       : multiplier;
 
-  const rows = useMemo(() => {
-    if (!rawRows || rawRows.length === 0) return [];
-    const valid: any[] = [];
-
-    const getVal = (row: any): number | null => {
-      if (!row) return null;
-      if (row.current_reading != null) return +row.current_reading;
-      if (row.meter_reading_kwh != null) return +row.meter_reading_kwh;
-      if (row.raw_meter_reading != null) return +row.raw_meter_reading;
-      return null;
-    };
-
-    for (let i = 0; i < rawRows.length; i++) {
-      const r = rawRows[i];
-      if (r.is_estimated && !r.is_meter_rollover && !r.is_meter_replacement) {
-        const cur = getVal(r);
-        if (cur != null) {
-          const pred = rawRows[i + 1];
-          const succ = rawRows[i - 1];
-
-          const predVal = getVal(pred);
-          const succVal = getVal(succ);
-
-          const violatesPred = predVal != null && !pred?.is_meter_rollover && !r.is_meter_replacement && cur <= predVal;
-          const violatesSucc = succVal != null && !r.is_meter_rollover && !succ?.is_meter_replacement && cur >= succVal;
-
-          if (violatesPred || violatesSucc) {
-            continue;
-          }
-        }
-      }
-      valid.push(r);
-    }
-
-    return valid;
-  }, [rawRows]);
+  const rows = useMemo(
+    () => filterPlausibleRows(rawRows, isDirectMode),
+    [rawRows, isDirectMode],
+  );
 
   const { isAdmin, isManager, isDataAnalyst, user, activeOperatorId } = useAuth();
   const hasFullAccess = isAdmin || isManager || isDataAnalyst;
