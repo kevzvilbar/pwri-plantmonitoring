@@ -61,6 +61,11 @@ export function Overview() {
   const trainIds    = (trains ?? []).map((t: any) => t.id);
   const trainIdsKey = trainIds.join(',');
 
+  // EGRESS: no refetchInterval — this query key is in useTrainDataRealtime's
+  // invalidation list, so a real write already triggers a refetch within
+  // moments via realtime. Blind 3-minute polling on top of that was
+  // duplicate egress, not added freshness (see ROTrainsPage.tsx, which
+  // shares this exact cache entry rather than fetching it a second time).
   const { data: lastReadings } = useQuery({
     queryKey: ['ro-last-all', trainIdsKey],
     queryFn: async () => {
@@ -75,10 +80,13 @@ export function Overview() {
       return map;
     },
     enabled: trainIds.length > 0,
-    staleTime: 180_000,  // FIX (egress): staleTime matched to refetchInterval — was relying on the 30s global default, so the app-wide background-sync sweep force-refetched this well before its own interval was due
-    refetchInterval: 180_000,
+    staleTime: 5 * 60_000,
   });
 
+  // EGRESS: same reasoning as lastReadings above — 'ro-spark' is also in
+  // useTrainDataRealtime's invalidation list, so it no longer needs its own
+  // refetchInterval; realtime (or the 5-min background-sync sweep as a
+  // fallback) drives the refresh instead.
   const { data: sparkData } = useQuery({
     queryKey: ['ro-spark', trainIdsKey],
     queryFn: async () => {
@@ -95,8 +103,7 @@ export function Overview() {
       return map;
     },
     enabled: trainIds.length > 0,
-    staleTime: 180_000,  // FIX (egress): staleTime matched to refetchInterval — was relying on the 30s global default, so the app-wide background-sync sweep force-refetched this well before its own interval was due
-    refetchInterval: 180_000,
+    staleTime: 5 * 60_000,
   });
 
   const trainHourlyGaps = useTrainHourlyGaps(plantId ? [plantId] : []);

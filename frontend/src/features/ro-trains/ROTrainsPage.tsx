@@ -4,6 +4,7 @@ import { LayoutGrid, Recycle } from 'lucide-react';
 import { ROTrainIcon, ChemicalsIcon } from '@/components/icons/water-icons';
 import { useAppStore } from '@/store/appStore';
 import { usePlants } from '@/hooks/usePlants';
+import { useROTrainsForPlant } from '@/hooks/useROTrains';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { type Database } from '@/integrations/supabase/types';
@@ -35,20 +36,27 @@ export default function ROTrains() {
     staleTime: 60_000,
   });
 
-  const { data: trains } = useQuery({
-    queryKey: ['ro-hero-trains', selectedPlantId],
-    queryFn: async () => {
-      let q = supabase.from('ro_trains').select('*').order('train_number');
-      if (selectedPlantId) q = q.eq('plant_id', selectedPlantId);
-      return (await q).data ?? [];
-    },
-  });
+  const { data: trains } = useROTrainsForPlant(selectedPlantId || undefined);
 
   const trainIds = (trains ?? []).map((t: any) => t.id);
   const trainIdsKey = trainIds.join(',');
 
+  // EGRESS: this used to be its own ['ro-hero-last-all', ...] query — an
+  // exact duplicate of Overview.tsx's ['ro-last-all', ...] query below (same
+  // table, same columns, same trainIds), fetched a second time under a
+  // different cache key purely because this page mounts <Overview> as its
+  // default tab at the same time. Sharing the key lets react-query dedupe
+  // the two into one request/cache entry instead of two independent ones.
+  //
+  // No refetchInterval here (and none in Overview.tsx either): this query
+  // key is in useTrainDataRealtime's invalidation list, so real writes to
+  // ro_train_readings/ro_pretreatment_readings/train_status_log already
+  // trigger a refetch within moments via realtime — polling every 3 minutes
+  // on top of that was pure duplicate egress, not added freshness. The 5-min
+  // useBackgroundSync sweep remains the safety net for when realtime isn't
+  // available (see useTrainDataRealtime.ts's own documented rationale).
   const { data: lastReadings } = useQuery({
-    queryKey: ['ro-hero-last-all', trainIdsKey],
+    queryKey: ['ro-last-all', trainIdsKey],
     queryFn: async () => {
       if (!trainIds.length) return {};
       type RoTrainReadingRow = Database['public']['Tables']['ro_train_readings']['Row'];
@@ -61,8 +69,7 @@ export default function ROTrains() {
       return map;
     },
     enabled: trainIds.length > 0,
-    staleTime: 180_000,  // FIX (egress): staleTime matched to refetchInterval — was relying on the 30s global default, so the app-wide background-sync sweep force-refetched this well before its own interval was due
-    refetchInterval: 180_000,
+    staleTime: 5 * 60_000,
   });
 
   const activeTrains = (trains ?? []).filter(
