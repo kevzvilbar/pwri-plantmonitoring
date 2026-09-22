@@ -1,0 +1,33 @@
+-- =============================================================================
+-- Migration: restore_authenticated_execute_fn_sweep_derived_meters
+--
+-- fn_sweep_derived_meters(date, integer) is missing its `authenticated` EXECUTE
+-- grant live, breaking the "Recalculate now" button in Operations > Locator
+-- (useLocatorReading.ts) with "permission denied for function
+-- fn_sweep_derived_meters" for every signed-in user.
+--
+-- History: 20260727000003_hamas_phase2_sweep_function.sql granted EXECUTE to
+-- anon AND authenticated. 20260817000001_sweep_function_revoke_anon.sql later
+-- revoked anon only, explicitly preserving authenticated ("the existing
+-- `authenticated` grant is untouched"). No migration anywhere in this repo
+-- (applied or archived) revokes `authenticated` from this function -- live
+-- currently shows EXECUTE granted only to postgres/service_role. This is the
+-- same "SQL applied directly to prod, bypassing the migrations folder" drift
+-- pattern already flagged in docs/STAGING.md, not a change this repo's history
+-- accounts for.
+--
+-- Scope: three sibling functions named alongside this one in past hardening
+-- passes (fn_backfill_missing_readings, fn_compute_daily_plant_summary,
+-- recompute_production_cost) show the same missing-authenticated state, but
+-- each is confirmed (via repo grep) to be called only by a GitHub Actions cron
+-- (service_role key) or a DB trigger, never from the frontend -- so they are
+-- left untouched here. Do NOT re-grant anon: that revoke was a deliberate,
+-- documented fix for a real hole (the anon key ships in the public bundle),
+-- and this migration must not reopen it.
+--
+-- Applied live via Supabase MCP on 2026-09-21 ahead of this file (see
+-- docs/MIGRATION-SQUASH.md for the live/repo reconciliation this project
+-- already tracks); this migration brings the repo back in sync with that.
+-- =============================================================================
+
+GRANT EXECUTE ON FUNCTION public.fn_sweep_derived_meters(date, integer) TO authenticated;
