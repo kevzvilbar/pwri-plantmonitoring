@@ -64,26 +64,45 @@ export default function Dashboard() {
   const [modal, setModal] = useState<null | { metric: string; title: string }>(null);
   const [downtimeOpen, setDowntimeOpen] = useState(false);
     // ── Data freshness indicator ─────────────────────────────────────
-  // Use React Query's dataUpdatedAt for real freshness instead of a fake
-  // Real data freshness from latest reading in Supabase
-  const { data: latestReading } = useQuery({
-    queryKey: ['latest-reading', selectedPlantId],
+  // P4-6: latest reading across RO trains, wells, locators and product
+  // meters — not ro_train_readings alone, so a wells-only plant no longer
+  // looks stale while it is logging. One small head query per source;
+  // the max timestamp wins. Respects the plant picker via plant_id.
+  const { data: latestReadingAt } = useQuery<Date | null>({
+    queryKey: ['latest-reading', selectedPlantId ?? 'all'],
     queryFn: async () => {
-      let q = supabase
-        .from('ro_train_readings')
-        .select('reading_datetime')
-        .order('reading_datetime', { ascending: false })
-        .limit(1);
-      if (selectedPlantId) {
-        q = q.eq('plant_id', selectedPlantId);
+      const pickLatest = async (table: string): Promise<string | null> => {
+        // `as any` matches the codebase pattern for dynamic table names —
+        // the generated Database type doesn't cover every table union here.
+        let q: any = (supabase.from(table as any) as any)
+          .select('reading_datetime')
+          .order('reading_datetime', { ascending: false })
+          .limit(1);
+        if (selectedPlantId) {
+          q = q.eq('plant_id', selectedPlantId);
+        }
+        const { data, error } = await q.maybeSingle();
+        if (error || !data?.reading_datetime) return null;
+        return data.reading_datetime as string;
+      };
+      const stamps = await Promise.all([
+        pickLatest('ro_train_readings'),
+        pickLatest('well_readings'),
+        pickLatest('locator_readings'),
+        pickLatest('product_meter_readings'),
+      ]);
+      let latest: Date | null = null;
+      for (const s of stamps) {
+        if (!s) continue;
+        const d = new Date(s);
+        if (Number.isNaN(d.getTime())) continue;
+        if (!latest || d.getTime() > latest.getTime()) latest = d;
       }
-      const { data, error } = await q.maybeSingle();
-      if (error) return null;
-      return data;
+      return latest;
     },
     staleTime: 5 * 60_000, // 5 minutes
   });
-  const dataFreshness = latestReading?.reading_datetime ? new Date(latestReading.reading_datetime) : null;
+  const dataFreshness = latestReadingAt ?? null;
 
   // ── Compliance Thresholds (derived from compliance settings, per-plant or global) ──
   const thresholdScope = selectedPlantId || 'global';

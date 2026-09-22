@@ -216,6 +216,7 @@ function PlantDetail({ plantId, wellId }: { plantId: string; wellId: string | nu
       <PlantHeroBanner
         plant={plant}
         trainCounts={trainCounts}
+        lastReadingAt={freshnessByPlant?.[plant.id] ?? null}
         isManager={isManager}
         onEdit={openInfoEdit}
         onBack={() => navigate('/plants')}

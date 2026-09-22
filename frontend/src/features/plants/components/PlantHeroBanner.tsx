@@ -1,5 +1,3 @@
-import { useState, useEffect } from 'react';
-import { format } from 'date-fns';
 import { ChevronLeft, MapPin, Pencil, Droplets, Zap, Building2, Sun, Gauge } from 'lucide-react';
 import { ROTrainIcon, GridPylonIcon } from '@/components/icons/water-icons';
 import { Button } from '@/components/ui/button';
@@ -7,11 +5,15 @@ import { Lamp } from '@/components/ui/Lamp';
 import { fmtNum } from '@/lib/format';
 import { useQuery } from '@tanstack/react-query';
 import { loadThresholds } from '@/pages/Compliance';
+import { describeFreshness } from '@/shared/freshness';
+import { useNow } from '@/hooks/useNow';
 import { ProductMetersStat } from './config/ProductMeters';
 
 interface PlantHeroBannerProps {
   plant: any;
   trainCounts?: { active: number; total: number };
+  /** Latest reading across RO trains, wells, locators and product meters. `null` = unknown. */
+  lastReadingAt?: Date | null;
   isManager?: boolean;
   onEdit: () => void;
   onBack: () => void;
@@ -21,12 +23,17 @@ interface PlantHeroBannerProps {
 export function PlantHeroBanner({
   plant,
   trainCounts,
+  lastReadingAt = null,
   isManager,
   onEdit,
   onBack,
   deleteButton,
 }: PlantHeroBannerProps) {
-  const [timeStr, setTimeStr] = useState('');
+  // Tick every 30 s so the freshness label advances without a refetch (P4-5).
+  const now = useNow(30_000);
+  // P4-3: map the per-plant reading timestamp to { label, tone } with the
+  // shared thresholds — the same helper PlantListHeader uses.
+  const freshness = describeFreshness(lastReadingAt ?? null, now.getTime());
 
   const { data: thresholds } = useQuery({
     queryKey: ['thresholds', plant?.id || 'global'],
@@ -34,17 +41,6 @@ export function PlantHeroBanner({
     enabled: !!plant?.id,
     staleTime: 60_000,
   });
-
-  // Live PHT Clock ticking every second
-  useEffect(() => {
-    const updateTime = () => {
-      const now = new Date();
-      setTimeStr(format(now, 'hh:mm:ss a') + ' PHT');
-    };
-    updateTime();
-    const interval = setInterval(updateTime, 1000);
-    return () => clearInterval(interval);
-  }, []);
 
   const isOnline = plant.status === 'Active';
   const trainOnlinePct = trainCounts && trainCounts.total > 0
@@ -117,10 +113,29 @@ export function PlantHeroBanner({
               <span className="truncate max-w-[260px]">{plant.address || 'Address unassigned'}</span>
             </p>
             <div className="flex items-center gap-2 font-mono text-2xs text-slate-300 self-start sm:self-auto tabular-nums">
-              <Lamp tone="live" pulse size={6} />
-              <span className="text-cyan-300 font-semibold">Live Telemetry</span>
+              <Lamp
+                tone={
+                  freshness.tone === 'fresh' ? 'live'
+                  : freshness.tone === 'aging' ? 'warn'
+                  : freshness.tone === 'stale' ? 'danger'
+                  : 'muted'
+                }
+                pulse={freshness.tone === 'fresh'}
+                size={6}
+              />
+              <span className={
+                freshness.tone === 'fresh' ? 'text-emerald-300 font-semibold'
+                : freshness.tone === 'aging' ? 'text-amber-300 font-semibold'
+                : freshness.tone === 'stale' ? 'text-rose-300 font-semibold'
+                : 'text-slate-400 font-semibold'
+              }>
+                {freshness.tone === 'fresh' ? 'Live Telemetry'
+                  : freshness.tone === 'unknown' ? 'No recent readings'
+                  : freshness.tone === 'aging' ? 'Aging Data'
+                  : 'Stale Data'}
+              </span>
               <span className="text-white/30">&bull;</span>
-              <span>{timeStr || '—'}</span>
+              <span>{freshness.label}</span>
             </div>
           </div>
         </div>
