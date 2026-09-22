@@ -316,6 +316,7 @@ export function useAlertEvents(plantIds: string[] = []): UseAlertEventsResult {
   // and again the moment the browser reports it is back online.
   useEffect(() => {
     if (!user || !isOnline || flushedRef.current) return;
+    if (!user?.id || !isOnline || flushedRef.current) return;
     flushedRef.current = true;
     void flushAlertEventOutbox().then((sent) => {
     if (!user?.id || !isOnline) return;
