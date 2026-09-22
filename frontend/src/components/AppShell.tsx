@@ -1,4 +1,4 @@
-import { useRef, useEffect } from 'react';
+import { useRef, useEffect, useState, useCallback } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { TopBar } from './TopBar';
 import { BottomNav } from './BottomNav';
@@ -12,6 +12,7 @@ import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 import { PullToRefreshIndicator } from './PullToRefresh';
 import { ShiftHandoverModal } from './ShiftHandoverModal';
 import { AlertsRuntime } from '@/features/notifications/AlertsRuntime';
+import { CommandPalette, useCommandPaletteShortcut } from '@/components/CommandPalette';
 import { useQueryClient } from '@tanstack/react-query';
 import { ErrorBoundary } from './ErrorBoundary';
 
@@ -95,6 +96,9 @@ export function AppShell() {
   useScrollRestore();
   const { pathname } = useLocation();
   const queryClient = useQueryClient();
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const openPalette = useCallback(() => setPaletteOpen(true), []);
+  useCommandPaletteShortcut(openPalette);
 
   const pullState = usePullToRefresh({
     onRefresh: async () => {
@@ -118,6 +122,9 @@ export function AppShell() {
           trail into the store. Must be the ONLY mount of this. */}
       <AlertsRuntime />
 
+      {/* P5-10 (stretch): Ctrl+K / Cmd+K palette — pages, plants, wells. */}
+      <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
+
       {/* Global Operator Shift Monitoring & Handover Verification */}
       <ShiftHandoverModal />
 
@@ -128,7 +135,7 @@ export function AppShell() {
         </div>
 
         <div className="flex-1 flex flex-col min-w-0">
-          <TopBar />
+          <TopBar onOpenSearch={openPalette} />
           <OfflineBanner />
 
           {/*

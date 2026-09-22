@@ -14,6 +14,7 @@
  * Status is derived server-side by `get_alert_statuses()`, which returns the
  * latest event per alert_key with the snooze window already applied.
  */
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useCallback, useEffect, useMemo } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -39,6 +40,7 @@ export type AlertServerStatusMap = Record<string, AlertServerStatus>;
 
 export const EMPTY_ALERT_STATUSES: AlertServerStatusMap = {};
 
+const OUTBOX_KEY = 'pwri-alert-event-outbox';
 export const OUTBOX_KEY_PREFIX = 'pwri-alert-event-outbox:';
 const LEGACY_OUTBOX_KEY = 'pwri-alert-event-outbox';
 
@@ -137,8 +139,10 @@ export function isRetryableError(error: unknown): boolean {
 // Partitioned by user ID so shared tablets don't attempt to replay User A's
 // writes under User B's session (triggering RLS 42501 violations).
 
+function readOutbox(): AlertEventInsert[] {
 export function readOutbox(userId?: string | null): AlertEventInsert[] {
   try {
+    const raw = localStorage.getItem(OUTBOX_KEY);
     const key = getOutboxKey(userId);
     const raw = localStorage.getItem(key);
     if (!raw) return [];
@@ -149,8 +153,11 @@ export function readOutbox(userId?: string | null): AlertEventInsert[] {
   }
 }
 
+function writeOutbox(rows: AlertEventInsert[]): void {
 export function writeOutbox(userId: string | null | undefined, rows: AlertEventInsert[]): void {
   try {
+    if (rows.length === 0) localStorage.removeItem(OUTBOX_KEY);
+    else localStorage.setItem(OUTBOX_KEY, JSON.stringify(rows));
     const key = getOutboxKey(userId);
     if (rows.length === 0) localStorage.removeItem(key);
     else localStorage.setItem(key, JSON.stringify(rows));
@@ -158,11 +165,14 @@ export function writeOutbox(userId: string | null | undefined, rows: AlertEventI
 }
 
 /** Insert one event, falling back to the outbox when the network refuses. */
+async function persistEvent(row: AlertEventInsert): Promise<boolean> {
 export async function persistEvent(row: AlertEventInsert, userId?: string | null): Promise<boolean> {
   const uid = userId ?? row.user_id ?? null;
   try {
     const { error } = await supabase.from('alert_events').insert(row);
     if (!error) return true;
+  } catch { /* network down — fall through to the queue */ }
+  writeOutbox([...readOutbox(), row]);
     if (!isRetryableError(error)) {
       console.warn('[useAlertEvents] Dropping non-retryable alert event insert error:', error);
       return false;
@@ -177,6 +187,9 @@ export async function persistEvent(row: AlertEventInsert, userId?: string | null
   return false;
 }
 
+/** Flush queued events. Stops at the first failure so ordering is preserved. */
+export async function flushAlertEventOutbox(): Promise<number> {
+  const queued = readOutbox();
 /**
  * Flush queued events for a user. Stops at the first retryable failure so ordering
  * is preserved; drops non-retryable failures so the queue never gets permanently blocked.
@@ -186,6 +199,7 @@ export async function flushAlertEventOutbox(userId?: string | null): Promise<num
   const queued = readOutbox(userId);
   if (queued.length === 0) return 0;
   let sent = 0;
+  for (const row of queued) {
   const remaining: AlertEventInsert[] = [];
 
   for (let i = 0; i < queued.length; i++) {
@@ -198,6 +212,7 @@ export async function flushAlertEventOutbox(userId?: string | null): Promise<num
 
     try {
       const { error } = await supabase.from('alert_events').insert(row);
+      if (error) break;
       if (error) {
         if (isRetryableError(error)) {
           // Network or transient error: stop and preserve this row and subsequent items
@@ -211,6 +226,8 @@ export async function flushAlertEventOutbox(userId?: string | null): Promise<num
         }
       }
       sent += 1;
+    } catch {
+      break;
     } catch (err) {
       if (isRetryableError(err)) {
         remaining.push(...queued.slice(i));
@@ -221,12 +238,15 @@ export async function flushAlertEventOutbox(userId?: string | null): Promise<num
       }
     }
   }
+  if (sent > 0) writeOutbox(readOutbox().slice(sent));
 
   writeOutbox(userId, remaining);
   return sent;
 }
 
 /** Test/debug helper — how many writes are still waiting to reach the DB. */
+export function alertEventOutboxSize(): number {
+  return readOutbox().length;
 export function alertEventOutboxSize(userId?: string | null): number {
   if (userId) return readOutbox(userId).length;
   let total = readOutbox(null).length;
@@ -270,6 +290,7 @@ export function useAlertEvents(plantIds: string[] = []): UseAlertEventsResult {
   const qc = useQueryClient();
   const isOnline = useOnlineStatus();
   const plantIdsKey = plantIds.join(',');
+  const flushedRef = useRef(false);
 
   const { data, isSuccess } = useQuery({
     queryKey: ['alert-events', 'statuses', plantIdsKey],
@@ -289,13 +310,19 @@ export function useAlertEvents(plantIds: string[] = []): UseAlertEventsResult {
     meta: { silent: true },
   });
 
+  // Flush anything queued while offline. Runs once per mount, and again the
+  // moment the browser reports it is back online.
   // Flush anything queued while offline for this user. Runs once per mount/user switch,
   // and again the moment the browser reports it is back online.
   useEffect(() => {
+    if (!user || !isOnline || flushedRef.current) return;
+    flushedRef.current = true;
+    void flushAlertEventOutbox().then((sent) => {
     if (!user?.id || !isOnline) return;
     void flushAlertEventOutbox(user.id).then((sent) => {
       if (sent > 0) qc.invalidateQueries({ queryKey: ['alert-events'] });
     });
+  }, [user, isOnline, qc]);
   }, [user?.id, isOnline, qc]);
 
   const mutation = useMutation({
@@ -310,6 +337,7 @@ export function useAlertEvents(plantIds: string[] = []): UseAlertEventsResult {
         // queued row self-describing when it is replayed later.
         ...(user?.id ? { user_id: user.id } : {}),
       };
+      return persistEvent(row);
       return persistEvent(row, user?.id);
     },
     onSuccess: () => {

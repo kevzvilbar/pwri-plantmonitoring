@@ -45,6 +45,8 @@ describe('PlantHeroBanner freshness (P4-3)', () => {
 
   it('shows unknown when there are no readings', () => {
     renderHero(null);
+    // Unknown prints the tone label only — there is no age to add, so the
+    // string appears exactly once.
     expect(screen.getByText('No recent readings')).toBeTruthy();
     expect(screen.queryByText('Live Telemetry')).toBeNull();
   });

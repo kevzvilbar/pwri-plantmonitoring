@@ -1,0 +1,31 @@
+
+[1m[46m RUN [49m[22m [36mv3.2.7 [39m[90mC:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend[39m
+
+[90mstderr[2m | src/components/CommandPalette.test.tsx[2m > [22m[2mCommandPalette (P5-10)[2m > [22m[2mlists nav pages the user may open
+[22m[39m⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+Warning: Missing `Description` or `aria-describedby={undefined}` for {DialogContent}.
+
+ [32m✓[39m src/features/plants/components/PlantHeroBanner.test.tsx [2m([22m[2m3 tests[22m[2m)[22m[32m 157[2mms[22m[39m
+[90mstderr[2m | src/components/CommandPalette.test.tsx[2m > [22m[2mCommandPalette (P5-10)[2m > [22m[2mlists visible plants
+[22m[39mWarning: Missing `Description` or `aria-describedby={undefined}` for {DialogContent}.
+
+[90mstderr[2m | src/components/CommandPalette.test.tsx[2m > [22m[2mCommandPalette (P5-10)[2m > [22m[2moffers a well in both P5-7 directions: its page and its readings row
+[22m[39mWarning: Missing `Description` or `aria-describedby={undefined}` for {DialogContent}.
+
+[90mstderr[2m | src/components/CommandPalette.test.tsx[2m > [22m[2mCommandPalette (P5-10)[2m > [22m[2moffers a locator in both P5-7 directions
+[22m[39mWarning: Missing `Description` or `aria-describedby={undefined}` for {DialogContent}.
+
+ [32m✓[39m src/components/CommandPalette.test.tsx [2m([22m[2m4 tests[22m[2m)[22m[33m 387[2mms[22m[39m
+[90mstderr[2m | src/features/operations/components/locators/LocatorRow/DerivedMeterPanel.assetLink.test.tsx[2m > [22m[2mDerivedMeterPanel asset link (P5-7)[2m > [22m[2mlinks the derived name to the locator card in Plants
+[22m[39m⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+
+ [32m✓[39m src/features/operations/components/locators/LocatorRow/DerivedMeterPanel.assetLink.test.tsx [2m([22m[2m1 test[22m[2m)[22m[32m 156[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m3 passed[39m[22m[90m (3)[39m
+[2m      Tests [22m [1m[32m8 passed[39m[22m[90m (8)[39m
+[2m   Start at [22m 20:37:50
+[2m   Duration [22m 7.94s[2m (transform 1.44s, setup 1.02s, collect 5.92s, tests 700ms, environment 4.01s, prepare 916ms)[22m
+
+ALL_DONE 

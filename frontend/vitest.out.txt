@@ -1,0 +1,655 @@
+
+[1m[46m RUN [49m[22m [36mv3.2.7 [39m[90mC:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend[39m
+
+ [31m❯[39m src/features/plants/components/PlantHeroBanner.test.tsx [2m([22m[2m3 tests[22m[2m | [22m[31m1 failed[39m[2m)[22m[33m 318[2mms[22m[39m
+   [32m✓[39m PlantHeroBanner freshness (P4-3)[2m > [22mbinds the badge to a fresh reading, not plant.status[32m 177[2mms[22m[39m
+   [32m✓[39m PlantHeroBanner freshness (P4-3)[2m > [22mshows stale (not Live) for an old reading on an Active plant[32m 60[2mms[22m[39m
+[31m   [31m×[31m PlantHeroBanner freshness (P4-3)[2m > [22mshows unknown when there are no readings[39m[32m 76[2mms[22m[39m
+[31m     → Found multiple elements with the text: No recent readings
+
+Here are the matching elements:
+
+Ignored nodes: comments, script, style
+[36m<span[31m
+  [33mclass[31m=[32m"text-slate-400 font-semibold"[31m
+[36m>[31m
+  [0mNo recent readings[0m
+[36m</span>[31m
+
+Ignored nodes: comments, script, style
+[36m<span>[31m
+  [0mNo recent readings[0m
+[36m</span>[31m
+
+(If this is intentional, then use the `*AllBy*` variant of the query (like `queryAllByText`, `getAllByText`, or `findAllByText`)).
+
+Ignored nodes: comments, script, style
+[36m<body>[31m
+  [36m<div>[31m
+    [36m<div[31m
+      [33mclass[31m=[32m"space-y-3"[31m
+    [36m>[31m
+      [36m<div[31m
+        [33mclass[31m=[32m"flex items-center justify-between"[31m
+      [36m>[31m
+        [36m<button[31m
+          [33mclass[31m=[32m"inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground hover:text-primary transition-colors group"[31m
+        [36m>[31m
+          [36m<svg[31m
+            [33maria-hidden[31m=[32m"true"[31m
+            [33mclass[31m=[32m"lucide lucide-chevron-left h-4 w-4 transition-transform group-hover:-translate-x-0.5"[31m
+            [33mfill[31m=[32m"none"[31m
+            [33mheight[31m=[32m"24"[31m
+            [33mstroke[31m=[32m"currentColor"[31m
+            [33mstroke-linecap[31m=[32m"round"[31m
+            [33mstroke-linejoin[31m=[32m"round"[31m
+            [33mstroke-width[31m=[32m"2"[31m
+            [33mviewBox[31m=[32m"0 0 24 24"[31m
+            [33mwidth[31m=[32m"24"[31m
+            [33mxmlns[31m=[32m"http://www.w3.org/2000/svg"[31m
+          [36m>[31m
+            [36m<path[31m
+              [33md[31m=[32m"m15 18-6-6 6-6"[31m
+            [36m/>[31m
+          [36m</svg>[31m
+          [36m<span>[31m
+            [0mAll Facilities[0m
+          [36m</span>[31m
+          [36m<span[31m
+            [33mclass[31m=[32m"text-border"[31m
+          [36m>[31m
+            [0m/[0m
+          [36m</span>[31m
+          [36m<span[31m
+            [33mclass[31m=[32m"text-foreground"[31m
+          [36m>[31m
+            [0mTest Plant[0m
+          [36m</span>[31m
+        [36m</button>[31m
+        [36m<div[31m
+          [33mclass[31m=[32m"flex items-center gap-2"[31m
+        [36m>[31m
+          [36m<span[31m
+            [33mclass[31m=[32m"text-2xs font-mono text-muted-foreground hidden sm:inline"[31m
+          [36m>[31m
+            [0mID: [0m
+            [0mplant-1[0m
+          [36m</span>[31m
+        [36m</div>[31m
+      [36m</div>[31m
+      [36m<div[31m
+        [33mclass[31m=[32m"rounded-lg border border-slate-800 bg-slate-900 text-white p-4 sm:p-5 relative overflow-hidden space-y-4 shadow-sm"[31m
+      [36m>[31m
+        [36m<div[31m
+          [33mclass[31m=[32m"flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800"[31m
+        [36m>[31m
+          [36m<div[31m
+            [33mclass[31m=[32m"flex items-center gap-2.5 flex-wrap"[31m
+          [36m>[31m
+            [36m<svg[31m
+              [33maria-hidden[31m=[32m"true"[31m
+              [33mclass[31m=[32m"lucide lucide-building2 lucide-building-2 h-5 w-5 text-teal-400 shrink-0"[31m
+              [33mfill[31m=[32m"none"[31m
+              [33mheight[31m=[32m"24"[31m
+              [33mstroke[31m=[32m"currentColor"[31m
+              [33mstroke-linecap[31m=[32m"round"[31m
+              [33mstroke-linejoin[31m=[32m"round"[31m
+              [33mstroke-width[31m=[32m"2"[31m
+              [33mviewBox[31m=[32m"0 0 24 24"[31m
+              [33mwidth[31m=[32m"24"[31m
+              [33mxmlns[31m=[32m"http://www.w3.org/2000/svg"[31m
+            [36m>[31m
+              [36m<path[31m
+                [33md[31m=[32m"M10 12h4"[31m
+              [36m/>[31m
+              [36m<path[31m
+                [33md[31m=[32m"M10 8h4"[31m
+              [36m/>[31m
+              [36m<path[31m
+                [33md[31m=[32m"M14 21v-3a2 2 0 0 0-4 0v3"[31m
+              [36m/>[31m
+              [36m<path[31m
+                [33md[31m=[32m"M6 10H4a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-2"[31m
+              [36m/>[31m
+              [36m<path[31m
+                [33md[31m=[32m"M6 21V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v16"[31m
+              [36m/>[31m
+            [36m</svg>[31m
+            [36m<div[31m
+              [33mclass[31m=[32m"flex items-center gap-2 flex-wrap"[31m
+            [36m>[31m
+              [36m<span[31m
+                [33mclass[31m=[32m"text-3xs font-mono font-bold px-2 py-0.5 rounded-md bg-slate-800 text-teal-300 border border-teal-500/30 uppercase tracking-wider"[31m
+              [36m>[31m
+                [0mFACILITY COCKPIT[0m
+              [36m</span>[31m
+              [36m<h1[31m
+                [33mclass[31m=[32m"text-lg sm:text-xl font-bold tracking-tight text-white"[31m
+              [36m>[31m
+                [0mTest Plant[0m
+              [36m</h1>[31m
+              [36m<span[31m
+                [33mclass[31m=[32m"inline-flex items-center gap-1.5 text-2xs font-semibold px-2.5 py-0.5 rounded-md border bg-emerald-950/80 text-emerald-300 border-emerald-500/40"[31m
+              [36m>[31m
+                [36m<span[31m
+                  [33maria-hidden[31m=[32m"true"[31m
+                  [33mclass[31m=[32m"lamp-dot inline-block rounded-full shrink-0 transition-colors"[31m
+                  [33mstyle[31m=[32m"width: 6px; height: 6px; box-shadow: 0 0 5px hsl(var(--accent) / 0.75);"[31m
+                [36m/>[31m
+                [36m<span>[31m
+                  [0mActive[0m
+                [36m</span>[31m
+              [36m</span>[31m
+            [36m</div>[31m
+          [36m</div>[31m
+          [36m<div[31m
+            [33mclass[31m=[32m"flex items-center gap-3"[31m
+          [36m>[31m
+            [36m<p[31m
+              [33mclass[31m=[32m"text-2xs text-slate-400 items-center gap-1.5 hidden md:flex"[31m
+            [36m>[31m
+              [36m<svg[31m
+                [33maria-hidden[31m=[32m"true"[31m
+                [33mclass[31m=[32m"lucide lucide-map-pin h-3.5 w-3.5 text-teal-400/80 shrink-0"[31m
+                [33mfill[31m=[32m"none"[31m
+                [33mheight[31m=[32m"24"[31m
+                [33mstroke[31m=[32m"currentColor"[31m
+                [33mstroke-linecap[31m=[32m"round"[31m
+                [33mstroke-linejoin[31m=[32m"round"[31m
+                [33mstroke-width[31m=[32m"2"[31m
+                [33mviewBox[31m=[32m"0 0 24 24"[31m
+                [33mwidth[31m=[32m"24"[31m
+                [33mxmlns[31m=[32m"http://www.w3.org/2000/svg"[31m
+              [36m>[31m
+                [36m<path[31m
+                  [33md[31m=[32m"M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"[31m
+                [36m/>[31m
+                [36m<circle[31m
+                  [33mcx[31m=[32m"12"[31m
+                  [33mcy[31m=[32m"10"[31m
+                  [33mr[31m=[32m"3"[31m
+                [36m/>[31m
+              [36m</svg>[31m
+              [36m<span[31m
+                [33mclass[31m=[32m"truncate max-w-[260px]"[31m
+              [36m>[31m
+                [0mAddress unassigned[0m
+              [36m</span>[31m
+            [36m</p>[31m
+            [36m<di...[39m
+[90mstderr[2m | src/components/CommandPalette.test.tsx[2m > [22m[2mCommandPalette (P5-10)[2m > [22m[2mlists nav pages the user may open
+[22m[39m⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+`DialogContent` requires a `DialogTitle` for the component to be accessible for screen reader users.
+
+If you want to hide the `DialogTitle`, you can wrap it with our VisuallyHidden component.
+
+For more information, see https://radix-ui.com/primitives/docs/components/dialog
+Warning: Missing `Description` or `aria-describedby={undefined}` for {DialogContent}.
+Error: Uncaught [TypeError: i.scrollIntoView is not a function]
+    at reportException (C:\Users\vilba\.antigravity\pwri-plantmonitoring-main\pwri-plantmonitoring\frontend\node_modules\jsdom\lib\jsdom\living\helpers\runtime-script-errors.js:66:24)
+    at innerInvokeEventListeners (C:\Users\vilba\.antigravity\pwri-plantmonitoring-main\pwri-plantmonitoring\frontend\node_modules\jsdom\lib\jsdom\living\events\EventTarget-impl.js:353:9)
+    at invokeEventListeners (C:\Users\vilba\.antigravity\pwri-plantmonitoring-main\pwri-plantmonitoring\frontend\node_modules\jsdom\lib\jsdom\living\events\EventTarget-impl.js:286:3)
+    at HTMLUnknownElementImpl._dispatch (C:\Users\vilba\.antigravity\pwri-plantmonitoring-main\pwri-plantmonitoring\frontend\node_modules\jsdom\lib\jsdom\living\events\EventTarget-impl.js:233:9)
+    at HTMLUnknownElementImpl.dispatchEvent (C:\Users\vilba\.antigravity\pwri-plantmonitoring-main\pwri-plantmonitoring\frontend\node_modules\jsdom\lib\jsdom\living\events\EventTarget-impl.js:104:17)
+    at HTMLUnknownElement.dispatchEvent (C:\Users\vilba\.antigravity\pwri-plantmonitoring-main\pwri-plantmonitoring\frontend\node_modules\jsdom\lib\jsdom\living\generated\EventTarget.js:241:34)
+    at Object.invokeGuardedCallbackDev (C:\Users\vilba\.antigravity\pwri-plantmonitoring-main\pwri-plantmonitoring\frontend\node_modules\react-dom\cjs\react-dom.development.js:4213:16)
+    at invokeGuardedCallback (C:\Users\vilba\.antigravity\pwri-plantmonitoring-main\pwri-plantmonitoring\frontend\node_modules\react-dom\cjs\react-dom.development.js:4277:31)
+    at reportUncaughtErrorInDEV (C:\Users\vilba\.antigravity\pwri-plantmonitoring-main\pwri-plantmonitoring\frontend\node_modules\react-dom\cjs\react-dom.development.js:22877:5)
+    at captureCommitPhaseError (C:\Users\vilba\.antigravity\pwri-plantmonitoring-main\pwri-plantmonitoring\frontend\node_modules\react-dom\cjs\react-dom.development.js:27165:5) TypeError: i.scrollIntoView is not a function
+    at ne [90m(file:///C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/[39mnode_modules/[4mcmdk[24m/dist/index.mjs:1:4249[90m)[39m
+    at [90mfile:///C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/[39mnode_modules/[4mcmdk[24m/dist/index.mjs:1:10642
+    at Map.forEach (<anonymous>)
+    at [90mfile:///C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/[39mnode_modules/[4mcmdk[24m/dist/index.mjs:1:10631
+    at commitHookEffectListMount [90m(C:\Users\vilba\.antigravity\pwri-plantmonitoring-main\pwri-plantmonitoring\frontend\[39mnode_modules\[4mreact-dom[24m\cjs\react-dom.development.js:23189:26[90m)[39m
+    at commitLayoutEffectOnFiber [90m(C:\Users\vilba\.antigravity\pwri-plantmonitoring-main\pwri-plantmonitoring\frontend\[39mnode_modules\[4mreact-dom[24m\cjs\react-dom.development.js:23312:15[90m)[39m
+    at commitLayoutMountEffects_complete [90m(C:\Users\vilba\.antigravity\pwri-plantmonitoring-main\pwri-plantmonitoring\frontend\[39mnode_modules\[4mreact-dom[24m\cjs\react-dom.development.js:24727:9[90m)[39m
+    at commitLayoutEffects_begin [90m(C:\Users\vilba\.antigravity\pwri-plantmonitoring-main\pwri-plantmonitoring\frontend\[39mnode_modules\[4mreact-dom[24m\cjs\react-dom.development.js:24713:7[90m)[39m
+    at commitLayoutEffects [90m(C:\Users\vilba\.antigravity\pwri-plantmonitoring-main\pwri-plantmonitoring\frontend\[39mnode_modules\[4mreact-dom[24m\cjs\react-dom.development.js:24651:3[90m)[39m
+    at commitRootImpl [90m(C:\Users\vilba\.antigravity\pwri-plantmonitoring-main\pwri-plantmonitoring\frontend\[39mnode_modules\[4mreact-dom[24m\cjs\react-dom.development.js:26862:5[90m)[39m
+The above error occurred in the <ForwardRef> component:
+
+    at file:///C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/node_modules/cmdk/dist/index.mjs:1:631
+    at C:\Users\vilba\.antigravity\pwri-plantmonitoring-main\pwri-plantmonitoring\frontend\src\components\ui\command.tsx:13:67
+    at div
+    at file:///C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/node_modules/@radix-ui/react-primitive/dist/index.mjs:28:13
+    at file:///C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/node_modules/@radix-ui/react-dismissable-layer/dist/index.mjs:24:7
+    at file:///C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/node_modules/@radix-ui/react-slot/dist/index.mjs:33:13
+    at file:///C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/node_modules/@radix-ui/react-slot/dist/index.mjs:9:13
+    at file:///C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/node_modules/@radix-ui/react-primitive/dist/index.mjs:28:13
+    at file:///C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/node_modules/@radix-ui/react-focus-scope/dist/index.mjs:15:5
+    at file:///C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/node_modules/@radix-ui/react-dialog/dist/index.mjs:206:13
+    at file:///C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/node_modules/@radix-ui/react-dialog/dist/index.mjs:132:58
+    at Presence (file:///C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/node_modules/@radix-ui/react-presence/dist/index.mjs:19:11)
+    at file:///C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/node_modules/@radix-ui/react-dialog/dist/index.mjs:123:64
+    at file:///C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/node_modules/@radix-ui/react-slot/dist/index.mjs:33:13
+    at file:///C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/node_modules/@radix-ui/react-slot/dist/index.mjs:9:13
+    at file:///C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/node_modules/@radix-ui/react-primitive/dist/index.mjs:28:13
+    at file:///C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/node_modules/@radix-ui/react-portal/dist/index.mjs:11:22
+    at Presence (file:///C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/node_modules/@radix-ui/react-presence/dist/index.mjs:19:11)
+    at Provider (file:///C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/node_modules/@radix-ui/react-context/dist/index.mjs:27:15)
+    at DialogPortal (file:///C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/node_modules/@radix-ui/react-dialog/dist/index.mjs:85:11)
+    at C:\Users\vilba\.antigravity\pwri-plantmonitoring-main\pwri-plantmonitoring\frontend\src\components\ui\dialog.tsx:25:73
+    at Provider (file:///C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/node_modules/@radix-ui/react-context/dist/index.mjs:27:15)
+    at Dialog (file:///C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/node_modules/@radix-ui/react-dialog/dist/index.mjs:25:5)
+    at CommandDialog (C:\Users\vilba\.antigravity\pwri-plantmonitoring-main\pwri-plantmonitoring\frontend\src\components\ui\command.tsx:23:26)
+    at CommandPalette (C:\Users\vilba\.antigravity\pwri-plantmonitoring-main\pwri-plantmonitoring\frontend\src\components\CommandPalette.tsx:37:31)
+    at Router (C:\Users\vilba\.antigravity\pwri-plantmonitoring-main\pwri-plantmonitoring\frontend\node_modules\react-router\dist\umd\react-router.development.js:1203:17)
+    at MemoryRouter (C:\Users\vilba\.antigravity\pwri-plantmonitoring-main\pwri-plantmonitoring\frontend\node_modules\react-router\dist\umd\react-router.development.js:1097:7)
+
+Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://reactjs.org/link/error-boundaries to learn more about error boundaries.
+
+[90mstderr[2m | src/components/CommandPalette.test.tsx[2m > [22m[2mCommandPalette (P5-10)[2m > [22m[2mlists visible plants
+[22m[39m`DialogContent` requires a `DialogTitle` for the component to be accessible for screen reader users.
+
+If you want to hide the `DialogTitle`, you can wrap it with our VisuallyHidden component.
+
+For more information, see https://radix-ui.com/primitives/docs/components/dialog
+Warning: Missing `Description` or `aria-describedby={undefined}` for {DialogContent}.
+Error: Uncaught [TypeError: i.scrollIntoView is not a function]
+    at reportException (C:\Users\vilba\.antigravity\pwri-plantmonitoring-main\pwri-plantmonitoring\frontend\node_modules\jsdom\lib\jsdom\living\helpers\runtime-script-errors.js:66:24)
+    at innerInvokeEventListeners (C:\Users\vilba\.antigravity\pwri-plantmonitoring-main\pwri-plantmonitoring\frontend\node_modules\jsdom\lib\jsdom\living\events\EventTarget-impl.js:353:9)
+    at invokeEventListeners (C:\Users\vilba\.antigravity\pwri-plantmonitoring-main\pwri-plantmonitoring\frontend\node_modules\jsdom\lib\jsdom\living\events\EventTarget-impl.js:286:3)
+    at HTMLUnknownElementImpl._dispatch (C:\Users\vilba\.antigravity\pwri-plantmonitoring-main\pwri-plantmonitoring\frontend\node_modules\jsdom\lib\jsdom\living\events\EventTarget-impl.js:233:9)
+    at HTMLUnknownElementImpl.dispatchEvent (C:\Users\vilba\.antigravity\pwri-plantmonitoring-main\pwri-plantmonitoring\frontend\node_modules\jsdom\lib\jsdom\living\events\EventTarget-impl.js:104:17)
+    at HTMLUnknownElement.dispatchEvent (C:\Users\vilba\.antigravity\pwri-plantmonitoring-main\pwri-plantmonitoring\frontend\node_modules\jsdom\lib\jsdom\living\generated\EventTarget.js:241:34)
+    at Object.invokeGuardedCallbackDev (C:\Users\vilba\.antigravity\pwri-plantmonitoring-main\pwri-plantmonitoring\frontend\node_modules\react-dom\cjs\react-dom.development.js:4213:16)
+    at invokeGuardedCallback (C:\Users\vilba\.antigravity\pwri-plantmonitoring-main\pwri-plantmonitoring\frontend\node_modules\react-dom\cjs\react-dom.development.js:4277:31)
+    at reportUncaughtErrorInDEV (C:\Users\vilba\.antigravity\pwri-plantmonitoring-main\pwri-plantmonitoring\frontend\node_modules\react-dom\cjs\react-dom.development.js:22877:5)
+    at captureCommitPhaseError (C:\Users\vilba\.antigravity\pwri-plantmonitoring-main\pwri-plantmonitoring\frontend\node_modules\react-dom\cjs\react-dom.development.js:27165:5) TypeError: i.scrollIntoView is not a function
+    at ne [90m(file:///C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/[39mnode_modules/[4mcmdk[24m/dist/index.mjs:1:4249[90m)[39m
+    at [90mfile:///C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/[39mnode_modules/[4mcmdk[24m/dist/index.mjs:1:10642
+    at Map.forEach (<anonymous>)
+    at [90mfile:///C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/[39mnode_modules/[4mcmdk[24m/dist/index.mjs:1:10631
+    at commitHookEffectListMount [90m(C:\Users\vilba\.antigravity\pwri-plantmonitoring-main\pwri-plantmonitoring\frontend\[39mnode_modules\[4mreact-dom[24m\cjs\react-dom.development.js:23189:26[90m)[39m
+    at commitLayoutEffectOnFiber [90m(C:\Users\vilba\.antigravity\pwri-plantmonitoring-main\pwri-plantmonitoring\frontend\[39mnode_modules\[4mreact-dom[24m\cjs\react-dom.development.js:23312:15[90m)[39m
+    at commitLayoutMountEffects_complete [90m(C:\Users\vilba\.antigravity\pwri-plantmonitoring-main\pwri-plantmonitoring\frontend\[39mnode_modules\[4mreact-dom[24m\cjs\react-dom.development.js:24727:9[90m)[39m
+    at commitLayoutEffects_begin [90m(C:\Users\vilba\.antigravity\pwri-plantmonitoring-main\pwri-plantmonitoring\frontend\[39mnode_modules\[4mreact-dom[24m\cjs\react-dom.development.js:24713:7[90m)[39m
+    at commitLayoutEffects [90m(C:\Users\vilba\.antigravity\pwri-plantmonitoring-main\pwri-plantmonitoring\frontend\[39mnode_modules\[4mreact-dom[24m\cjs\react-dom.development.js:24651:3[90m)[39m
+    at commitRootImpl [90m(C:\Users\vilba\.antigravity\pwri-plantmonitoring-main\pwri-plantmonitoring\frontend\[39mnode_modules\[4mreact-dom[24m\cjs\react-dom.development.js:26862:5[90m)[39m
+The above error occurred in the <ForwardRef> component:
+
+    at file:///C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/node_modules/cmdk/dist/index.mjs:1:631
+    at C:\Users\vilba\.antigravity\pwri-plantmonitoring-main\pwri-plantmonitoring\frontend\src\components\ui\command.tsx:13:67
+    at div
+    at file:///C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/node_modules/@radix-ui/react-primitive/dist/index.mjs:28:13
+    at file:///C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/node_modules/@radix-ui/react-dismissable-layer/dist/index.mjs:24:7
+    at file:///C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/node_modules/@radix-ui/react-slot/dist/index.mjs:33:13
+    at file:///C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/node_modules/@radix-ui/react-slot/dist/index.mjs:9:13
+    at file:///C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/node_modules/@radix-ui/react-primitive/dist/index.mjs:28:13
+    at file:///C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/node_modules/@radix-ui/react-focus-scope/dist/index.mjs:15:5
+    at file:///C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/node_modules/@radix-ui/react-dialog/dist/index.mjs:206:13
+    at file:///C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/node_modules/@radix-ui/react-dialog/dist/index.mjs:132:58
+    at Presence (file:///C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/node_modules/@radix-ui/react-presence/dist/index.mjs:19:11)
+    at file:///C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/node_modules/@radix-ui/react-dialog/dist/index.mjs:123:64
+    at file:///C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/node_modules/@radix-ui/react-slot/dist/index.mjs:33:13
+    at file:///C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/node_modules/@radix-ui/react-slot/dist/index.mjs:9:13
+    at file:///C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/node_modules/@radix-ui/react-primitive/dist/index.mjs:28:13
+    at file:///C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/node_modules/@radix-ui/react-portal/dist/index.mjs:11:22
+    at Presence (file:///C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/node_modules/@radix-ui/react-presence/dist/index.mjs:19:11)
+    at Provider (file:///C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/node_modules/@radix-ui/react-context/dist/index.mjs:27:15)
+    at DialogPortal (file:///C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/node_modules/@radix-ui/react-dialog/dist/index.mjs:85:11)
+    at C:\Users\vilba\.antigravity\pwri-plantmonitoring-main\pwri-plantmonitoring\frontend\src\components\ui\dialog.tsx:25:73
+    at Provider (file:///C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/node_modules/@radix-ui/react-context/dist/index.mjs:27:15)
+    at Dialog (file:///C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/node_modules/@radix-ui/react-dialog/dist/index.mjs:25:5)
+    at CommandDialog (C:\Users\vilba\.antigravity\pwri-plantmonitoring-main\pwri-plantmonitoring\frontend\src\components\ui\command.tsx:23:26)
+    at CommandPalette (C:\Users\vilba\.antigravity\pwri-plantmonitoring-main\pwri-plantmonitoring\frontend\src\components\CommandPalette.tsx:37:31)
+    at Router (C:\Users\vilba\.antigravity\pwri-plantmonitoring-main\pwri-plantmonitoring\frontend\node_modules\react-router\dist\umd\react-router.development.js:1203:17)
+    at MemoryRouter (C:\Users\vilba\.antigravity\pwri-plantmonitoring-main\pwri-plantmonitoring\frontend\node_modules\react-router\dist\umd\react-router.development.js:1097:7)
+
+Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://reactjs.org/link/error-boundaries to learn more about error boundaries.
+
+[90mstderr[2m | src/components/CommandPalette.test.tsx[2m > [22m[2mCommandPalette (P5-10)[2m > [22m[2moffers a well in both P5-7 directions: its page and its readings row
+[22m[39m`DialogContent` requires a `DialogTitle` for the component to be accessible for screen reader users.
+
+If you want to hide the `DialogTitle`, you can wrap it with our VisuallyHidden component.
+
+For more information, see https://radix-ui.com/primitives/docs/components/dialog
+Warning: Missing `Description` or `aria-describedby={undefined}` for {DialogContent}.
+Error: Uncaught [TypeError: i.scrollIntoView is not a function]
+    at reportException (C:\Users\vilba\.antigravity\pwri-plantmonitoring-main\pwri-plantmonitoring\frontend\node_modules\jsdom\lib\jsdom\living\helpers\runtime-script-errors.js:66:24)
+    at innerInvokeEventListeners (C:\Users\vilba\.antigravity\pwri-plantmonitoring-main\pwri-plantmonitoring\frontend\node_modules\jsdom\lib\jsdom\living\events\EventTarget-impl.js:353:9)
+    at invokeEventListeners (C:\Users\vilba\.antigravity\pwri-plantmonitoring-main\pwri-plantmonitoring\frontend\node_modules\jsdom\lib\jsdom\living\events\EventTarget-impl.js:286:3)
+    at HTMLUnknownElementImpl._dispatch (C:\Users\vilba\.antigravity\pwri-plantmonitoring-main\pwri-plantmonitoring\frontend\node_modules\jsdom\lib\jsdom\living\events\EventTarget-impl.js:233:9)
+    at HTMLUnknownElementImpl.dispatchEvent (C:\Users\vilba\.antigravity\pwri-plantmonitoring-main\pwri-plantmonitoring\frontend\node_modules\jsdom\lib\jsdom\living\events\EventTarget-impl.js:104:17)
+    at HTMLUnknownElement.dispatchEvent (C:\Users\vilba\.antigravity\pwri-plantmonitoring-main\pwri-plantmonitoring\frontend\node_modules\jsdom\lib\jsdom\living\generated\EventTarget.js:241:34)
+    at Object.invokeGuardedCallbackDev (C:\Users\vilba\.antigravity\pwri-plantmonitoring-main\pwri-plantmonitoring\frontend\node_modules\react-dom\cjs\react-dom.development.js:4213:16)
+    at invokeGuardedCallback (C:\Users\vilba\.antigravity\pwri-plantmonitoring-main\pwri-plantmonitoring\frontend\node_modules\react-dom\cjs\react-dom.development.js:4277:31)
+    at reportUncaughtErrorInDEV (C:\Users\vilba\.antigravity\pwri-plantmonitoring-main\pwri-plantmonitoring\frontend\node_modules\react-dom\cjs\react-dom.development.js:22877:5)
+    at captureCommitPhaseError (C:\Users\vilba\.antigravity\pwri-plantmonitoring-main\pwri-plantmonitoring\frontend\node_modules\react-dom\cjs\react-dom.development.js:27165:5) TypeError: i.scrollIntoView is not a function
+    at ne [90m(file:///C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/[39mnode_modules/[4mcmdk[24m/dist/index.mjs:1:4249[90m)[39m
+    at [90mfile:///C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/[39mnode_modules/[4mcmdk[24m/dist/index.mjs:1:10642
+    at Map.forEach (<anonymous>)
+    at [90mfile:///C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/[39mnode_modules/[4mcmdk[24m/dist/index.mjs:1:10631
+    at commitHookEffectListMount [90m(C:\Users\vilba\.antigravity\pwri-plantmonitoring-main\pwri-plantmonitoring\frontend\[39mnode_modules\[4mreact-dom[24m\cjs\react-dom.development.js:23189:26[90m)[39m
+    at commitLayoutEffectOnFiber [90m(C:\Users\vilba\.antigravity\pwri-plantmonitoring-main\pwri-plantmonitoring\frontend\[39mnode_modules\[4mreact-dom[24m\cjs\react-dom.development.js:23312:15[90m)[39m
+    at commitLayoutMountEffects_complete [90m(C:\Users\vilba\.antigravity\pwri-plantmonitoring-main\pwri-plantmonitoring\frontend\[39mnode_modules\[4mreact-dom[24m\cjs\react-dom.development.js:24727:9[90m)[39m
+    at commitLayoutEffects_begin [90m(C:\Users\vilba\.antigravity\pwri-plantmonitoring-main\pwri-plantmonitoring\frontend\[39mnode_modules\[4mreact-dom[24m\cjs\react-dom.development.js:24713:7[90m)[39m
+    at commitLayoutEffects [90m(C:\Users\vilba\.antigravity\pwri-plantmonitoring-main\pwri-plantmonitoring\frontend\[39mnode_modules\[4mreact-dom[24m\cjs\react-dom.development.js:24651:3[90m)[39m
+    at commitRootImpl [90m(C:\Users\vilba\.antigravity\pwri-plantmonitoring-main\pwri-plantmonitoring\frontend\[39mnode_modules\[4mreact-dom[24m\cjs\react-dom.development.js:26862:5[90m)[39m
+The above error occurred in the <ForwardRef> component:
+
+    at file:///C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/node_modules/cmdk/dist/index.mjs:1:631
+    at C:\Users\vilba\.antigravity\pwri-plantmonitoring-main\pwri-plantmonitoring\frontend\src\components\ui\command.tsx:13:67
+    at div
+    at file:///C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/node_modules/@radix-ui/react-primitive/dist/index.mjs:28:13
+    at file:///C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/node_modules/@radix-ui/react-dismissable-layer/dist/index.mjs:24:7
+    at file:///C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/node_modules/@radix-ui/react-slot/dist/index.mjs:33:13
+    at file:///C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/node_modules/@radix-ui/react-slot/dist/index.mjs:9:13
+    at file:///C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/node_modules/@radix-ui/react-primitive/dist/index.mjs:28:13
+    at file:///C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/node_modules/@radix-ui/react-focus-scope/dist/index.mjs:15:5
+    at file:///C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/node_modules/@radix-ui/react-dialog/dist/index.mjs:206:13
+    at file:///C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/node_modules/@radix-ui/react-dialog/dist/index.mjs:132:58
+    at Presence (file:///C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/node_modules/@radix-ui/react-presence/dist/index.mjs:19:11)
+    at file:///C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/node_modules/@radix-ui/react-dialog/dist/index.mjs:123:64
+    at file:///C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/node_modules/@radix-ui/react-slot/dist/index.mjs:33:13
+    at file:///C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/node_modules/@radix-ui/react-slot/dist/index.mjs:9:13
+    at file:///C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/node_modules/@radix-ui/react-primitive/dist/index.mjs:28:13
+    at file:///C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/node_modules/@radix-ui/react-portal/dist/index.mjs:11:22
+    at Presence (file:///C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/node_modules/@radix-ui/react-presence/dist/index.mjs:19:11)
+    at Provider (file:///C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/node_modules/@radix-ui/react-context/dist/index.mjs:27:15)
+    at DialogPortal (file:///C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/node_modules/@radix-ui/react-dialog/dist/index.mjs:85:11)
+    at C:\Users\vilba\.antigravity\pwri-plantmonitoring-main\pwri-plantmonitoring\frontend\src\components\ui\dialog.tsx:25:73
+    at Provider (file:///C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/node_modules/@radix-ui/react-context/dist/index.mjs:27:15)
+    at Dialog (file:///C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/node_modules/@radix-ui/react-dialog/dist/index.mjs:25:5)
+    at CommandDialog (C:\Users\vilba\.antigravity\pwri-plantmonitoring-main\pwri-plantmonitoring\frontend\src\components\ui\command.tsx:23:26)
+    at CommandPalette (C:\Users\vilba\.antigravity\pwri-plantmonitoring-main\pwri-plantmonitoring\frontend\src\components\CommandPalette.tsx:37:31)
+    at Router (C:\Users\vilba\.antigravity\pwri-plantmonitoring-main\pwri-plantmonitoring\frontend\node_modules\react-router\dist\umd\react-router.development.js:1203:17)
+    at MemoryRouter (C:\Users\vilba\.antigravity\pwri-plantmonitoring-main\pwri-plantmonitoring\frontend\node_modules\react-router\dist\umd\react-router.development.js:1097:7)
+
+Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://reactjs.org/link/error-boundaries to learn more about error boundaries.
+
+[90mstderr[2m | src/components/CommandPalette.test.tsx[2m > [22m[2mCommandPalette (P5-10)[2m > [22m[2moffers a locator in both P5-7 directions
+[22m[39m`DialogContent` requires a `DialogTitle` for the component to be accessible for screen reader users.
+
+If you want to hide the `DialogTitle`, you can wrap it with our VisuallyHidden component.
+
+For more information, see https://radix-ui.com/primitives/docs/components/dialog
+Warning: Missing `Description` or `aria-describedby={undefined}` for {DialogContent}.
+Error: Uncaught [TypeError: i.scrollIntoView is not a function]
+    at reportException (C:\Users\vilba\.antigravity\pwri-plantmonitoring-main\pwri-plantmonitoring\frontend\node_modules\jsdom\lib\jsdom\living\helpers\runtime-script-errors.js:66:24)
+    at innerInvokeEventListeners (C:\Users\vilba\.antigravity\pwri-plantmonitoring-main\pwri-plantmonitoring\frontend\node_modules\jsdom\lib\jsdom\living\events\EventTarget-impl.js:353:9)
+    at invokeEventListeners (C:\Users\vilba\.antigravity\pwri-plantmonitoring-main\pwri-plantmonitoring\frontend\node_modules\jsdom\lib\jsdom\living\events\EventTarget-impl.js:286:3)
+    at HTMLUnknownElementImpl._dispatch (C:\Users\vilba\.antigravity\pwri-plantmonitoring-main\pwri-plantmonitoring\frontend\node_modules\jsdom\lib\jsdom\living\events\EventTarget-impl.js:233:9)
+    at HTMLUnknownElementImpl.dispatchEvent (C:\Users\vilba\.antigravity\pwri-plantmonitoring-main\pwri-plantmonitoring\frontend\node_modules\jsdom\lib\jsdom\living\events\EventTarget-impl.js:104:17)
+    at HTMLUnknownElement.dispatchEvent (C:\Users\vilba\.antigravity\pwri-plantmonitoring-main\pwri-plantmonitoring\frontend\node_modules\jsdom\lib\jsdom\living\generated\EventTarget.js:241:34)
+    at Object.invokeGuardedCallbackDev (C:\Users\vilba\.antigravity\pwri-plantmonitoring-main\pwri-plantmonitoring\frontend\node_modules\react-dom\cjs\react-dom.development.js:4213:16)
+    at invokeGuardedCallback (C:\Users\vilba\.antigravity\pwri-plantmonitoring-main\pwri-plantmonitoring\frontend\node_modules\react-dom\cjs\react-dom.development.js:4277:31)
+    at reportUncaughtErrorInDEV (C:\Users\vilba\.antigravity\pwri-plantmonitoring-main\pwri-plantmonitoring\frontend\node_modules\react-dom\cjs\react-dom.development.js:22877:5)
+    at captureCommitPhaseError (C:\Users\vilba\.antigravity\pwri-plantmonitoring-main\pwri-plantmonitoring\frontend\node_modules\react-dom\cjs\react-dom.development.js:27165:5) TypeError: i.scrollIntoView is not a function
+    at ne [90m(file:///C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/[39mnode_modules/[4mcmdk[24m/dist/index.mjs:1:4249[90m)[39m
+    at [90mfile:///C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/[39mnode_modules/[4mcmdk[24m/dist/index.mjs:1:10642
+    at Map.forEach (<anonymous>)
+    at [90mfile:///C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/[39mnode_modules/[4mcmdk[24m/dist/index.mjs:1:10631
+    at commitHookEffectListMount [90m(C:\Users\vilba\.antigravity\pwri-plantmonitoring-main\pwri-plantmonitoring\frontend\[39mnode_modules\[4mreact-dom[24m\cjs\react-dom.development.js:23189:26[90m)[39m
+    at commitLayoutEffectOnFiber [90m(C:\Users\vilba\.antigravity\pwri-plantmonitoring-main\pwri-plantmonitoring\frontend\[39mnode_modules\[4mreact-dom[24m\cjs\react-dom.development.js:23312:15[90m)[39m
+    at commitLayoutMountEffects_complete [90m(C:\Users\vilba\.antigravity\pwri-plantmonitoring-main\pwri-plantmonitoring\frontend\[39mnode_modules\[4mreact-dom[24m\cjs\react-dom.development.js:24727:9[90m)[39m
+    at commitLayoutEffects_begin [90m(C:\Users\vilba\.antigravity\pwri-plantmonitoring-main\pwri-plantmonitoring\frontend\[39mnode_modules\[4mreact-dom[24m\cjs\react-dom.development.js:24713:7[90m)[39m
+    at commitLayoutEffects [90m(C:\Users\vilba\.antigravity\pwri-plantmonitoring-main\pwri-plantmonitoring\frontend\[39mnode_modules\[4mreact-dom[24m\cjs\react-dom.development.js:24651:3[90m)[39m
+    at commitRootImpl [90m(C:\Users\vilba\.antigravity\pwri-plantmonitoring-main\pwri-plantmonitoring\frontend\[39mnode_modules\[4mreact-dom[24m\cjs\react-dom.development.js:26862:5[90m)[39m
+The above error occurred in the <ForwardRef> component:
+
+    at file:///C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/node_modules/cmdk/dist/index.mjs:1:631
+    at C:\Users\vilba\.antigravity\pwri-plantmonitoring-main\pwri-plantmonitoring\frontend\src\components\ui\command.tsx:13:67
+    at div
+    at file:///C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/node_modules/@radix-ui/react-primitive/dist/index.mjs:28:13
+    at file:///C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/node_modules/@radix-ui/react-dismissable-layer/dist/index.mjs:24:7
+    at file:///C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/node_modules/@radix-ui/react-slot/dist/index.mjs:33:13
+    at file:///C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/node_modules/@radix-ui/react-slot/dist/index.mjs:9:13
+    at file:///C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/node_modules/@radix-ui/react-primitive/dist/index.mjs:28:13
+    at file:///C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/node_modules/@radix-ui/react-focus-scope/dist/index.mjs:15:5
+    at file:///C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/node_modules/@radix-ui/react-dialog/dist/index.mjs:206:13
+    at file:///C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/node_modules/@radix-ui/react-dialog/dist/index.mjs:132:58
+    at Presence (file:///C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/node_modules/@radix-ui/react-presence/dist/index.mjs:19:11)
+    at file:///C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/node_modules/@radix-ui/react-dialog/dist/index.mjs:123:64
+    at file:///C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/node_modules/@radix-ui/react-slot/dist/index.mjs:33:13
+    at file:///C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/node_modules/@radix-ui/react-slot/dist/index.mjs:9:13
+    at file:///C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/node_modules/@radix-ui/react-primitive/dist/index.mjs:28:13
+    at file:///C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/node_modules/@radix-ui/react-portal/dist/index.mjs:11:22
+    at Presence (file:///C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/node_modules/@radix-ui/react-presence/dist/index.mjs:19:11)
+    at Provider (file:///C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/node_modules/@radix-ui/react-context/dist/index.mjs:27:15)
+    at DialogPortal (file:///C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/node_modules/@radix-ui/react-dialog/dist/index.mjs:85:11)
+    at C:\Users\vilba\.antigravity\pwri-plantmonitoring-main\pwri-plantmonitoring\frontend\src\components\ui\dialog.tsx:25:73
+    at Provider (file:///C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/node_modules/@radix-ui/react-context/dist/index.mjs:27:15)
+    at Dialog (file:///C:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/frontend/node_modules/@radix-ui/react-dialog/dist/index.mjs:25:5)
+    at CommandDialog (C:\Users\vilba\.antigravity\pwri-plantmonitoring-main\pwri-plantmonitoring\frontend\src\components\ui\command.tsx:23:26)
+    at CommandPalette (C:\Users\vilba\.antigravity\pwri-plantmonitoring-main\pwri-plantmonitoring\frontend\src\components\CommandPalette.tsx:37:31)
+    at Router (C:\Users\vilba\.antigravity\pwri-plantmonitoring-main\pwri-plantmonitoring\frontend\node_modules\react-router\dist\umd\react-router.development.js:1203:17)
+    at MemoryRouter (C:\Users\vilba\.antigravity\pwri-plantmonitoring-main\pwri-plantmonitoring\frontend\node_modules\react-router\dist\umd\react-router.development.js:1097:7)
+
+Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://reactjs.org/link/error-boundaries to learn more about error boundaries.
+
+ [31m❯[39m src/components/CommandPalette.test.tsx [2m([22m[2m4 tests[22m[2m | [22m[31m4 failed[39m[2m)[22m[33m 701[2mms[22m[39m
+[31m   [31m×[31m CommandPalette (P5-10)[2m > [22mlists nav pages the user may open[39m[33m 404[2mms[22m[39m
+[31m     → i.scrollIntoView is not a function[39m
+[31m   [31m×[31m CommandPalette (P5-10)[2m > [22mlists visible plants[39m[32m 120[2mms[22m[39m
+[31m     → i.scrollIntoView is not a function[39m
+[31m   [31m×[31m CommandPalette (P5-10)[2m > [22moffers a well in both P5-7 directions: its page and its readings row[39m[32m 96[2mms[22m[39m
+[31m     → i.scrollIntoView is not a function[39m
+[31m   [31m×[31m CommandPalette (P5-10)[2m > [22moffers a locator in both P5-7 directions[39m[32m 77[2mms[22m[39m
+[31m     → i.scrollIntoView is not a function[39m
+[90mstderr[2m | src/features/operations/components/locators/LocatorRow/DerivedMeterPanel.assetLink.test.tsx[2m > [22m[2mDerivedMeterPanel asset link (P5-7)[2m > [22m[2mlinks the derived name to the locator card in Plants
+[22m[39m⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+
+ [32m✓[39m src/features/operations/components/locators/LocatorRow/DerivedMeterPanel.assetLink.test.tsx [2m([22m[2m1 test[22m[2m)[22m[32m 131[2mms[22m[39m
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 5 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m src/components/CommandPalette.test.tsx[2m > [22mCommandPalette (P5-10)[2m > [22mlists nav pages the user may open
+[41m[1m FAIL [22m[49m src/components/CommandPalette.test.tsx[2m > [22mCommandPalette (P5-10)[2m > [22mlists visible plants
+[41m[1m FAIL [22m[49m src/components/CommandPalette.test.tsx[2m > [22mCommandPalette (P5-10)[2m > [22moffers a well in both P5-7 directions: its page and its readings row
+[41m[1m FAIL [22m[49m src/components/CommandPalette.test.tsx[2m > [22mCommandPalette (P5-10)[2m > [22moffers a locator in both P5-7 directions
+[31m[1mTypeError[22m: i.scrollIntoView is not a function[39m
+[36m [2m❯[22m ne node_modules/cmdk/dist/index.mjs:[2m1:4249[22m[39m
+
+[90m [2m❯[22m node_modules/cmdk/dist/index.mjs:[2m1:10642[22m[39m
+[90m [2m❯[22m node_modules/cmdk/dist/index.mjs:[2m1:10631[22m[39m
+[90m [2m❯[22m commitHookEffectListMount node_modules/react-dom/cjs/react-dom.development.js:[2m23189:26[22m[39m
+[90m [2m❯[22m commitLayoutEffectOnFiber node_modules/react-dom/cjs/react-dom.development.js:[2m23312:15[22m[39m
+[90m [2m❯[22m commitLayoutMountEffects_complete node_modules/react-dom/cjs/react-dom.development.js:[2m24727:9[22m[39m
+[90m [2m❯[22m commitLayoutEffects_begin node_modules/react-dom/cjs/react-dom.development.js:[2m24713:7[22m[39m
+[90m [2m❯[22m commitLayoutEffects node_modules/react-dom/cjs/react-dom.development.js:[2m24651:3[22m[39m
+[90m [2m❯[22m commitRootImpl node_modules/react-dom/cjs/react-dom.development.js:[2m26862:5[22m[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/5]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m src/features/plants/components/PlantHeroBanner.test.tsx[2m > [22mPlantHeroBanner freshness (P4-3)[2m > [22mshows unknown when there are no readings
+[31m[1mTestingLibraryElementError[22m[39m: Found multiple elements with the text: No recent readings
+
+Here are the matching elements:
+
+Ignored nodes: comments, script, style
+[36m<span[39m
+  [33mclass[39m=[32m"text-slate-400 font-semibold"[39m
+[36m>[39m
+  [0mNo recent readings[0m
+[36m</span>[39m
+
+Ignored nodes: comments, script, style
+[36m<span>[39m
+  [0mNo recent readings[0m
+[36m</span>[39m
+
+(If this is intentional, then use the `*AllBy*` variant of the query (like `queryAllByText`, `getAllByText`, or `findAllByText`)).
+
+Ignored nodes: comments, script, style
+[36m<body>[39m
+  [36m<div>[39m
+    [36m<div[39m
+      [33mclass[39m=[32m"space-y-3"[39m
+    [36m>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"flex items-center justify-between"[39m
+      [36m>[39m
+        [36m<button[39m
+          [33mclass[39m=[32m"inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground hover:text-primary transition-colors group"[39m
+        [36m>[39m
+          [36m<svg[39m
+            [33maria-hidden[39m=[32m"true"[39m
+            [33mclass[39m=[32m"lucide lucide-chevron-left h-4 w-4 transition-transform group-hover:-translate-x-0.5"[39m
+            [33mfill[39m=[32m"none"[39m
+            [33mheight[39m=[32m"24"[39m
+            [33mstroke[39m=[32m"currentColor"[39m
+            [33mstroke-linecap[39m=[32m"round"[39m
+            [33mstroke-linejoin[39m=[32m"round"[39m
+            [33mstroke-width[39m=[32m"2"[39m
+            [33mviewBox[39m=[32m"0 0 24 24"[39m
+            [33mwidth[39m=[32m"24"[39m
+            [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+          [36m>[39m
+            [36m<path[39m
+              [33md[39m=[32m"m15 18-6-6 6-6"[39m
+            [36m/>[39m
+          [36m</svg>[39m
+          [36m<span>[39m
+            [0mAll Facilities[0m
+          [36m</span>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"text-border"[39m
+          [36m>[39m
+            [0m/[0m
+          [36m</span>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"text-foreground"[39m
+          [36m>[39m
+            [0mTest Plant[0m
+          [36m</span>[39m
+        [36m</button>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"flex items-center gap-2"[39m
+        [36m>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"text-2xs font-mono text-muted-foreground hidden sm:inline"[39m
+          [36m>[39m
+            [0mID: [0m
+            [0mplant-1[0m
+          [36m</span>[39m
+        [36m</div>[39m
+      [36m</div>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"rounded-lg border border-slate-800 bg-slate-900 text-white p-4 sm:p-5 relative overflow-hidden space-y-4 shadow-sm"[39m
+      [36m>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"flex items-center gap-2.5 flex-wrap"[39m
+          [36m>[39m
+            [36m<svg[39m
+              [33maria-hidden[39m=[32m"true"[39m
+              [33mclass[39m=[32m"lucide lucide-building2 lucide-building-2 h-5 w-5 text-teal-400 shrink-0"[39m
+              [33mfill[39m=[32m"none"[39m
+              [33mheight[39m=[32m"24"[39m
+              [33mstroke[39m=[32m"currentColor"[39m
+              [33mstroke-linecap[39m=[32m"round"[39m
+              [33mstroke-linejoin[39m=[32m"round"[39m
+              [33mstroke-width[39m=[32m"2"[39m
+              [33mviewBox[39m=[32m"0 0 24 24"[39m
+              [33mwidth[39m=[32m"24"[39m
+              [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+            [36m>[39m
+              [36m<path[39m
+                [33md[39m=[32m"M10 12h4"[39m
+              [36m/>[39m
+              [36m<path[39m
+                [33md[39m=[32m"M10 8h4"[39m
+              [36m/>[39m
+              [36m<path[39m
+                [33md[39m=[32m"M14 21v-3a2 2 0 0 0-4 0v3"[39m
+              [36m/>[39m
+              [36m<path[39m
+                [33md[39m=[32m"M6 10H4a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-2"[39m
+              [36m/>[39m
+              [36m<path[39m
+                [33md[39m=[32m"M6 21V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v16"[39m
+              [36m/>[39m
+            [36m</svg>[39m
+            [36m<div[39m
+              [33mclass[39m=[32m"flex items-center gap-2 flex-wrap"[39m
+            [36m>[39m
+              [36m<span[39m
+                [33mclass[39m=[32m"text-3xs font-mono font-bold px-2 py-0.5 rounded-md bg-slate-800 text-teal-300 border border-teal-500/30 uppercase tracking-wider"[39m
+              [36m>[39m
+                [0mFACILITY COCKPIT[0m
+              [36m</span>[39m
+              [36m<h1[39m
+                [33mclass[39m=[32m"text-lg sm:text-xl font-bold tracking-tight text-white"[39m
+              [36m>[39m
+                [0mTest Plant[0m
+              [36m</h1>[39m
+              [36m<span[39m
+                [33mclass[39m=[32m"inline-flex items-center gap-1.5 text-2xs font-semibold px-2.5 py-0.5 rounded-md border bg-emerald-950/80 text-emerald-300 border-emerald-500/40"[39m
+              [36m>[39m
+                [36m<span[39m
+                  [33maria-hidden[39m=[32m"true"[39m
+                  [33mclass[39m=[32m"lamp-dot inline-block rounded-full shrink-0 transition-colors"[39m
+                  [33mstyle[39m=[32m"width: 6px; height: 6px; box-shadow: 0 0 5px hsl(var(--accent) / 0.75);"[39m
+                [36m/>[39m
+                [36m<span>[39m
+                  [0mActive[0m
+                [36m</span>[39m
+              [36m</span>[39m
+            [36m</div>[39m
+          [36m</div>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"flex items-center gap-3"[39m
+          [36m>[39m
+            [36m<p[39m
+              [33mclass[39m=[32m"text-2xs text-slate-400 items-center gap-1.5 hidden md:flex"[39m
+            [36m>[39m
+              [36m<svg[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"lucide lucide-map-pin h-3.5 w-3.5 text-teal-400/80 shrink-0"[39m
+                [33mfill[39m=[32m"none"[39m
+                [33mheight[39m=[32m"24"[39m
+                [33mstroke[39m=[32m"currentColor"[39m
+                [33mstroke-linecap[39m=[32m"round"[39m
+                [33mstroke-linejoin[39m=[32m"round"[39m
+                [33mstroke-width[39m=[32m"2"[39m
+                [33mviewBox[39m=[32m"0 0 24 24"[39m
+                [33mwidth[39m=[32m"24"[39m
+                [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+              [36m>[39m
+                [36m<path[39m
+                  [33md[39m=[32m"M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"[39m
+                [36m/>[39m
+                [36m<circle[39m
+                  [33mcx[39m=[32m"12"[39m
+                  [33mcy[39m=[32m"10"[39m
+                  [33mr[39m=[32m"3"[39m
+                [36m/>[39m
+              [36m</svg>[39m
+              [36m<span[39m
+                [33mclass[39m=[32m"truncate max-w-[260px]"[39m
+              [36m>[39m
+                [0mAddress unassigned[0m
+              [36m</span>[39m
+            [36m</p>[39m
+            [36m<di...
+[90m [2m❯[22m Object.getElementError node_modules/@testing-library/dom/dist/config.js:[2m37:19[22m[39m
+[90m [2m❯[22m getElementError node_modules/@testing-library/dom/dist/query-helpers.js:[2m20:35[22m[39m
+[90m [2m❯[22m getMultipleElementsFoundError node_modules/@testing-library/dom/dist/query-helpers.js:[2m23:10[22m[39m
+[90m [2m❯[22m node_modules/@testing-library/dom/dist/query-helpers.js:[2m55:13[22m[39m
+[90m [2m❯[22m getByText node_modules/@testing-library/dom/dist/query-helpers.js:[2m95:19[22m[39m
+[36m [2m❯[22m src/features/plants/components/PlantHeroBanner.test.tsx:[2m48:19[22m[39m
+    [90m 46| [39m  [34mit[39m([32m'shows unknown when there are no readings'[39m[33m,[39m () [33m=>[39m {
+    [90m 47| [39m    [34mrenderHero[39m([35mnull[39m)[33m;[39m
+    [90m 48| [39m    [34mexpect[39m(screen[33m.[39m[34mgetByText[39m([32m'No recent readings'[39m))[33m.[39m[34mtoBeTruthy[39m()[33m;[39m
+    [90m   | [39m                  [31m^[39m
+    [90m 49| [39m    [34mexpect[39m(screen[33m.[39m[34mqueryByText[39m([32m'Live Telemetry'[39m))[33m.[39m[34mtoBeNull[39m()[33m;[39m
+    [90m 50| [39m  })[33m;[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/5]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m2 failed[39m[22m[2m | [22m[1m[32m1 passed[39m[22m[90m (3)[39m
+[2m      Tests [22m [1m[31m5 failed[39m[22m[2m | [22m[1m[32m3 passed[39m[22m[90m (8)[39m
+[2m   Start at [22m 20:35:41
+[2m   Duration [22m 12.96s[2m (transform 1.82s, setup 2.22s, collect 8.80s, tests 1.15s, environment 8.06s, prepare 987ms)[22m
+
+ALL_DONE 

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { AssetLink } from '@/components/AssetLink';
 import { Button } from '@/components/ui/button';
 import { ReadingHistoryDialog } from '@/components/ReadingHistoryDialog';
 import { DerivedMeterOverrideDialog } from '@/components/DerivedMeterOverrideDialog';
@@ -72,7 +73,9 @@ export function DerivedMeterPanel({
     <div className="px-4 py-3 space-y-2">
       <div className="flex items-center justify-between gap-2 min-w-0">
         <div className="flex items-center gap-2 flex-wrap min-w-0 flex-1">
-          <div className="text-sm font-semibold text-foreground break-words">{locator.name}</div>
+          {/* P5-7: same asset link as a physical locator row — the name goes to
+              the locator's card in Plants (plain text without plants view). */}
+          <AssetLink kind="locator" plantId={plantId} id={locator.id} name={locator.name} className="text-sm font-semibold text-foreground break-words" />
           <span className="inline-flex items-center gap-1 text-3xs font-bold uppercase tracking-widest bg-warn-soft text-warn px-1.5 py-0.5 rounded-full shrink-0">
             <DerivedMeterIcon className="h-2.5 w-2.5" /> Derived
           </span>

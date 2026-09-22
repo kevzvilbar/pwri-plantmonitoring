@@ -101,7 +101,10 @@ export function PlantHeroBanner({
                   ? 'bg-emerald-950/80 text-emerald-300 border-emerald-500/40'
                   : 'bg-amber-950/80 text-amber-300 border-amber-500/40'
               }`}>
-                <Lamp tone={isOnline ? 'good' : 'warn'} pulse={isOnline} size={6} />
+                {/* The admin-set facility status, stated plainly. It does not
+                    pulse: a pulse in this hero now means one thing only —
+                    the reading above is fresh. */}
+                <Lamp tone={isOnline ? 'good' : 'warn'} size={6} />
                 <span>{plant.status}</span>
               </span>
             </div>
@@ -134,8 +137,15 @@ export function PlantHeroBanner({
                   : freshness.tone === 'aging' ? 'Aging Data'
                   : 'Stale Data'}
               </span>
-              <span className="text-white/30">&bull;</span>
-              <span>{freshness.label}</span>
+              {/* Unknown means there is no age to print: describeFreshness
+                  returns "No recent readings" as the label too, and saying it
+                  twice reads like a stutter. */}
+              {freshness.tone !== 'unknown' && (
+                <>
+                  <span className="text-white/30">&bull;</span>
+                  <span>{freshness.label}</span>
+                </>
+              )}
             </div>
           </div>
         </div>

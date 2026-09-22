@@ -157,6 +157,7 @@ export type PlantCardProps = {
   isManager: boolean;
 };
 
+export function PlantCard({ plant, summaryCounts, onNavigate, onInspect, isManager }: PlantCardProps) {
 export function PlantCard({ plant, summaryCounts, lastReadingAt, onNavigate, onInspect, isManager }: PlantCardProps) {
   const now = useNow(30_000);
   const freshness = describeFreshness(lastReadingAt, now.getTime());

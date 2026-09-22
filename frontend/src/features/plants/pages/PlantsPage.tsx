@@ -205,6 +205,12 @@ function PlantDetail({ plantId, wellId }: { plantId: string; wellId: string | nu
     openInfoEdit, saveInfo, isManager,
   } = usePlantDetail(plantId, wellId);
 
+  // P4-3: per-plant reading timestamp for the hero banner. Scoped to this
+  // plant (not the list's freshness map, which is out of scope here), across
+  // RO trains, wells, locators and product meters. Hook is above the
+  // not-found return so the hook order is stable across renders.
+  const { freshnessByPlant } = usePlantFreshness(plant ? [plant.id] : []);
+
   if (!plant) return <div>Plant not found.</div>;
 
   const handleFieldChange = (field: string, value: string) => {

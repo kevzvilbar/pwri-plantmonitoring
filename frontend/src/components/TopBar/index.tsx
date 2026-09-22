@@ -1,4 +1,4 @@
-import { Bell } from 'lucide-react';
+import { Bell, Search } from 'lucide-react';
 import { useTopBarState } from './useTopBarState';
 import { AlertPanel } from './AlertPanel';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -14,7 +14,7 @@ import { Logomark } from '@/components/icons/Logomark';
 import { ThemeSelector } from '@/components/ThemeSelector';
 import { OperatorSwitcher } from '@/components/OperatorSwitcher';
 
-export function TopBar() {
+export function TopBar({ onOpenSearch }: { onOpenSearch?: () => void } = {}) {
   const {
     isMobile,
     sidebarCollapsed,
@@ -96,6 +96,22 @@ export function TopBar() {
 
           <SyncIndicator />
           <ThemeSelector />
+
+          {/* P5-10: opens the Ctrl+K palette. Rendered only when the shell
+              wires the handler, so a TopBar used on its own (tests) has no
+              dead button. */}
+          {onOpenSearch && (
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="Search pages, plants, and wells (Ctrl+K)"
+              title="Search pages, plants, and wells (Ctrl+K)"
+              onClick={onOpenSearch}
+              className="relative h-10 w-10 text-topbar-foreground hover:bg-white/10 focus-visible:ring-white/30"
+            >
+              <Search className="h-[17px] w-[17px]" />
+            </Button>
+          )}
 
           {isMobile ? (
             <Sheet open={panelOpen} onOpenChange={setPanelOpen}>
