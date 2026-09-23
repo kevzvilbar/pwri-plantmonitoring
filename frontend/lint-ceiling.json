@@ -1,6 +1,6 @@
 {
-  "maxWarnings": 2480,
-  "lastUpdated": "2026-09-22",
+  "maxWarnings": 2493,
+  "lastUpdated": "2026-09-23",
   "history": [
     {
       "date": "2026-09-10",
@@ -225,6 +225,12 @@
       "maxWarnings": 2480,
       "previous": 2475,
       "reason": "+1 is drift, not this session's: filterPlausibleRows.test.ts (4aa448a4, landed between sessions) has one `any` in its Supabase-row mock, same convention as the rest of the suite, ceiling never updated for it -- confirmed by linting just its three touched files at that commit alone (1 warning) before touching anything else. This session's own +4: four new tests in useAlertEvents.test.ts (adopting rows left in the pre-partition shared outbox after the 2026-09-21 outbox fix above -- a row queued under the old, pre-user-partition key was otherwise never read again) each mock supabase.from with `(supabase.from as any)`, the same pattern the file's other 15 tests already use -- 6 -> 10 `any` warnings in that one file, 0 elsewhere. Also fixed, unrelated to the warning count: two more timezone-fragile tests the 2026-09-21 CI-timezone entry didn't catch -- TrendChartAggregate.test.ts (UTC-midnight fixtures, failed in America/New_York and Los Angeles), and a real product bug in the KPI dashboard where 'today' silently rolled back a day for the first 8 hours of every Manila day (generateDays2 had a LOCAL fmtIsoDate shadowing the real, already-fixed one in shared/format.ts -- same name, old UTC-based bug, so a plain grep for the real helper's usages found this file and looked migrated). Verified: 1251 vitest tests pass in both UTC and America/New_York, tsc --noEmit 0 errors, prod build clean."
+    },
+    {
+      "date": "2026-09-23",
+      "maxWarnings": 2493,
+      "previous": 2480,
+      "reason": "Re-baselined lint ceiling after landing P5-10 CommandPalette components (useCommandPaletteShortcut / CommandPalette.test.tsx) and ROTrains query consolidation with added unit test coverage (useROTrains.test.tsx). Verified: 157 vitest suites pass (1265/1265 tests), tsc --noEmit 0 errors, check-lint-ceiling clean."
     }
   ]
 }
