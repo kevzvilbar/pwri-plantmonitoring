@@ -511,8 +511,6 @@ export function useDashboardAlerts({
           linkPath:    link,
         });
       }
-      const tds = r.permeate_tds ?? 0;
-      if (tds >= 600) {
       const plantThresholds = thresholdsByPlant[pid] ?? thresholdsByPlant['global'] ?? DEFAULT_THRESHOLDS;
       const permTdsMax = plantThresholds.permeate_tds_max ?? DEFAULT_THRESHOLDS.permeate_tds_max;
       const permTdsWarn = permTdsMax * 0.9;
@@ -523,11 +521,8 @@ export function useDashboardAlerts({
 
       if (tds != null && tds > permTdsMax) {
         storeAlerts.push({
-          id:          `tds-${r.train_id}-${r.train_number}`,
           id:          critId,
           severity:    'critical',
-          title:       `TDS alert: ${tds} ppm`,
-          description: `${trainLabel} — permeate TDS exceeded 600 ppm`,
           title:       `High Permeate TDS: ${fmtNum(tds, 0)} ppm`,
           description: `${trainLabel} — permeate TDS at ${fmtNum(tds, 0)} ppm exceeds ${permTdsMax} ppm limit`,
           source:      'RO Trains',
@@ -535,15 +530,11 @@ export function useDashboardAlerts({
           timestamp:   Date.now(),
           linkPath:    link,
         });
-      } else if (tds >= 500) {
         clearedConditionIds.push(warnId, legacyId);
       } else if (tds != null && tds >= permTdsWarn) {
         storeAlerts.push({
-          id:          `tds-warn-${r.train_id}-${r.train_number}`,
           id:          warnId,
           severity:    'warning',
-          title:       `TDS approaching limit: ${tds} ppm`,
-          description: `${trainLabel} — permeate TDS at ${tds} ppm (limit: 600 ppm)`,
           title:       `TDS approaching limit: ${fmtNum(tds, 0)} ppm`,
           description: `${trainLabel} — permeate TDS at ${fmtNum(tds, 0)} ppm (limit: ${permTdsMax} ppm)`,
           source:      'RO Trains',
@@ -690,7 +681,6 @@ export function useDashboardAlerts({
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [trainGaps, wellGaps, locatorGaps, trainHourlyGaps, latestRO, chemInv, feedAlerts, selectedPlantId, nrw, nrwBreached,
-      pretreatmentAlerts, pumpElectricalAlerts, roMeterSpikes, todayPower, powerIsStale, powerAvgByPlant, plantNameById]);
       pretreatmentAlerts, pumpElectricalAlerts, roMeterSpikes, todayPower, powerIsStale, powerAvgByPlant, plantNameById, thresholdsByPlant]);
 
   return { plantNameById, roMeterSpikes, pretreatmentAlerts, pumpElectricalAlerts };

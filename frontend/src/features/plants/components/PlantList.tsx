@@ -16,7 +16,6 @@ export type PlantListProps = {
   setStatusFilter: (v: 'all' | 'Active' | 'Inactive') => void;
 };
 
-export function PlantList({ plants, needsAssignment = false, filteredList, summaryCounts, isManager, onNavigate, onInspect, setSearch, setStatusFilter }: PlantListProps) {
 export function PlantList({
   plants,
   needsAssignment = false,

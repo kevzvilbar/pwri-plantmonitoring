@@ -4,12 +4,10 @@ import { describeFreshness } from '@/shared/freshness';
 import { useNow } from '@/hooks/useNow';
 
 export function PlantListHeader({
-  list, summaryCounts, lastReadingAt, totalCapacity, roUtilPct, avgHealth,
   list, summaryCounts, lastReadingAt, totalCapacity, roUtilPct, avgHealth, silentCount = 0,
 }: {
   list: any[];
   summaryCounts: any;
-  /** Timestamp of the latest RO-train reading across all displayed plants. Pass `null` when unknown/loading. */
   /** Timestamp of the latest reading across all displayed plants. Pass `null` when unknown/loading. */
   lastReadingAt: Date | null;
   totalCapacity: number;
@@ -18,7 +16,6 @@ export function PlantListHeader({
   silentCount?: number;
 }) {
   const facilityCount = list?.length ?? 0;
-  const freshness = describeFreshness(lastReadingAt);
   const now = useNow(30_000);
   const freshness = describeFreshness(lastReadingAt, now.getTime());
 
@@ -35,7 +32,6 @@ export function PlantListHeader({
               <h1 className="text-lg sm:text-xl font-bold tracking-tight text-foreground">
                 Water Production Facilities
               </h1>
-              {freshness.tone === 'fresh' ? (
               {silentCount > 0 && facilityCount > 0 ? (
                 <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-3xs font-bold uppercase tracking-wider bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 shadow-2xs">
                   <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-amber-500"></span>
