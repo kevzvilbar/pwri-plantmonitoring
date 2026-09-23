@@ -1504,6 +1504,50 @@ export type Database = {
           },
         ]
       }
+      dosing_points: {
+        Row: {
+          chemical: string
+          created_at: string
+          id: string
+          injects_into_stage_key: string
+          label: string | null
+          plant_id: string
+          pump_hp: number | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          chemical: string
+          created_at?: string
+          id?: string
+          injects_into_stage_key: string
+          label?: string | null
+          plant_id: string
+          pump_hp?: number | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          chemical?: string
+          created_at?: string
+          id?: string
+          injects_into_stage_key?: string
+          label?: string | null
+          plant_id?: string
+          pump_hp?: number | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dosing_points_plant_id_fkey"
+            columns: ["plant_id"]
+            isOneToOne: false
+            referencedRelation: "plants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       downtime_events: {
         Row: {
           created_at: string
@@ -2740,6 +2784,94 @@ export type Database = {
           },
         ]
       }
+      plant_process_stages: {
+        Row: {
+          created_at: string
+          detail: string | null
+          id: string
+          label: string
+          node_type: string
+          plant_id: string
+          scope: string
+          sort_order: number
+          stage_key: string
+          updated_at: string
+          wrap_cols: number | null
+        }
+        Insert: {
+          created_at?: string
+          detail?: string | null
+          id?: string
+          label: string
+          node_type: string
+          plant_id: string
+          scope?: string
+          sort_order: number
+          stage_key: string
+          updated_at?: string
+          wrap_cols?: number | null
+        }
+        Update: {
+          created_at?: string
+          detail?: string | null
+          id?: string
+          label?: string
+          node_type?: string
+          plant_id?: string
+          scope?: string
+          sort_order?: number
+          stage_key?: string
+          updated_at?: string
+          wrap_cols?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "plant_process_stages_plant_id_fkey"
+            columns: ["plant_id"]
+            isOneToOne: false
+            referencedRelation: "plants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      plant_topology_config: {
+        Row: {
+          column_widths: Json
+          custom_columns: Json
+          custom_nodes: Json
+          palette_items: Json
+          plant_id: string
+          position_overrides: Json
+          updated_at: string
+        }
+        Insert: {
+          column_widths?: Json
+          custom_columns?: Json
+          custom_nodes?: Json
+          palette_items?: Json
+          plant_id: string
+          position_overrides?: Json
+          updated_at?: string
+        }
+        Update: {
+          column_widths?: Json
+          custom_columns?: Json
+          custom_nodes?: Json
+          palette_items?: Json
+          plant_id?: string
+          position_overrides?: Json
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "plant_topology_config_plant_id_fkey"
+            columns: ["plant_id"]
+            isOneToOne: true
+            referencedRelation: "plants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       plant_topology_links: {
         Row: {
           created_at: string
@@ -3333,6 +3465,57 @@ export type Database = {
           },
         ]
       }
+      product_tanks: {
+        Row: {
+          capacity_m3: number | null
+          created_at: string
+          id: string
+          name: string
+          plant_id: string
+          product_meter_id: string | null
+          status: string
+          tank_number: number
+          updated_at: string
+        }
+        Insert: {
+          capacity_m3?: number | null
+          created_at?: string
+          id?: string
+          name: string
+          plant_id: string
+          product_meter_id?: string | null
+          status?: string
+          tank_number: number
+          updated_at?: string
+        }
+        Update: {
+          capacity_m3?: number | null
+          created_at?: string
+          id?: string
+          name?: string
+          plant_id?: string
+          product_meter_id?: string | null
+          status?: string
+          tank_number?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_tanks_plant_id_fkey"
+            columns: ["plant_id"]
+            isOneToOne: false
+            referencedRelation: "plants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_tanks_product_meter_id_fkey"
+            columns: ["product_meter_id"]
+            isOneToOne: false
+            referencedRelation: "product_meters"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       production_calc_log: {
         Row: {
           entry_name: string | null
@@ -3503,6 +3686,39 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      push_subscriptions: {
+        Row: {
+          auth: string
+          created_at: string
+          endpoint: string
+          id: string
+          p256dh: string
+          updated_at: string
+          user_agent: string | null
+          user_id: string
+        }
+        Insert: {
+          auth: string
+          created_at?: string
+          endpoint: string
+          id?: string
+          p256dh: string
+          updated_at?: string
+          user_agent?: string | null
+          user_id: string
+        }
+        Update: {
+          auth?: string
+          created_at?: string
+          endpoint?: string
+          id?: string
+          p256dh?: string
+          updated_at?: string
+          user_agent?: string | null
+          user_id?: string
+        }
+        Relationships: []
       }
       raw_edit_log: {
         Row: {
@@ -4293,10 +4509,62 @@ export type Database = {
           },
         ]
       }
+      ro_train_uptime_reports: {
+        Row: {
+          covered_from: string
+          covered_until: string
+          created_at: string
+          id: string
+          plant_id: string
+          reason_category: string
+          reason_detail: string | null
+          reported_by: string | null
+          train_id: string
+        }
+        Insert: {
+          covered_from: string
+          covered_until: string
+          created_at?: string
+          id?: string
+          plant_id: string
+          reason_category: string
+          reason_detail?: string | null
+          reported_by?: string | null
+          train_id: string
+        }
+        Update: {
+          covered_from?: string
+          covered_until?: string
+          created_at?: string
+          id?: string
+          plant_id?: string
+          reason_category?: string
+          reason_detail?: string | null
+          reported_by?: string | null
+          train_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ro_train_uptime_reports_plant_id_fkey"
+            columns: ["plant_id"]
+            isOneToOne: false
+            referencedRelation: "plants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ro_train_uptime_reports_train_id_fkey"
+            columns: ["train_id"]
+            isOneToOne: false
+            referencedRelation: "ro_trains"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ro_trains: {
         Row: {
           booster_pump_targets: Json | null
           created_at: string
+          elements_per_vessel: number
           em_all_streams: boolean
           em_stream_feed: boolean
           em_stream_permeate: boolean
@@ -4308,6 +4576,9 @@ export type Database = {
           feed_source_train_id: string | null
           filter_housing_type: string | null
           filter_media_type: string | null
+          has_feed_meter: boolean
+          has_permeate_meter: boolean
+          has_reject_meter: boolean
           hpp_target_pressure_psi: number | null
           id: string
           name: string | null
@@ -4317,6 +4588,7 @@ export type Database = {
           num_controllers: number
           num_filter_housings: number
           num_hp_pumps: number
+          num_vessels: number
           permeate_meter_brand: string | null
           permeate_meter_installed_date: string | null
           permeate_meter_serial: string | null
@@ -4339,6 +4611,7 @@ export type Database = {
         Insert: {
           booster_pump_targets?: Json | null
           created_at?: string
+          elements_per_vessel?: number
           em_all_streams?: boolean
           em_stream_feed?: boolean
           em_stream_permeate?: boolean
@@ -4350,6 +4623,9 @@ export type Database = {
           feed_source_train_id?: string | null
           filter_housing_type?: string | null
           filter_media_type?: string | null
+          has_feed_meter?: boolean
+          has_permeate_meter?: boolean
+          has_reject_meter?: boolean
           hpp_target_pressure_psi?: number | null
           id?: string
           name?: string | null
@@ -4359,6 +4635,7 @@ export type Database = {
           num_controllers?: number
           num_filter_housings?: number
           num_hp_pumps?: number
+          num_vessels?: number
           permeate_meter_brand?: string | null
           permeate_meter_installed_date?: string | null
           permeate_meter_serial?: string | null
@@ -4381,6 +4658,7 @@ export type Database = {
         Update: {
           booster_pump_targets?: Json | null
           created_at?: string
+          elements_per_vessel?: number
           em_all_streams?: boolean
           em_stream_feed?: boolean
           em_stream_permeate?: boolean
@@ -4392,6 +4670,9 @@ export type Database = {
           feed_source_train_id?: string | null
           filter_housing_type?: string | null
           filter_media_type?: string | null
+          has_feed_meter?: boolean
+          has_permeate_meter?: boolean
+          has_reject_meter?: boolean
           hpp_target_pressure_psi?: number | null
           id?: string
           name?: string | null
@@ -4401,6 +4682,7 @@ export type Database = {
           num_controllers?: number
           num_filter_housings?: number
           num_hp_pumps?: number
+          num_vessels?: number
           permeate_meter_brand?: string | null
           permeate_meter_installed_date?: string | null
           permeate_meter_serial?: string | null

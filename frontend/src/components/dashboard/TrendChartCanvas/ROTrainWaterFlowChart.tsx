@@ -245,19 +245,19 @@ function ROTrainFlowTooltip({ active, payload, label }: any) {
       <div className="flex items-center justify-between gap-2 border-b border-border/60 pb-2 mb-2">
         <p className="font-bold text-xs text-foreground tracking-tight m-0">{label}</p>
         {hasDeviation ? (
-          <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-rose-500 bg-rose-500/10 border border-rose-500/25 px-1.5 py-0.5 rounded">
+          <span className="inline-flex items-center gap-1 text-2xs font-semibold text-rose-500 bg-rose-500/10 border border-rose-500/25 px-1.5 py-0.5 rounded">
             <AlertTriangle className="w-3 h-3" />
             Mismatch
           </span>
         ) : (
-          <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-500 bg-emerald-500/10 border border-emerald-500/25 px-1.5 py-0.5 rounded">
+          <span className="inline-flex items-center gap-1 text-2xs font-semibold text-emerald-500 bg-emerald-500/10 border border-emerald-500/25 px-1.5 py-0.5 rounded">
             <CheckCircle2 className="w-3 h-3" />
             Balanced
           </span>
         )}
       </div>
 
-      <div className="space-y-1 text-[11px]">
+      <div className="space-y-1 text-xs">
         <div className="flex justify-between items-center text-cyan-400 font-medium">
           <span className="font-bold tracking-wide">PERMEATE:</span>
           <span className="font-bold font-mono">+{permVal.toLocaleString()} m³</span>
@@ -273,13 +273,13 @@ function ROTrainFlowTooltip({ active, payload, label }: any) {
           <span className="font-bold font-mono text-foreground">{feedVal > 0 ? `${feedVal.toLocaleString()} m³` : '—'}</span>
         </div>
 
-        <div className="flex justify-between items-center text-muted-foreground text-[10px]">
+        <div className="flex justify-between items-center text-muted-foreground text-2xs">
           <span>EXPECTED (Perm + Rej):</span>
           <span className="font-mono">{expectedFeed.toLocaleString()} m³</span>
         </div>
 
         {hasDeviation && (
-          <div className="mt-1.5 pt-1.5 border-t border-rose-500/30 flex justify-between items-center text-rose-400 text-[10px] font-semibold">
+          <div className="mt-1.5 pt-1.5 border-t border-rose-500/30 flex justify-between items-center text-rose-400 text-2xs font-semibold">
             <span>Discrepancy:</span>
             <span className="font-mono font-bold">
               {diff > 0 ? `+${diff}` : `${diff}`} m³ ({variancePct > 0 ? `+${variancePct}` : `${variancePct}`}%)
@@ -288,7 +288,7 @@ function ROTrainFlowTooltip({ active, payload, label }: any) {
         )}
 
         {recoveryPct && (
-          <div className="flex justify-between items-center text-muted-foreground text-[10px] pt-1">
+          <div className="flex justify-between items-center text-muted-foreground text-2xs pt-1">
             <span>Calculated Recovery:</span>
             <span className="font-semibold text-foreground font-mono">{recoveryPct}%</span>
           </div>
@@ -336,16 +336,16 @@ export function ROTrainWaterFlowChart({
   return (
     <div className="relative w-full h-full flex flex-col">
       {/* Chart Legend Header */}
-      <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-1 text-[11px] mb-1 px-1 text-muted-foreground">
+      <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-1 text-2xs mb-1 px-1 text-muted-foreground">
         <div className="flex items-center gap-1.5">
           <span className="w-2.5 h-2.5 rounded-xs bg-gradient-to-t from-sky-600 to-cyan-400 inline-block shadow-xs" />
           <span className="font-bold text-xs tracking-wider text-cyan-400">PERMEATE</span>
-          <span className="text-[10px] text-muted-foreground">Permeate (+)</span>
+          <span className="text-2xs text-muted-foreground">Permeate (+)</span>
         </div>
         <div className="flex items-center gap-1.5">
           <span className="w-2.5 h-2.5 rounded-xs bg-gradient-to-t from-orange-600 to-rose-500 inline-block shadow-xs" />
           <span className="font-bold text-xs tracking-wider text-rose-400">REJECT WATER</span>
-          <span className="text-[10px] text-muted-foreground">Reject (−)</span>
+          <span className="text-2xs text-muted-foreground">Reject (−)</span>
         </div>
         <div className="flex items-center gap-1.5">
           <span className="w-3 h-0.5 bg-slate-200 inline-block rounded-full" />

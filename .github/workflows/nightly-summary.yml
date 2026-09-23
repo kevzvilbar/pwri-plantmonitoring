@@ -20,9 +20,10 @@ jobs:
     steps:
       - name: Call fn_compute_daily_plant_summary via Supabase REST
         env:
-          SUPABASE_URL:    ${{ secrets.VITE_SUPABASE_URL }}
-          SUPABASE_ANON:   ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
-          TARGET_DATE:     ${{ inputs.date }}
+          SUPABASE_URL:          ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SUPABASE_ANON:         ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+          TARGET_DATE:           ${{ inputs.date }}
         run: |
           # Determine which date to compute
           if [ -z "$TARGET_DATE" ]; then
@@ -31,21 +32,48 @@ jobs:
               || TZ='Asia/Manila' date -v-1d '+%Y-%m-%d')
           fi
 
+          if [ -z "$SUPABASE_URL" ]; then
+            echo "ERROR: SUPABASE_URL (secrets.VITE_SUPABASE_URL) is not configured in GitHub repository secrets."
+            exit 1
+          fi
+
+          API_KEY="${SUPABASE_SERVICE_ROLE:-$SUPABASE_ANON}"
+          if [ -z "$API_KEY" ]; then
+            echo "ERROR: Neither SUPABASE_SERVICE_ROLE_KEY nor VITE_SUPABASE_PUBLISHABLE_KEY is configured in GitHub repository secrets."
+            exit 1
+          fi
+
+          CLEAN_URL="${SUPABASE_URL%/}"
           echo "Computing daily summary for: $TARGET_DATE"
 
-          # Call the Postgres function via Supabase REST API /rpc endpoint
-          RESPONSE=$(curl -sf \
+          # Do not use curl --fail here: it exits before the response body can be
+          # printed, which hides the PostgREST error behind exit code 22.
+          HTTP_STATUS=$(curl --silent --show-error --retry 2 --retry-all-errors \
+            --connect-timeout 15 --max-time 120 \
+            -w "%{http_code}" -o /tmp/summary_resp.json \
             -X POST \
-            "${SUPABASE_URL}/rest/v1/rpc/fn_compute_daily_plant_summary" \
-            -H "apikey: ${SUPABASE_ANON}" \
-            -H "Authorization: Bearer ${SUPABASE_ANON}" \
+            "${CLEAN_URL}/rest/v1/rpc/fn_compute_daily_plant_summary" \
+            -H "apikey: ${API_KEY}" \
+            -H "Authorization: Bearer ${API_KEY}" \
             -H "Content-Type: application/json" \
             -d "{\"p_date\": \"${TARGET_DATE}\"}")
 
+          RESPONSE=$(cat /tmp/summary_resp.json 2>/dev/null || echo "")
+          echo "HTTP Status: $HTTP_STATUS"
           echo "Response: $RESPONSE"
 
-          # Check it returned plants_processed > 0
-          PLANTS=$(echo "$RESPONSE" | grep -o '"plants_processed":[0-9]*' | grep -o '[0-9]*' || echo "0")
+          if [ "$HTTP_STATUS" -lt 200 ] || [ "$HTTP_STATUS" -ge 300 ]; then
+            echo "ERROR: Supabase REST API returned HTTP $HTTP_STATUS: $RESPONSE"
+            exit 1
+          fi
+
+          if ! printf '%s' "$RESPONSE" | jq -e '.ok == true' >/dev/null 2>&1; then
+            echo "ERROR: fn_compute_daily_plant_summary did not report ok:true — check the response above."
+            exit 1
+          fi
+
+          # Check how many plants were processed
+          PLANTS=$(printf '%s' "$RESPONSE" | jq -r '.plants_processed // 0' 2>/dev/null || echo "0")
           echo "Plants processed: $PLANTS"
 
           if [ "$PLANTS" -eq "0" ]; then

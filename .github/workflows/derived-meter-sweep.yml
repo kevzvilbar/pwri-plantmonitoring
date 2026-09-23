@@ -73,15 +73,12 @@ jobs:
       # it bypasses RLS -- so keep it only here, in GitHub Actions secrets.
       - name: Call fn_sweep_derived_meters via Supabase REST
         env:
-          SUPABASE_URL:  ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_URL:          ${{ secrets.VITE_SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          TARGET_DATE:   ${{ inputs.date }}
-          LOOKBACK_DAYS: ${{ inputs.lookback_days }}
-          # The exact cron string that fired this run (unset for
-          # workflow_dispatch) — lets the script below tell the new 23:30 PHT
-          # same-day run apart from the other three yesterday-PHT runs
-          # without needing four near-duplicate job definitions.
-          SCHEDULE:      ${{ github.event.schedule }}
+          SUPABASE_ANON:         ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+          TARGET_DATE:           ${{ inputs.date }}
+          LOOKBACK_DAYS:         ${{ inputs.lookback_days }}
+          SCHEDULE:              ${{ github.event.schedule }}
         run: |
           # Determine which date to sweep up to.
           #   1. Explicit input (workflow_dispatch) always wins.
@@ -100,20 +97,42 @@ jobs:
             LOOKBACK_DAYS=3
           fi
 
+          if [ -z "$SUPABASE_URL" ]; then
+            echo "ERROR: SUPABASE_URL (secrets.VITE_SUPABASE_URL) is not configured in GitHub repository secrets."
+            exit 1
+          fi
+
+          API_KEY="${SUPABASE_SERVICE_ROLE:-$SUPABASE_ANON}"
+          if [ -z "$API_KEY" ]; then
+            echo "ERROR: Neither SUPABASE_SERVICE_ROLE_KEY nor VITE_SUPABASE_PUBLISHABLE_KEY is configured in GitHub repository secrets."
+            exit 1
+          fi
+
+          CLEAN_URL="${SUPABASE_URL%/}"
           echo "Sweeping derived meters through: $TARGET_DATE (lookback ${LOOKBACK_DAYS}d)${SCHEDULE:+ [schedule: $SCHEDULE]}"
 
-          # Call the Postgres function via Supabase REST API /rpc endpoint
-          RESPONSE=$(curl -sf \
+          # Do not use curl --fail here: it exits before the response body can be
+          # printed, which hides the PostgREST error behind exit code 22.
+          HTTP_STATUS=$(curl --silent --show-error --retry 2 --retry-all-errors \
+            --connect-timeout 15 --max-time 120 \
+            -w "%{http_code}" -o /tmp/sweep_resp.json \
             -X POST \
-            "${SUPABASE_URL}/rest/v1/rpc/fn_sweep_derived_meters" \
-            -H "apikey: ${SUPABASE_SERVICE_ROLE}" \
-            -H "Authorization: Bearer ${SUPABASE_SERVICE_ROLE}" \
+            "${CLEAN_URL}/rest/v1/rpc/fn_sweep_derived_meters" \
+            -H "apikey: ${API_KEY}" \
+            -H "Authorization: Bearer ${API_KEY}" \
             -H "Content-Type: application/json" \
             -d "{\"p_date\": \"${TARGET_DATE}\", \"p_lookback_days\": ${LOOKBACK_DAYS}}")
 
+          RESPONSE=$(cat /tmp/sweep_resp.json 2>/dev/null || echo "")
+          echo "HTTP Status: $HTTP_STATUS"
           echo "Response: $RESPONSE"
 
-          if ! printf '%s' "$RESPONSE" | jq -e '.ok == true' >/dev/null; then
+          if [ "$HTTP_STATUS" -lt 200 ] || [ "$HTTP_STATUS" -ge 300 ]; then
+            echo "ERROR: Supabase REST API returned HTTP $HTTP_STATUS: $RESPONSE"
+            exit 1
+          fi
+
+          if ! printf '%s' "$RESPONSE" | jq -e '.ok == true' >/dev/null 2>&1; then
             echo "ERROR: sweep did not report ok:true — check the response above."
             exit 1
           fi

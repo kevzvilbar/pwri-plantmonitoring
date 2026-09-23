@@ -26,14 +26,14 @@ function VolumeBar({
   const pct = maxValue > 0 ? Math.max((value / maxValue) * 100, value > 0 ? 2 : 0) : 0;
   return (
     <span className="flex items-center gap-1.5">
-      <span className="w-14 shrink-0 text-[10px] font-medium text-muted-foreground">{label}</span>
+      <span className="w-14 shrink-0 text-2xs font-medium text-muted-foreground">{label}</span>
       <span className="relative h-1.5 flex-1 min-w-0 rounded-full bg-muted/60 overflow-hidden">
         <span
           className="absolute inset-y-0 left-0 rounded-full transition-[width]"
           style={{ width: `${pct}%`, backgroundColor: color }}
         />
       </span>
-      <span className="w-14 shrink-0 text-right text-[10px] font-mono-num text-muted-foreground">
+      <span className="w-14 shrink-0 text-right text-2xs font-mono-num text-muted-foreground">
         {fmtNum(value, 0)}
       </span>
     </span>
