@@ -8,8 +8,8 @@ const toastSuccess = vi.fn();
 
 vi.mock('sonner', () => ({
   toast: {
-    error: (...args: unknown[]) => toastError(...args),
-    success: (...args: unknown[]) => toastSuccess(...args),
+    error: (...args: any[]) => toastError(...args),
+    success: (...args: any[]) => toastSuccess(...args),
     info: vi.fn(),
   },
 }));
@@ -42,7 +42,7 @@ vi.mock('@/integrations/supabase/client', () => ({
           }),
         }),
       }),
-      insert: (payload: unknown) => insertFn(payload),
+      insert: (payload: any) => insertFn(payload),
     }),
   },
 }));
@@ -110,3 +110,4 @@ describe('DowntimeEventsModal regression tests', () => {
     });
   });
 });
+

@@ -4,3 +4,4 @@ build
 .git
 supabase/.temp
 *.log
+
