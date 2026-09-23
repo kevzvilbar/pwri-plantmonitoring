@@ -28,7 +28,7 @@ vi.mock('@/components/operations/ControlCluster', async () => ({
 vi.mock('@/components/operations/MetaStrip', async () => ({
   MetaStrip: (await import('@/features/operations/components/MetaStrip')).MetaStrip,
 }));
-vi.mock('@/pages/operations/shared', () => ({ WELL_MAX_READINGS_PER_DAY: 4 }));
+vi.mock('@/features/operations/shared', () => ({ WELL_MAX_READINGS_PER_DAY: 4 }));
 
 import { WellRowHeader } from './WellRowHeader';
 

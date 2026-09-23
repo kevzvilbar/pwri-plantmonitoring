@@ -5,9 +5,11 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 
+import type { PlantMeterConfig } from '@/features/plants/shared';
+
 interface PowerMeterSectionProps {
-  cfg: import('@/pages/plants/shared').PlantMeterConfig;
-  update: (patch: Partial<import('@/pages/plants/shared').PlantMeterConfig>) => void;
+  cfg: PlantMeterConfig;
+  update: (patch: Partial<PlantMeterConfig>) => void;
   canEdit: boolean;
 }
 

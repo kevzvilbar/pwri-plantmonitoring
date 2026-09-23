@@ -670,11 +670,9 @@ export function useDashboardAlerts({
       });
     });
 
-    if (storeAlerts.length > 0) {
-      const dedupedMap = new Map<string, PlantAlert>();
-      storeAlerts.forEach((a) => dedupedMap.set(a.id, a));
-      addAlerts(Array.from(dedupedMap.values()));
-    }
+    const dedupedMap = new Map<string, PlantAlert>();
+    storeAlerts.forEach((a) => dedupedMap.set(a.id, a));
+    addAlerts(Array.from(dedupedMap.values()));
 
     if (clearedConditionIds.length > 0) {
       clearConditionAlerts(clearedConditionIds);

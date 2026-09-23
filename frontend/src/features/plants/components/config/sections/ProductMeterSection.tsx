@@ -5,9 +5,11 @@ import { Label } from '@/components/ui/label';
 import { TrendingUp, BarChart2, Gauge } from 'lucide-react';
 import { PermeateProductCheck } from './PermeateProductCheck';
 
+import type { PlantMeterConfig } from '@/features/plants/shared';
+
 interface ProductMeterSectionProps {
-  cfg: import('@/pages/plants/shared').PlantMeterConfig;
-  update: (patch: Partial<import('@/pages/plants/shared').PlantMeterConfig>) => void;
+  cfg: PlantMeterConfig;
+  update: (patch: Partial<PlantMeterConfig>) => void;
   canEdit: boolean;
   plantId?: string;
   plantName?: string;

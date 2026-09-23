@@ -12,9 +12,11 @@ import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
 
+import type { PlantMeterConfig } from '@/features/plants/shared';
+
 interface RoTrainsMeterSectionProps {
-  cfg: import('@/pages/plants/shared').PlantMeterConfig;
-  update: (patch: Partial<import('@/pages/plants/shared').PlantMeterConfig>) => void;
+  cfg: PlantMeterConfig;
+  update: (patch: Partial<PlantMeterConfig>) => void;
   canEdit: boolean;
   plantId?: string;
 }

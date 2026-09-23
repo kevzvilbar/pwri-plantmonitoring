@@ -1,5 +1,5 @@
 {
-  "maxWarnings": 2493,
+  "maxWarnings": 2479,
   "lastUpdated": "2026-09-23",
   "history": [
     {
@@ -231,6 +231,12 @@
       "maxWarnings": 2493,
       "previous": 2480,
       "reason": "Re-baselined lint ceiling after landing P5-10 CommandPalette components (useCommandPaletteShortcut / CommandPalette.test.tsx) and ROTrains query consolidation with added unit test coverage (useROTrains.test.tsx). Verified: 157 vitest suites pass (1265/1265 tests), tsc --noEmit 0 errors, check-lint-ceiling clean."
+    },
+    {
+      "date": "2026-09-23",
+      "maxWarnings": 2479,
+      "previous": 2493,
+      "reason": "Deleted dead re-export shims in pages/plants/ and pages/operations/ (P6-2 completion), eliminating 14 react-refresh/only-export-components warnings from unused legacy exports."
     }
   ]
 }

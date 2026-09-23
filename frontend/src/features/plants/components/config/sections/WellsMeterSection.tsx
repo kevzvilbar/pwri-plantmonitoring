@@ -3,9 +3,11 @@ import { Zap, Plus, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
+import type { PlantMeterConfig } from '@/features/plants/shared';
+
 interface WellsMeterSectionProps {
-  cfg: import('@/pages/plants/shared').PlantMeterConfig;
-  update: (patch: Partial<import('@/pages/plants/shared').PlantMeterConfig>) => void;
+  cfg: PlantMeterConfig;
+  update: (patch: Partial<PlantMeterConfig>) => void;
   canEdit: boolean;
   wells: Array<{ id: string; name: string }>;
 }

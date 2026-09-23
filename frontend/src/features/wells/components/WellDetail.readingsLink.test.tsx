@@ -26,8 +26,8 @@ vi.mock('@/hooks/useCustomRoles', () => ({
 }));
 vi.mock('@/integrations/supabase/client', () => ({ supabase: {} }));
 vi.mock('sonner', () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
-vi.mock('@/pages/plants/charts/EntityHistoryChart/index', () => ({ EntityHistoryChart: () => null, MeterDetailButton: () => null }));
-vi.mock('@/pages/plants/locators/LocatorDialogs', () => ({ ReplaceMeterDialog: () => null }));
+vi.mock('@/features/plants/components/charts/EntityHistoryChart/index', () => ({ EntityHistoryChart: () => null, MeterDetailButton: () => null }));
+vi.mock('@/features/plants/components/locators/LocatorDialogs', () => ({ ReplaceMeterDialog: () => null }));
 vi.mock('./WellDialogs', () => ({ EditElectricMeterDialog: () => null, EditHydraulicDialog: () => null, HydraulicHistoryDialog: () => null }));
 vi.mock('@/components/readingHistory/MeterReplacementDetailDialog', () => ({ MeterReplacementDetailDialog: () => null }));
 vi.mock('@/components/readingHistory/ReplPill', () => ({ ReplPill: () => null }));

@@ -48,9 +48,9 @@ vi.mock('./WellDialogs', () => ({
 vi.mock('@/integrations/supabase/client', () => ({ supabase: {} }));
 vi.mock('@/hooks/useAuth', () => ({ useAuth: () => ({}) }));
 vi.mock('@/store/appStore', () => ({ useAppStore: () => ({}) }));
-vi.mock('@/pages/plants/locators/LocatorDialogs', () => ({ ReasonField: () => null }));
-vi.mock('@/pages/plants/charts/EntityHistoryChart/index', () => ({ EntityHistoryChart: () => null, MeterDetailButton: () => null }));
-vi.mock('@/pages/plants/shared', () => ({
+vi.mock('@/features/plants/components/locators/LocatorDialogs', () => ({ ReasonField: () => null }));
+vi.mock('@/features/plants/components/charts/EntityHistoryChart/index', () => ({ EntityHistoryChart: () => null, MeterDetailButton: () => null }));
+vi.mock('@/features/plants/shared', () => ({
   CollapsibleSection: () => null, GridPylonIcon: () => null, usePlantMeterConfig: () => ({}), logStatusChange: () => {},
 }));
 vi.mock('@/components/DeleteEntityMenu', () => ({ DeleteEntityMenu: () => null }));

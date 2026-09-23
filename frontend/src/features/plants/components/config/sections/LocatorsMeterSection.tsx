@@ -4,9 +4,11 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 
+import type { PlantMeterConfig } from '@/features/plants/shared';
+
 interface LocatorsMeterSectionProps {
-  cfg: import('@/pages/plants/shared').PlantMeterConfig;
-  update: (patch: Partial<import('@/pages/plants/shared').PlantMeterConfig>) => void;
+  cfg: PlantMeterConfig;
+  update: (patch: Partial<PlantMeterConfig>) => void;
   canEdit: boolean;
   locators: Array<{ id: string; name: string; product_meter_id: string | null }>;
   configProductMeters: Array<{ id: string; name: string }>;
