@@ -9,7 +9,7 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { type Database } from '@/integrations/supabase/types';
 import { deriveTrainStatus, ROTrainHero } from './index';
-import { loadThresholds } from '@/pages/Compliance';
+import { loadThresholds } from '@/features/compliance';
 
 import { CIPLog } from './cip/CIPLog';
 import { ChemicalDosing } from './dosing/ChemicalDosing';

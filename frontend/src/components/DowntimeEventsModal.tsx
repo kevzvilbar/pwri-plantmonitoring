@@ -53,7 +53,7 @@ export function DowntimeEventsModal({
   const [showAddDialog, setShowAddDialog] = useState(false);
 
   const [newEventDate, setNewEventDate] = useState<string>(format(new Date(), 'yyyy-MM-dd'));
-  const [newEventPlantId, setNewEventPlantId] = useState<string>(initialPlantId || plants[0]?.id || '');
+  const [newEventPlantId, setNewEventPlantId] = useState<string>(initialPlantId || '');
   const [newEventSubsystem, setNewEventSubsystem] = useState<string>('RO Trains');
   const [newEventDuration, setNewEventDuration] = useState<string>('');
   const [newEventDescription, setNewEventDescription] = useState<string>('');
@@ -167,6 +167,10 @@ export function DowntimeEventsModal({
 
   const handleCreateEvent = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!newEventPlantId) {
+      toast.error('Please select a plant');
+      return;
+    }
     if (!newEventDate) {
       toast.error('Please select an event date');
       return;

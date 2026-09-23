@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Lamp } from '@/components/ui/Lamp';
 import { fmtNum } from '@/lib/format';
 import { useQuery } from '@tanstack/react-query';
-import { loadThresholds } from '@/pages/Compliance';
+import { loadThresholds } from '@/features/compliance';
 import { describeFreshness } from '@/shared/freshness';
 import { useNow } from '@/hooks/useNow';
 import { ProductMetersStat } from './config/ProductMeters';

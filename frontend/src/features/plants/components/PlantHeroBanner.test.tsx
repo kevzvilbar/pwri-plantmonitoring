@@ -5,7 +5,7 @@ import { PlantHeroBanner } from './PlantHeroBanner';
 
 afterEach(() => cleanup());
 
-vi.mock('@/pages/Compliance', () => ({
+vi.mock('@/features/compliance', () => ({
   loadThresholds: vi.fn().mockResolvedValue({}),
 }));
 vi.mock('./config/ProductMeters', () => ({

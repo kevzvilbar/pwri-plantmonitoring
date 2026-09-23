@@ -9,7 +9,7 @@ import { Card } from '@/components/ui/card';
 import { fmtNum } from '@/lib/calculations';
 import { cn } from '@/lib/utils';
 import { deriveTrainStatus, TrainCard } from './index';
-import { loadThresholds, DEFAULT_THRESHOLDS } from '@/pages/Compliance';
+import { loadThresholds, DEFAULT_THRESHOLDS } from '@/features/compliance';
 import { useTrainHourlyGaps, type TrainHourlyGap } from '@/hooks/useTrainHourlyGaps';
 import { Search, X, ShieldAlert, Gauge, LayoutGrid } from 'lucide-react';
 import { PlantPicker } from './shared/PlantPicker';
