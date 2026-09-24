@@ -10,6 +10,9 @@ export interface UseQualityStatsParams {
   todayWells?: any[];
 }
 
+const EMPTY_TRAIN_IDS: string[] = [];
+const EMPTY_TRAIN_META_MAP = new Map<string, { plant_id: string; train_number: number | null; train_name: string | null; well_id: string | null; unit_type: string | null }>();
+
 export function useQualityStats({
   plantIds,
   plants,
@@ -38,8 +41,8 @@ export function useQualityStats({
     enabled: plantIds.length > 0,
     staleTime: 10 * 60_000,
   });
-  const qualityTrainIds   = _qualityTrainMeta?.ids    ?? [];
-  const qualityTrainMeta2 = _qualityTrainMeta?.metaMap ?? new Map<string, { plant_id: string; train_number: number | null; train_name: string | null; well_id: string | null; unit_type: string | null }>();
+  const qualityTrainIds   = _qualityTrainMeta?.ids    ?? EMPTY_TRAIN_IDS;
+  const qualityTrainMeta2 = _qualityTrainMeta?.metaMap ?? EMPTY_TRAIN_META_MAP;
 
   const { data: wellNamesByTrainWell = new Map<string, string>() } = useQuery({
     queryKey: ['dash-well-names-for-trains', plantIds],

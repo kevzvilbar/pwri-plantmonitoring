@@ -31,6 +31,7 @@ vi.mock('./useAlertEvents', () => ({
     loaded: true,
     isRecording: false,
   }),
+  persistEvent: vi.fn().mockResolvedValue(true),
 }));
 
 const useProductionStats = vi.fn();
