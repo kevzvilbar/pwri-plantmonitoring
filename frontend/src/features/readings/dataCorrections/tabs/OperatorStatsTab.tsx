@@ -17,17 +17,6 @@ export function OperatorStatsTab() {
     pct >= 20 ? 'bg-destructive/10' :
     pct >= 10 ? 'bg-warn-soft' : '';
 
-  const safeDateDistance = (iso?: string | null) => {
-    if (!iso) return '—';
-    try {
-      const d = new Date(iso);
-      if (isNaN(d.getTime())) return '—';
-      return formatDistanceToNow(d, { addSuffix: true });
-    } catch {
-      return '—';
-    }
-  };
-
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-2">
@@ -115,9 +104,9 @@ export function OperatorStatsTab() {
                       </td>
                       <td className="px-3 py-2.5 text-muted-foreground whitespace-nowrap">
                         {s.last_entry_at
-                          ? safeDateDistance(s.last_entry_at)
+                          ? formatDistanceToNow(new Date(s.last_entry_at), { addSuffix: true })
                           : s.last_error_at
-                          ? safeDateDistance(s.last_error_at)
+                          ? formatDistanceToNow(new Date(s.last_error_at), { addSuffix: true })
                           : '—'}
                       </td>
                     </tr>

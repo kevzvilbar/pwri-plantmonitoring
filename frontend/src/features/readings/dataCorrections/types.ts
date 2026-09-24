@@ -121,19 +121,10 @@ export const tableLabel: Record<SourceTable, string> = {
   ro_train_readings: 'RO Train',
 };
 
-export const fmtNum = (n: number | null | undefined) =>
-  n == null || isNaN(Number(n)) ? '—' : Number(n).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+export const fmtNum = (n: number | null) =>
+  n == null ? '—' : n.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-export const fmtDt = (s: string | null | undefined) => {
-  if (!s) return '—';
-  try {
-    const d = new Date(s);
-    if (isNaN(d.getTime())) return '—';
-    return format(d, 'dd MMM yy HH:mm');
-  } catch {
-    return '—';
-  }
-};
+export const fmtDt = (s: string) => format(new Date(s), 'dd MMM yy HH:mm');
 
 export const PENDING_FETCH_LIMIT_PER_TABLE = 1000;
 

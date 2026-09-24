@@ -68,7 +68,7 @@ describe('in-app navigation targets', () => {
     expect(routes.some((r) => r.test('/corrections'))).toBe(false);
   });
 
-  it('every literal navigate()/Navigate/Link target resolves to a declared route', { timeout: 60000 }, () => {
+  it('every literal navigate()/Navigate/Link target resolves to a declared route', { timeout: 20000 }, () => {
     const broken: string[] = [];
     for (const file of sourceFiles(SRC)) {
       for (const target of literalTargets(file)) {

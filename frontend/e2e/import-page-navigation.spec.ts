@@ -21,7 +21,7 @@ test.describe('Import Page', () => {
     await expect(dropzone.first()).toBeVisible({ timeout: 10_000 });
 
     // Page title or instruction text confirms the module loaded
-    const instruction = page.locator('text=/Smart Multi-Import/i, text=/Drop a .csv/i, text=/CSV batch loader/i');
+    const instruction = page.locator('text=/Pick an import type/i, text=/CSV File Upload/i, text=/Smart import/i');
     await expect(instruction.first()).toBeVisible({ timeout: 10_000 });
   });
 

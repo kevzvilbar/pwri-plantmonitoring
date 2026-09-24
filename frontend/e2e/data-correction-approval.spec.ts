@@ -45,7 +45,7 @@ test.describe('Manager Data Correction Approval Workflow', () => {
     await page.waitForTimeout(3_000);
 
     // If no corrections exist, the test is informational (not a failure)
-    const pendingRows = page.locator('tr:has-text("pending"), tr:has-text("Pending"), div:has-text("Operator Correction Requests"), button:has-text("Approve")');
+    const pendingRows = page.locator('tr:has-text("pending"), tr:has-text("Pending")');
     const rowCount = await pendingRows.count();
 
     if (rowCount === 0) {
