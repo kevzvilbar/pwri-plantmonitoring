@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { HAS_CREDENTIALS } from './base';
+import { signIn, HAS_CREDENTIALS } from './base';
 
 /**
  * Critical workflow: RO Train Hourly Readings on /ro-trains.
@@ -17,11 +17,7 @@ test.describe('RO Train Hourly Readings Workflow', () => {
       return;
     }
 
-    await page.goto('/auth');
-    await page.fill('#signin-email', process.env.E2E_EMAIL!);
-    await page.fill('#signin-password', process.env.E2E_PASSWORD!);
-    await page.click('button:has-text("Sign in")');
-    await page.waitForURL((url) => !url.pathname.startsWith('/auth'), { timeout: 15_000 });
+    await signIn(page);
   });
 
   test('navigates to RO Trains and shows the Pre-Treatment tab', async ({ page }) => {

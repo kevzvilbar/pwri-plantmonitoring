@@ -15,7 +15,11 @@ export async function signIn(page: Page, email = E2E_EMAIL, password = E2E_PASSW
   await page.goto('/auth');
   await page.fill('#signin-email', email);
   await page.fill('#signin-password', password);
-  await page.click('button:has-text("Sign in")');
+  // Must target the form's submit button. `button:has-text("Sign in")` also
+  // matches the already-selected "Sign in" TabsTrigger (role=tab) that sits
+  // above the form, and page.click() takes the FIRST match -- so it clicked the
+  // tab, never submitted, and waitForURL below timed out in every spec.
+  await page.click('button[type="submit"]:has-text("Sign in")');
   await page.waitForURL((url) => !/\/auth\/?$/.test(url.pathname), { timeout: 15_000 });
 }
 

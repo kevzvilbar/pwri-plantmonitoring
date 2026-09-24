@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { HAS_CREDENTIALS } from './base';
+import { signIn, E2E_MANAGER_EMAIL, HAS_CREDENTIALS } from './base';
 
 /**
  * Critical workflow: Manager reviews and approves a data correction.
@@ -10,7 +10,9 @@ import { HAS_CREDENTIALS } from './base';
  * - The approve / reject action buttons are present
  *
  * Prerequisites:
- *   E2E_EMAIL / E2E_PASSWORD must be set, and the user must have manager or admin role.
+ *   E2E_EMAIL / E2E_PASSWORD must be set (they gate the suite). The test signs in
+ *   as the seeded Manager: the seeded E2E_EMAIL user is an Operator, who is
+ *   redirected away from /data-corrections by ProtectedRoute.
  */
 test.describe('Manager Data Correction Approval Workflow', () => {
   test.beforeEach(async ({ page }) => {
@@ -19,11 +21,7 @@ test.describe('Manager Data Correction Approval Workflow', () => {
       return;
     }
 
-    await page.goto('/auth');
-    await page.fill('#signin-email', process.env.E2E_EMAIL!);
-    await page.fill('#signin-password', process.env.E2E_PASSWORD!);
-    await page.click('button:has-text("Sign in")');
-    await page.waitForURL((url) => !url.pathname.startsWith('/auth'), { timeout: 15_000 });
+    await signIn(page, E2E_MANAGER_EMAIL);
   });
 
   test('loads the Data Corrections page without errors', async ({ page }) => {

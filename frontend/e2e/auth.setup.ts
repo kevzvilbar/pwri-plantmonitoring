@@ -9,7 +9,8 @@ export default async function setupAuth(page: any): Promise<any> {
   await page.goto('/auth');
   await page.fill('#signin-email', email);
   await page.fill('#signin-password', password);
-  await page.click('button:has-text("Sign in")');
+  // Submit button only -- the "Sign in" tab trigger also matches has-text (see base.ts signIn).
+  await page.click('button[type="submit"]:has-text("Sign in")');
 
   try {
     await page.waitForURL((url) => !url.pathname.startsWith('/auth'), { timeout: 15_000 });

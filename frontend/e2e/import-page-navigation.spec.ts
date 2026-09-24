@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { signIn, HAS_CREDENTIALS } from './base';
+import { signIn, E2E_ADMIN_EMAIL, HAS_CREDENTIALS } from './base';
 
 test.describe('Import Page', () => {
   test.beforeEach(async ({ page }) => {
@@ -7,7 +7,8 @@ test.describe('Import Page', () => {
       test.skip(true, 'Skipping: set E2E_EMAIL and E2E_PASSWORD to run this suite.');
       return;
     }
-    await signIn(page);
+    // Admin, not the default Operator: /import isn't in OPERATOR_ALLOWED_PATHS.
+    await signIn(page, E2E_ADMIN_EMAIL);
   });
   test('renders the import page with a dropzone and no crash', async ({ page }) => {
     await page.goto('/import');

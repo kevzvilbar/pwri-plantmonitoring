@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { HAS_CREDENTIALS } from './base';
+import { signIn, E2E_ADMIN_EMAIL, HAS_CREDENTIALS } from './base';
 
 /**
  * Critical workflow: Plant-wide compliance snapshot.
@@ -12,7 +12,9 @@ import { HAS_CREDENTIALS } from './base';
  * - Export CSV button is present
  *
  * Prerequisites:
- *   E2E_EMAIL / E2E_PASSWORD must be set.
+ *   E2E_EMAIL / E2E_PASSWORD must be set (they gate the suite). The test itself
+ *   signs in as the seeded Admin: the seeded E2E_EMAIL user is an Operator, and
+ *   ProtectedRoute bounces Operators off /compliance (OPERATOR_ALLOWED_PATHS).
  */
 test.describe('Compliance Snapshot Workflow', () => {
   test.beforeEach(async ({ page }) => {
@@ -21,11 +23,7 @@ test.describe('Compliance Snapshot Workflow', () => {
       return;
     }
 
-    await page.goto('/auth');
-    await page.fill('#signin-email', process.env.E2E_EMAIL!);
-    await page.fill('#signin-password', process.env.E2E_PASSWORD!);
-    await page.click('button:has-text("Sign in")');
-    await page.waitForURL((url) => !url.pathname.startsWith('/auth'), { timeout: 15_000 });
+    await signIn(page, E2E_ADMIN_EMAIL);
   });
 
   test('compliance page renders without errors', async ({ page }) => {
