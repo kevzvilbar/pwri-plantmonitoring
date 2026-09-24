@@ -18,7 +18,7 @@ export function BillsList({ plantId }: BillsListProps) {
         ? (
             await supabase
               .from('electric_bills')
-              .select('id, plant_id, billing_month, current_reading, previous_reading, multiplier, total_kwh, total_amount, currency, notes, created_at')
+              .select('id, plant_id, billing_month, current_reading, previous_reading, multiplier, total_kwh, total_amount, remarks, created_at')
               .eq('plant_id', plantId)
               .order('billing_month', { ascending: false })
               .limit(12)
