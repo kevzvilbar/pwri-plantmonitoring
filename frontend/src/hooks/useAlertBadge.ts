@@ -26,6 +26,20 @@ export function selectAttentionAlerts(
   );
 }
 
+/**
+ * All alerts that are currently active (not acknowledged, resolved, or snoozed),
+ * including info severity.
+ */
+export function selectActiveAlerts(
+  alerts: readonly PlantAlert[],
+  snoozeMap: SnoozeMap,
+  serverStatusByKey: ServerStatusMap = {},
+): PlantAlert[] {
+  return alerts.filter(
+    (a) => getAlertStatus(a, snoozeMap, serverStatusByKey) === 'active',
+  );
+}
+
 /** Nav badge state, read from the in-memory alert store. Two primitive
  *  selectors, so subscribers only re-render when a value actually changes. */
 export function useAlertBadge(): { count: number; hasCritical: boolean } {

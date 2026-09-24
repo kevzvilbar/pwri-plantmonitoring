@@ -1,15 +1,13 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { toast } from 'sonner';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/hooks/useAuth';
 import { usePlants } from '@/hooks/usePlants';
 import { useVisiblePlants } from '@/hooks/useVisiblePlants';
 import { useAlertStore } from '@/store/alertStore';
 import { useDebounce } from '@/hooks/useDebounce';
-import { sevTier, EMPTY_NOTIFICATIONS, type Notification } from '../lib/constants';
+import { selectActiveAlerts } from '@/hooks/useAlertBadge';
+import { sevTier } from '../lib/constants';
 import { useAuditedAlertActions } from './useAuditedAlertActions';
+import { useNotifications } from './useNotifications';
 import { effectiveAlertStatus } from '../lib/alertStatus';
 import type { AlertStatus } from '@/store/alertStore';
 
@@ -17,8 +15,6 @@ export type StatusFilter = 'all' | AlertStatus;
 
 export function useAlerts() {
   const navigate = useNavigate();
-  const qc = useQueryClient();
-  const { user } = useAuth();
   const { data: plants } = usePlants();
   const { plantAlerts, snoozeMap, serverStatusByKey } = useAlertStore();
 
@@ -39,42 +35,15 @@ export function useAlerts() {
     return m;
   }, [plants]);
 
-  const { data: notificationsData, isLoading: logsLoading } = useQuery({
-    queryKey: ['notifications', user?.id],
-    queryFn: async (): Promise<Notification[]> => {
-      if (!user) return EMPTY_NOTIFICATIONS;
-      const { data } = await supabase
-        .from('notifications')
-        .select('id,title,message,link_path,read,severity,created_at')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
-        .limit(100);
-      return (data ?? EMPTY_NOTIFICATIONS) as Notification[];
-    },
-    enabled: !!user,
-  });
-
-  const notifs = notificationsData ?? EMPTY_NOTIFICATIONS;
-
-  const markAllRead = async () => {
-    if (!user) return;
-    await supabase.from('notifications').update({ read: true }).eq('user_id', user.id).eq('read', false);
-    qc.invalidateQueries({ queryKey: ['notifications'] });
-    toast.success('All notifications marked as read');
-  };
-
-  const deleteNotification = async (id: string) => {
-    if (!user) return;
-    qc.setQueryData<Notification[]>(['notifications', user.id], (prev) =>
-      (prev ?? EMPTY_NOTIFICATIONS).filter((n) => n.id !== id));
-    const { error } = await supabase.from('notifications').delete().eq('id', id).eq('user_id', user.id);
-    if (error) {
-      qc.invalidateQueries({ queryKey: ['notifications'] });
-      toast.error('Failed to dismiss notification');
-    } else {
-      toast.success('Notification dismissed');
-    }
-  };
+  // Single shared notifications hook
+  const {
+    notifs,
+    notificationsData,
+    logsLoading,
+    unreadCount: unreadLogsCount,
+    markAllRead,
+    deleteNotification,
+  } = useNotifications();
 
   const filteredPlantAlerts = useMemo(() => {
     return plantAlerts
@@ -100,7 +69,7 @@ export function useAlerts() {
       })
       .sort((a, b) => {
         const order = { critical: 0, warning: 1, info: 2 };
-        return (order[sevTier(a.severity)] - order[sevTier(b.severity)]) || (b.timestamp - a.timestamp);
+        return order[sevTier(a.severity)] - order[sevTier(b.severity)] || b.timestamp - a.timestamp;
       });
   }, [plantAlerts, plantFilter, tierFilter, statusFilter, snoozeMap, serverStatusByKey, debouncedSearchQuery, plantNameById]);
 
@@ -118,26 +87,40 @@ export function useAlerts() {
     });
   }, [notifs, tierFilter, debouncedSearchQuery]);
 
-  const criticalCount = useMemo(() => plantAlerts.filter((a) => sevTier(a.severity) === 'critical').length, [plantAlerts]);
-  const warningCount = useMemo(() => plantAlerts.filter((a) => sevTier(a.severity) === 'warning').length, [plantAlerts]);
-  const infoCount = useMemo(() => plantAlerts.filter((a) => sevTier(a.severity) === 'info').length, [plantAlerts]);
-  const unreadLogsCount = useMemo(() => notifs.filter((n) => !n.read).length, [notifs]);
+  // Active alerts across the fleet (filters out acknowledged, resolved, snoozed)
+  const activeAlerts = useMemo(
+    () => selectActiveAlerts(plantAlerts, snoozeMap, serverStatusByKey),
+    [plantAlerts, snoozeMap, serverStatusByKey],
+  );
+
+  const criticalCount = useMemo(
+    () => activeAlerts.filter((a) => sevTier(a.severity) === 'critical').length,
+    [activeAlerts],
+  );
+  const warningCount = useMemo(
+    () => activeAlerts.filter((a) => sevTier(a.severity) === 'warning').length,
+    [activeAlerts],
+  );
+  const infoCount = useMemo(
+    () => activeAlerts.filter((a) => sevTier(a.severity) === 'info').length,
+    [activeAlerts],
+  );
 
   // ── P3-2: audited actions — local store update + one alert_events row ──────
   const { ackAlert, ackAll, resolveWithNote, snoozeMany, snoozableIds } = useAuditedAlertActions();
 
-    return {
+  return {
     navigate,
     activeView, setActiveView,
     tierFilter, setTierFilter,
     statusFilter, setStatusFilter,
     plantFilter, setPlantFilter,
     searchQuery, setSearchQuery,
-    plantAlerts, visiblePlants, needsAssignment, plantNameById,
+    plantAlerts, activeAlerts, visiblePlants, needsAssignment, plantNameById,
     notificationsData, logsLoading, notifs,
     filteredPlantAlerts, filteredLogs,
     criticalCount, warningCount, infoCount, unreadLogsCount,
-    plantAlertsLength: plantAlerts.length, notifsLength: notifs.length,
+    plantAlertsLength: activeAlerts.length, notifsLength: notifs.length,
     markAllRead, deleteNotification,
     // P3-2: audited actions (local store update + one alert_events row)
     ackAlert, ackAll, resolveWithNote, snoozeMany, snoozableIds,

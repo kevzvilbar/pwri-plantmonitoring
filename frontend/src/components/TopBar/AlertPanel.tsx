@@ -145,7 +145,7 @@ export function AlertPanel() {
           >
             <span>Active Alarms</span>
             <span className={cn('text-3xs font-mono-num px-1 rounded-full', activeTab === 'active' ? 'bg-primary-foreground/20 text-white' : 'bg-muted text-muted-foreground')}>
-              {plantAlerts.length}
+              {sortedAlerts.length}
             </span>
           </button>
           <button
@@ -165,7 +165,7 @@ export function AlertPanel() {
           </button>
         </div>
 
-        {activeTab === 'active' && plantAlerts.length > 0 && (
+        {activeTab === 'active' && sortedAlerts.length > 0 && (
           <div className="flex items-center gap-1 overflow-x-auto pt-0.5">
             <button
               type="button"
@@ -177,7 +177,7 @@ export function AlertPanel() {
                   : 'text-muted-foreground hover:text-foreground'
               )}
             >
-              All ({plantAlerts.length})
+              All ({sortedAlerts.length})
             </button>
             {criticalAlerts.length > 0 && (
               <button

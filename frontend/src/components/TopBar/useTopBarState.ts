@@ -1,15 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
-import { useAppStore } from '@/store/appStore';
+import { usePlantStore } from '@/store/plantStore';
+import { useAlertStore } from '@/store/alertStore';
 import { usePlants } from '@/hooks/usePlants';
 import { useVisiblePlants } from '@/hooks/useVisiblePlants';
 import { usePlantSelectionGuard } from '@/hooks/usePlantSelectionGuard';
 import { useNavigate } from 'react-router-dom';
-import { toast } from 'sonner';
 import { useSidebar } from '@/components/ui/sidebar';
-import { Notification, SevTier, EMPTY_NOTIFICATIONS } from './types';
+import { selectActiveAlerts, selectAttentionAlerts } from '@/hooks/useAlertBadge';
+import { useNotifications } from '@/features/notifications/hooks/useNotifications';
+import { SevTier } from './types';
 import { sevTier } from './helpers';
 
 export function useTopBarState() {
@@ -17,15 +17,22 @@ export function useTopBarState() {
   const { isMobile, state } = useSidebar();
   const sidebarCollapsed = state === 'collapsed';
   const { data: plants } = usePlants();
+  const { selectedPlantId, setSelectedPlantId } = usePlantStore();
   const {
-    selectedPlantId, setSelectedPlantId,
-    setUnreadCount, unreadCount,
-    plantAlerts, alertsReady,
-    snoozeAlert, unsnoozeAlert, pruneSnooze,
-    acknowledgeAlert, resolveAlert, acknowledgeAll, resolveAll,
-  } = useAppStore();
+    plantAlerts,
+    alertsReady,
+    snoozeMap,
+    serverStatusByKey,
+    snoozeAlert,
+    unsnoozeAlert,
+    pruneSnooze,
+    acknowledgeAlert,
+    resolveAlert,
+    acknowledgeAll,
+    resolveAll,
+  } = useAlertStore();
+
   const navigate = useNavigate();
-  const qc = useQueryClient();
 
   const [panelOpen, setPanelOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'active' | 'logs'>('active');
@@ -38,35 +45,51 @@ export function useTopBarState() {
   // P5-2: drop a persisted plant selection this user cannot see.
   usePlantSelectionGuard();
 
-  const { data: notificationsData } = useQuery({
-    queryKey: ['notifications', user?.id],
-    queryFn: async (): Promise<Notification[]> => {
-      if (!user) return EMPTY_NOTIFICATIONS;
-      const { data } = await supabase
-        .from('notifications')
-        .select('id,title,message,link_path,read,severity,created_at')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
-        .limit(30);
-      return (data ?? EMPTY_NOTIFICATIONS) as Notification[];
-    },
-    enabled: !!user,
-    staleTime: 120_000,
-  });
-
-  const notifs = notificationsData ?? EMPTY_NOTIFICATIONS;
-  const nextUnreadCount = useMemo(() => notifs.filter((n) => !n.read).length, [notifs]);
+  // De-duplicated notifications hook
+  const {
+    notifs,
+    unreadCount,
+    markAllRead,
+    deleteNotification,
+  } = useNotifications();
 
   useEffect(() => {
-    if (unreadCount !== nextUnreadCount) setUnreadCount(nextUnreadCount);
-  }, [nextUnreadCount, setUnreadCount, unreadCount]);
+    pruneSnooze();
+  }, [pruneSnooze]);
 
-  useEffect(() => { pruneSnooze(); }, [pruneSnooze]);
+  const plantNameById = useMemo(() => {
+    const m = new Map<string, string>();
+    (plants ?? []).forEach((p) => m.set(p.id, p.name ?? p.id));
+    return m;
+  }, [plants]);
+
+  // Global attention alerts (critical + warning, active status across all visible plants)
+  // Guarantees exact count parity with sidebar badge.
+  const attentionAlerts = useMemo(
+    () => selectAttentionAlerts(plantAlerts, snoozeMap, serverStatusByKey),
+    [plantAlerts, snoozeMap, serverStatusByKey],
+  );
+  const attentionCount = attentionAlerts.length;
+
+  // Active alerts (all active status alerts across all plants, including info)
+  const activeAlerts = useMemo(
+    () => selectActiveAlerts(plantAlerts, snoozeMap, serverStatusByKey),
+    [plantAlerts, snoozeMap, serverStatusByKey],
+  );
+  const activeAlarmsCount = activeAlerts.length;
+
+  // Total badge sums unread workflow notifications and attention alerts
+  const totalBadge = unreadCount + attentionCount;
+  const hasCritical = useMemo(
+    () => attentionAlerts.some((a) => a.severity === 'critical'),
+    [attentionAlerts],
+  );
 
   const prevCriticalIdsRef = useRef<string[]>([]);
-
   useEffect(() => {
-    const currentCriticalIds = plantAlerts.filter(a => sevTier(a.severity) === 'critical').map((a) => a.id);
+    const currentCriticalIds = attentionAlerts
+      .filter((a) => a.severity === 'critical')
+      .map((a) => a.id);
     const hasNewCritical = currentCriticalIds.some((id) => !prevCriticalIdsRef.current.includes(id));
     let timer: ReturnType<typeof setTimeout> | undefined;
     if (hasNewCritical && currentCriticalIds.length > 0) {
@@ -77,52 +100,35 @@ export function useTopBarState() {
     return () => {
       if (timer) clearTimeout(timer);
     };
-  }, [plantAlerts]);
+  }, [attentionAlerts]);
 
-  const markAllRead = async () => {
-    if (!user) return;
-    await supabase.from('notifications').update({ read: true }).eq('user_id', user.id).eq('read', false);
-    qc.invalidateQueries({ queryKey: ['notifications'] });
-    toast.success('All notifications marked as read');
-  };
-
-  const deleteNotification = async (id: string) => {
-    if (!user) return;
-    qc.setQueryData<Notification[]>(['notifications', user.id], (prev) =>
-      (prev ?? EMPTY_NOTIFICATIONS).filter((n) => n.id !== id));
-    const { error } = await supabase.from('notifications').delete().eq('id', id).eq('user_id', user.id);
-    if (error) {
-      qc.invalidateQueries({ queryKey: ['notifications'] });
-    }
-  };
-
-  const plantNameById = useMemo(() => {
-    const m = new Map<string, string>();
-    (plants ?? []).forEach((p) => m.set(p.id, p.name ?? p.id));
-    return m;
-  }, [plants]);
-
-  // ── P3-8: no clearAlerts() on plant change. Alerts carry plantId, so both
-  // the TopBar bell and the Alerts page filter by the selector instead of
-  // destroying state (which also wiped acknowledgedBy/resolvedBy).
+  // ── P3-8: AlertPanel list displays alarms for selectedPlantId (including status lines)
   const scopedAlerts = useMemo(() => {
     if (!selectedPlantId) return plantAlerts;
     return plantAlerts.filter((a) => !a.plantId || a.plantId === selectedPlantId);
   }, [plantAlerts, selectedPlantId]);
 
-  const totalBadge = unreadCount + scopedAlerts.length;
+  const sortedAlerts = useMemo(
+    () =>
+      [...scopedAlerts].sort((a, b) => {
+        const order: Record<SevTier, number> = { critical: 0, warning: 1, info: 2 };
+        return order[sevTier(a.severity)] - order[sevTier(b.severity)] || b.timestamp - a.timestamp;
+      }),
+    [scopedAlerts],
+  );
 
-  const sortedAlerts = useMemo(() =>
-    [...scopedAlerts].sort((a, b) => {
-      const order: Record<SevTier, number> = { critical: 0, warning: 1, info: 2 };
-      return (order[sevTier(a.severity)] - order[sevTier(b.severity)]) || (b.timestamp - a.timestamp);
-    }),
-  [scopedAlerts]);
-
-  const criticalAlerts = useMemo(() => sortedAlerts.filter(a => sevTier(a.severity) === 'critical'), [sortedAlerts]);
-  const warningAlerts  = useMemo(() => sortedAlerts.filter(a => sevTier(a.severity) === 'warning'), [sortedAlerts]);
-  const infoAlerts     = useMemo(() => sortedAlerts.filter(a => sevTier(a.severity) === 'info'), [sortedAlerts]);
-  const hasCritical    = criticalAlerts.length > 0;
+  const criticalAlerts = useMemo(
+    () => sortedAlerts.filter((a) => sevTier(a.severity) === 'critical'),
+    [sortedAlerts],
+  );
+  const warningAlerts = useMemo(
+    () => sortedAlerts.filter((a) => sevTier(a.severity) === 'warning'),
+    [sortedAlerts],
+  );
+  const infoAlerts = useMemo(
+    () => sortedAlerts.filter((a) => sevTier(a.severity) === 'info'),
+    [sortedAlerts],
+  );
 
   const displayedAlerts = useMemo(() => {
     if (tierFilter === 'critical') return criticalAlerts;
@@ -131,7 +137,7 @@ export function useTopBarState() {
     return sortedAlerts;
   }, [tierFilter, sortedAlerts, criticalAlerts, warningAlerts, infoAlerts]);
 
-    return {
+  return {
     panelOpen,
     setPanelOpen,
     activeTab,
@@ -142,8 +148,11 @@ export function useTopBarState() {
     needsAssignment,
     notifs,
     unreadCount,
-    setUnreadCount,
     plantAlerts,
+    activeAlerts,
+    activeAlarmsCount,
+    attentionAlerts,
+    attentionCount,
     alertsReady,
     totalBadge,
     sortedAlerts,
@@ -156,10 +165,10 @@ export function useTopBarState() {
     markAllRead,
     deleteNotification,
     snoozeAlert,
-    unsnoozeAlert,  // Added
+    unsnoozeAlert,
     acknowledgeAlert,
     resolveAlert,
-        acknowledgeAll,
+    acknowledgeAll,
     resolveAll,
     isMobile,
     sidebarCollapsed,
