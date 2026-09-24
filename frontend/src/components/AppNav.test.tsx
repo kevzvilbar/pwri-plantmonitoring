@@ -12,20 +12,29 @@ vi.mock('@/hooks/useCustomRoles', () => ({ useMyCustomRole: () => ({ data: mockC
 import { AppSidebar } from '@/components/AppSidebar';
 import { BottomNav } from '@/components/BottomNav';
 import { SidebarProvider } from '@/components/ui/sidebar';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useAlertStore, type PlantAlert } from '@/store/alertStore';
 
 const alert = (id: string, severity: PlantAlert['severity']): PlantAlert => ({
   id, severity, title: id, description: '', source: 'test', plantId: 'p1', timestamp: 0,
 });
 
+const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
 const renderSidebar = (path = '/') =>
   render(
-    <MemoryRouter initialEntries={[path]}>
-      <SidebarProvider><AppSidebar /></SidebarProvider>
-    </MemoryRouter>,
+    <QueryClientProvider client={queryClient}>
+      <MemoryRouter initialEntries={[path]}>
+        <SidebarProvider><AppSidebar /></SidebarProvider>
+      </MemoryRouter>
+    </QueryClientProvider>,
   );
 const renderBottomNav = (path = '/') =>
-  render(<MemoryRouter initialEntries={[path]}><BottomNav /></MemoryRouter>);
+  render(
+    <QueryClientProvider client={queryClient}>
+      <MemoryRouter initialEntries={[path]}><BottomNav /></MemoryRouter>
+    </QueryClientProvider>,
+  );
 
 beforeEach(() => {
   mockRoles = ['Operator'];

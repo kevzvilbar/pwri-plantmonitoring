@@ -15,9 +15,20 @@ vi.mock('@/hooks/usePendingApprovalsCount', () => ({
 import { AppSidebar } from '@/components/AppSidebar';
 import { BottomNav } from '@/components/BottomNav';
 import { SidebarProvider } from '@/components/ui/sidebar';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
-const sidebar = () => render(<MemoryRouter><SidebarProvider><AppSidebar /></SidebarProvider></MemoryRouter>);
-const bottomNav = () => render(<MemoryRouter><BottomNav /></MemoryRouter>);
+const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+const sidebar = () => render(
+  <QueryClientProvider client={queryClient}>
+    <MemoryRouter><SidebarProvider><AppSidebar /></SidebarProvider></MemoryRouter>
+  </QueryClientProvider>,
+);
+const bottomNav = () => render(
+  <QueryClientProvider client={queryClient}>
+    <MemoryRouter><BottomNav /></MemoryRouter>
+  </QueryClientProvider>,
+);
 const badge = (n: number) => new RegExp(`^${n} ${n === 1 ? 'account' : 'accounts'} waiting for approval$`);
 
 beforeEach(() => { mockRoles = ['Admin']; mockPending = 0; });

@@ -33,12 +33,7 @@ export function SyncIndicator({
   className,
 }: SyncIndicatorProps = {}) {
   const { status, lastSynced, error, setStatus, setLastSynced, setError } = useSyncStore();
-  let qc: ReturnType<typeof useQueryClient> | null = null;
-  try {
-    qc = useQueryClient();
-  } catch {
-    qc = null;
-  }
+  const qc = useQueryClient();
 
   const lastToastedErr = useRef<string | null>(null);
 
@@ -46,9 +41,7 @@ export function SyncIndicator({
     if (status === 'syncing') return;
     setStatus('syncing');
     try {
-      if (qc) {
-        await qc.refetchQueries({ type: 'active' }, { throwOnError: true });
-      }
+      await qc.refetchQueries({ type: 'active' }, { throwOnError: true });
       setLastSynced(new Date());
       setError(null);
     } catch (err) {
