@@ -249,6 +249,6 @@ export function useCostComposition(
       };
     },
     enabled: plantIds.length > 0,
-    staleTime: 60_000,
+    staleTime: 5 * 60_000,
   });
 }

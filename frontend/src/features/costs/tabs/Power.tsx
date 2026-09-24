@@ -57,14 +57,36 @@ export function Power() {
 
   const { data: bills } = useQuery({
     queryKey: ['bills', plantId],
-    queryFn: async () => plantId ? (await supabase.from('electric_bills').select('*').eq('plant_id', plantId).order('billing_month', { ascending: false }).limit(12)).data ?? [] : [],
+    queryFn: async () =>
+      plantId
+        ? (
+            await supabase
+              .from('electric_bills')
+              .select('id, plant_id, billing_month, current_reading, previous_reading, multiplier, total_kwh, total_amount, remarks, created_at')
+              .eq('plant_id', plantId)
+              .order('billing_month', { ascending: false })
+              .limit(12)
+          ).data ?? []
+        : [],
     enabled: !!plantId,
+    staleTime: 10 * 60_000,
   });
 
   const { data: tariffs } = useQuery({
     queryKey: ['tariffs', plantId],
-    queryFn: async () => plantId ? (await supabase.from('power_tariffs').select('*').eq('plant_id', plantId).order('effective_date', { ascending: false }).limit(12)).data ?? [] : [],
+    queryFn: async () =>
+      plantId
+        ? (
+            await supabase
+              .from('power_tariffs')
+              .select('id, plant_id, rate_per_kwh, effective_date, notes, created_at')
+              .eq('plant_id', plantId)
+              .order('effective_date', { ascending: false })
+              .limit(12)
+          ).data ?? []
+        : [],
     enabled: !!plantId,
+    staleTime: 10 * 60_000,
   });
 
   useEffect(() => {

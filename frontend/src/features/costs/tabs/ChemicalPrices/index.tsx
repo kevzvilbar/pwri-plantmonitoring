@@ -32,7 +32,15 @@ export function ChemicalPrices() {
 
   const { data, isLoading } = useQuery({
     queryKey: ['chem-prices'],
-    queryFn: async () => (await supabase.from('chemical_prices').select('*').order('effective_date', { ascending: false }).limit(50)).data ?? [],
+    queryFn: async () =>
+      (
+        await supabase
+          .from('chemical_prices')
+          .select('id, plant_id, item_category, item_name, price_per_unit, currency, effective_date, notes, created_at')
+          .order('effective_date', { ascending: false })
+          .limit(50)
+      ).data ?? [],
+    staleTime: 10 * 60_000,
   });
 
   return (
