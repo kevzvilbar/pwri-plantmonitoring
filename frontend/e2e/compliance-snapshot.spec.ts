@@ -34,7 +34,7 @@ test.describe('Compliance Snapshot Workflow', () => {
     await expect(page.locator('text=Something went wrong')).toHaveCount(0);
 
     // Page title
-    await expect(page.locator('text=Compliance')).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByRole('heading', { name: 'Compliance' })).toBeVisible({ timeout: 10_000 });
   });
 
   test('Facility Radar tab shows compliance score or evaluation pending', async ({ page }) => {
@@ -97,7 +97,7 @@ test.describe('Compliance Snapshot Workflow', () => {
     await page.waitForTimeout(2_000);
 
     // Sandbox inputs should be visible
-    await expect(page.locator('text=Sandbox, text=Simulation')).toBeVisible({ timeout: 5_000 });
+    await expect(page.locator('text=/Sandbox/i, text=/Simulation/i').first()).toBeVisible({ timeout: 5_000 });
     const inputs = page.locator('input[type="number"]');
     await expect(inputs.first()).toBeVisible({ timeout: 5_000 });
   });

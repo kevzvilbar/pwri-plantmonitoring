@@ -24,7 +24,7 @@ test.describe('RO Train Hourly Readings Workflow', () => {
     await page.goto('/ro-trains');
 
     // Page title present
-    await expect(page.locator('text=RO Train')).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('heading', { name: /RO Train/i })).toBeVisible({ timeout: 15_000 });
 
     // Pre-treatment tab is visible (main hourly log)
     const tab = page.locator('button:has-text("Pre-Treatment"), [role="tab"]:has-text("Pre-Treatment")');

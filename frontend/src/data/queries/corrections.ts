@@ -662,7 +662,7 @@ export async function fetchCorrectionRequests(status?: string): Promise<Correcti
     id: r.id,
     source_table: r.source_table as SourceTable,
     source_id: r.source_id,
-    entity_name: `${tableLabel[r.source_table as SourceTable] ?? r.source_table} ${r.source_id.slice(0, 8)}`,
+    entity_name: `${tableLabel[r.source_table as SourceTable] ?? r.source_table} ${r.source_id ? String(r.source_id).slice(0, 8) : ''}`,
     plant_name: r.plant_id ? plantMap[r.plant_id] ?? null : null,
     original_value: r.original_value,
     proposed_value: r.proposed_value,

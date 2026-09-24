@@ -86,8 +86,11 @@ export default function CompliancePage() {
     if (selectedPlantId) {
       setPlantId(selectedPlantId);
       setScope('plant');
+    } else if (plants && plants.length > 0 && (plantId === 'global' || !plantId)) {
+      setPlantId(plants[0].id);
+      setScope('plant');
     }
-  }, [selectedPlantId]);
+  }, [selectedPlantId, plants, plantId]);
 
   const thresholdScope = scope === 'plant' && plantId ? plantId : 'global';
 
