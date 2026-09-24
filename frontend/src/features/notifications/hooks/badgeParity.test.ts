@@ -162,3 +162,4 @@ describe('Badge Parity: Sidebar vs Bell vs Alerts KPI', () => {
     expect(result.current.hasCritical).toBe(false);
   });
 });
+

@@ -102,11 +102,11 @@ export function useTopBarState() {
     };
   }, [attentionAlerts]);
 
-  // ── P3-8: AlertPanel list displays alarms for selectedPlantId (including status lines)
+  // ── P3-8: AlertPanel list displays active alarms, optionally filtered to selectedPlantId
   const scopedAlerts = useMemo(() => {
-    if (!selectedPlantId) return plantAlerts;
-    return plantAlerts.filter((a) => !a.plantId || a.plantId === selectedPlantId);
-  }, [plantAlerts, selectedPlantId]);
+    if (!selectedPlantId) return activeAlerts;
+    return activeAlerts.filter((a) => !a.plantId || a.plantId === selectedPlantId);
+  }, [activeAlerts, selectedPlantId]);
 
   const sortedAlerts = useMemo(
     () =>
