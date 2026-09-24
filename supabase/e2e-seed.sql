@@ -180,7 +180,7 @@ DECLARE
   v_correction_id uuid := gen_random_uuid();
 BEGIN
   SELECT id INTO v_plant_id FROM public.plants WHERE name = 'E2E Test Plant' LIMIT 1;
-  SELECT id INTO v_operator_id FROM _e2e_test_users WHERE role = 'Operator' LIMIT 1;
+  SELECT user_id INTO v_operator_id FROM _e2e_test_users WHERE role = 'Operator' LIMIT 1;
   SELECT id INTO v_well_reading_id FROM public.well_readings WHERE plant_id = v_plant_id LIMIT 1;
   
   IF v_plant_id IS NOT NULL AND v_operator_id IS NOT NULL AND v_well_reading_id IS NOT NULL THEN
