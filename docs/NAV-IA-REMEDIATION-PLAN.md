@@ -43,7 +43,7 @@ Everything else in the first review is either partly done or untouched. Appendix
 
 **Problem.** `frontend/src/components/ProtectedRoute.tsx` calls `toast.error()` and `setShowAccessDenied(true)` in the render body. React re-renders on every render-phase update until it throws. The real file, run with a mocked operator on `/data-corrections`, throws `Too many re-renders` and fires 104 toasts.
 
-- [ ] **P0-1** Replace the render-body side effects with a small component:
+- [x] **P0-1** Replace the render-body side effects with a small component:
 
   ```tsx
   function AccessDenied() {
@@ -59,7 +59,7 @@ Everything else in the first review is either partly done or untouched. Appendix
   ```
 
   Then delete the `showAccessDenied` state, its `useEffect`, the trailing `if (showAccessDenied) return null`, and the `useState` import.
-- [ ] **P0-2** Add `frontend/src/components/ProtectedRoute.test.tsx` (below). This file was verified against the patched component: one toast, redirect to `/`, allowed paths untouched.
+- [x] **P0-2** Add `frontend/src/components/ProtectedRoute.test.tsx` (below). This file was verified against the patched component: one toast, redirect to `/`, allowed paths untouched.
 
   ```tsx
   import { render, screen } from '@testing-library/react';
@@ -104,7 +104,7 @@ Everything else in the first review is either partly done or untouched. Appendix
     });
   });
   ```
-- [ ] **P0-3** Manual check as an Operator: open `/data-corrections` directly, and via the Operations ribbon. Expected: land on `/`, one "Access restricted" toast, no error screen.
+- [x] **P0-3** Manual check as an Operator: open `/data-corrections` directly, and via the Operations ribbon. Expected: land on `/`, one "Access restricted" toast, no error screen.
 
 **Done when:** the new test passes, and the full suite still passes.
 
@@ -116,7 +116,7 @@ Everything else in the first review is either partly done or untouched. Appendix
 
 There is also a permissions gap. The nav calls the base `hasPermission(roles, ...)`, but pages use `usePermission()`, which applies custom-role overrides from Admin → Roles. An override that restricts a module will not hide it in the nav.
 
-- [ ] **P1-1** Rewrite `frontend/src/navConfig.ts` as plain data plus a pure builder that takes a predicate:
+- [x] **P1-1** Rewrite `frontend/src/navConfig.ts` as plain data plus a pure builder that takes a predicate:
 
   ```ts
   export type Can = (moduleKey: ModuleKey, action?: Action) => boolean;
@@ -126,13 +126,13 @@ There is also a permissions gap. The nav calls the base `hasPermission(roles, ..
   - Groups and order per Appendix A. Do not filter out `admin_*`. Show "Admin Console" when `can('admin_users') || can('admin_plants') || can('admin_audit')` (D1).
   - Labels come only from `MODULE_LABELS`. Add `mobileLabel`, `end`, `matchPaths`, `matchTabValues` and `priority` (for bottom-nav slots) to each item.
   - Remove `profile` from the nav (it lives in the avatar menu). Give every remaining module a unique icon.
-- [ ] **P1-2** Add `useCan()` to `hooks/usePermission.ts`. It calls `useAuth()` and `useMyCustomRole()` once and returns a memoized `Can` that applies `effectivePermission` for custom roles, else `hasPermission`. Add `useNavGroups()` = `buildNavConfig(useCan())`.
-- [ ] **P1-3** `AppSidebar.tsx`: render `useNavGroups()`; delete `buildSidebarGroups`. `BottomNav.tsx`: render `priority` items in the bar and the rest in the More sheet from the same groups; delete `buildSideSheetGroups` (D4).
-- [ ] **P1-4** Alerts badge in the sidebar item and the bottom-nav Alerts slot (count of unacknowledged critical + warning). Until Phase 3, count from `useAlertStore`.
-- [ ] **P1-5** Page titles match nav labels. `features/operations/pages/OperationsPage.tsx` title "Operations Control" becomes "Daily Readings". Check the other pages against `MODULE_LABELS`.
-- [ ] **P1-6** Add `navConfig.test.ts` asserting the exact output per role from Appendix A, plus an invariant: every route an Operator sees in the nav is in `OPERATOR_ALLOWED_PATHS`.
-- [ ] **P1-7** *(stretch)* Derive `OPERATOR_ALLOWED_PATHS` from `ROUTE_MAP` and the matrix for the Operator role, so the route guard cannot drift from the nav again.
-- [ ] **P1-8** Fix stale comments: `BottomNav` ("Plants moves into More"), `ProtectedRoute` ("Generated from PERMISSION_MATRIX via usePermission()"), and the `permissions.ts` header.
+- [x] **P1-2** Add `useCan()` to `hooks/usePermission.ts`. It calls `useAuth()` and `useMyCustomRole()` once and returns a memoized `Can` that applies `effectivePermission` for custom roles, else `hasPermission`. Add `useNavGroups()` = `buildNavConfig(useCan())`.
+- [x] **P1-3** `AppSidebar.tsx`: render `useNavGroups()`; delete `buildSidebarGroups`. `BottomNav.tsx`: render `priority` items in the bar and the rest in the More sheet from the same groups; delete `buildSideSheetGroups` (D4).
+- [x] **P1-4** Alerts badge in the sidebar item and the bottom-nav Alerts slot (count of unacknowledged critical + warning). Until Phase 3, count from `useAlertStore`.
+- [x] **P1-5** Page titles match nav labels. `features/operations/pages/OperationsPage.tsx` title "Operations Control" becomes "Daily Readings". Check the other pages against `MODULE_LABELS`.
+- [x] **P1-6** Add `navConfig.test.ts` asserting the exact output per role from Appendix A, plus an invariant: every route an Operator sees in the nav is in `OPERATOR_ALLOWED_PATHS`.
+- [x] **P1-7** *(stretch)* Derive `OPERATOR_ALLOWED_PATHS` from `ROUTE_MAP` and the matrix for the Operator role, so the route guard cannot drift from the nav again.
+- [x] **P1-8** Fix stale comments: `BottomNav` ("Plants moves into More"), `ProtectedRoute` ("Generated from PERMISSION_MATRIX via usePermission()"), and the `permissions.ts` header.
 
 **Done when:** `AppSidebar` and `BottomNav` import nothing but `useNavGroups()`, the per-role test passes, and no group is called `Other`.
 
@@ -140,16 +140,16 @@ There is also a permissions gap. The nav calls the base `hasPermission(roles, ..
 
 ### Phase 2: Dead ends and broken links (M)
 
-- [ ] **P2-1** `OperationsPage.tsx`: gate the Import and Export buttons and each "Operations Tools" ribbon link with `useCan()` (`smart_import`, `data_exports`, `data_corrections`, `manager_scorecard`, `network_topology`). Hide the whole ribbon when empty. Add a small `<CanLink>` helper so other pages can reuse it.
-- [ ] **P2-2** Dashboard Data Trust cluster (`components/dashboard/DataTrustAuditCard.tsx`, `PendingReviewCard.tsx`): for roles without `data_corrections` view, render read-only or hide the navigate buttons. Operators get "My correction requests" once P5-6 lands.
-- [ ] **P2-3** `pages/Dashboard/hooks/useDashboardAlerts.ts` (~line 541): low-stock `linkPath: '/chemicals'` becomes `/ro-trains?tab=chemical-dosing`. Operators are blocked from `/chemicals` by `ProtectedRoute` before the redirect runs. Keep the `/chemicals` route for old bookmarks. Add a unit test that every alert `linkPath` an operator can receive is in the allow-list.
-- [ ] **P2-4** `features/readings/pages/DataCorrectionsPage.tsx`: read and write `?tab=` (`pending | inbox | history | operators`) with a validity guard. The Dashboard already links to `?tab=history` and the page ignores it (`<Tabs defaultValue="pending">`).
-- [ ] **P2-5** Login deep link.
+- [x] **P2-1** `OperationsPage.tsx`: gate the Import and Export buttons and each "Operations Tools" ribbon link with `useCan()` (`smart_import`, `data_exports`, `data_corrections`, `manager_scorecard`, `network_topology`). Hide the whole ribbon when empty. Add a small `<CanLink>` helper so other pages can reuse it.
+- [x] **P2-2** Dashboard Data Trust cluster (`components/dashboard/DataTrustAuditCard.tsx`, `PendingReviewCard.tsx`): for roles without `data_corrections` view, render read-only or hide the navigate buttons. Operators get "My correction requests" once P5-6 lands.
+- [x] **P2-3** `pages/Dashboard/hooks/useDashboardAlerts.ts` (~line 541): low-stock `linkPath: '/chemicals'` becomes `/ro-trains?tab=chemical-dosing`. Operators are blocked from `/chemicals` by `ProtectedRoute` before the redirect runs. Keep the `/chemicals` route for old bookmarks. Add a unit test that every alert `linkPath` an operator can receive is in the allow-list.
+- [x] **P2-4** `features/readings/pages/DataCorrectionsPage.tsx`: read and write `?tab=` (`pending | inbox | history | operators`) with a validity guard. The Dashboard already links to `?tab=history` and the page ignores it (`<Tabs defaultValue="pending">`).
+- [x] **P2-5** Login deep link.
   - `LoginForm.tsx` (three `navigate('/')` calls, ~lines 136, 140, 153): use the `from` location saved by `ProtectedRoute`.
   - `AuthPage.tsx`: `redirectTo` currently drops `search` and `hash`.
   - Extract `getPostLoginPath(location)` that returns `pathname + search + hash`, and accepts only strings starting with a single `/` (reject `//host` open redirects). Unit-test it.
-- [ ] **P2-6** `/admin?tab=`: make `AdminPage` read and write `tab`. `ROUTE_MAP` already emits `/admin?tab=plants` and friends, and the page ignores them.
-- [ ] **P2-7** Bell empty state: add `alertsReady` to the store and show "Checking plant systems…" until the first computation finishes. Never say "operating normally" before that.
+- [x] **P2-6** `/admin?tab=`: make `AdminPage` read and write `tab`. `ROUTE_MAP` already emits `/admin?tab=plants` and friends, and the page ignores them.
+- [x] **P2-7** Bell empty state: add `alertsReady` to the store and show "Checking plant systems…" until the first computation finishes. Never say "operating normally" before that.
 
 **Done when:** an operator can click every visible button and link without an "Access restricted" toast, and a deep link survives sign-in including its query string.
 
@@ -164,8 +164,8 @@ There is also a permissions gap. The nav calls the base `hasPermission(roles, ..
 - `plantAlerts` is not persisted and nothing is written to the database, so there is no audit trail.
 - "Resolve all" and "Snooze all" are one tap with no confirmation.
 
-- [ ] **P3-1** Use `useAuth().user.id` everywhere in `AlertPanel.tsx`. Remove every `'current-user'`.
-- [ ] **P3-2** Persist events. Sketch (adapt to your migration naming and RLS helpers such as `has_role()`):
+- [x] **P3-1** Use `useAuth().user.id` everywhere in `AlertPanel.tsx`. Remove every `'current-user'`.
+- [x] **P3-2** Persist events. Sketch (adapt to your migration naming and RLS helpers such as `has_role()`):
 
   ```sql
   create table public.alert_events (
@@ -182,16 +182,16 @@ There is also a permissions gap. The nav calls the base `hasPermission(roles, ..
   ```
 
   Add `useAlertEvents(plantIds)` (query and mutations). Alert status becomes derived: `status = f(alert_key, latest event, snooze)`. The app advertises offline-first field use, so check how readings are queued offline and route these writes through the same queue.
-- [ ] **P3-3** Read the status in the UI.
+- [x] **P3-3** Read the status in the UI.
   - Filters: Active / Acknowledged / Snoozed / Resolved.
   - `Signal` shows "Acknowledged by X · 14:02".
   - The bell badge and nav badge count unacknowledged items only.
-- [ ] **P3-4** Stop-gap if P3-2 slips: make `addAlerts` merge by id and preserve `acknowledged*` and `resolved*` fields.
-- [ ] **P3-5** Bulk actions get a confirm dialog that states the count. Exclude critical alerts from bulk snooze. Resolve requires a note (D2).
-- [ ] **P3-6** One vocabulary: Acknowledge · Snooze · Resolve. Remove `removeAlerts` (it snoozes for 5 minutes despite its name) and the deprecated `onDismiss` path.
-- [ ] **P3-7** Compute alerts independent of route (D3). Mount one `<AlertsRuntime />` in `AppShell`, and remove `useDashboardAlerts` from `pages/Dashboard.tsx`. **Watch for double mounting:** `useTrainAutoOffline` documents that two mounted instances write duplicate Offline status-log rows. Measure the added query load on non-Dashboard pages before shipping.
-- [ ] **P3-8** `useTopBarState.ts:64` calls `clearAlerts()` on every plant change. Replace with filtering by plant so switching the selector doesn't destroy alert state.
-- [ ] **P3-9** Tests:
+- [x] **P3-4** Stop-gap if P3-2 slips: make `addAlerts` merge by id and preserve `acknowledged*` and `resolved*` fields.
+- [x] **P3-5** Bulk actions get a confirm dialog that states the count. Exclude critical alerts from bulk snooze. Resolve requires a note (D2).
+- [x] **P3-6** One vocabulary: Acknowledge · Snooze · Resolve. Remove `removeAlerts` (it snoozes for 5 minutes despite its name) and the deprecated `onDismiss` path.
+- [x] **P3-7** Compute alerts independent of route (D3). Mount one `<AlertsRuntime />` in `AppShell`, and remove `useDashboardAlerts` from `pages/Dashboard.tsx`. **Watch for double mounting:** `useTrainAutoOffline` documents that two mounted instances write duplicate Offline status-log rows. Measure the added query load on non-Dashboard pages before shipping.
+- [x] **P3-8** `useTopBarState.ts:64` calls `clearAlerts()` on every plant change. Replace with filtering by plant so switching the selector doesn't destroy alert state.
+- [x] **P3-9** Tests:
   - the store merge preserves status
   - an ack records the real user id
   - resolved and acknowledged alerts leave the badge count
@@ -205,36 +205,36 @@ There is also a permissions gap. The nav calls the base `hasPermission(roles, ..
 
 **Problem.** The Dashboard hero now uses real data, but prints raw seconds ("Updated 10800s ago"), stays green with a pulsing lamp however stale the data is, and falls back to "Live" when there is no reading. `PlantsPage` shows "Synced 0s ago" while loading or with no data, and always shows a static "Live Telemetry" badge. `OperationsPage` has a hard-coded, pulsing "Data freshness validated" label.
 
-- [ ] **P4-1** Add `shared/freshness.ts`: `describeFreshness(ts: Date | null, now = Date.now())` returns `{ label, tone: 'fresh' | 'aging' | 'stale' | 'unknown' }`. Suggested thresholds: fresh under 90 min, aging under 4 h, stale after that. Confirm against the real logging cadence with operations.
-- [ ] **P4-2** `components/dashboard/PlantPulseHero.tsx`: show the label and tone. The lamp pulses only when fresh. No "Live" fallback; use "No recent readings".
-- [ ] **P4-3** `features/plants/pages/PlantsPage.tsx` and `PlantListHeader.tsx`: pass `null` (not `0`) when unknown, use a per-plant timestamp rather than one global "latest", and bind or remove the static "Live Telemetry" badge.
-- [ ] **P4-4** `OperationsPage.tsx`: remove "Data freshness validated", or bind it to a real check.
-- [ ] **P4-5** Add `useNow(30_000)` so "4 min ago" advances without a refetch.
-- [ ] **P4-6** Confirm the source: the latest reading across wells, locators and RO trains, or a server aggregate. Today it is `ro_train_readings` only.
-- [ ] **P4-7** Unit-test `describeFreshness` at each threshold and for `null`.
+- [x] **P4-1** Add `shared/freshness.ts`: `describeFreshness(ts: Date | null, now = Date.now())` returns `{ label, tone: 'fresh' | 'aging' | 'stale' | 'unknown' }`. Suggested thresholds: fresh under 90 min, aging under 4 h, stale after that. Confirm against the real logging cadence with operations.
+- [x] **P4-2** `components/dashboard/PlantPulseHero.tsx`: show the label and tone. The lamp pulses only when fresh. No "Live" fallback; use "No recent readings".
+- [x] **P4-3** `features/plants/pages/PlantsPage.tsx` and `PlantListHeader.tsx`: pass `null` (not `0`) when unknown, use a per-plant timestamp rather than one global "latest", and bind or remove the static "Live Telemetry" badge.
+- [x] **P4-4** `OperationsPage.tsx`: remove "Data freshness validated", or bind it to a real check.
+- [x] **P4-5** Add `useNow(30_000)` so "4 min ago" advances without a refetch.
+- [x] **P4-6** Confirm the source: the latest reading across wells, locators and RO trains, or a server aggregate. Today it is `ro_train_readings` only.
+- [x] **P4-7** Unit-test `describeFreshness` at each threshold and for `null`.
 
 ---
 
 ### Phase 5: IA follow-ups (M to L, pick in any order)
 
-- [ ] **P5-1** `useVisiblePlants()` shared by TopBar, `PlantsPage` and `useAlerts` (D5). Delete the three inline copies.
-- [ ] **P5-2** One plant context.
+- [x] **P5-1** `useVisiblePlants()` shared by TopBar, `PlantsPage` and `useAlerts` (D5). Delete the three inline copies.
+- [x] **P5-2** One plant context.
   - Opening `/plants/:id` sets `selectedPlantId`.
   - Replace the per-form `PlantSelector` in Operations with a read-only plant chip bound to the global selector.
   - When the selection is "All plants", require an explicit choice. Remove the `plants?.[0]` fallback in `OperationsPage`.
   - Reset `selectedPlantId` on sign-out.
-- [ ] **P5-3** Make well detail a route (`/plants/:id/wells/:wellId`) so it is linkable and browser Back returns to the wells list. `WellsList.tsx` currently does `if (detail) return <WellDetail … />`.
-- [ ] **P5-4** One `useUrlTab(key, validValues, default)` hook. Migrate Operations, RO Trains, Plants, Employees, Maintenance, Incidents, Compliance, Costs, Admin and Data Corrections. Today: 6 pages use `useTabPersist` (sessionStorage), 3 use `?tab=`, and the rest use plain state.
-- [ ] **P5-5** Help and approvals.
+- [x] **P5-3** Make well detail a route (`/plants/:id/wells/:wellId`) so it is linkable and browser Back returns to the wells list. `WellsList.tsx` currently does `if (detail) return <WellDetail … />`.
+- [x] **P5-4** One `useUrlTab(key, validValues, default)` hook. Migrate Operations, RO Trains, Plants, Employees, Maintenance, Incidents, Compliance, Costs, Admin and Data Corrections. Today: 6 pages use `useTabPersist` (sessionStorage), 3 use `?tab=`, and the rest use plain state.
+- [x] **P5-5** Help and approvals.
   - Add "Help & Manual" to the avatar menu (`OperatorSwitcher`), hosting `AppManual` on its own route.
   - Move `PendingApprovals` to Admin → Users with a count badge on the Admin nav item.
   - Rename the Employees "Info" tab to "Org chart".
-- [ ] **P5-6** "My correction requests" view for operators (tab or route), added to the operator allow-list.
-- [ ] **P5-7** Cross-links between assets and readings. `WellsList` → Operations exists (`handleNavOperations`); add Operations rows → asset.
-- [ ] **P5-8** `PendingApproval`: subscribe to the user's own profile row (or poll every ~10 s) and continue automatically when approved. Fix the copy.
-- [ ] **P5-9** Dashboard: keep one drill-down mode. Stop rewriting the saved preference when "inline" is clicked.
-- [ ] **P5-10** *(stretch)* Command palette using `components/ui/command.tsx`: jump to a page, plant or well.
-- [ ] **P5-11** Mobile and accessibility.
+- [x] **P5-6** "My correction requests" view for operators (tab or route), added to the operator allow-list.
+- [x] **P5-7** Cross-links between assets and readings. `WellsList` → Operations exists (`handleNavOperations`); add Operations rows → asset.
+- [x] **P5-8** `PendingApproval`: subscribe to the user's own profile row (or poll every ~10 s) and continue automatically when approved. Fix the copy.
+- [x] **P5-9** Dashboard: keep one drill-down mode. Stop rewriting the saved preference when "inline" is clicked.
+- [x] **P5-10** *(stretch)* Command palette using `components/ui/command.tsx`: jump to a page, plant or well.
+- [x] **P5-11** Mobile and accessibility.
   - Raise 9 px nav labels to at least 11 px.
   - Fix the active-label size shift in the bottom nav.
   - Replace the hand-rolled tab bars (Operations, Plant detail) with Radix `Tabs`, or add `role="tab"` and `aria-selected`.
@@ -244,10 +244,10 @@ There is also a permissions gap. The nav calls the base `hasPermission(roles, ..
 
 ### Phase 6: Hygiene (S)
 
-- [ ] **P6-1** Run Prettier on files with drifted indentation: `AlertPanel`, `useTopBarState`, `Signal`, `PlantPulseHero`, `Dashboard`, `PlantsPage`, `useAlerts`, `ControlConsole`.
-- [ ] **P6-2** Finish the slicing: `features/readings` still imports from `@/pages/plants/...` and `@/pages/operations/shared`. Point those at `@/features/...` and delete the shims left in `pages/plants` and `pages/operations`.
-- [ ] **P6-3** `AddPlantDialog` in `PlantsPage.tsx` has no trigger anywhere (also true before the refactor). Add an "Add plant" button for MANAGE roles, or delete the dead dialog if Admin → Plants is the intended entry point.
-- [ ] **P6-4** Remove unused imports (`useNavigationType` in `AuthPage`, `profile` in `BottomNav`) and fix the two `react-hooks/exhaustive-deps` warnings in `useTopBarState`.
+- [x] **P6-1** Run Prettier on files with drifted indentation: `AlertPanel`, `useTopBarState`, `Signal`, `PlantPulseHero`, `Dashboard`, `PlantsPage`, `useAlerts`, `ControlConsole`.
+- [x] **P6-2** Finish the slicing: `features/readings` still imports from `@/pages/plants/...` and `@/pages/operations/shared`. Point those at `@/features/...` and delete the shims left in `pages/plants` and `pages/operations`.
+- [x] **P6-3** `AddPlantDialog` in `PlantsPage.tsx` has no trigger anywhere (also true before the refactor). Add an "Add plant" button for MANAGE roles, or delete the dead dialog if Admin → Plants is the intended entry point.
+- [x] **P6-4** Remove unused imports (`useNavigationType` in `AuthPage`, `profile` in `BottomNav`) and fix the two `react-hooks/exhaustive-deps` warnings in `useTopBarState`.
 
 ---
 
@@ -286,7 +286,7 @@ Group order: Overview → Daily Logs → Assets → Review → Reports & Data �
 | Group | Items (module key) | Visible to |
 |---|---|---|
 | Overview | Dashboard (`dashboard`), Alerts (`alerts`), Compliance (`compliance`) | Dashboard and Alerts: all. Compliance: Technician, Manager, Data Analyst, Admin |
-| Daily Logs | Daily Readings (`operations`), RO Trains (`ro_trains`), PM Schedule (`pm_schedule`), Incidents (`incidents`) | all |
+| Daily Logs | Daily Readings (`operations`), RO Trains (`ro_trains`), PM Schedule (`pm_schedule`), Incidents (`incidents`), My Corrections (`my_corrections`) | all |
 | Assets | Plants (`plants`), Network Topology (`network_topology`) | Plants: all. Topology: Technician and up |
 | Review | Data Analysis & Review, Data Corrections, Manager Scorecard | Manager, Data Analyst, Admin |
 | Reports & Data | Costs & Tariffs (`costs`), Data Exports, Smart Import | Costs: Technician and up. Exports and Import: Manager, Data Analyst, Admin |
@@ -298,11 +298,11 @@ Profile is not a nav item.
 
 | Role | Groups | Items |
 |---|---|---|
-| Operator | Overview[Dashboard, Alerts] · Daily Logs[4] · Assets[Plants] · Team & Admin[Employees] | 4 groups, 8 items |
-| Technician | Overview[Dashboard, Alerts, Compliance] · Daily Logs[4] · Assets[Plants, Network Topology] · Reports & Data[Costs & Tariffs] · Team & Admin[Employees] | 5 groups, 11 items |
-| Manager | Overview[3] · Daily Logs[4] · Assets[2] · Review[3] · Reports & Data[3] · Team & Admin[Employees, Admin Console] | 6 groups, 17 items |
-| Data Analyst | as Manager, without Admin Console | 6 groups, 16 items |
-| Admin | as Manager | 6 groups, 17 items |
+| Operator | Overview[Dashboard, Alerts] · Daily Logs[5] · Assets[Plants] · Team & Admin[Employees] | 4 groups, 9 items |
+| Technician | Overview[Dashboard, Alerts, Compliance] · Daily Logs[5] · Assets[Plants, Network Topology] · Reports & Data[Costs & Tariffs] · Team & Admin[Employees] | 5 groups, 12 items |
+| Manager | Overview[3] · Daily Logs[5] · Assets[2] · Review[3] · Reports & Data[3] · Team & Admin[Employees, Admin Console] | 6 groups, 18 items |
+| Data Analyst | as Manager, without Admin Console | 6 groups, 17 items |
+| Admin | as Manager | 6 groups, 18 items |
 
 ---
 

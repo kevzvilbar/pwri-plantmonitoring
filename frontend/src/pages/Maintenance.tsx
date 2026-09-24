@@ -67,7 +67,7 @@ export default function Maintenance() {
     <div className="space-y-4 animate-fade-in">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <PageHeader title="Preventive Maintenance Schedule (PMS)" />
+          <PageHeader title="PM Schedule" />
           <p className="text-xs text-muted-foreground mt-0.5">
             Manage routine service intervals, checklist executions, and equipment reliability records.
           </p>

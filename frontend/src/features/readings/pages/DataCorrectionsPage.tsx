@@ -56,7 +56,7 @@ export default function DataCorrectionsPage() {
   return (
     <div className="space-y-4 animate-fade-in">
       <PageHeader
-        title="Data Corrections & Review Hub"
+        title="Data Corrections"
         subtitle="Review flagged readings, approve operator requested corrections, retract errors, and track data quality in one place."
       />
 

@@ -24,7 +24,7 @@ export default function Costs() {
   return (
     <div className="space-y-4 animate-fade-in max-w-[1600px] mx-auto pb-10" data-testid="costs-page">
       <PageHeader
-        title="Costs"
+        title="Costs & Tariffs"
         subtitle="Production cost, power bills & tariffs, chemical & filter prices"
       />
 

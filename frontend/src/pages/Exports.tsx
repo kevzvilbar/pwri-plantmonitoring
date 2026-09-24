@@ -94,7 +94,7 @@ export default function Exports() {
       {/* Page header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <PageHeader
-          title="Data Warehouse & Exports"
+          title="Data Exports"
           titleIcon={<FileSpreadsheet className="h-5 w-5 text-primary" />}
           subtitle={<>Enterprise telemetry and operational database export hub. Download datasets across {ALL_TABLES.length} system tables.</>}
         />

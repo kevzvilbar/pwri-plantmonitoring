@@ -269,7 +269,7 @@ export default function CompliancePage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <PageHeader
-          title="Compliance & Regulatory Radar"
+          title="Compliance"
           titleIcon={<ShieldCheck className="h-5 w-5 text-accent" />}
           subtitle="Real-time threshold surveillance for water quality parameters, plant hydraulic efficiency, NRW, downtime, and chemical autonomy."
         />

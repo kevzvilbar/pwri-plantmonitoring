@@ -38,7 +38,7 @@ export default function ManagerScorecard() {
   return (
     <div className="space-y-4 animate-fade-in">
       <PageHeader
-        title="Manager Scorecard & Oversight"
+        title="Manager Scorecard"
         titleIcon={<Award className="h-5 w-5 text-accent" />}
         subtitle="Data-quality oversight per manager & plant — monitor operator input diligence, correction approval speed, and annual management ratings."
       />

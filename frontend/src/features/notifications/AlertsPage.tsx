@@ -58,7 +58,7 @@ export default function Alerts() {
   return (
     <div className="space-y-5 pb-12">
       <PageHeader
-        title="Alert & Notification Center"
+        title="Alerts"
         subtitle="Unified operations alarm triage, telemetry anomaly surveillance, and system event log."
       />
 
