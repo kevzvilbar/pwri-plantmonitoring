@@ -28,34 +28,32 @@ test.describe('Compliance Snapshot Workflow', () => {
 
   test('compliance page renders without errors', async ({ page }) => {
     await page.goto('/compliance');
-    await page.waitForTimeout(3_000);
 
-    await expect(page.locator('text=Application Error')).toHaveCount(0);
-    await expect(page.locator('text=Something went wrong')).toHaveCount(0);
+    // Page title. Role-based on purpose: the bare text 'Compliance' also matches
+    // the sidebar link, the export button and the 'Evaluating facility
+    // compliance...' state, which is a strict-mode violation.
+    await expect(page.getByRole('heading', { name: 'Compliance', exact: true })).toBeVisible({ timeout: 15_000 });
 
-    // Page title
-    await expect(page.locator('text=Compliance')).toBeVisible({ timeout: 10_000 });
+    // Assert the absence of error UI only once the page has actually rendered.
+    await expect(page.getByText('Application Error')).toHaveCount(0);
+    await expect(page.getByText('Something went wrong')).toHaveCount(0);
   });
 
   test('Facility Radar tab shows compliance score or evaluation pending', async ({ page }) => {
     await page.goto('/compliance');
-    await page.waitForTimeout(4_000);
+    await expect(page.getByRole('heading', { name: 'Compliance', exact: true })).toBeVisible({ timeout: 15_000 });
 
     // Facility Radar tab (default)
-    const tab = page.locator('[role="tab"]:has-text("Facility Radar"), button:has-text("Facility Radar")');
-    const hasTab = (await tab.count()) > 0;
+    await page.getByRole('tab', { name: /Facility Radar/i }).click();
 
-    if (hasTab) {
-      await tab.first().click();
-      await page.waitForTimeout(2_000);
-    }
-
-    // Should see either a compliance score card or evaluating state
-    const hasScore = (await page.locator('text=Compliance Rating, text=Compliance Score').count()) > 0;
-    const hasEvaluating = (await page.locator('text=Evaluating, text=Evaluate').count()) > 0;
-    const hasViolations = (await page.locator('text=violations, text=Violations').count()) > 0;
-
-    expect(hasScore || hasEvaluating || hasViolations).toBeTruthy();
+    // Should see either the score card, the evaluating state, or a violations list.
+    // NOTE: Playwright's `text=a, text=b` is NOT a selector list -- the text engine
+    // swallows the whole string, so it matched nothing. Combine with .or()/regex.
+    const outcome = page
+      .getByText('Compliance Rating')
+      .or(page.getByText(/Evaluating facility compliance/i))
+      .or(page.getByText(/violation/i));
+    await expect(outcome.first()).toBeVisible({ timeout: 20_000 });
   });
 
   test('Fleet Matrix tab shows cross-plant compliance table', async ({ page }) => {
@@ -83,23 +81,14 @@ test.describe('Compliance Snapshot Workflow', () => {
 
   test('What-If Simulator tab renders sandbox inputs', async ({ page }) => {
     await page.goto('/compliance');
-    await page.waitForTimeout(2_000);
+    await expect(page.getByRole('heading', { name: 'Compliance', exact: true })).toBeVisible({ timeout: 15_000 });
 
-    const whatIfTab = page.locator('[role="tab"]:has-text("What-If"), button:has-text("What-If")');
-    const hasWhatIf = (await whatIfTab.count()) > 0;
-
-    if (!hasWhatIf) {
-      test.skip(true, 'What-If tab not found — skip.');
-      return;
-    }
-
-    await whatIfTab.first().click();
-    await page.waitForTimeout(2_000);
+    // The tab always exists; a missing tab is a regression, not a reason to skip.
+    await page.getByRole('tab', { name: /What-If/i }).click();
 
     // Sandbox inputs should be visible
-    await expect(page.locator('text=Sandbox, text=Simulation')).toBeVisible({ timeout: 5_000 });
-    const inputs = page.locator('input[type="number"]');
-    await expect(inputs.first()).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByText('Real-Time What-If Simulation Sandbox')).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator('input[type="number"]').first()).toBeVisible({ timeout: 10_000 });
   });
 
   test('Export Compliance Audit CSV button is present', async ({ page }) => {

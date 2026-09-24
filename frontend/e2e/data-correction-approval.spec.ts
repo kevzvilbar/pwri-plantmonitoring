@@ -26,18 +26,14 @@ test.describe('Manager Data Correction Approval Workflow', () => {
 
   test('loads the Data Corrections page without errors', async ({ page }) => {
     await page.goto('/data-corrections');
-    await page.waitForTimeout(3_000);
+
+    // The page shell rendered (an error boundary would replace the heading).
+    await expect(page.getByRole('heading', { name: 'Data Corrections', exact: true })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('tab', { name: /Pending Reviews/i })).toBeVisible();
 
     // Should not render an error state
-    await expect(page.locator('text=Application Error')).toHaveCount(0);
-    await expect(page.locator('text=Something went wrong')).toHaveCount(0);
-
-    // Either the corrections table or an empty-state card should be visible
-    const hasTable = (await page.locator('table').count()) > 0;
-    const hasEmptyState = (await page.locator('text=No pending, text=no corrections').count()) > 0;
-    const hasHeading = (await page.locator('text=Data Corrections, text=Correction Requests').count()) > 0;
-
-    expect(hasTable || hasEmptyState || hasHeading).toBeTruthy();
+    await expect(page.getByText('Application Error')).toHaveCount(0);
+    await expect(page.getByText('Something went wrong')).toHaveCount(0);
   });
 
   test('shows Approve and Reject buttons for pending corrections if any exist', async ({ page }) => {

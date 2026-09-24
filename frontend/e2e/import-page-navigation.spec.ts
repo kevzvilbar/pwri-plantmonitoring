@@ -21,8 +21,9 @@ test.describe('Import Page', () => {
     await expect(dropzone.first()).toBeVisible({ timeout: 10_000 });
 
     // Page title or instruction text confirms the module loaded
-    const instruction = page.locator('text=/Pick an import type/i, text=/CSV File Upload/i, text=/Smart import/i');
-    await expect(instruction.first()).toBeVisible({ timeout: 10_000 });
+    // (`text=/a/i, text=/b/i` is not a selector list -- use a single regex.)
+    await expect(page.getByRole('heading', { name: /Smart Multi-Import Studio/i })).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText('CSV File Upload', { exact: true })).toBeVisible({ timeout: 10_000 });
   });
 
   test('no crash when navigating away and back', async ({ page }) => {

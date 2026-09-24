@@ -30,14 +30,19 @@ test.describe('Well Reading Workflow', () => {
     const wellsTab = page.locator('button:has-text("Wells")');
     await expect(wellsTab).toBeVisible();
 
-    // Wells tab is active by default for the first plant (url param tab=well)
-    await page.waitForTimeout(2000);
+    // The Wells section needs an active plant. An Operator with exactly one plant gets
+    // it automatically; with several, ActivePlantChip shows a 'Choose a plant' prompt.
+    // Wait for whichever appears (auto-retrying) instead of counting once after a
+    // fixed sleep -- the plant list loads asynchronously and the dev server is cold.
+    const activeWells = page.getByText('Active Wells', { exact: true }).first();
+    const choosePlant = page.getByRole('group', { name: 'Choose a plant' });
+    await expect(activeWells.or(choosePlant)).toBeVisible({ timeout: 20_000 });
 
-    // WellReadingForm renders either a plant selector or well rows
-    const hasRows = await page.locator('text=Active Wells').count();
-    const hasNoWellsMsg = await page.locator('text=No active wells for this plant').count();
+    if (await choosePlant.isVisible()) {
+      await choosePlant.getByRole('button', { name: 'E2E Test Plant' }).click();
+    }
 
-    expect(hasRows + hasNoWellsMsg).toBeGreaterThan(0);
+    await expect(activeWells).toBeVisible({ timeout: 15_000 });
   });
 
   test('enters a meter reading and saves', async ({ page }) => {
