@@ -1,6 +1,14 @@
 import { test, expect } from '@playwright/test';
+import { signIn, HAS_CREDENTIALS } from './base';
 
 test.describe('Dashboard loads', () => {
+  test.beforeEach(async ({ page }) => {
+    if (!HAS_CREDENTIALS) {
+      test.skip(true, 'Skipping: set E2E_EMAIL and E2E_PASSWORD to run this suite.');
+      return;
+    }
+    await signIn(page);
+  });
   test('renders Dashboard with KPI cards and no error boundary', async ({ page }) => {
     await page.goto('/');
 

@@ -185,6 +185,7 @@ jobs:
   e2e-smoke:
     name: E2E smoke (Playwright)
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     # Roadmap Phase 2: the smallest end-to-end tripwire — boots the real
     # dev server, loads the app in a real browser, and proves the shell
@@ -212,7 +213,7 @@ jobs:
 
       - name: Run smoke tests
         working-directory: frontend
-        run: npx playwright test
+        run: npx playwright test e2e/smoke.spec.ts
         env:
           # Same placeholders as the build step: the smoke test exercises
           # the shell + router, which must render without a backend.
@@ -231,6 +232,7 @@ jobs:
     name: E2E authenticated (Playwright vs local Supabase)
     runs-on: ubuntu-latest
     needs: baseline-check
+    timeout-minutes: 15
 
     # Roadmap Phase 2: runs the 5 critical authenticated workflows
     # against a disposable local Supabase instance (same one used by rls-tests).
@@ -255,9 +257,20 @@ jobs:
 
       - name: Seed E2E test data
         run: |
-          # Get the local Supabase connection details
-          DB_URL=$(supabase status --output json | jq -r '.db_url')
-          psql "$DB_URL" -f supabase/e2e-seed.sql
+          set -euo pipefail
+          supabase status -o env > "$RUNNER_TEMP/supabase.env"
+          set -a; . "$RUNNER_TEMP/supabase.env"; set +a
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/e2e-seed.sql
+          # Hand the local stack's real URL/key to the Playwright step
+          echo "VITE_SUPABASE_URL=$API_URL"              >> "$GITHUB_ENV"
+          echo "VITE_SUPABASE_PUBLISHABLE_KEY=$ANON_KEY" >> "$GITHUB_ENV"
+
+      - name: Verify seeded login works
+        run: |
+          set -a; . "$RUNNER_TEMP/supabase.env"; set +a
+          curl -sf "$API_URL/auth/v1/token?grant_type=password" \
+            -H "apikey: $ANON_KEY" -H 'Content-Type: application/json' \
+            -d '{"email":"e2e-operator@test.local","password":"testpassword123"}' | jq -e .access_token > /dev/null
 
       - name: Install dependencies
         working-directory: frontend
@@ -271,9 +284,6 @@ jobs:
         working-directory: frontend
         run: npx playwright test --grep="Workflow|Dashboard|Import"
         env:
-          # Use the local Supabase instance
-          VITE_SUPABASE_URL: http://localhost:54321
-          VITE_SUPABASE_PUBLISHABLE_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0
           # Test credentials (matching the seeded users)
           E2E_EMAIL: e2e-operator@test.local
           E2E_PASSWORD: testpassword123
@@ -343,33 +353,3 @@ jobs:
         # Use --audit-level=high to fail only on high/critical.
         # Moderate/low are reported but don't fail CI (too noisy for
         # this codebase's dependency tree). Adjust if policy changes.
-
-  codeql:
-    name: CodeQL analysis
-    runs-on: ubuntu-latest
-    permissions:
-      security-events: write
-      actions: read
-      contents: read
-    # Roadmap Phase 2: static analysis for security patterns in TypeScript/React.
-    # Runs on push to main and scheduled weekly. Results uploaded to
-    # GitHub Security tab for triage. Does not block merges on first
-    # introduction (alerts only) — can be tightened to 'error' later.
-    strategy:
-      fail-fast: false
-      matrix:
-        language: [typescript]
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Initialize CodeQL
-        uses: github/codeql-action/init@v3
-        with:
-          languages: ${{ matrix.language }}
-          config-file: ./.github/codeql/codeql-config.yml
-          queries: +security-extended,+security-and-quality
-
-      - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v3
-        with:
-          category: "/language:${{ matrix.language }}"

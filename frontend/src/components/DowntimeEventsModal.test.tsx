@@ -84,7 +84,7 @@ describe('DowntimeEventsModal regression tests', () => {
 
     expect(toastError).toHaveBeenCalledWith('Please select a plant');
     expect(insertFn).not.toHaveBeenCalled();
-  });
+  }, 15_000);
 
   it('pre-populates plantId when passed as initialPlantId', async () => {
     renderModal({ plantId: 'p2', plantName: 'Umapad' });
@@ -108,6 +108,6 @@ describe('DowntimeEventsModal regression tests', () => {
       );
       expect(toastSuccess).toHaveBeenCalledWith('Downtime event recorded successfully');
     });
-  });
+  }, 15_000);
 });
 

@@ -7,7 +7,7 @@ import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 
 export default defineConfig(({ mode }) => ({
-  base: process.env.VERCEL ? '/' : '/pwri-plantmonitoring/',
+  base: (process.env.VERCEL || process.env.E2E_ROOT_BASE) ? '/' : '/pwri-plantmonitoring/',
   envPrefix: ["VITE_"],
   server: {
     host: "0.0.0.0",
