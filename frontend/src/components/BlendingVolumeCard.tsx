@@ -7,12 +7,14 @@ import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell,
 } from 'recharts';
 import { format, parseISO, subDays } from 'date-fns';
-import { Waves, Layers, BarChart2, X } from 'lucide-react';
+import { Waves, Layers, BarChart2, X, TableProperties } from 'lucide-react';
 import { fmtNum } from '@/lib/calculations';
 import { supabase } from '@/integrations/supabase/client';
 import { useAppStore } from '@/store/appStore';
 import { rangeKeyToDays } from '@/components/dashboard/types';
 import { DRILL_COLORS, ModernChartLegend } from '@/components/dashboard/TrendChartLegend';
+import { PivotTable } from '@/components/dashboard/TrendChartTables/PivotTable';
+import { BlendingDataSummaryModal } from '@/components/dashboard/BlendingDataSummaryModal';
 
 // Per-day series entry. `by_well` is a well_id → volume pivot for that single
 // day — needed for the "By well" stacked view and the richer tooltip/drill
@@ -129,6 +131,7 @@ export function BlendingVolumeCard({ plantIds }: Props) {
   const navigate = useNavigate();
   const [viewMode, setViewMode] = useState<'total' | 'by-well'>('total');
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
+  const [showSummaryModal, setShowSummaryModal] = useState(false);
 
   // ── Follow the dashboard's shared/universal range picker ─────────────────
   // Same three fields every other trend chart on the dashboard reads from —
@@ -182,6 +185,26 @@ export function BlendingVolumeCard({ plantIds }: Props) {
   const today = data?.today_m3 ?? 0;
   const topWells = (data?.by_well ?? []).slice(0, 3);
   const dailyAvg = series.length ? total / series.length : 0;
+
+  // Real pivot entities & date-mapped lookup for Data Summary table / CSV export
+  const entities = useMemo(() => (data?.by_well ?? []).map((w) => ({
+    id: w.well_id,
+    label: w.plant_name ? `${w.well_name || 'Unnamed'} (${w.plant_name})` : (w.well_name || 'Unnamed'),
+  })), [data]);
+
+  const dates = useMemo(() => series.map((s) => s.date), [series]);
+
+  const pivot = useMemo(() => {
+    const map = new Map<string, Map<string, number>>();
+    series.forEach((s) => {
+      const rowMap = new Map<string, number>();
+      Object.entries(s.by_well).forEach(([wid, vol]) => {
+        if (vol > 0) rowMap.set(wid, vol);
+      });
+      map.set(s.date, rowMap);
+    });
+    return map;
+  }, [series]);
 
   // Wells that get their own color in the stacked view + tooltip; anything
   // past MAX_STACK_WELLS is folded into "Other" (see stackKeys below).
@@ -315,6 +338,18 @@ export function BlendingVolumeCard({ plantIds }: Props) {
               </button>
             </div>
           )}
+
+          {/* Data Summary Action */}
+          <button
+            type="button"
+            onClick={() => setShowSummaryModal(true)}
+            className="h-6 px-2 text-2xs font-semibold rounded border border-border/80 bg-card text-foreground hover:bg-muted/80 hover:text-primary transition-all duration-150 ease-spring-out active:scale-[0.98] flex items-center gap-1 shadow-2xs cursor-pointer shrink-0"
+            title="Open Blending Data Summary"
+            data-testid="blending-data-summary-button"
+          >
+            <TableProperties className="h-3 w-3 text-primary shrink-0" />
+            <span>Data Summary</span>
+          </button>
         </div>
       </div>
 
@@ -485,6 +520,19 @@ export function BlendingVolumeCard({ plantIds }: Props) {
           </div>
         </div>
       )}
+      {/* ── Data Summary Popup Modal ── */}
+      <BlendingDataSummaryModal
+        open={showSummaryModal}
+        onClose={() => setShowSummaryModal(false)}
+        rangeLabel={rangeLabel}
+        dates={dates}
+        entities={entities}
+        pivot={pivot}
+        total={total}
+        dailyAvg={dailyAvg}
+        today={today}
+        isFetching={isFetching}
+      />
     </Card>
   );
 }

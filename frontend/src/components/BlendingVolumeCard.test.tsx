@@ -37,6 +37,28 @@ describe('BlendingVolumeCard', () => {
     // Pattern A empty state pill and CTA button are rendered
     expect(getByText('Zero Blending Injections Recorded')).toBeDefined();
     expect(getByText('Log blending entry →')).toBeDefined();
+
+    // Data Summary action button is present
+    expect(getByTestId('blending-data-summary-button')).toBeDefined();
+    expect(getByText('Data Summary')).toBeDefined();
+  });
+
+  it('opens Blending Data Summary modal when Data Summary button is clicked', async () => {
+    const { getByTestId, findByTestId } = render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter>
+          <BlendingVolumeCard plantIds={['plant-1']} />
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+
+    const summaryBtn = getByTestId('blending-data-summary-button');
+    summaryBtn.click();
+
+    const popup = await findByTestId('dsm-popup-blending');
+    expect(popup).toBeDefined();
   });
 });
+
+
 
