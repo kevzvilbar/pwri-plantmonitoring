@@ -1,10 +1,12 @@
 import { useMemo } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
-import { Menu } from 'lucide-react';
+import { Menu, Palette, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { NavItemBadge } from '@/components/NavItemBadge';
 import { useNavGroups } from '@/hooks/useNavGroups';
 import { isNavItemActive, type NavItem } from '@/navConfig';
+import { ThemeSelector } from '@/components/ThemeSelector';
+import { SyncIndicator } from '@/components/SyncIndicator';
 import {
   Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger,
 } from '@/components/ui/sheet';
@@ -163,6 +165,42 @@ export function BottomNav() {
                   </div>
                 </div>
               ))}
+
+              {/* Preferences & System */}
+              <div className="pt-2 border-t border-border/60">
+                <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground px-2 mb-2">
+                  System &amp; Settings
+                </div>
+                <div className="flex flex-col gap-1.5 px-1">
+                  <ThemeSelector
+                    align="end"
+                    trigger={
+                      <button className="flex items-center justify-between w-full px-3 py-2 rounded-lg text-sm bg-muted/40 hover:bg-muted text-foreground transition-colors cursor-pointer text-left">
+                        <span className="flex items-center gap-2.5">
+                          <Palette className="h-4 w-4 text-primary shrink-0" />
+                          <span>Theme &amp; Lighting</span>
+                        </span>
+                        <span className="text-3xs text-muted-foreground font-medium px-2 py-0.5 rounded-full bg-card border border-border/60">
+                          Change
+                        </span>
+                      </button>
+                    }
+                  />
+                  <SyncIndicator
+                    trigger={
+                      <button className="flex items-center justify-between w-full px-3 py-2 rounded-lg text-sm bg-muted/40 hover:bg-muted text-foreground transition-colors cursor-pointer text-left">
+                        <span className="flex items-center gap-2.5">
+                          <RefreshCw className="h-4 w-4 text-muted-foreground shrink-0" />
+                          <span>Sync Status</span>
+                        </span>
+                        <span className="text-3xs text-muted-foreground font-medium px-2 py-0.5 rounded-full bg-card border border-border/60">
+                          Details
+                        </span>
+                      </button>
+                    }
+                  />
+                </div>
+              </div>
             </div>
           </SheetContent>
         </Sheet>

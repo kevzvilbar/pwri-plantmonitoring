@@ -21,9 +21,24 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
-export function SyncIndicator() {
+export interface SyncIndicatorProps {
+  trigger?: React.ReactNode;
+  showOnlyActiveOnMobile?: boolean;
+  className?: string;
+}
+
+export function SyncIndicator({
+  trigger,
+  showOnlyActiveOnMobile = false,
+  className,
+}: SyncIndicatorProps = {}) {
   const { status, lastSynced, error, setStatus, setLastSynced, setError } = useSyncStore();
-  const qc = useQueryClient();
+  let qc: ReturnType<typeof useQueryClient> | null = null;
+  try {
+    qc = useQueryClient();
+  } catch {
+    qc = null;
+  }
 
   const lastToastedErr = useRef<string | null>(null);
 
@@ -31,7 +46,9 @@ export function SyncIndicator() {
     if (status === 'syncing') return;
     setStatus('syncing');
     try {
-      await qc.refetchQueries({ type: 'active' }, { throwOnError: true });
+      if (qc) {
+        await qc.refetchQueries({ type: 'active' }, { throwOnError: true });
+      }
       setLastSynced(new Date());
       setError(null);
     } catch (err) {
@@ -71,30 +88,39 @@ export function SyncIndicator() {
   const isSyncing = status === 'syncing';
   const isError   = status === 'error';
 
+  // If configured to only show when active on mobile and currently idle, hide it
+  if (showOnlyActiveOnMobile && !isSyncing && !isError) {
+    return null;
+  }
+
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <button
-          aria-label={label}
-          className={cn(
-            // Matches the 40px hit area used for the other TopBar icon
-            // buttons (Bell, ThemeSelector) — see TopBar.tsx.
-            'relative flex items-center justify-center h-10 w-10 rounded-md transition-colors',
-            'text-topbar-foreground/60 hover:text-topbar-foreground hover:bg-white/10',
-            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30',
-            isSyncing && 'pointer-events-none',
-          )}
-        >
-          {isSyncing && (
-            <RefreshCw className="h-[15px] w-[15px] animate-spin" aria-hidden />
-          )}
-          {isError && (
-            <WifiOff className="h-[15px] w-[15px] text-warn" aria-hidden />
-          )}
-          {!isSyncing && !isError && (
-            <Clock className="h-[15px] w-[15px]" aria-hidden />
-          )}
-        </button>
+        {trigger ? (
+          trigger
+        ) : (
+          <button
+            aria-label={label}
+            className={cn(
+              'relative flex items-center justify-center h-8.5 w-8.5 sm:h-9 sm:w-9 rounded-lg transition-colors',
+              'text-topbar-foreground/70 hover:text-topbar-foreground hover:bg-white/10',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30 shrink-0',
+              isSyncing && 'pointer-events-none text-primary',
+              isError && 'text-warn',
+              className,
+            )}
+          >
+            {isSyncing && (
+              <RefreshCw className="h-4 w-4 animate-spin" aria-hidden />
+            )}
+            {isError && (
+              <WifiOff className="h-4 w-4 text-warn" aria-hidden />
+            )}
+            {!isSyncing && !isError && (
+              <Clock className="h-4 w-4" aria-hidden />
+            )}
+          </button>
+        )}
       </PopoverTrigger>
       <PopoverContent side="bottom" align="end" className="w-56 p-3 text-xs">
         <p className={cn('font-medium', isError ? 'text-warn' : 'text-foreground')}>{label}</p>

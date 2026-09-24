@@ -33,18 +33,19 @@ export function TopBar({ onOpenSearch }: { onOpenSearch?: () => void } = {}) {
 
   return (
     <header className="sticky top-0 z-40 bg-topbar text-topbar-foreground border-b border-white/8 shadow-sm">
-      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 sm:gap-3 px-3 sm:px-4 h-12">
+      <div className="flex items-center justify-between gap-1.5 sm:gap-3 px-2.5 sm:px-4 h-12">
 
-        <div className="flex items-center min-w-0">
+        {/* ── Left: Brand Identity ── */}
+        <div className="flex items-center min-w-0 shrink-0">
           {isMobile ? (
-            <NavLink to="/" className="flex items-center gap-2 shrink-0 group" aria-label="PWRI Monitoring & Alert">
-              <Logomark size={28} className="rounded-lg shrink-0 group-hover:scale-105 transition-transform duration-200" />
+            <NavLink to="/" className="flex items-center gap-1.5 shrink-0 group py-1" aria-label="PWRI Monitoring & Alert">
+              <Logomark size={26} className="rounded-lg shrink-0 group-hover:scale-105 transition-transform duration-200" />
               <div className="flex flex-col leading-none">
-                <span className="text-xs font-semibold tracking-tight text-topbar-foreground group-hover:text-primary transition-colors">
+                <span className="text-xs font-bold tracking-tight text-topbar-foreground group-hover:text-primary transition-colors">
                   PWRI
                 </span>
-                <span className="text-3xs text-topbar-muted tracking-[0.1em] uppercase">
-                  Monitoring & Alert
+                <span className="hidden xs:inline-block text-3xs text-topbar-muted tracking-[0.08em] uppercase">
+                  Monitoring
                 </span>
               </div>
             </NavLink>
@@ -64,7 +65,8 @@ export function TopBar({ onOpenSearch }: { onOpenSearch?: () => void } = {}) {
           ) : null}
         </div>
 
-        <div className="flex justify-center">
+        {/* ── Center: Plant Selector (Adaptive Pill) ── */}
+        <div className="flex-1 flex justify-center max-w-[140px] sm:max-w-[210px] mx-1 min-w-0">
           {/* D5: a user with no plants gets a disabled picker that says so,
               not an "All plants" that silently means everything. */}
           <Select
@@ -74,14 +76,14 @@ export function TopBar({ onOpenSearch }: { onOpenSearch?: () => void } = {}) {
           >
             <SelectTrigger
               className={cn(
-                'w-[140px] sm:w-[210px] h-8',
-                'bg-white/10 border-white/15 text-topbar-foreground',
-                'hover:bg-white/15 focus:ring-white/30 focus:ring-1',
-                'text-xs font-medium placeholder:text-topbar-muted',
-                '[&>span]:text-topbar-foreground [&>svg]:text-topbar-muted',
+                'w-full h-8 px-2 sm:px-3 rounded-lg',
+                'bg-white/10 border-white/15 text-topbar-foreground backdrop-blur-xs',
+                'hover:bg-white/15 focus:ring-white/30 focus:ring-1 transition-all',
+                'text-xs font-medium placeholder:text-topbar-muted truncate',
+                '[&>span]:text-topbar-foreground [&>span]:truncate [&>svg]:text-topbar-muted [&>svg]:shrink-0',
               )}
             >
-              <SelectValue placeholder={needsAssignment ? 'No plants assigned' : 'Select plant'} />
+              <SelectValue placeholder={needsAssignment ? 'No plants' : 'Select plant'} />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All plants</SelectItem>
@@ -92,10 +94,19 @@ export function TopBar({ onOpenSearch }: { onOpenSearch?: () => void } = {}) {
           </Select>
         </div>
 
-        <div className="flex items-center justify-end gap-2 sm:gap-3 min-w-0">
+        {/* ── Right: Action Controls ── */}
+        <div className="flex items-center justify-end gap-1 sm:gap-2 shrink-0">
 
-          <SyncIndicator />
-          <ThemeSelector />
+          {/* Desktop Status & Customization Tools */}
+          <div className="hidden sm:flex items-center gap-1">
+            <SyncIndicator />
+            <ThemeSelector />
+          </div>
+
+          {/* Mobile Active Sync Notice (only visible if actively syncing or error) */}
+          <div className="sm:hidden">
+            <SyncIndicator showOnlyActiveOnMobile />
+          </div>
 
           {/* P5-10: opens the Ctrl+K palette. Rendered only when the shell
               wires the handler, so a TopBar used on its own (tests) has no
@@ -107,9 +118,9 @@ export function TopBar({ onOpenSearch }: { onOpenSearch?: () => void } = {}) {
               aria-label="Search pages, plants, and wells (Ctrl+K)"
               title="Search pages, plants, and wells (Ctrl+K)"
               onClick={onOpenSearch}
-              className="relative h-10 w-10 text-topbar-foreground hover:bg-white/10 focus-visible:ring-white/30"
+              className="relative h-8.5 w-8.5 sm:h-9 sm:w-9 text-topbar-foreground hover:bg-white/10 focus-visible:ring-white/30 rounded-lg shrink-0"
             >
-              <Search className="h-[17px] w-[17px]" />
+              <Search className="h-4 w-4" />
             </Button>
           )}
 
@@ -121,7 +132,7 @@ export function TopBar({ onOpenSearch }: { onOpenSearch?: () => void } = {}) {
                   size="icon"
                   aria-label={totalBadge > 0 ? `Notifications (${totalBadge} unread)` : 'Notifications'}
                   className={cn(
-                    'relative h-10 w-10 min-h-[44px] min-w-[44px]',
+                    'relative h-8.5 w-8.5 sm:h-9 sm:w-9 rounded-lg shrink-0',
                     'hover:bg-white/10 focus-visible:ring-white/30',
                     hasCritical
                       ? 'text-danger'
@@ -132,17 +143,17 @@ export function TopBar({ onOpenSearch }: { onOpenSearch?: () => void } = {}) {
                 >
                   <Bell
                     className={cn(
-                      'h-[18px] w-[18px] transition-colors',
+                      'h-4 w-4 transition-colors',
                       isRinging && 'animate-bell-ring-once',
                     )}
                   />
                   {totalBadge > 0 && (
                     <span
                       className={cn(
-                        'absolute 0.5 top-0.5 right-0.5 min-w-[17px] h-[17px] px-[3px]',
+                        'absolute -top-0.5 -right-0.5 min-w-[16px] h-[16px] px-1',
                         'flex items-center justify-center rounded-full',
                         'text-3xs font-mono-num font-bold text-white leading-none',
-                        'ring-2 ring-topbar',
+                        'ring-2 ring-topbar shadow-xs pointer-events-none',
                         hasCritical ? 'bg-danger' : plantAlerts.length > 0 ? 'bg-warn' : 'bg-danger',
                       )}
                       aria-label={`${totalBadge} alerts`}
@@ -165,7 +176,7 @@ export function TopBar({ onOpenSearch }: { onOpenSearch?: () => void } = {}) {
                   size="icon"
                   aria-label={totalBadge > 0 ? `Notifications (${totalBadge} unread)` : 'Notifications'}
                   className={cn(
-                    'relative h-10 w-10',
+                    'relative h-9 w-9 rounded-lg shrink-0',
                     'hover:bg-white/10 focus-visible:ring-white/30',
                     hasCritical
                       ? 'text-danger'
@@ -176,17 +187,17 @@ export function TopBar({ onOpenSearch }: { onOpenSearch?: () => void } = {}) {
                 >
                   <Bell
                     className={cn(
-                      'h-[17px] w-[17px] transition-colors',
+                      'h-4 w-4 transition-colors',
                       isRinging && 'animate-bell-ring-once',
                     )}
                   />
                   {totalBadge > 0 && (
                     <span
                       className={cn(
-                        'absolute -top-0.5 -right-0.5 min-w-[16px] h-[16px] px-[3px]',
+                        'absolute -top-0.5 -right-0.5 min-w-[16px] h-[16px] px-1',
                         'flex items-center justify-center rounded-full',
                         'text-3xs font-mono-num font-bold text-white leading-none',
-                        'ring-2 ring-topbar',
+                        'ring-2 ring-topbar shadow-xs pointer-events-none',
                         hasCritical ? 'bg-danger' : plantAlerts.length > 0 ? 'bg-warn' : 'bg-danger',
                       )}
                       aria-label={`${totalBadge} alerts`}

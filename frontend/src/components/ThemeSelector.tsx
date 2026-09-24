@@ -9,7 +9,17 @@ import {
 } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 
-export function ThemeSelector() {
+export interface ThemeSelectorProps {
+  trigger?: React.ReactNode;
+  align?: 'start' | 'center' | 'end';
+  className?: string;
+}
+
+export function ThemeSelector({
+  trigger,
+  align = 'end',
+  className,
+}: ThemeSelectorProps = {}) {
   const colorTheme = useThemeStore((s) => s.colorTheme);
   const setColorTheme = useThemeStore((s) => s.setColorTheme);
   const darkMode = useThemeStore((s) => s.darkMode);
@@ -20,23 +30,30 @@ export function ThemeSelector() {
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-10 w-10 text-topbar-foreground/70 hover:text-topbar-foreground hover:bg-white/10 relative"
-          aria-label="Choose color theme"
-          title="Theme & Appearance"
-        >
-          <Palette className="h-4 w-4" />
-          <span
-            className="absolute bottom-2 right-2 w-2 h-2 rounded-full border border-topbar"
-            style={{ background: currentThemeObj.swatches[1] }}
-          />
-        </Button>
+        {trigger ? (
+          trigger
+        ) : (
+          <Button
+            variant="ghost"
+            size="icon"
+            className={cn(
+              'h-8.5 w-8.5 sm:h-9 sm:w-9 text-topbar-foreground/70 hover:text-topbar-foreground hover:bg-white/10 rounded-lg relative shrink-0',
+              className,
+            )}
+            aria-label="Choose color theme"
+            title="Theme & Appearance"
+          >
+            <Palette className="h-4 w-4" />
+            <span
+              className="absolute bottom-1.5 right-1.5 w-2 h-2 rounded-full border border-topbar"
+              style={{ background: currentThemeObj.swatches[1] }}
+            />
+          </Button>
+        )}
       </PopoverTrigger>
 
       <PopoverContent
-        align="end"
+        align={align}
         sideOffset={8}
         className="w-[360px] max-w-[94vw] p-4 rounded-2xl bg-card/95 backdrop-blur-xl border border-border shadow-2xl space-y-3.5"
       >
