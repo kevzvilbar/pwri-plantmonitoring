@@ -100,7 +100,7 @@ export function useCostStats({
     },
     enabled: plantIds.length > 0,
     staleTime: 5 * 60_000,
-    refetchInterval: 5 * 60_000,
+    refetchInterval: false,
   });
 
   const todayCosts        = todayCostsRaw?.rows ?? [];

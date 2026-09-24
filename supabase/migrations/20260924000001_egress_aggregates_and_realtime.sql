@@ -1,9 +1,10 @@
 -- =============================================================================
--- Migration: 20260918000003_dashboard_server_aggregates.sql
--- Description: Server-side aggregation RPC for "All Facilities" and per-plant
---              dashboard views. Replaces browser-side row-walking and pivot
---              reductions across multiple large reading tables to drastically
---              cut client egress and eliminate N+1 fallback queries.
+-- Migration: 20260924000001_egress_aggregates_and_realtime.sql
+-- Description: 
+--   1. Replaces STABLE get_dashboard_aggregates function body to use CTEs
+--      instead of CREATE TEMP TABLE, fixing runtime execution in Postgres.
+--   2. Adds remaining high-traffic telemetry & alert tables to supabase_realtime
+--      publication for reactive frontend cache invalidation.
 -- =============================================================================
 
 CREATE OR REPLACE FUNCTION public.get_dashboard_aggregates(
@@ -262,10 +263,79 @@ BEGIN
 END;
 $$;
 
--- Security permissions
 REVOKE EXECUTE ON FUNCTION public.get_dashboard_aggregates(uuid[], timestamptz, timestamptz, timestamptz, timestamptz, date) FROM PUBLIC;
 GRANT  EXECUTE ON FUNCTION public.get_dashboard_aggregates(uuid[], timestamptz, timestamptz, timestamptz, timestamptz, date) TO authenticated;
 
 COMMENT ON FUNCTION public.get_dashboard_aggregates IS
   'Server-side aggregate computation for production, consumption, raw water, NRW %, and blending for multi-facility and single-plant views.';
 
+-- ── 2. Add telemetry and alert tables to supabase_realtime publication ────────
+
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_publication WHERE pubname = 'supabase_realtime') THEN
+    -- well_readings
+    IF NOT EXISTS (
+      SELECT 1 FROM pg_publication_tables
+      WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'well_readings'
+    ) THEN
+      ALTER PUBLICATION supabase_realtime ADD TABLE public.well_readings;
+    END IF;
+
+    -- locator_readings
+    IF NOT EXISTS (
+      SELECT 1 FROM pg_publication_tables
+      WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'locator_readings'
+    ) THEN
+      ALTER PUBLICATION supabase_realtime ADD TABLE public.locator_readings;
+    END IF;
+
+    -- power_readings
+    IF NOT EXISTS (
+      SELECT 1 FROM pg_publication_tables
+      WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'power_readings'
+    ) THEN
+      ALTER PUBLICATION supabase_realtime ADD TABLE public.power_readings;
+    END IF;
+
+    -- product_meter_readings
+    IF NOT EXISTS (
+      SELECT 1 FROM pg_publication_tables
+      WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'product_meter_readings'
+    ) THEN
+      ALTER PUBLICATION supabase_realtime ADD TABLE public.product_meter_readings;
+    END IF;
+
+    -- alert_events
+    IF NOT EXISTS (
+      SELECT 1 FROM pg_publication_tables
+      WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'alert_events'
+    ) THEN
+      ALTER PUBLICATION supabase_realtime ADD TABLE public.alert_events;
+    END IF;
+
+    -- blending_events
+    IF NOT EXISTS (
+      SELECT 1 FROM pg_publication_tables
+      WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'blending_events'
+    ) THEN
+      ALTER PUBLICATION supabase_realtime ADD TABLE public.blending_events;
+    END IF;
+
+    -- downtime_events
+    IF NOT EXISTS (
+      SELECT 1 FROM pg_publication_tables
+      WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'downtime_events'
+    ) THEN
+      ALTER PUBLICATION supabase_realtime ADD TABLE public.downtime_events;
+    END IF;
+
+    -- pump_readings
+    IF NOT EXISTS (
+      SELECT 1 FROM pg_publication_tables
+      WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'pump_readings'
+    ) THEN
+      ALTER PUBLICATION supabase_realtime ADD TABLE public.pump_readings;
+    END IF;
+  END IF;
+END $$;

@@ -60,11 +60,9 @@ export function PendingReviewCard({ plantIds }: Props) {
         corrections: corrReqCount,
       };
     },
-    // FIX (egress): staleTime matched to refetchInterval — was relying on the 30s
-    // global default, so the app-wide background-sync sweep force-refetched this
-    // well before its own interval was due.
-    staleTime: 120_000,
-    refetchInterval: 120_000,
+    // FIX (egress): covered by realtime cache invalidation
+    staleTime: 5 * 60_000,
+    refetchInterval: false,
   });
 
   const pendingCount = pendingData.total;

@@ -44,8 +44,7 @@ export function useTrendChartQueries({
   // EGRESS OPTIMIZATION: If the selected range is strictly in the past, telemetry cannot
   // change in real time, so disable recurring background refetching entirely.
   const todayKey = format(new Date(), 'yyyy-MM-dd');
-  const isHistorical = endKey < todayKey;
-  const chartRefetchInterval = isHistorical ? false : 5 * 60_000;
+  const chartRefetchInterval = false;
   const chartStaleTime = 5 * 60_000;
 
   // ── Entity name lookups — fetched once per plant selection ─────────────────

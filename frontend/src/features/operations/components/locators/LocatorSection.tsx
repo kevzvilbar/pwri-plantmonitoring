@@ -198,8 +198,8 @@ export function LocatorReadingForm({ highlightId }: { highlightId?: string | nul
     // reduce the real-world fetch rate. staleTime now matches
     // refetchInterval so both mechanisms agree on the cadence instead of
     // fighting each other.
-    staleTime: 120_000,
-    refetchInterval: 120_000,
+    staleTime: 5 * 60_000,
+    refetchInterval: false,
   });
 
   // ── Dedicated latest-reading query ────────────────────────────────────────
@@ -226,12 +226,8 @@ export function LocatorReadingForm({ highlightId }: { highlightId?: string | nul
       return results.flatMap(r => r.data ?? []);
     },
     enabled: !!plantId && !!_locatorIds?.length,
-    // FIX (egress, round 2): payload is small (1 row per locator) so this
-    // one was never the big cost, but staleTime:0 still meant the global
-    // background-sync sweep re-ran it every ~60s. Matched to refetchInterval
-    // like op-loc-recent above so the two queries stay in lockstep.
-    staleTime: 120_000,
-    refetchInterval: 120_000,
+    staleTime: 5 * 60_000,
+    refetchInterval: false,
   });
 
   // latestByLocator — sourced from the dedicated query above, NOT from the

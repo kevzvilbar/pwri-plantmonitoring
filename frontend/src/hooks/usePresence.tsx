@@ -182,7 +182,7 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
   }, [patchCacheAndPing]);
 
   // ---------------------------------------------------------------------------
-  // Periodic heartbeat (120 s) + tab-focus heartbeat + shift-change stamp
+  // Periodic heartbeat (300 s / 5 min) + tab-focus heartbeat + shift-change stamp
   // ---------------------------------------------------------------------------
   useEffect(() => {
     if (!currentUserId) return;
@@ -192,7 +192,7 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
     const interval = setInterval(() => {
       if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
       stamp();
-    }, 120_000);
+    }, 300_000);
 
     const handleVisibility = () => {
       if (document.visibilityState === 'visible') stamp();
@@ -206,13 +206,13 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
   }, [currentUserId, stamp]);
 
   // ---------------------------------------------------------------------------
-  // Safety-net: refetch ['staff'] every 180 seconds (when tab is visible)
+  // Safety-net: refetch ['staff'] every 600 seconds / 10 mins (when tab is visible)
   // ---------------------------------------------------------------------------
   useEffect(() => {
     const interval = setInterval(() => {
       if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
       queryClient.invalidateQueries({ queryKey: ['staff'] });
-    }, 180_000);
+    }, 600_000);
     return () => clearInterval(interval);
   }, [queryClient]);
 

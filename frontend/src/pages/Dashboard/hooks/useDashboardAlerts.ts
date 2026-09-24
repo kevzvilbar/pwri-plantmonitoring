@@ -137,7 +137,7 @@ export function useDashboardAlerts({
       : [],
     enabled: plantIds.length > 0 && !propChemInv,
     staleTime: 5 * 60_000,
-    refetchInterval: 5 * 60_000,
+    refetchInterval: false,
   });
   const chemInv = propChemInv ?? internalChemInv;
 
@@ -165,8 +165,8 @@ export function useDashboardAlerts({
       return map;
     },
     enabled: plantIds.length > 0 && !propThresholds,
-    staleTime: 5 * 60_000,
-    refetchInterval: 5 * 60_000,
+    staleTime: 10 * 60_000,
+    refetchInterval: false,
   });
   const thresholdsByPlant = propThresholds ?? internalThresholds ?? {};
   const { data: internalFeed } = useQuery<{ count: number; alerts: any[] }>({
@@ -262,7 +262,7 @@ export function useDashboardAlerts({
     enabled: !propFeedAlerts && plantIds.length > 0,
     retry: false,
     staleTime: 5 * 60_000,
-    refetchInterval: 5 * 60_000,
+    refetchInterval: false,
   });
   const feedAlerts = propFeedAlerts ?? internalFeed?.alerts ?? [];
 

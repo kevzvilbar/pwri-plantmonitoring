@@ -276,8 +276,8 @@ export function useAlertEvents(plantIds: string[] = []): UseAlertEventsResult {
       return (rows ?? EMPTY_ALERT_STATUSES) as AlertServerStatusMap;
     },
     enabled: !!user,
-    staleTime: 30_000,
-    refetchInterval: 60_000,
+    staleTime: 5 * 60_000,
+    refetchInterval: false,
     // A missing table (migration not applied yet) must not spam toasts — the
     // caller simply falls back to the in-memory store.
     retry: 0,

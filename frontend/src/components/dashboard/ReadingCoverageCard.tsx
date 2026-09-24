@@ -123,11 +123,9 @@ export function ReadingCoverageCard({ plantIds }: Props) {
       // Distinct wells
       return new Set((data ?? []).map((r: any) => r.well_id)).size;
     },
-    // FIX (egress): staleTime matched to refetchInterval — was relying on the
-    // 30s global default, so the app-wide background-sync sweep force-refetched
-    // this well before its own interval was due.
+    // FIX (egress): covered by realtime cache invalidation
     staleTime: 5 * 60_000,
-    refetchInterval: 5 * 60_000,
+    refetchInterval: false,
   });
 
   const { data: locDone = 0 } = useQuery({
@@ -141,11 +139,9 @@ export function ReadingCoverageCard({ plantIds }: Props) {
       const { data } = await q;
       return new Set((data ?? []).map((r: any) => r.locator_id)).size;
     },
-    // FIX (egress): staleTime matched to refetchInterval — was relying on the
-    // 30s global default, so the app-wide background-sync sweep force-refetched
-    // this well before its own interval was due.
+    // FIX (egress): covered by realtime cache invalidation
     staleTime: 5 * 60_000,
-    refetchInterval: 5 * 60_000,
+    refetchInterval: false,
   });
 
   const { data: trainDone = 0 } = useQuery({
@@ -159,11 +155,9 @@ export function ReadingCoverageCard({ plantIds }: Props) {
       const { data } = await q;
       return new Set((data ?? []).map((r: any) => r.train_id)).size;
     },
-    // FIX (egress): staleTime matched to refetchInterval — was relying on the
-    // 30s global default, so the app-wide background-sync sweep force-refetched
-    // this well before its own interval was due.
+    // FIX (egress): covered by realtime cache invalidation
     staleTime: 5 * 60_000,
-    refetchInterval: 5 * 60_000,
+    refetchInterval: false,
   });
 
   const rows: CoverageRow[] = [

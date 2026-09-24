@@ -80,7 +80,7 @@ export function useQualityStats({
     },
     enabled: qualityTrainIds.length > 0,
     staleTime: 5 * 60_000,
-    refetchInterval: 5 * 60_000,
+    refetchInterval: false,
   });
 
   const { data: roHistory10d = [] } = useQuery({
@@ -139,7 +139,7 @@ export function useQualityStats({
     },
     enabled: plantIds.length > 0,
     staleTime: 5 * 60_000,
-    refetchInterval: 5 * 60_000,
+    refetchInterval: false,
   });
 
   const { data: latestPumpReadings = [] } = useQuery({
@@ -163,7 +163,7 @@ export function useQualityStats({
     },
     enabled: plantIds.length > 0,
     staleTime: 5 * 60_000,
-    refetchInterval: 5 * 60_000,
+    refetchInterval: false,
   });
 
   // ── Aggregates ────────────────────────────────────────────────────────────

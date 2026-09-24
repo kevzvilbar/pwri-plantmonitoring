@@ -80,8 +80,8 @@ export function usePlantFreshness(plantIds: string[]): UsePlantFreshnessResult {
     queryKey: ['plant-freshness', plantIdsKey],
     queryFn: () => fetchPlantFreshness(plantIds),
     enabled: plantIds.length > 0,
-    staleTime: 60_000,
-    refetchInterval: 60_000,
+    staleTime: 5 * 60_000,
+    refetchInterval: false,
   });
 
   const freshnessByPlant = useMemo(() => {

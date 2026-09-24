@@ -160,8 +160,8 @@ export function WellReadingForm({ highlightId }: { highlightId?: string | null }
     // the same treatment: staleTime matched to refetchInterval so the
     // app-wide background-sync sweep doesn't re-fetch it every ~60s on top
     // of its own timer.
-    staleTime: 120_000,
-    refetchInterval: 120_000, // poll every 2 min — now actually mirrors op-loc-recent
+    staleTime: 5 * 60_000,
+    refetchInterval: false,
   });
 
   const { latestByWell, todayByWell, avgByWell } = useMemo(() => {
@@ -214,9 +214,8 @@ export function WellReadingForm({ highlightId }: { highlightId?: string | null }
       return (data ?? []) as { well_id: string; reading_datetime: string }[];
     },
     enabled: !!plantId,
-    staleTime: 120_000, // FIX (egress): was relying on the 30s global default, so the
-    // background-sync sweep force-refetched it well before its own interval fired.
-    refetchInterval: 120_000,
+    staleTime: 5 * 60_000,
+    refetchInterval: false,
   });
   const freshDtByWell = useMemo(() => {
     const map: Record<string, string> = {};

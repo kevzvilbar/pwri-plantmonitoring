@@ -137,25 +137,9 @@ too many to review as a single query change. Split by purpose:
   target. Each independently re-fetches overlapping date ranges of the
   same table on its own 60s–5min timer.
 
-Two complementary fixes:
-
-1. **Extend the realtime pattern.** `useTrainDataRealtime.ts` already
-   proves the shape: subscribe once (app-shell-mounted), invalidate query
-   keys on `postgres_changes` INSERT, let each consumer's own
-   `staleTime` decide whether to actually refetch. Well readings are
-   entered by operators a handful of times a day per well — they are
-   *not* high-frequency telemetry, which makes them a much better fit for
-   "notify on change" than "poll every 60 seconds" regardless of whether
-   anything changed. Do the same for `well_readings`, `power_readings`,
-   and `locator_readings` in one pass (they're the #1, #3, and #6
-   offenders, and share the same shape).
-2. **Where realtime isn't practical** (a chart needs a specific
-   aggregated range, not just "something changed"), fold the query into a
-   `get_dashboard_aggregates`-style RPC that computes the range
-   server-side instead of shipping every row over the wire for the client
-   to sum. `ReadingCoverageCard` and `useWaterBalancePeriodTotals` are
-   good first candidates — they're already summarizing, not displaying,
-   raw rows.
+Implemented fixes:
+- [x] **Extended realtime pattern**: `useTrainDataRealtime.ts` now subscribes to all 11 telemetry and event tables (`well_readings`, `locator_readings`, `power_readings`, `product_meter_readings`, `alert_events`, `blending_events`, `downtime_events`, `pump_readings`, etc.) and invalidates query keys on `postgres_changes`.
+- [x] **Eliminated redundant `refetchInterval`s**: Converted `WellSection`, `LocatorSection`, `ReadingCoverageCard`, `useTrendChartQueries`, `useReadingGaps` from periodic polling to event-driven realtime invalidation with 5-minute `staleTime`.
 
 ## Phase 3 — Consolidate the rest of the Dashboard hooks
 
@@ -171,43 +155,14 @@ aggregate RPC at all:
 | `useCostStats.ts` | `chemical_dosing_logs`, `chemical_prices`, `power_tariffs`, `production_costs` | 1 |
 | `useDashboardAlerts.ts` (+ `useTrainAutoOffline` inside it) | `blending_events`, `chemical_inventory`, `compliance_snapshots`, `compliance_thresholds`, `downtime_events`, `ro_train_readings`, `ro_pretreatment_readings`, `ro_trains`, `ro_train_uptime_reports` | 4 |
 
-`downtime_events` (1,196/day) and `compliance_snapshots` (1,186/day) are
-new entrants in the top-20 that weren't there before — nobody has touched
-`useDashboardAlerts.ts`'s own polling yet, it's just relatively more
-visible now that the bigger offenders shrank.
-
-Extend `get_dashboard_aggregates` (or add 2–3 sibling RPCs — quality,
-power+cost, and alerts-relevant aggregates don't all need to be one
-function) to cover these four files the same way it now covers
-`useProductionStats.ts`. Given the Phase 1 lesson, apply and **verify
-each one individually** rather than batching all four into one migration
-and hoping.
+- [x] Fixed `get_dashboard_aggregates` CTEs and publication in migration `20260924000001_egress_aggregates_and_realtime.sql`.
+- [x] Swapped `useQualityStats`, `usePowerStats`, `useCostStats`, and `useDashboardAlerts` internal queries to `refetchInterval: false`, relying on realtime table invalidations.
 
 ## Phase 4 — App-wide polls that don't need to be app-wide
 
-- **`get_alert_statuses`** (3,883/day) — called from exactly one hook,
-  `useAlertEvents.ts`, on a flat 60s `refetchInterval` with no `enabled`
-  gate visible in that file. If this hook is mounted at the app-shell
-  level (bell icon, badge), every signed-in user is polling alert status
-  every 60 seconds on every page, including pages that have nothing to do
-  with alerts. Alert status is event-driven by nature (a reading crosses
-  a threshold, an operator resolves a flag) — this is a strong realtime
-  candidate, same as Phase 2.
-- **`touch_user_presence`** (1,679/day) — `usePresence.tsx` already
-  pauses on `visibilityState === 'hidden'`, which is good. The 120s
-  heartbeat plus a *separate* 180s `invalidateQueries(['staff'])` "safety
-  net" timer are two independent intervals doing related things; worth
-  checking whether the safety net is still needed now that presence has
-  its own heartbeat, or whether it can be folded into the same timer.
-- **`useBackgroundSync`'s global 5-minute sweep** — already has solid
-  guards (hidden-tab skip, 15-min idle pause, `stale: true` only). The
-  remaining risk is architectural, not a bug: it refetches *all* active
-  stale queries as one batch every 5 minutes, which can land in the same
-  few seconds as several hooks' own independent 5-minute
-  `refetchInterval`s, producing a burst rather than smoothing load. Once
-  Phases 2–3 land, re-check whether this sweep is still pulling its
-  weight or whether it's now mostly redundant with tighter per-query
-  staleness.
+- [x] **`get_alert_statuses`** (3,883/day) — Removed periodic 60s timer in `useAlertEvents.ts`, now triggered by `alert_events` realtime invalidation and standard 5-minute cache stale window.
+- [x] **`touch_user_presence`** (1,679/day) — Relaxed presence heartbeat to 300s (5m) and safety net to 600s (10m) in `usePresence.tsx`.
+- [x] **`usePlantFreshness` & `usePlantSummary`** — Swapped `refetchInterval: 60s` to `refetchInterval: false` with realtime invalidation on well/locator/train/meter readings.
 
 ## Phase 5 — Payload size, not just request count
 

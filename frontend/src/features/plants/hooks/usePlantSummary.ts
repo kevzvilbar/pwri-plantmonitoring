@@ -70,7 +70,7 @@ export function usePlantSummary() {
         trains:   trainTally,
       };
     },
-    staleTime: 60_000,
-    refetchInterval: 60_000,
+    staleTime: 5 * 60_000,
+    refetchInterval: false,
   });
 }
