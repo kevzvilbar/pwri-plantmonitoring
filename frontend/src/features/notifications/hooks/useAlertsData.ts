@@ -14,17 +14,20 @@
  * there is no extra network traffic, and on every other route these are the
  * only queries that run.
  */
-import { useMemo } from 'react';
+import { useMemo, useCallback } from 'react';
 import { format, subDays } from 'date-fns';
 import { usePlantStore } from '@/store/plantStore';
 import { useAlertStore } from '@/store/alertStore';
 import { useVisiblePlants } from '@/hooks/useVisiblePlants';
 import { useProductionStats, useQualityStats, usePowerStats, useDashboardAlerts } from '@/pages/Dashboard/hooks';
+import { useAlertEvents } from './useAlertEvents';
 
 export function useAlertsData() {
   const selectedPlantId = usePlantStore((s) => s.selectedPlantId);
   const addAlerts = useAlertStore((s) => s.addAlerts);
   const clearConditionAlerts = useAlertStore((s) => s.clearConditionAlerts);
+  const serverStatusByKey = useAlertStore((s) => s.serverStatusByKey);
+  const plantAlerts = useAlertStore((s) => s.plantAlerts);
 
   // P5-1 (D5): the same visibility rule as the TopBar, Alerts page, Plants
   // page and Dashboard. The alarm set is computed only for plants the user
@@ -37,6 +40,26 @@ export function useAlertsData() {
   );
   const plantIds = scopedPlants.map((p) => p.id);
   const plantIdsKey = plantIds.join(',');
+  const { record: recordAlertEvent } = useAlertEvents(plantIds);
+
+  const handleClearConditionAlerts = useCallback((ids: string[]) => {
+    // D2: When a condition clears, if an alert had an acknowledged, resolved,
+    // or snoozed status on the server, append a 'reopened' event so the server
+    // status resets to 'active' and future recurrences are not suppressed.
+    const byId = new Map(plantAlerts.map((a) => [a.id, a]));
+    ids.forEach((id) => {
+      const currentServerStatus = serverStatusByKey[id];
+      if (currentServerStatus && currentServerStatus !== 'active') {
+        const alert = byId.get(id);
+        void recordAlertEvent({
+          alertKey: id,
+          action: 'reopened',
+          plantId: alert?.plantId ?? null,
+        });
+      }
+    });
+    clearConditionAlerts(ids);
+  }, [clearConditionAlerts, serverStatusByKey, plantAlerts, recordAlertEvent]);
 
   // Same UTC-safe day boundaries as Dashboard.tsx (Bug 4 fix there): build
   // YYYY-MM-DD from the LOCAL calendar date, then read it as UTC midnight, so
@@ -70,7 +93,7 @@ export function useAlertsData() {
   useDashboardAlerts({
     selectedPlantId,
     addAlerts,
-    clearConditionAlerts,
+    clearConditionAlerts: handleClearConditionAlerts,
     plants: scopedPlants,
     plantIds,
     latestRO: qualityStats.latestRO,

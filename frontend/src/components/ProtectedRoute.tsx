@@ -9,7 +9,7 @@ import { toast } from 'sonner';
 // Routes an Operator is allowed to visit. Everything else redirects to /.
 // Maintained by hand; checked by navConfig.test.ts (P1-6) against
 // buildNavConfig output: an Operator-visible nav item whose route is missing
-// from this list fails the test. P1-7 would derive this from ROUTE_MAP +
+// from this list fails the test. P1-7 would derive this from ROUTE_MAP + nav items directly, but the test ensures this list stays in sync.
 export const OPERATOR_ALLOWED_PATHS = [
   '/',
   '/plants',

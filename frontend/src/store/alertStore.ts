@@ -154,8 +154,21 @@ export const useAlertStore = create<AlertState>()(
           // so the alarm should leave the list outright. The old `removeAlerts`
           // instead snoozed for 5 minutes, which both hid a still-true alarm
           // and silently punched a hole in the list.
+          // Also remove cleared IDs from serverStatusByKey so recurring
+          // occurrences are not permanently muted by stale resolved/acknowledged status.
           const gone = new Set(ids);
-          return { plantAlerts: s.plantAlerts.filter((a) => !gone.has(a.id)) };
+          const nextStatus = { ...s.serverStatusByKey };
+          let changedStatus = false;
+          ids.forEach((id) => {
+            if (id in nextStatus) {
+              delete nextStatus[id];
+              changedStatus = true;
+            }
+          });
+          return {
+            plantAlerts: s.plantAlerts.filter((a) => !gone.has(a.id)),
+            serverStatusByKey: changedStatus ? nextStatus : s.serverStatusByKey,
+          };
         }),
       clearAlerts: () => set({ plantAlerts: [] }),
 

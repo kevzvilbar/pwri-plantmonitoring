@@ -91,6 +91,14 @@ describe('useAlertStore', () => {
     expect(useAlertStore.getState().snoozeMap['alert-1']).toBeUndefined();
   });
 
+  it('clearConditionAlerts clears serverStatusByKey so re-fired alerts are not blocked', () => {
+    useAlertStore.getState().setServerStatuses({ 'alert-1': 'resolved' });
+    useAlertStore.getState().clearConditionAlerts(['alert-1']);
+    expect(useAlertStore.getState().serverStatusByKey['alert-1']).toBeUndefined();
+    useAlertStore.getState().addAlerts([mockAlert]);
+    expect(useAlertStore.getState().plantAlerts).toHaveLength(1);
+  });
+
   it('should add alerts and deduplicate by id', () => {
     useAlertStore.getState().addAlerts([mockAlert]);
     expect(useAlertStore.getState().plantAlerts).toHaveLength(1);

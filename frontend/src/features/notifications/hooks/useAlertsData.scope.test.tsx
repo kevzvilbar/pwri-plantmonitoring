@@ -24,6 +24,14 @@ vi.mock('@/hooks/useAuth', () => ({
   }),
 }));
 vi.mock('@/hooks/usePlants', () => ({ usePlants: () => ({ data: PLANTS, isLoading: false }) }));
+vi.mock('./useAlertEvents', () => ({
+  useAlertEvents: () => ({
+    record: vi.fn().mockResolvedValue(true),
+    statuses: {},
+    loaded: true,
+    isRecording: false,
+  }),
+}));
 
 const useProductionStats = vi.fn();
 const useQualityStats = vi.fn();

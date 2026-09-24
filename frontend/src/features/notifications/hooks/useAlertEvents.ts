@@ -16,6 +16,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useOnlineStatus } from '@/hooks/useOnlineStatus';
@@ -159,11 +160,14 @@ export async function persistEvent(row: AlertEventInsert, userId?: string | null
     if (!error) return true;
     if (!isRetryableError(error)) {
       console.warn('[useAlertEvents] Dropping non-retryable alert event insert error:', error);
+      toast.error(`Alert update could not be saved: ${error.message || 'Permission denied'}`);
       return false;
     }
   } catch (err) {
     if (!isRetryableError(err)) {
       console.warn('[useAlertEvents] Dropping non-retryable alert event insert exception:', err);
+      const msg = err instanceof Error ? err.message : 'Unknown error';
+      toast.error(`Alert update could not be saved: ${msg}`);
       return false;
     }
   }
@@ -201,6 +205,7 @@ export async function flushAlertEventOutbox(userId?: string | null): Promise<num
           // Non-retryable error (e.g. 403 RLS violation, foreign key constraint):
           // Drop it so head-of-line blocking does not prevent subsequent items
           console.warn('[useAlertEvents] Dropping non-retryable queued alert event:', error, row);
+          toast.error(`Queued alert update dropped: ${error.message || 'Permission denied'}`);
           continue;
         }
       }
@@ -211,6 +216,8 @@ export async function flushAlertEventOutbox(userId?: string | null): Promise<num
         break;
       } else {
         console.warn('[useAlertEvents] Dropping non-retryable queued alert event on exception:', err, row);
+        const msg = err instanceof Error ? err.message : 'Unknown error';
+        toast.error(`Queued alert update dropped: ${msg}`);
         continue;
       }
     }

@@ -1,7 +1,10 @@
+import { useState } from 'react';
 import { Activity, Bell, BellOff, BellRing, CheckCircle2, ChevronRight, FileText } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAlertActorNames } from '@/features/notifications/hooks/useAlertActorNames';
 import { useAuditedAlertActions } from '@/features/notifications/hooks/useAuditedAlertActions';
+import { ConfirmBulkDialog } from '@/features/notifications/components/ConfirmBulkDialog';
+import { ResolveNoteDialog } from '@/features/notifications/components/ResolveNoteDialog';
 import { alertStatusLine } from '@/features/notifications/lib/alertStatusLine';
 import { useTopBarState } from './useTopBarState';
 import { cn } from '@/lib/utils';
@@ -40,6 +43,26 @@ export function AlertPanel() {
     navigate,
   } = useTopBarState();
 
+  const [bulkAction, setBulkAction] = useState<'acknowledge' | 'snooze' | 'resolve' | null>(null);
+  const [resolveTarget, setResolveTarget] = useState<string | null>(null);
+
+  const openBulk = (action: 'acknowledge' | 'snooze' | 'resolve') => setBulkAction(action);
+
+  const runBulk = () => {
+    if (bulkAction === 'acknowledge') {
+      ackAll();
+      toast.success('All alerts acknowledged');
+    } else if (bulkAction === 'snooze') {
+      snoozeMany(snoozableIds, 60 * 60 * 1000);
+      toast.success(
+        snoozableIds.length === sortedAlerts.length
+          ? 'All alerts snoozed for 1 hour'
+          : `${snoozableIds.length} snoozed for 1 hour (critical alarms stay on)`,
+      );
+    }
+    setBulkAction(null);
+  };
+
   return (
     <div className="flex flex-col h-full max-h-[82vh] overflow-hidden bg-card text-card-foreground">
       <div className="p-3 bg-muted/40 border-b border-border/60 space-y-2.5">
@@ -63,19 +86,12 @@ export function AlertPanel() {
             )}
           </div>
 
-                    <div className="flex items-center gap-1 shrink-0 ml-auto">
+          <div className="flex items-center gap-1 shrink-0 ml-auto">
             {activeTab === 'active' && sortedAlerts.length > 0 && (
               <>
                 <button
                   type="button"
-                  onClick={() => {
-                    snoozeMany(snoozableIds, 60 * 60 * 1000);
-                    toast.success(
-                      snoozableIds.length === sortedAlerts.length
-                        ? 'All alerts snoozed for 1 hour'
-                        : `${snoozableIds.length} snoozed for 1 hour (critical alarms stay on)`,
-                    );
-                  }}
+                  onClick={() => openBulk('snooze')}
                   disabled={snoozableIds.length === 0}
                   className="flex items-center gap-1 text-2xs px-2 py-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors font-medium min-h-[32px] sm:min-h-[28px] disabled:opacity-40 disabled:cursor-not-allowed"
                   title={snoozableIds.length === 0
@@ -87,12 +103,7 @@ export function AlertPanel() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => {
-                    // Use acknowledgeAll instead of clearing alerts silently
-                    // Record who and when for audit trail
-                    ackAll();
-                    toast.success('All alerts acknowledged');
-                  }}
+                  onClick={() => openBulk('acknowledge')}
                   className="text-2xs px-2 py-1 rounded-md text-muted-foreground hover:text-primary hover:bg-primary-soft transition-colors font-medium min-h-[32px] sm:min-h-[28px]"
                   title="Acknowledge all alerts (records who and when)"
                 >
@@ -100,12 +111,7 @@ export function AlertPanel() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => {
-                    sortedAlerts.forEach((a) => {
-                      resolveWithNote(a.id, 'Bulk resolve from bell panel');
-                    });
-                    toast.success('All alerts resolved');
-                  }}
+                  onClick={() => openBulk('resolve')}
                   className="text-2xs px-2 py-1 rounded-md text-muted-foreground hover:text-danger hover:bg-danger-soft transition-colors font-medium min-h-[32px] sm:min-h-[28px]"
                   title="Resolve all alerts (records who and when)"
                 >
@@ -254,10 +260,7 @@ export function AlertPanel() {
                     ackAlert(alert.id);
                     toast.success('Alert acknowledged');
                   }}
-                  onResolve={() => {
-                    resolveWithNote(alert.id, 'Resolved from bell panel');
-                    toast.success('Alert resolved');
-                  }}
+                  onResolve={() => setResolveTarget(alert.id)}
                   // P3-6: the deprecated onDismiss path is gone. "Dismiss" was
                   // a silent 5-minute snooze under a name that read like a
                   // delete; acknowledge (audited) is the honest replacement.
@@ -359,6 +362,37 @@ export function AlertPanel() {
           <span>Push Setup</span>
         </button>
       </div>
+
+      {/* ── P3-5: confirm + note dialogs ─────────────────────────────────── */}
+      <ConfirmBulkDialog
+        open={bulkAction === 'acknowledge' || bulkAction === 'snooze'}
+        action={bulkAction === 'snooze' ? 'snooze' : 'acknowledge'}
+        count={bulkAction === 'snooze' ? snoozableIds.length : sortedAlerts.length}
+        snoozeLabel="1 hour"
+        criticalExcluded={
+          bulkAction === 'snooze' && snoozableIds.length !== sortedAlerts.length
+        }
+        onOpenChange={(open) => { if (!open) setBulkAction(null); }}
+        onConfirm={runBulk}
+      />
+      <ResolveNoteDialog
+        open={resolveTarget != null || bulkAction === 'resolve'}
+        count={resolveTarget ? 1 : sortedAlerts.length}
+        onOpenChange={(open) => {
+          if (!open) { setResolveTarget(null); setBulkAction(null); }
+        }}
+        onConfirm={(note) => {
+          if (resolveTarget) {
+            resolveWithNote(resolveTarget, note);
+            toast.success('Alert resolved');
+          } else {
+            sortedAlerts.forEach((a) => resolveWithNote(a.id, note));
+            toast.success(`All ${sortedAlerts.length} alerts resolved`);
+          }
+          setResolveTarget(null);
+          setBulkAction(null);
+        }}
+      />
     </div>
   );
 }

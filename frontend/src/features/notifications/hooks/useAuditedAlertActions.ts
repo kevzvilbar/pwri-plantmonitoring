@@ -72,5 +72,14 @@ export function useAuditedAlertActions() {
     [plantAlerts],
   );
 
-  return { ackAlert, ackAll, resolveWithNote, snoozeMany, snoozableIds };
+  /** Reopen an alert so it re-activates in the audit trail. */
+  const reopenAlert = useCallback((id: string, plantId?: string | null) => {
+    void recordAlertEvent({
+      alertKey: id,
+      action: 'reopened',
+      plantId: plantId ?? null,
+    });
+  }, [recordAlertEvent]);
+
+  return { ackAlert, ackAll, resolveWithNote, snoozeMany, snoozableIds, reopenAlert };
 }
