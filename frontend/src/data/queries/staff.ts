@@ -126,13 +126,13 @@ export async function fetchKpiReadings(range: 'today' | number): Promise<{
     : new Date(Date.now() - (range as number) * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
   
   const [wellReadings, locReadings, roReadings, meterReadings, powerReadings, chemReadings, blendingReadings] = await Promise.all([
-    supabase.from('well_readings').select('plant_id, well_id, reading_datetime, recorded_by, is_estimated').gte('reading_datetime', since),
-    supabase.from('locator_readings').select('plant_id, locator_id, reading_datetime, recorded_by, is_estimated').gte('reading_datetime', since),
-    supabase.from('ro_train_readings').select('plant_id, train_id, reading_datetime, recorded_by, is_estimated').gte('reading_datetime', since),
-    supabase.from('product_meter_readings').select('plant_id, meter_id, reading_datetime, recorded_by, is_estimated').gte('reading_datetime', since),
-    supabase.from('power_readings').select('plant_id, reading_datetime, recorded_by, is_estimated').gte('reading_datetime', since),
-    supabase.from('chemical_dosing_logs').select('plant_id, log_datetime, recorded_by').gte('log_datetime', since),
-    supabase.from('blending_events').select('plant_id, well_id, event_date, is_estimated').gte('event_date', since),
+    supabase.from('well_readings').select('*').gte('reading_datetime', since),
+    supabase.from('locator_readings').select('*').gte('reading_datetime', since),
+    supabase.from('ro_train_readings').select('*').gte('reading_datetime', since),
+    supabase.from('product_meter_readings').select('*').gte('reading_datetime', since),
+    supabase.from('power_readings').select('*').gte('reading_datetime', since),
+    supabase.from('chemical_dosing_logs').select('*').gte('log_datetime', since),
+    supabase.from('blending_events').select('*').gte('event_date', since),
   ]);
   
   if (wellReadings.error) throw wellReadings.error;

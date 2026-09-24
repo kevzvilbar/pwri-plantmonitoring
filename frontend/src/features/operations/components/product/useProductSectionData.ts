@@ -105,7 +105,7 @@ export function useProductSectionData({
         meterIds.map(async (id) => {
           const { data, error } = await supabase
             .from('product_meter_readings' as any)
-            .select('id, meter_id, plant_id, current_reading, previous_reading, daily_volume, reading_datetime, is_estimated, is_meter_replacement, recorded_by, norm_status')
+            .select('*')
             .eq('meter_id', id)
             .or('norm_status.is.null,norm_status.neq.retracted')
             .order('reading_datetime', { ascending: false })
@@ -113,7 +113,7 @@ export function useProductSectionData({
           if (error) {
             const { data: fallback } = await supabase
               .from('product_meter_readings' as any)
-              .select('id, meter_id, plant_id, current_reading, previous_reading, daily_volume, reading_datetime, is_estimated, is_meter_replacement, recorded_by, norm_status')
+              .select('*')
               .eq('meter_id', id)
               .order('reading_datetime', { ascending: false })
               .limit(1);
@@ -125,8 +125,8 @@ export function useProductSectionData({
       return results.flatMap((r) => r);
     },
     enabled: !!plantId && meterIds.length > 0,
-    staleTime: 5 * 60_000,
-    refetchInterval: false,
+    staleTime: 60_000,
+    refetchInterval: 60_000,
   });
 
   const latestByMeter = useMemo(() => {
@@ -151,7 +151,6 @@ export function useProductSectionData({
       return (data ?? []) as any[];
     },
     enabled: !!plantId,
-    staleTime: 5 * 60_000,
   });
 
   const avgByMeter = useMemo(() => {
@@ -181,7 +180,6 @@ export function useProductSectionData({
       return (data ?? []) as any[];
     },
     enabled: derivedLocatorIds.length > 0,
-    staleTime: 10 * 60_000,
   });
 
   const mirrorSourceById = useMemo(() => {
@@ -202,14 +200,13 @@ export function useProductSectionData({
     queryFn: async () => {
       const { data, error } = await supabase
         .from('reading_gap_reasons' as any)
-        .select('id, plant_id, entity_type, entity_id, gap_date, reason, notes, created_at')
+        .select('*')
         .eq('plant_id', plantId)
         .eq('entity_type', 'product')
         .eq('gap_date', todayDateStr);
       if (error) return [];
       return (data ?? []) as any[];
     },
-    staleTime: 5 * 60_000,
   });
 
   const gapReasonsByMeter = useMemo(() => {

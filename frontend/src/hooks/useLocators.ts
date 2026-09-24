@@ -50,7 +50,7 @@ export function useLocators(plantId?: string | string[]) {
       if (error) throw error;
       return (data ?? []) as Locator[];
     },
-    staleTime: 15 * 60_000,
+    staleTime: 10 * 60_000,
   });
 }
 

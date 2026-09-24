@@ -10,19 +10,8 @@ interface TariffHistoryProps {
 export function TariffHistory({ plantId }: TariffHistoryProps) {
   const { data: tariffs } = useQuery({
     queryKey: ['tariffs', plantId],
-    queryFn: async () =>
-      plantId
-        ? (
-            await supabase
-              .from('power_tariffs')
-              .select('id, plant_id, rate_per_kwh, effective_date, notes, created_at')
-              .eq('plant_id', plantId)
-              .order('effective_date', { ascending: false })
-              .limit(12)
-          ).data ?? []
-        : [],
+    queryFn: async () => plantId ? (await supabase.from('power_tariffs').select('*').eq('plant_id', plantId).order('effective_date', { ascending: false }).limit(12)).data ?? [] : [],
     enabled: !!plantId,
-    staleTime: 10 * 60_000,
   });
 
   return (

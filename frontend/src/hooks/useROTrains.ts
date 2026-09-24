@@ -78,7 +78,7 @@ export function useROTrains(plantId?: string | string[]) {
     // query to [] rather than leaving it perpetually in a disabled/no-data
     // state, since some callers read .data directly without checking enabled.
     initialData: isEmptySelection ? EMPTY_TRAINS : undefined,
-    staleTime: 15 * 60_000,
+    staleTime: 10 * 60_000,
   });
 }
 

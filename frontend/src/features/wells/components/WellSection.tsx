@@ -237,7 +237,7 @@ export function WellReadingForm({ highlightId }: { highlightId?: string | null }
     queryFn: async () => {
       const { data, error } = await supabase
         .from('reading_gap_reasons' as any)
-        .select('id,plant_id,entity_type,entity_id,gap_date,reason,notes,created_at')
+        .select('*')
         .eq('plant_id', plantId)
         .eq('entity_type', 'well')
         .eq('gap_date', todayDateStr);
