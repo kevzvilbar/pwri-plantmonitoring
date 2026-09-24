@@ -93,3 +93,4 @@ COMMENT ON FUNCTION public.get_alert_statuses(uuid[]) IS
   'Latest alert action per alert_key scoped by user_has_plant_access and is_manager_or_analyst_or_admin, snooze-expiry applied.';
 
 GRANT EXECUTE ON FUNCTION public.get_alert_statuses(uuid[]) TO authenticated;
+

@@ -94,3 +94,4 @@ This document defines the architectural standard, migration phases, decision log
 | **Team & Admin** | Employees | `/employees` | ✓ | ✓ | ✓ | ✓ | ✓ |
 | | Admin Console | `/admin` | | | ✓ | | ✓ |
 | **Total Items** | | | **9** | **12** | **18** | **17** | **18** |
+
