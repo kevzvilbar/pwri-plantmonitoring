@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { act, renderHook } from '@testing-library/react';
 import { useAlertStore, type PlantAlert, type PlantAlertSeverity } from '@/store/alertStore';
-import { selectAttentionAlerts, useAlertBadge } from '@/hooks/useAlertBadge';
+import { selectAttentionAlerts, selectOpenAlerts, useAlertBadge } from '@/hooks/useAlertBadge';
 
 const alert = (id: string, severity: PlantAlertSeverity, extra: Partial<PlantAlert> = {}): PlantAlert => ({
   id, severity, title: id, description: '', source: 'test', plantId: 'p1', timestamp: 0, ...extra,
@@ -46,6 +46,34 @@ describe('selectAttentionAlerts', () => {
     // Someone acknowledged it, then reopened it — derived status is 'active'.
     const list = [alert('a', 'critical')];
     expect(selectAttentionAlerts(list, {}, { a: 'active' }).map((x) => x.id)).toEqual(['a']);
+  });
+});
+
+describe('selectOpenAlerts', () => {
+  it('includes info severity (unlike selectAttentionAlerts)', () => {
+    const list = [alert('c', 'critical'), alert('i', 'info')];
+    expect(selectOpenAlerts(list, {}).map((a) => a.id)).toEqual(['c', 'i']);
+  });
+
+  it('keeps an acknowledged alert visible — it must not disappear the moment it is touched', () => {
+    const list = [alert('a', 'critical', { acknowledgedAt: 1, acknowledgedBy: 'u1' }), alert('b', 'warning')];
+    expect(selectOpenAlerts(list, {}).map((a) => a.id)).toEqual(['a', 'b']);
+  });
+
+  it('keeps a live-snoozed alert visible', () => {
+    const now = Date.now();
+    const list = [alert('a', 'critical')];
+    expect(selectOpenAlerts(list, { a: now + 60_000 }).map((x) => x.id)).toEqual(['a']);
+  });
+
+  it('drops an alert only once it is resolved', () => {
+    const list = [alert('a', 'critical', { resolvedAt: 1, resolvedBy: 'u1' }), alert('b', 'critical')];
+    expect(selectOpenAlerts(list, {}).map((a) => a.id)).toEqual(['b']);
+  });
+
+  it('drops an alert the audit trail says was resolved (P3-3)', () => {
+    const list = [alert('a', 'critical'), alert('b', 'warning')];
+    expect(selectOpenAlerts(list, {}, { a: 'resolved' }).map((x) => x.id)).toEqual(['b']);
   });
 });
 

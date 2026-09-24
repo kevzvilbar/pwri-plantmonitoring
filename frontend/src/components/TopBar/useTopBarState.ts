@@ -7,7 +7,7 @@ import { useVisiblePlants } from '@/hooks/useVisiblePlants';
 import { usePlantSelectionGuard } from '@/hooks/usePlantSelectionGuard';
 import { useNavigate } from 'react-router-dom';
 import { useSidebar } from '@/components/ui/sidebar';
-import { selectActiveAlerts, selectAttentionAlerts } from '@/hooks/useAlertBadge';
+import { selectActiveAlerts, selectAttentionAlerts, selectOpenAlerts } from '@/hooks/useAlertBadge';
 import { useNotifications } from '@/features/notifications/hooks/useNotifications';
 import { SevTier } from './types';
 import { sevTier } from './helpers';
@@ -78,6 +78,15 @@ export function useTopBarState() {
   );
   const activeAlarmsCount = activeAlerts.length;
 
+  // Open alerts (not yet resolved — active, acknowledged, or snoozed). This,
+  // not activeAlerts, is what the bell panel's list should render: an
+  // acknowledged alert should stay visible with its "Acknowledged by …" line
+  // until it's actually resolved, not disappear the moment it's touched.
+  const openAlerts = useMemo(
+    () => selectOpenAlerts(plantAlerts, snoozeMap, serverStatusByKey),
+    [plantAlerts, snoozeMap, serverStatusByKey],
+  );
+
   // Total badge sums unread workflow notifications and attention alerts
   const totalBadge = unreadCount + attentionCount;
   const hasCritical = useMemo(
@@ -102,11 +111,12 @@ export function useTopBarState() {
     };
   }, [attentionAlerts]);
 
-  // ── P3-8: AlertPanel list displays active alarms, optionally filtered to selectedPlantId
+  // ── P3-8: AlertPanel list displays open (not-yet-resolved) alarms, optionally
+  // filtered to selectedPlantId. Deliberately NOT activeAlerts — see openAlerts.
   const scopedAlerts = useMemo(() => {
-    if (!selectedPlantId) return activeAlerts;
-    return activeAlerts.filter((a) => !a.plantId || a.plantId === selectedPlantId);
-  }, [activeAlerts, selectedPlantId]);
+    if (!selectedPlantId) return openAlerts;
+    return openAlerts.filter((a) => !a.plantId || a.plantId === selectedPlantId);
+  }, [openAlerts, selectedPlantId]);
 
   const sortedAlerts = useMemo(
     () =>
@@ -151,6 +161,7 @@ export function useTopBarState() {
     plantAlerts,
     activeAlerts,
     activeAlarmsCount,
+    openAlerts,
     attentionAlerts,
     attentionCount,
     alertsReady,

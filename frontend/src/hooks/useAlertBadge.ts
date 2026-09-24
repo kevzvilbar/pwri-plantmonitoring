@@ -40,6 +40,27 @@ export function selectActiveAlerts(
   );
 }
 
+/**
+ * Alerts that are still open — any severity, any status except resolved.
+ * Acknowledged and snoozed alerts stay in this set, so a list built from it
+ * (the bell panel's "Active Alarms" tab) keeps showing an alert — with its
+ * "Acknowledged by …" status line — until someone actually resolves it,
+ * instead of the alert vanishing the moment it's acknowledged.
+ *
+ * This is the selector for *what to list*. `selectAttentionAlerts` and
+ * `selectActiveAlerts` are for *what to count* on a badge — do not reuse
+ * either of those to drive a list of alerts a person needs to keep reading.
+ */
+export function selectOpenAlerts(
+  alerts: readonly PlantAlert[],
+  snoozeMap: SnoozeMap,
+  serverStatusByKey: ServerStatusMap = {},
+): PlantAlert[] {
+  return alerts.filter(
+    (a) => getAlertStatus(a, snoozeMap, serverStatusByKey) !== 'resolved',
+  );
+}
+
 /** Nav badge state, read from the in-memory alert store. Two primitive
  *  selectors, so subscribers only re-render when a value actually changes. */
 export function useAlertBadge(): { count: number; hasCritical: boolean } {
