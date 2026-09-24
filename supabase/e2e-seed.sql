@@ -56,7 +56,7 @@ BEGIN
     v_plant_id,
     'E2E Test Locator',
     'Active',
-    'cumulative'
+    'raw'
   );
 
   -- 4. Create an RO train
