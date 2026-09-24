@@ -26,9 +26,13 @@ test.describe('Well Reading Workflow', () => {
     // Daily Readings page rendered (heading, not bare text: the nav link has the same label)
     await expect(page.getByRole('heading', { name: 'Daily Readings' })).toBeVisible({ timeout: 15_000 });
 
-    // Wells tab is present in the tab bar
-    const wellsTab = page.locator('button:has-text("Wells")');
+    // /operations opens on the Locators tab (useUrlTab default is 'locator'), and only
+    // the open tab's form is mounted -- so the Wells section does not exist until the
+    // Wells tab is selected. The tab label also carries a count badge, hence the regex.
+    const wellsTab = page.getByRole('tab', { name: /Wells/ });
     await expect(wellsTab).toBeVisible();
+    await wellsTab.click();
+    await expect(wellsTab).toHaveAttribute('aria-selected', 'true');
 
     // The Wells section needs an active plant. An Operator with exactly one plant gets
     // it automatically; with several, ActivePlantChip shows a 'Choose a plant' prompt.
