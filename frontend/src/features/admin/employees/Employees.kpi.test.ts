@@ -102,5 +102,45 @@ describe('computeEntityOverallScore (Phase 1 KPI scoring redesign)', () => {
     expect(res.scorePct).toBe(70);
     expect(res.tier.tier).toBe('Meets Target');
   });
+
+  it('correctly credits non-typing partner on dual-duty shift with pooled RO score (D1 / P2-1)', () => {
+    // Both Operator A (typed) and Operator B (non-typing partner) receive 100% RO diligence
+    const tsPartner: EntityTypeScore = {
+      wells: { '2026-09-01': 1.0, '2026-09-02': 1.0 },
+      locator: { '2026-09-01': 1.0, '2026-09-02': 1.0 },
+      product_meter: { '2026-09-01': 1.0, '2026-09-02': 1.0 },
+      solar: { '2026-09-01': 1.0, '2026-09-02': 1.0 },
+      grid: { '2026-09-01': 1.0, '2026-09-02': 1.0 },
+      chemicals: { '2026-09-01': 1.0, '2026-09-02': 1.0 },
+      ro_train: { '2026-09-01': 1.0, '2026-09-02': 1.0 },
+    };
+
+    const res = computeEntityOverallScore(tsPartner, ['2026-09-01', '2026-09-02'], todayStr);
+    expect(res.scorePct).toBe(100);
+    expect(res.roAvg).toBeCloseTo(1.0);
+    expect(res.sharedAvg).toBeCloseTo(1.0);
+    expect(res.tier.tier).toBe('Outstanding');
+  });
+
+  it('correctly handles attendance-only fallback without penalizing RO score (D3 / P2-2)', () => {
+    // Operator present on duty but without declared partner and 0 typed RO readings
+    // RO Train is null (excluded), Shared duties 100%
+    const tsAttendanceOnly: EntityTypeScore = {
+      wells: { '2026-09-01': 1.0, '2026-09-02': 1.0 },
+      locator: { '2026-09-01': 1.0, '2026-09-02': 1.0 },
+      product_meter: { '2026-09-01': 1.0, '2026-09-02': 1.0 },
+      solar: { '2026-09-01': 1.0, '2026-09-02': 1.0 },
+      grid: { '2026-09-01': 1.0, '2026-09-02': 1.0 },
+      chemicals: { '2026-09-01': 1.0, '2026-09-02': 1.0 },
+      ro_train: { '2026-09-01': null, '2026-09-02': null },
+    };
+
+    const res = computeEntityOverallScore(tsAttendanceOnly, ['2026-09-01', '2026-09-02'], todayStr);
+    expect(res.scorePct).toBe(100);
+    expect(res.roAvg).toBeNull();
+    expect(res.sharedAvg).toBeCloseTo(1.0);
+    expect(res.tier.tier).toBe('Outstanding');
+  });
 });
+
 

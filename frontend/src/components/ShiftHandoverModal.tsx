@@ -19,8 +19,9 @@ import {
   isShiftConfirmationExpired,
   type ShiftInfo,
 } from '@/lib/shifts';
-import { Clock, UserCheck, Users, LogOut, ArrowRight, CheckCircle2, ShieldCheck, AlertCircle } from 'lucide-react';
+import { Clock, UserCheck, Users, LogOut, ArrowRight, CheckCircle2, ShieldCheck, AlertCircle, UserPlus } from 'lucide-react';
 import { toast } from 'sonner';
+import { recordShiftDuty } from '@/data/mutations/shiftDuty';
 
 function initials(p: Profile | null): string {
   if (!p) return '?';
@@ -42,6 +43,7 @@ export function ShiftHandoverModal() {
   const [peerOperators, setPeerOperators] = useState<Profile[]>([]);
   const [loadingPeers, setLoadingPeers] = useState(false);
   const [switching, setSwitching] = useState(false);
+  const [selectedPartnerId, setSelectedPartnerId] = useState<string>('');
 
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -74,6 +76,7 @@ export function ShiftHandoverModal() {
       setIsOpen(true);
       setShowSwitchPicker(false);
       setSearchTerm('');
+      loadPeerOperators();
     } else {
       setIsOpen(false);
     }
@@ -153,10 +156,12 @@ export function ShiftHandoverModal() {
   };
 
   // Option 1: Confirm same operator continuing
-  const handleConfirmSame = () => {
+  const handleConfirmSame = async () => {
     if (!user) return;
     const now = new Date();
     const cycleKey = getShiftCycleKey(now);
+    const sessionPlants: string[] = profile?.plant_assignments ?? [];
+    const sharedPlant = sessionPlants[0] ?? selectedPlantId ?? '';
 
     saveShiftConfirmation(user.id, {
       cycleKey,
@@ -165,7 +170,24 @@ export function ShiftHandoverModal() {
       confirmedBy: user.email ?? 'unknown',
     });
 
-    toast.success(`Confirmed: Continuing as ${fullName(currentOperator)} for ${currentShift.name}`, {
+    if (sharedPlant) {
+      try {
+        await recordShiftDuty({
+          plantId: sharedPlant,
+          operatorId: currentOperatorId,
+          partnerOperatorId: selectedPartnerId || null,
+          cycleKey,
+          confirmedBy: user.id,
+        });
+      } catch (e) {
+        console.warn('[ShiftHandover] recordShiftDuty failed:', e);
+      }
+    }
+
+    const partnerProfile = peerOperators.find((p) => p.id === selectedPartnerId);
+    const partnerMsg = selectedPartnerId && partnerProfile ? ` (Paired with ${fullName(partnerProfile)})` : '';
+
+    toast.success(`Confirmed: Continuing as ${fullName(currentOperator)}${partnerMsg} for ${currentShift.name}`, {
       icon: <CheckCircle2 className="h-4 w-4 text-accent" />,
       duration: 5000,
     });
@@ -209,6 +231,18 @@ export function ShiftHandoverModal() {
         } catch (auditErr) {
           console.warn('[ShiftHandoverModal] Audit log write failed:', auditErr);
         }
+
+        try {
+          await recordShiftDuty({
+            plantId: sharedPlant,
+            operatorId: newOp.id,
+            partnerOperatorId: selectedPartnerId || null,
+            cycleKey,
+            confirmedBy: user.id,
+          });
+        } catch (dutyErr) {
+          console.warn('[ShiftHandoverModal] recordShiftDuty failed:', dutyErr);
+        }
       }
 
       // Record shift confirmation for the new operator
@@ -219,7 +253,10 @@ export function ShiftHandoverModal() {
         confirmedBy: user.email ?? 'unknown',
       });
 
-      toast.success(`Handover complete: Now recording as ${fullName(newOp)} for ${currentShift.name}`);
+      const partnerProfile = peerOperators.find((p) => p.id === selectedPartnerId);
+      const partnerMsg = selectedPartnerId && partnerProfile ? ` (Paired with ${fullName(partnerProfile)})` : '';
+
+      toast.success(`Handover complete: Now recording as ${fullName(newOp)}${partnerMsg} for ${currentShift.name}`);
       setIsOpen(false);
       setShowSwitchPicker(false);
     } catch (err: any) {
@@ -302,6 +339,31 @@ export function ShiftHandoverModal() {
             <p className="text-xs font-semibold text-foreground text-center px-3 py-2 rounded-lg bg-accent-soft/40 border border-accent/20">
               “Are you still <strong>{fullName(currentOperator)}</strong> for this shift, or is another operator taking over?”
             </p>
+
+            {/* Optional Pair-Duty Partner Selector */}
+            <div className="space-y-1.5 p-3 rounded-xl bg-muted/40 border border-border/70">
+              <label className="text-3xs uppercase font-bold text-muted-foreground flex items-center gap-1.5">
+                <UserPlus className="h-3.5 w-3.5 text-accent" />
+                Working with a partner on this shift? (Optional)
+              </label>
+              <select
+                value={selectedPartnerId}
+                onChange={(e) => setSelectedPartnerId(e.target.value)}
+                className="w-full text-xs px-2.5 py-2 rounded-lg bg-background border border-border/80 text-foreground focus:outline-none focus:ring-1 focus:ring-accent"
+              >
+                <option value="">No partner (Solo shift)</option>
+                {peerOperators
+                  .filter((p) => p.id !== currentOperatorId)
+                  .map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {fullName(p)} (@{p.username || 'operator'})
+                    </option>
+                  ))}
+              </select>
+              <p className="text-3xs text-muted-foreground leading-tight">
+                Pair-duty attribution pools RO diligence credit so both operators receive full KPI credit.
+              </p>
+            </div>
 
             <div className="flex flex-col gap-2.5">
               {/* Option 1: Same Operator Continuing */}

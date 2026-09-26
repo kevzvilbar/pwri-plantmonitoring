@@ -13,6 +13,8 @@ import { OPERATOR_DESIGNATION } from '@/components/DesignationCombobox';
 import { getPostLoginPath } from '../getPostLoginPath';
 import { EmailConfirmationNotice, PendingNotice } from './EmailConfirmation';
 import { ForgotPasswordForm } from './PasswordResetForm';
+import { recordShiftDuty } from '@/data/mutations/shiftDuty';
+import { getShiftCycleKey } from '@/lib/shifts';
 
 const emailSchema = z.string().trim().email('Enter a valid email').max(255);
 const passSchema  = z.string().min(8, 'Min 8 characters').max(72);
@@ -148,8 +150,22 @@ export function SignInForm({
     navigate(postLoginPath);
   };
 
-  const handlePickUsername = (u: PickEntry) => {
+  const handlePickUsername = async (u: PickEntry) => {
     setActiveOperatorId(u.id);
+
+    if (signedInPlantId) {
+      try {
+        const cycleKey = getShiftCycleKey();
+        await recordShiftDuty({
+          plantId: signedInPlantId,
+          operatorId: u.id,
+          cycleKey,
+          confirmedBy: u.id,
+        });
+      } catch (err) {
+        console.warn('[Auth] recordShiftDuty error:', err);
+      }
+    }
 
     toast.success(`Now recording as ${u.first_name ?? u.username}!`);
     void logLoginAttempt({

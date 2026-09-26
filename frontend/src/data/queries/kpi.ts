@@ -222,3 +222,24 @@ export async function fetchBlendingReadings(since: string): Promise<Array<{ plan
     .filter(r => !r.is_estimated)
     .map(r => ({ ...r, recorded_by: null })) as Array<{ plant_id: string; well_id: string; event_date: string; recorded_by: string | null }>;
 }
+
+export async function fetchShiftDutyLogs(since: string): Promise<Array<{
+  id: string;
+  plant_id: string;
+  operator_id: string;
+  partner_operator_id: string | null;
+  is_dual_duty: boolean;
+  cycle_key: string;
+  declared_at: string;
+  ended_at: string | null;
+}>> {
+  const { data, error } = await supabase
+    .from('shift_duty_log')
+    .select('id, plant_id, operator_id, partner_operator_id, is_dual_duty, cycle_key, declared_at, ended_at')
+    .gte('declared_at', since);
+  if (error) {
+    console.warn('[KPI] fetchShiftDutyLogs error:', error);
+    return [];
+  }
+  return (data ?? []) as any[];
+}

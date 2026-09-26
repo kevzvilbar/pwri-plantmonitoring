@@ -8,7 +8,7 @@ vi.mock('@/hooks/useAuth', () => {
   const me = { first_name: 'Ana', last_name: 'Cruz', designation: 'Manager', plant_assignments: [] };
   return { useAuth: () => ({ user: { id: 'u1' }, profile: me, activeOperator: me, signOut: vi.fn() }) };
 });
-vi.mock('@tanstack/react-query', () => ({ useQuery: () => ({ data: [] }) }));
+vi.mock('@tanstack/react-query', () => ({ useQuery: () => ({ data: [] }), useQueryClient: () => ({ invalidateQueries: vi.fn() }) }));
 vi.mock('@/integrations/supabase/client', () => ({ supabase: { from: vi.fn() } }));
 vi.mock('sonner', () => ({ toast: { error: vi.fn(), success: vi.fn(), warning: vi.fn() } }));
 

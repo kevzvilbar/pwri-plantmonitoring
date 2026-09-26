@@ -4823,6 +4823,53 @@ export type Database = {
           },
         ]
       }
+      shift_duty_log: {
+        Row: {
+          confirmed_by: string | null
+          cycle_key: string
+          declared_at: string
+          ended_at: string | null
+          ended_by: string | null
+          id: string
+          is_dual_duty: boolean
+          operator_id: string
+          partner_operator_id: string | null
+          plant_id: string
+        }
+        Insert: {
+          confirmed_by?: string | null
+          cycle_key: string
+          declared_at?: string
+          ended_at?: string | null
+          ended_by?: string | null
+          id?: string
+          is_dual_duty?: boolean
+          operator_id: string
+          partner_operator_id?: string | null
+          plant_id: string
+        }
+        Update: {
+          confirmed_by?: string | null
+          cycle_key?: string
+          declared_at?: string
+          ended_at?: string | null
+          ended_by?: string | null
+          id?: string
+          is_dual_duty?: boolean
+          operator_id?: string
+          partner_operator_id?: string | null
+          plant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "shift_duty_log_plant_id_fkey"
+            columns: ["plant_id"]
+            isOneToOne: false
+            referencedRelation: "plants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       signup_audit: {
         Row: {
           created_at: string

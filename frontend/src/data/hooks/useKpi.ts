@@ -20,6 +20,7 @@ import {
   fetchPowerReadings,
   fetchChemReadings,
   fetchBlendingReadings,
+  fetchShiftDutyLogs,
   type PlantFlags,
   type EntityCountsPerPlant,
   type KpiReadings,
@@ -138,6 +139,14 @@ export function useBlendingReadings(since: string, refreshKey: number) {
   return useQuery({
     queryKey: queryKeys.kpi.blendingReadings(since, refreshKey),
     queryFn: () => fetchBlendingReadings(since),
+    staleTime: 3 * 60_000,
+  });
+}
+
+export function useShiftDutyLogs(since: string, refreshKey: number) {
+  return useQuery({
+    queryKey: queryKeys.kpi.shiftDutyLogs(since, refreshKey),
+    queryFn: () => fetchShiftDutyLogs(since),
     staleTime: 3 * 60_000,
   });
 }

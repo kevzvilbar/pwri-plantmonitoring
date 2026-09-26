@@ -1,16 +1,19 @@
 import { useEffect, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth, type Profile } from '@/hooks/useAuth';
 import { useAppStore } from '@/store/appStore';
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent,
   DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuItem,
+  DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent,
 } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { BookOpen, ChevronDown, UserCheck, UserCog, LogOut } from 'lucide-react';
+import { BookOpen, ChevronDown, UserCheck, UserCog, LogOut, Users, UserPlus, UserX, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
+import { recordShiftDuty, endShiftDuty, fetchActiveShiftDuty } from '@/data/mutations/shiftDuty';
+import { getShiftCycleKey } from '@/lib/shifts';
 
 function initials(p: Profile | null): string {
   if (!p) return '?';
@@ -29,22 +32,12 @@ function canSwitchOperator(profile: Profile | null): boolean {
   return OPERATOR_DESIGNATIONS.includes(profile.designation);
 }
 
-/**
- * Fetches Active Operator profiles on the same plant(s).
- * 
- * PERF NOTE: Uses parallel queries (one per plant) + client-side merge instead of
- * a single overlaps() query. This works around PostgREST array overlap issues.
- * 
- * Future optimization: If PostgREST adds better array containment support,
- * consolidate to a single query with overlaps() to reduce network requests.
- */
 function useSamePlantOperators(plantAssignments: string[]) {
   return useQuery<Profile[]>({
     queryKey: ['same-plant-operators', plantAssignments.join(',')],
     queryFn: async () => {
       if (plantAssignments.length === 0) return [];
 
-      // Query once per plant and union — avoids .overlaps() PostgREST compatibility issues
       const results = await Promise.all(
         plantAssignments.map((pid) =>
           supabase
@@ -57,7 +50,6 @@ function useSamePlantOperators(plantAssignments: string[]) {
         ),
       );
 
-      // Merge and deduplicate by id
       const seen = new Set<string>();
       const merged: Profile[] = [];
       for (const { data } of results) {
@@ -68,7 +60,6 @@ function useSamePlantOperators(plantAssignments: string[]) {
           }
         }
       }
-      // Sort by first name
       return merged.sort((a, b) =>
         (a.first_name ?? '').localeCompare(b.first_name ?? ''),
       );
@@ -84,12 +75,6 @@ async function logSwitchEvent(payload: {
   to_operator_id: string;
   switched_by: string;
 }) {
-  // Was: POST to `${API_BASE}/operator/switch-log`, silently swallowed on
-  // failure (console.warn only) — meaning every switch went unlogged
-  // whenever the backend was unreachable, with zero visible indication.
-  // operator_switch_log now lives directly in Supabase (RLS:
-  // auth_write_switch_log allows any signed-in user to insert), so write
-  // there directly instead of depending on a backend that isn't deployed.
   const { error } = await supabase.from('operator_switch_log' as any).insert({
     plant_id: payload.plant_id,
     from_operator_id: payload.from_operator_id,
@@ -97,11 +82,6 @@ async function logSwitchEvent(payload: {
     switched_by: payload.switched_by,
   });
   if (error) {
-    // The switch itself already succeeded client-side (Zustand store) —
-    // don't block or roll that back over an audit-log write failing. But
-    // don't go silent either: an admin/manager reviewing operator_switch_log
-    // later should be able to trust it's complete, so a failure here is
-    // worth a visible (if unobtrusive) signal rather than console-only.
     console.warn('[OperatorSwitcher] Failed to write switch audit log', error);
     toast.warning('Operator switched, but the audit log entry failed to save.');
   }
@@ -109,11 +89,12 @@ async function logSwitchEvent(payload: {
 
 export function OperatorSwitcher() {
   const { user, profile, activeOperator, signOut } = useAuth();
-  const { activeOperatorId, setActiveOperatorId } = useAppStore();
+  const { activeOperatorId, setActiveOperatorId, selectedPlantId } = useAppStore();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
   const switchAllowed = canSwitchOperator(profile);
-  const plantAssignments = profile?.plant_assignments ?? [];
+  const plantAssignments = profile?.plant_assignments ?? (selectedPlantId ? [selectedPlantId] : []);
   const { data: peers = [] } = useSamePlantOperators(
     switchAllowed ? plantAssignments : [],
   );
@@ -125,13 +106,57 @@ export function OperatorSwitcher() {
 
   const isOverride = activeOperatorId !== null && activeOperatorId !== user?.id;
   const avatarBg = isOverride ? 'bg-warn' : 'bg-accent';
+  const currentOpId = activeOperatorId ?? user?.id ?? '';
+  const sharedPlant = plantAssignments[0] ?? selectedPlantId ?? '';
+  const cycleKey = getShiftCycleKey();
+
+  const { data: activeDuty } = useQuery({
+    queryKey: ['active-shift-duty', sharedPlant, currentOpId, cycleKey],
+    queryFn: () => fetchActiveShiftDuty(sharedPlant, currentOpId, cycleKey),
+    enabled: Boolean(sharedPlant && currentOpId && open),
+  });
+
+  const partnerId = activeDuty?.is_dual_duty
+    ? (activeDuty.operator_id === currentOpId ? activeDuty.partner_operator_id : activeDuty.operator_id)
+    : null;
+  const activePartner = partnerId ? peers.find((p) => p.id === partnerId) : null;
+
+  const handleEndPartnership = async () => {
+    if (!activeDuty || !user) return;
+    try {
+      await endShiftDuty({ id: activeDuty.id, endedBy: user.id });
+      queryClient.invalidateQueries({ queryKey: ['active-shift-duty'] });
+      queryClient.invalidateQueries({ queryKey: ['kpi'] });
+      toast.success('Shift partnership ended.');
+    } catch (e) {
+      toast.error('Failed to end partnership.');
+    }
+  };
+
+  const handleSetPartner = async (partner: Profile) => {
+    if (!sharedPlant || !currentOpId || !user) return;
+    try {
+      await recordShiftDuty({
+        plantId: sharedPlant,
+        operatorId: currentOpId,
+        partnerOperatorId: partner.id,
+        cycleKey,
+        confirmedBy: user.id,
+      });
+      queryClient.invalidateQueries({ queryKey: ['active-shift-duty'] });
+      queryClient.invalidateQueries({ queryKey: ['kpi'] });
+      toast.success(`Paired on shift with ${fullName(partner)}`);
+    } catch (e) {
+      toast.error('Failed to set shift partner.');
+    }
+  };
 
   const handleSelect = async (p: Profile) => {
     const targetPlants: string[] = p.plant_assignments ?? [];
     const sessionPlants: string[] = profile?.plant_assignments ?? [];
-    const sharedPlant = sessionPlants.find((pid) => targetPlants.includes(pid));
+    const sp = sessionPlants.find((pid) => targetPlants.includes(pid)) ?? selectedPlantId;
 
-    if (!sharedPlant) {
+    if (!sp) {
       toast.error('Cannot switch: operator is not assigned to this plant.');
       setOpen(false);
       return;
@@ -151,11 +176,22 @@ export function OperatorSwitcher() {
       setOpen(false);
       toast.success(`Now recording as ${fullName(p)}`);
       await logSwitchEvent({
-        plant_id: sharedPlant,
+        plant_id: sp,
         from_operator_id: activeOperatorId ?? user?.id ?? '',
         to_operator_id: p.id,
         switched_by: user?.id ?? '',
       });
+      try {
+        await recordShiftDuty({
+          plantId: sp,
+          operatorId: p.id,
+          cycleKey,
+          confirmedBy: user?.id ?? '',
+        });
+        queryClient.invalidateQueries({ queryKey: ['active-shift-duty'] });
+      } catch (e) {
+        console.warn('[OperatorSwitcher] recordShiftDuty error:', e);
+      }
     } else {
       setPendingId(p.id);
     }
@@ -181,7 +217,7 @@ export function OperatorSwitcher() {
         </button>
       </DropdownMenuTrigger>
 
-      <DropdownMenuContent align="end" className="w-56">
+      <DropdownMenuContent align="end" className="w-60">
 
         {/* Header */}
         <div className="px-3 py-2">
@@ -197,6 +233,61 @@ export function OperatorSwitcher() {
             <p className="text-2xs text-muted-foreground pl-4 leading-tight truncate">Logged in as {user?.email}</p>
           )}
         </div>
+
+        {/* Active Partner Status & Controls */}
+        {switchAllowed && (
+          <>
+            <DropdownMenuSeparator className="my-0" />
+            <div className="px-3 py-1.5 bg-muted/30">
+              <div className="flex items-center justify-between gap-1">
+                <span className="text-3xs uppercase font-bold text-muted-foreground">Pair-Duty</span>
+                {activePartner ? (
+                  <span className="text-3xs font-semibold px-1.5 py-0.2 rounded bg-accent-soft text-accent border border-accent/30">
+                    Dual Active
+                  </span>
+                ) : (
+                  <span className="text-3xs font-medium text-muted-foreground">Solo</span>
+                )}
+              </div>
+              {activePartner ? (
+                <div className="mt-1 flex items-center justify-between gap-2">
+                  <span className="text-xs font-medium text-foreground truncate">
+                    {fullName(activePartner)}
+                  </span>
+                  <button
+                    onClick={handleEndPartnership}
+                    className="text-3xs text-danger hover:underline shrink-0"
+                    title="End shift partnership"
+                  >
+                    End Pair
+                  </button>
+                </div>
+              ) : null}
+            </div>
+
+            {!activePartner && peers.filter((p) => p.id !== currentOpId).length > 0 && (
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger className="gap-2 text-xs py-1.5 px-3 cursor-pointer">
+                  <UserPlus className="h-3.5 w-3.5 text-accent" />
+                  <span>Pair with partner</span>
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent className="w-48">
+                  {peers
+                    .filter((p) => p.id !== currentOpId)
+                    .map((p) => (
+                      <DropdownMenuItem
+                        key={p.id}
+                        onClick={() => handleSetPartner(p)}
+                        className="text-xs py-1.5 cursor-pointer"
+                      >
+                        {fullName(p)}
+                      </DropdownMenuItem>
+                    ))}
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
+            )}
+          </>
+        )}
 
         <DropdownMenuSeparator className="my-0" />
 

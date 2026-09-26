@@ -18,9 +18,17 @@ import {
   usePowerReadings,
   useChemReadings,
   useBlendingReadings,
+  useShiftDutyLogs,
   type PlantFlags,
   type EntityCountsPerPlant,
 } from '@/data/hooks/useKpi';
+
+export type DutyState =
+  | 'data_entry'
+  | 'dual_duty'
+  | 'attendance_only'
+  | 'off_duty'
+  | 'plant_active_unattributed';
 
 export type UseKpiDataOptions = {
   staff: StaffMember[];
@@ -51,6 +59,8 @@ export type UseKpiDataResult = {
   powerReadings: any[];
   chemReadings: any[];
   blendingReadings: any[];
+  shiftDutyLogs: any[];
+  dutyStates: Record<string, DutyState>;
   isLoading: boolean;
   kpiError: any;
   retryKpiQueries: () => void;
@@ -200,68 +210,113 @@ function buildIndividualMatrix(
   powerReadings: any[],
   chemReadings: any[],
   blendingReadings: any[],
-): ScoreMatrix {
+  shiftDutyLogs: any[],
+): { individual: ScoreMatrix; dutyStates: Record<string, DutyState> } {
   const indiv: ScoreMatrix = {};
+  const dutyStates: Record<string, DutyState> = {};
   const daySet = new Set(days);
 
   const opDutySet = new Set<string>();
+  const opDataEntrySet = new Set<string>();
   const roMap: Record<string, number> = {};
+  const plantDayActiveSet = new Set<string>();
 
   wellReadings.forEach((r) => {
     const day = fmtIsoDate(r.reading_datetime);
     if (!daySet.has(day)) return;
+    plantDayActiveSet.add(`${r.plant_id}:${day}`);
     if (r.recorded_by) {
-      opDutySet.add(`${r.recorded_by}:${r.plant_id}:${day}`);
+      const k = `${r.recorded_by}:${r.plant_id}:${day}`;
+      opDutySet.add(k);
+      opDataEntrySet.add(k);
     }
   });
 
   locReadings.forEach((r) => {
     const day = fmtIsoDate(r.reading_datetime);
     if (!daySet.has(day)) return;
+    plantDayActiveSet.add(`${r.plant_id}:${day}`);
     if (r.recorded_by) {
-      opDutySet.add(`${r.recorded_by}:${r.plant_id}:${day}`);
+      const k = `${r.recorded_by}:${r.plant_id}:${day}`;
+      opDutySet.add(k);
+      opDataEntrySet.add(k);
     }
   });
 
   roReadings.forEach((r) => {
     const day = fmtIsoDate(r.reading_datetime);
     if (!daySet.has(day)) return;
+    plantDayActiveSet.add(`${r.plant_id}:${day}`);
     if (r.recorded_by) {
-      opDutySet.add(`${r.recorded_by}:${r.plant_id}:${day}`);
-      const k = `${r.recorded_by}:${r.plant_id}:${day}:${r.train_id}`;
-      roMap[k] = (roMap[k] ?? 0) + 1;
+      const k = `${r.recorded_by}:${r.plant_id}:${day}`;
+      opDutySet.add(k);
+      opDataEntrySet.add(k);
+      const tk = `${r.recorded_by}:${r.plant_id}:${day}:${r.train_id}`;
+      roMap[tk] = (roMap[tk] ?? 0) + 1;
     }
   });
 
   meterReadings.forEach((r) => {
     const day = fmtIsoDate(r.reading_datetime);
     if (!daySet.has(day)) return;
+    plantDayActiveSet.add(`${r.plant_id}:${day}`);
     if (r.recorded_by) {
-      opDutySet.add(`${r.recorded_by}:${r.plant_id}:${day}`);
+      const k = `${r.recorded_by}:${r.plant_id}:${day}`;
+      opDutySet.add(k);
+      opDataEntrySet.add(k);
     }
   });
 
   powerReadings.forEach((r) => {
     const day = fmtIsoDate(r.reading_datetime);
     if (!daySet.has(day)) return;
+    plantDayActiveSet.add(`${r.plant_id}:${day}`);
     if (r.recorded_by) {
-      opDutySet.add(`${r.recorded_by}:${r.plant_id}:${day}`);
+      const k = `${r.recorded_by}:${r.plant_id}:${day}`;
+      opDutySet.add(k);
+      opDataEntrySet.add(k);
     }
   });
 
   chemReadings.forEach((r) => {
     const day = fmtIsoDate(r.log_datetime);
     if (!daySet.has(day)) return;
+    plantDayActiveSet.add(`${r.plant_id}:${day}`);
     if (r.recorded_by) {
-      opDutySet.add(`${r.recorded_by}:${r.plant_id}:${day}`);
+      const k = `${r.recorded_by}:${r.plant_id}:${day}`;
+      opDutySet.add(k);
+      opDataEntrySet.add(k);
     }
   });
 
   blendingReadings.forEach((r) => {
     const day = r.event_date;
     if (!daySet.has(day)) return;
+    plantDayActiveSet.add(`${r.plant_id}:${day}`);
     if (r.recorded_by) {
-      opDutySet.add(`${r.recorded_by}:${r.plant_id}:${day}`);
+      const k = `${r.recorded_by}:${r.plant_id}:${day}`;
+      opDutySet.add(k);
+      opDataEntrySet.add(k);
+    }
+  });
+
+  const dualPartnersByOpDay: Record<string, Set<string>> = {};
+
+  (shiftDutyLogs ?? []).forEach((log) => {
+    const day = fmtIsoDate(log.declared_at);
+    if (!daySet.has(day)) return;
+    const op1 = log.operator_id;
+    const op2 = log.partner_operator_id;
+    const isDual = Boolean(log.is_dual_duty && op2 && op2 !== op1);
+
+    const k1 = `${op1}:${log.plant_id}:${day}`;
+    opDutySet.add(k1);
+
+    if (isDual && op2) {
+      const k2 = `${op2}:${log.plant_id}:${day}`;
+      opDutySet.add(k2);
+      (dualPartnersByOpDay[k1] = dualPartnersByOpDay[k1] ?? new Set()).add(op2);
+      (dualPartnersByOpDay[k2] = dualPartnersByOpDay[k2] ?? new Set()).add(op1);
     }
   });
 
@@ -278,7 +333,23 @@ function buildIndividualMatrix(
       days.forEach((day) => {
         const isToday = day === todayStr;
         const dutyKey = `${op.id}:${plantId}:${day}`;
+        const hasDataEntry = opDataEntrySet.has(dutyKey);
+        const partnerIds = dualPartnersByOpDay[dutyKey] ? Array.from(dualPartnersByOpDay[dutyKey]) : [];
+        const isDual = partnerIds.length > 0;
         const isOnDuty = opDutySet.has(dutyKey);
+
+        let dutyState: DutyState = 'off_duty';
+        if (hasDataEntry) {
+          dutyState = isDual ? 'dual_duty' : 'data_entry';
+        } else if (isDual) {
+          dutyState = 'dual_duty';
+        } else if (isOnDuty) {
+          dutyState = 'attendance_only';
+        } else if (plantDayActiveSet.has(`${plantId}:${day}`)) {
+          dutyState = 'plant_active_unattributed';
+        }
+
+        dutyStates[dutyKey] = dutyState;
 
         if (!isOnDuty) {
           SHARED_COLS.forEach((col) => {
@@ -294,12 +365,20 @@ function buildIndividualMatrix(
 
         if (trainIds.length === 0) {
           ts.ro_train![day] = null;
+        } else if (dutyState === 'attendance_only') {
+          // Per D3: "Attendance credit only — RO cell stays N/A/excluded, never full or pooled."
+          ts.ro_train![day] = null;
         } else {
+          // Pooled RO scoring (P2-1) across self and all active dual-duty partners
           const shiftTarget = isToday
             ? Math.max(1, Math.ceil(DEFAULT_RO_OPERATOR_SHIFT_TARGET * elapsedFraction))
             : DEFAULT_RO_OPERATOR_SHIFT_TARGET;
+
           const perTrain = trainIds.map((tid) => {
-            const count = roMap[`${dutyKey}:${tid}`] ?? 0;
+            let count = roMap[`${dutyKey}:${tid}`] ?? 0;
+            for (const pId of partnerIds) {
+              count += roMap[`${pId}:${plantId}:${day}:${tid}`] ?? 0;
+            }
             return Math.min(1, count / shiftTarget);
           });
           ts.ro_train![day] = perTrain.reduce((a, b) => a + b, 0) / perTrain.length;
@@ -310,7 +389,7 @@ function buildIndividualMatrix(
     });
   });
 
-  return indiv;
+  return { individual: indiv, dutyStates };
 }
 
 function buildSummary(activeMatrix: ScoreMatrix, todayStr: string) {
@@ -370,13 +449,6 @@ export function useKpiData(opts: UseKpiDataOptions): UseKpiDataResult {
 
   const days = useMemo(() => generateDays2(range), [range, refreshKey]);
   const since = useMemo(() => days[0] + 'T00:00:00+08:00', [days]);
-  // Manila-anchored (fmtIsoDate), not UTC: a plain `.toISOString().slice(0, 10)`
-  // stays on YESTERDAY's date for the first 8 hours of every Manila day (Manila
-  // is UTC+8, so its midnight lands 8 hours before UTC's). During that window
-  // "today" would silently roll back a day: none of today's readings would
-  // count yet, wrongly crediting the day as at-target or the operator as pending
-  // rather than behind, and the elapsed-fraction pacing below would agree with
-  // the wrong day's target.
   const todayStr = useMemo(() => fmtIsoDate(new Date()), []);
   const now = new Date();
   const nowManila = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Manila' }));
@@ -424,9 +496,10 @@ export function useKpiData(opts: UseKpiDataOptions): UseKpiDataResult {
   const { data: powerReadings = [], isLoading: l5, error: e5, refetch: r5 } = usePowerReadings(since, refreshKey);
   const { data: chemReadings = [], isLoading: l6, error: e6, refetch: r6 } = useChemReadings(since, refreshKey);
   const { data: blendingReadings = [], isLoading: l7, error: e7, refetch: r7 } = useBlendingReadings(since, refreshKey);
+  const { data: shiftDutyLogs = [], isLoading: l8, error: e8, refetch: r8 } = useShiftDutyLogs(since, refreshKey);
 
-  const isLoading = plantFlagsLoading || entityCountsLoading || l1 || l2 || l3 || l4 || l5 || l6 || l7;
-  const kpiError = e1 || e2 || e3 || e4 || e5 || e6 || e7;
+  const isLoading = plantFlagsLoading || entityCountsLoading || l1 || l2 || l3 || l4 || l5 || l6 || l7 || l8;
+  const kpiError = e1 || e2 || e3 || e4 || e5 || e6 || e7 || e8;
 
   const retryKpiQueries = () => {
     queryClient.invalidateQueries({ queryKey: ['kpi'] });
@@ -441,13 +514,13 @@ export function useKpiData(opts: UseKpiDataOptions): UseKpiDataResult {
      powerReadings, chemReadings, blendingReadings],
   );
 
-  const individual = useMemo(
+  const { individual, dutyStates } = useMemo(
     () => buildIndividualMatrix(operators, plantsWithOps, days, todayStr, elapsedFraction,
       wellsPerPlant, locatorsPerPlant, trainsPerPlant, metersPerPlant, plantFlags, plantById, teamCoverage,
-      wellReadings, locReadings, roReadings, meterReadings, powerReadings, chemReadings, blendingReadings),
+      wellReadings, locReadings, roReadings, meterReadings, powerReadings, chemReadings, blendingReadings, shiftDutyLogs),
     [operators, plantsWithOps, days, todayStr, elapsedFraction, wellsPerPlant, locatorsPerPlant,
      trainsPerPlant, metersPerPlant, plantFlags, plantById, teamCoverage,
-     wellReadings, locReadings, roReadings, meterReadings, powerReadings, chemReadings, blendingReadings],
+     wellReadings, locReadings, roReadings, meterReadings, powerReadings, chemReadings, blendingReadings, shiftDutyLogs],
   );
 
   const activeMatrix = viewMode === 'team' ? teamCoverage : individual;
@@ -464,6 +537,7 @@ export function useKpiData(opts: UseKpiDataOptions): UseKpiDataResult {
     operators, plantsWithOps, plantFlags, plantById,
     wellsPerPlant, locatorsPerPlant, trainsPerPlant, metersPerPlant,
     wellReadings, locReadings, roReadings, meterReadings, powerReadings, chemReadings, blendingReadings,
+    shiftDutyLogs, dutyStates,
     isLoading, kpiError, retryKpiQueries,
     individual, teamCoverage, activeMatrix,
     summary, appraisalStats,

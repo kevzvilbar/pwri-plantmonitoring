@@ -74,6 +74,7 @@ export const queryKeys = {
     powerReadings: (since: string, refreshKey: number) => ['kpi', 'readings', 'power', since, refreshKey] as const,
     chemReadings: (since: string, refreshKey: number) => ['kpi', 'readings', 'chemical', since, refreshKey] as const,
     blendingReadings: (since: string, refreshKey: number) => ['kpi', 'readings', 'blending', since, refreshKey] as const,
+    shiftDutyLogs: (since: string, refreshKey: number) => ['kpi', 'readings', 'shift-duty', since, refreshKey] as const,
   },
   readingHistory: {
     list: (options: any) => ['reading-history', options.module, options.entityId, options.days, options.appliedFrom, options.appliedTo] as const,

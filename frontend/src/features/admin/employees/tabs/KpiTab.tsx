@@ -79,6 +79,11 @@ function exportAppraisalCsv(
     });
   });
 
+  rows.push([]);
+  rows.push([
+    '"# Note: Pair-duty attribution fix applied from 2026-09-26; historical scores before this date may undercount operators who shared data-entry duties."',
+  ]);
+
   const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
   const encodedUri = encodeURI(csvContent);
   const link = document.createElement('a');
@@ -106,7 +111,7 @@ function KpiTab({ staff, roles, plants }: { staff: any[]; roles: any[]; plants: 
   const data = useKpiData({ staff, roles, plants, range, refreshKey, viewMode });
 
   const { days, todayStr, operators, plantsWithOps, individual, teamCoverage,
-          activeMatrix, summary, appraisalStats, isLoading, kpiError, retryKpiQueries } = data;
+          activeMatrix, summary, appraisalStats, dutyStates, isLoading, kpiError, retryKpiQueries } = data;
 
   const togglePlant = useCallback((id: string) => {
     setExpandedPlants((prev) => {
@@ -488,6 +493,7 @@ function KpiTab({ staff, roles, plants }: { staff: any[]; roles: any[]; plants: 
                                   scores={(ts[col.key] ?? {}) as ScoreMap2}
                                   days={days}
                                   todayStr={todayStr}
+                                  dutyStates={Object.fromEntries(days.map((d) => [d, dutyStates[`${op.id}:${plant.id}:${d}`]]))}
                                   label={`${op.first_name} ${op.last_name} · ${col.full}`}
                                   onHover={onHover}
                                 />
