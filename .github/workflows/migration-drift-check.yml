@@ -17,6 +17,10 @@ name: Migration drift check
 #   SUPABASE_ACCESS_TOKEN  — personal/project access token, for `supabase login`
 #   SUPABASE_DB_PASSWORD   — the project's Postgres password, for `supabase link`
 # Both are scoped to this one job and never touch the frontend build.
+#
+# If SUPABASE_ACCESS_TOKEN is not configured the job exits 0 with a
+# warning rather than failing — a missing secret means the check cannot
+# run, not that there is drift. Configure the secret to enable the guard.
 
 on:
   schedule:
@@ -34,12 +38,29 @@ jobs:
         with:
           version: latest
 
+      - name: Check required secrets are configured
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          if [ -z "$SUPABASE_ACCESS_TOKEN" ]; then
+            echo "::warning::SUPABASE_ACCESS_TOKEN secret is not configured — skipping drift check."
+            echo "To enable this guardrail, add SUPABASE_ACCESS_TOKEN (a Supabase personal access token) and SUPABASE_DB_PASSWORD (the project's Postgres password) to this repository's secrets."
+            echo "SKIP_DRIFT_CHECK=true" >> "$GITHUB_ENV"
+          fi
+          if [ -z "$SUPABASE_DB_PASSWORD" ]; then
+            echo "::warning::SUPABASE_DB_PASSWORD secret is not configured — skipping drift check."
+            echo "SKIP_DRIFT_CHECK=true" >> "$GITHUB_ENV"
+          fi
+
       - name: Link to production project
+        if: env.SKIP_DRIFT_CHECK != 'true'
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
         run: supabase link --project-ref sosfbfxovtleuvahxvpm --password "${{ secrets.SUPABASE_DB_PASSWORD }}"
 
       - name: Diff remote schema against supabase/migrations/
+        if: env.SKIP_DRIFT_CHECK != 'true'
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
         run: |
@@ -51,3 +72,4 @@ jobs:
             exit 1
           fi
           echo "No drift — production schema matches supabase/migrations/."
+
