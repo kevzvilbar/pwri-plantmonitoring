@@ -5,7 +5,7 @@
  */
 import { format } from 'date-fns';
 
-export type SourceTable = 'locator_readings' | 'well_readings' | 'product_meter_readings' | 'ro_train_readings';
+export type SourceTable = 'locator_readings' | 'well_readings' | 'product_meter_readings' | 'ro_train_readings' | 'ro_pretreatment_readings';
 
 export type UUID = string;
 
@@ -119,6 +119,7 @@ export const tableLabel: Record<SourceTable, string> = {
   well_readings: 'Well',
   product_meter_readings: 'Product Meter',
   ro_train_readings: 'RO Train',
+  ro_pretreatment_readings: 'Pre-treatment',
 };
 
 export const fmtNum = (n: number | null | undefined) =>

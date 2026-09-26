@@ -19,6 +19,7 @@ import {
   retractReading,
   updateReadingValue,
   markMeterReplacement,
+  type SourceTable,
   type FlaggedRow,
   type CorrectionRequest,
   type ChainEntry,
@@ -132,7 +133,7 @@ export function useApproveReading() {
       reviewerId, 
       note 
     }: { 
-      table: 'locator_readings' | 'well_readings' | 'product_meter_readings' | 'ro_train_readings';
+      table: SourceTable;
       id: string;
       reviewerId: string;
       note?: string;
@@ -153,7 +154,7 @@ export function useRetractReading() {
       reviewerId, 
       note 
     }: { 
-      table: 'locator_readings' | 'well_readings' | 'product_meter_readings' | 'ro_train_readings';
+      table: SourceTable;
       id: string;
       reviewerId: string;
       note?: string;
@@ -175,7 +176,7 @@ export function useUpdateReadingValue() {
       editorId, 
       reason 
     }: { 
-      table: 'locator_readings' | 'well_readings' | 'product_meter_readings' | 'ro_train_readings';
+      table: SourceTable;
       id: string;
       newValue: number;
       editorId: string;
@@ -196,7 +197,7 @@ export function useMarkMeterReplacement() {
       id, 
       editorId 
     }: { 
-      table: 'locator_readings' | 'well_readings' | 'product_meter_readings' | 'ro_train_readings';
+      table: SourceTable;
       id: string;
       editorId: string;
     }) => markMeterReplacement(table, id, editorId),
@@ -273,7 +274,7 @@ export function useBulkApproveReadings() {
       reviewerId, 
       note 
     }: { 
-      table: 'locator_readings' | 'well_readings' | 'product_meter_readings' | 'ro_train_readings';
+      table: SourceTable;
       ids: string[];
       reviewerId: string;
       note?: string;
@@ -294,7 +295,7 @@ export function useBulkRetractReadings() {
       reviewerId, 
       note 
     }: { 
-      table: 'locator_readings' | 'well_readings' | 'product_meter_readings' | 'ro_train_readings';
+      table: SourceTable;
       ids: string[];
       reviewerId: string;
       note?: string;

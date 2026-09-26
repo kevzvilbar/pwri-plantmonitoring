@@ -31,7 +31,7 @@ import { Loader2, AlertCircle } from 'lucide-react';
 
 export interface CorrectionTarget {
   id: string;
-  sourceTable: 'locator_readings' | 'well_readings' | 'product_meter_readings' | 'ro_train_readings';
+  sourceTable: 'locator_readings' | 'well_readings' | 'product_meter_readings' | 'ro_train_readings' | 'ro_pretreatment_readings';
   plantId: string;
   entityName: string;      // e.g. "MCWD-M1" or "Well 8"
   currentReading: number;
@@ -90,12 +90,14 @@ export function CorrectionRequestDialog({ target, onClose, onSubmitted }: Props)
         }) as any);
       if (crErr) throw crErr;
 
-      // 2. Flag the reading as pending_review
-      const { error: upErr } = await (supabase
-        .from(target.sourceTable as any)
-        .update({ norm_status: 'pending_review' })
-        .eq('id', target.id) as any);
-      if (upErr) throw upErr;
+      // 2. Flag the reading as pending_review (for tables with norm_status)
+      if (target.sourceTable !== 'ro_pretreatment_readings') {
+        const { error: upErr } = await (supabase
+          .from(target.sourceTable as any)
+          .update({ norm_status: 'pending_review' })
+          .eq('id', target.id) as any);
+        if (upErr) throw upErr;
+      }
 
       // 3. Write normalization audit record
       await (supabase

@@ -176,8 +176,12 @@ export function usePendingReviewActions() {
       queryClient.setQueryData(['correction-requests-pending-count'], (old: number = 0) =>
         Math.max(0, old - 1)
       );
+      // P1-4: Also remove the reading from the Flagged Readings queue
+      queryClient.setQueryData(queryKeys.corrections.pending(), (old: FlaggedRow[] = []) =>
+        old.filter((r) => !(r.id === req.source_id && r.source_table === req.source_table))
+      );
 
-      await approveCorrectionRequestMutation.mutateAsync({
+      const res = await approveCorrectionRequestMutation.mutateAsync({
         id: req.id,
         reviewerId: user?.id ?? '',
         note: 'Approved correction request: ' + req.reason,
@@ -190,7 +194,12 @@ export function usePendingReviewActions() {
         oldValue: req.original_value,
         newValue: req.proposed_value,
       });
-      toast.success('Correction approved and applied');
+
+      if (res?.applied) {
+        toast.success('Correction approved and applied');
+      } else {
+        toast.success('Correction request approved — edit the reading directly to apply the new value');
+      }
       invalidate();
     } catch (err: any) {
       toast.error(friendlyError(err));
@@ -209,6 +218,10 @@ export function usePendingReviewActions() {
       );
       queryClient.setQueryData(['correction-requests-pending-count'], (old: number = 0) =>
         Math.max(0, old - 1)
+      );
+      // P1-4: Also remove the reading from the Flagged Readings queue as norm_status is reset to normal
+      queryClient.setQueryData(queryKeys.corrections.pending(), (old: FlaggedRow[] = []) =>
+        old.filter((r) => !(r.id === req.source_id && r.source_table === req.source_table))
       );
 
       await rejectCorrectionRequestMutation.mutateAsync({

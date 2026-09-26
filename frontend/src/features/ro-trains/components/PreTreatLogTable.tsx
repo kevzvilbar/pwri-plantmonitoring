@@ -273,7 +273,7 @@ export function PreTreatLogTable({
                   ) : !hasFullAccess && activeOperator?.id && (
                     <button
                       onClick={() => setCorrectionTarget({
-                        id: r.id, sourceTable: 'ro_train_readings',
+                        id: r.id, sourceTable: 'ro_pretreatment_readings',
                         plantId: r.plant_id ?? '', entityName: `${trainLabel} (pre-treatment)`,
                         currentReading: r.hpp_target_pressure_psi ?? 0,
                         previousReading: null, dailyVolume: null,

@@ -6413,6 +6413,22 @@ export type Database = {
         }
         Returns: undefined
       }
+      fn_approve_correction_request: {
+        Args: {
+          p_note?: string
+          p_request_id: string
+          p_reviewer_id: string
+        }
+        Returns: Json
+      }
+      fn_reject_correction_request: {
+        Args: {
+          p_note: string
+          p_request_id: string
+          p_reviewer_id: string
+        }
+        Returns: Json
+      }
       fn_backfill_missing_readings: {
         Args: { p_date?: string; p_lookback_days?: number }
         Returns: Json

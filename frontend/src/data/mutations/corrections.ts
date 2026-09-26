@@ -29,40 +29,40 @@ export async function updateCorrectionRequest(
   if (error) throw error;
 }
 
-/** Approve a correction request */
+export interface CorrectionResolutionResult {
+  success: boolean;
+  applied: boolean;
+  request_id?: string;
+}
+
+/** Approve a correction request atomically applying value cascade via RPC */
 export async function approveCorrectionRequest(
   id: string,
   reviewerId: string,
   note?: string,
-): Promise<void> {
-  const { error } = await supabase
-    .from('correction_requests')
-    .update({
-      status: 'approved',
-      resolved_by: reviewerId,
-      resolved_at: new Date().toISOString(),
-      resolution_note: note,
-    })
-    .eq('id', id);
+): Promise<CorrectionResolutionResult> {
+  const { data, error } = await (supabase.rpc as any)('fn_approve_correction_request', {
+    p_request_id: id,
+    p_reviewer_id: reviewerId,
+    p_note: note ?? null,
+  });
   if (error) throw error;
+  return (data as unknown as CorrectionResolutionResult) ?? { success: true, applied: true };
 }
 
-/** Reject a correction request */
+/** Reject a correction request atomically resetting norm_status via RPC */
 export async function rejectCorrectionRequest(
   id: string,
   reviewerId: string,
   note?: string,
-): Promise<void> {
-  const { error } = await supabase
-    .from('correction_requests')
-    .update({
-      status: 'rejected',
-      resolved_by: reviewerId,
-      resolved_at: new Date().toISOString(),
-      resolution_note: note,
-    })
-    .eq('id', id);
+): Promise<CorrectionResolutionResult> {
+  const { data, error } = await (supabase.rpc as any)('fn_reject_correction_request', {
+    p_request_id: id,
+    p_reviewer_id: reviewerId,
+    p_note: note || 'Rejected',
+  });
   if (error) throw error;
+  return (data as unknown as CorrectionResolutionResult) ?? { success: true, applied: false };
 }
 
 /** Insert reading normalization audit entry */
