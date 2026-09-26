@@ -101,8 +101,8 @@ function ConfigSectionTitle({ icon, hint, children }: {
 }
 
 export function PlantMeterConfigCard({ plant }: { plant: any }) {
-  const { isManager, isAdmin } = useAuth();
-  const canEdit = isManager || isAdmin;
+  const { isManager, isAdmin, isDataAnalyst } = useAuth();
+  const canEdit = isManager || isAdmin || isDataAnalyst;
   const { config: savedConfig, isLoading, saveConfig, isLocalOnly } = usePlantMeterConfig(plant.id);
   const qc = useQueryClient();
   const [cfg, setCfg] = useState<PlantMeterConfig>(DEFAULT_METER_CONFIG);
