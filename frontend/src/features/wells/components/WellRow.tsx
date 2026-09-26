@@ -52,6 +52,8 @@ export function WellRow({
         onStartEdit={actions.onStartEdit} onCancelEdit={actions.onCancelEdit}
         onShowHistory={() => actions.setShowHistory(true)}
         isManagerOrAdmin={isManagerOrAdmin}
+        canSelfEdit={actions.canSelfEdit} canRequest={actions.canRequest}
+        isLocked={actions.isLocked} onFix={actions.handleCorrectionRequest}
         isBlending={isBlending}
         isInSharedPowerGroup={isInSharedPowerGroup}
         gapReason={gapReason} onGapReasonClick={() => actions.setGapDialogOpen(true)}
@@ -113,6 +115,9 @@ export function WellRow({
         onSetReading={actions.setReading}
         meterReplacePending={actions.meterReplacePending}
         onMeterReplacePendingChange={actions.setMeterReplacePending}
+        correctionTarget={actions.correctionTarget}
+        onCloseCorrectionTarget={() => actions.setCorrectionTarget(null)}
+        onCorrectionSubmitted={() => { actions.setCorrectionTarget(null); onSaved(); }}
       />
     </div>
   );

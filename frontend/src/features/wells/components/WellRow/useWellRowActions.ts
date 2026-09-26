@@ -18,6 +18,7 @@ import { toast } from 'sonner';
 import { WELL_MAX_READINGS_PER_DAY, formatCooldown } from '@/features/operations/shared';
 import { CalendarClock, MessageCircleOff, Pencil, X, History, AlertCircle, ArrowUpRight, Loader2, Zap } from 'lucide-react';
 import { OdometerRollerInput, type OdometerAlertState } from '@/components/OdometerRollerInput';
+import type { CorrectionTarget } from '@/components/CorrectionRequestDialog';
 
 export interface UseWellRowActionsOptions {
   well: any;
@@ -105,6 +106,30 @@ export function useWellRowActions({
   const lastToday = todayReadings[0] ?? null;
   const atLimit = useMemo(() => !editingId && todayCount >= WELL_MAX_READINGS_PER_DAY, [editingId, todayCount]);
   const showDedicatedPower = well.has_power_meter && !isInSharedPowerGroup;
+
+  // Same self-edit / request-a-fix / locked split as LocatorRow: within 2 hours
+  // an operator can edit directly; past that (and under 7 days) editing is
+  // replaced with a correction request a supervisor has to approve; once a
+  // flagged reading has been resolved (locked_at set) neither is available.
+  const isLocked = !!lastToday?.locked_at;
+  const lastTodayAge = lastToday ? (Date.now() - new Date(lastToday.reading_datetime).getTime()) / 60_000 : Infinity;
+  const canSelfEdit = lastTodayAge <= 120 && !isLocked;
+  const canRequest = lastTodayAge > 120 && lastTodayAge < 7 * 24 * 60 && !isLocked;
+  const [correctionTarget, setCorrectionTarget] = useState<CorrectionTarget | null>(null);
+
+  const handleCorrectionRequest = useCallback(() => {
+    if (!lastToday) return;
+    setCorrectionTarget({
+      id: lastToday.id,
+      sourceTable: 'well_readings',
+      plantId,
+      entityName: well.name,
+      currentReading: lastToday.current_reading,
+      previousReading: lastToday.previous_reading ?? null,
+      dailyVolume: lastToday.daily_volume ?? null,
+      readingDatetime: lastToday.reading_datetime,
+    });
+  }, [lastToday, plantId, well.name]);
 
   const odometerAlert = useMemo<OdometerAlertState>(() => {
     if (!meterChanged) return 'neutral';
@@ -503,5 +528,6 @@ export function useWellRowActions({
     todayCount, lastToday, atLimit, showDedicatedPower, odometerAlert,
     save, savePower, saveTds, saveNtu, savePressure, saveSharedPower, saveGapReason,
     onStartEdit, onCancelEdit,
+    isLocked, canSelfEdit, canRequest, correctionTarget, setCorrectionTarget, handleCorrectionRequest,
   };
 }

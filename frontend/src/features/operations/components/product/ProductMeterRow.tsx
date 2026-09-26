@@ -34,11 +34,11 @@ import { toast } from 'sonner';
 import { submitAnomalyRemark, isAnomalyRemarkValid } from '@/lib/anomalyRemarks';
 import { isReasonComplete, resolveReason } from '@/lib/correctionReasons';
 import { reasonCategoryLabel } from '@/lib/reasonCodes';
-import { logReadingEdit, diffFields, canEditEntry } from '@/shared/readingAudit';
+import { logReadingEdit, diffFields } from '@/shared/readingAudit';
 import { logProductionCalc, invalidateProductMeterDash } from '../../shared';
 import {
   AlertCircle, Loader2, History, Gauge, CalendarClock, MessageCircleOff,
-  Droplet, Pencil, X
+  Droplet, Pencil, X, Lock, SquarePen
 } from 'lucide-react';
 import { ProductMeterHistoryDialog } from './ProductMeterHistoryDialog';
 
@@ -73,13 +73,62 @@ function ProductMeterRow({
   const dtInputRef = useRef<HTMLInputElement>(null);
   const [showReplaceMeter, setShowReplaceMeter] = useState(false);
   const [meterReplacePending, setMeterReplacePending] = useState<{ newInitialReading: number | null; replacementId: string | null } | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editBefore, setEditBefore] = useState<Record<string, unknown> | null>(null);
+  const [editReason, setEditReason] = useState('');
+  const [editCustomReason, setEditCustomReason] = useState('');
+  const [correctionTarget, setCorrectionTarget] = useState<CorrectionTarget | null>(null);
 
   const previous = latest?.current_reading ?? null;
   const cur = +reading || 0;
-  const readingChanged = reading !== '' && (previous == null || cur !== previous);
+  const readingChanged = reading !== '' && (previous == null || cur !== previous || editingId != null);
   const productionVolume = previous != null && readingChanged ? cur - previous : null;
   const [anomalyRemark, setAnomalyRemark] = useState('');
   const [showAnomalyBanner, setShowAnomalyBanner] = useState(false);
+
+  // Same self-edit / request-a-fix / locked split as LocatorRow and WellRow:
+  // within 2 hours an operator can edit directly; past that (and under 7
+  // days) editing is replaced with a correction request a supervisor has to
+  // approve; once a flagged reading has been resolved (locked_at set)
+  // neither is available.
+  const isLocked = !!latest?.locked_at;
+  const lastAge = latest?.reading_datetime ? (Date.now() - new Date(latest.reading_datetime).getTime()) / 60_000 : Infinity;
+  const canSelfEdit = lastAge <= 120 && !isLocked;
+  const canRequest = lastAge > 120 && lastAge < 7 * 24 * 60 && !isLocked;
+
+  const onStartEdit = () => {
+    if (!latest) return;
+    setEditingId(latest.id);
+    setReading(String(latest.current_reading ?? ''));
+    if (latest.reading_datetime) setCustomDt(format(new Date(latest.reading_datetime), "yyyy-MM-dd'T'HH:mm"));
+    setEditBefore({
+      current_reading: latest.current_reading ?? null,
+      reading_datetime: latest.reading_datetime ?? null,
+      daily_volume: latest.daily_volume ?? null,
+      is_meter_replacement: !!latest.is_meter_replacement,
+    });
+  };
+
+  const onCancelEdit = () => {
+    setEditingId(null);
+    setReading(previous != null ? previous.toFixed(2) : '');
+    setCustomDt(format(new Date(), "yyyy-MM-dd'T'HH:mm"));
+    setEditBefore(null); setEditReason(''); setEditCustomReason('');
+  };
+
+  const handleCorrectionRequest = () => {
+    if (!latest) return;
+    setCorrectionTarget({
+      id: latest.id,
+      sourceTable: 'product_meter_readings',
+      plantId,
+      entityName: meter.name,
+      currentReading: latest.current_reading,
+      previousReading: latest.previous_reading ?? null,
+      dailyVolume: latest.daily_volume ?? null,
+      readingDatetime: latest.reading_datetime,
+    });
+  };
 
   const hoursElapsedProduct = latest?.reading_datetime && reading
     ? (new Date(customDt).getTime() - new Date(latest.reading_datetime).getTime()) / 3_600_000
@@ -90,19 +139,24 @@ function ProductMeterRow({
   const anomalyRemarkRequired = highVol && !isAnomalyRemarkValid(anomalyRemark);
 
   useEffect(() => {
-    if (previous == null) return;
+    if (editingId || previous == null) return;
     const expected = previous.toFixed(2);
     if (reading === '' || reading === lastPrefilledProduct.current) {
       setReading(expected);
       lastPrefilledProduct.current = expected;
     }
-  }, [previous, reading]);
+  }, [previous, reading, editingId]);
 
   const save = async () => {
     if (saving) return;
     if (!reading) { toast.error(`${meter.name}: enter a reading`); return; }
 
-    if (previous != null && cur === previous && !meterReplacePending) {
+    if (editingId && !isReasonComplete(editReason, editCustomReason)) {
+      toast.error(`${meter.name}: select a reason for this edit`);
+      return;
+    }
+
+    if (!editingId && previous != null && cur === previous && !meterReplacePending) {
       if (hoursElapsedProduct != null && hoursElapsedProduct < 12) {
         toast.error(`${meter.name}: this odometer reading (${fmtNum(cur, 2)}) was already recorded within the last 12 hours.`);
         return;
@@ -117,23 +171,25 @@ function ProductMeterRow({
     setSaving(true);
     const dt = new Date(customDt).toISOString();
 
-    try {
-      const dayObj = new Date(customDt);
-      const dayStart = new Date(dayObj.getFullYear(), dayObj.getMonth(), dayObj.getDate(), 0, 0, 0, 0).toISOString();
-      const dayEnd = new Date(dayObj.getFullYear(), dayObj.getMonth(), dayObj.getDate(), 23, 59, 59, 999).toISOString();
-      await supabase
-        .from('product_meter_readings' as any)
-        .delete()
-        .eq('meter_id', meter.id)
-        .eq('is_estimated', true)
-        .gte('reading_datetime', dayStart)
-        .lte('reading_datetime', dayEnd);
-    } catch (err) {
-      console.warn('[Operations] Failed to purge orphan estimate on same day:', err);
+    if (!editingId) {
+      try {
+        const dayObj = new Date(customDt);
+        const dayStart = new Date(dayObj.getFullYear(), dayObj.getMonth(), dayObj.getDate(), 0, 0, 0, 0).toISOString();
+        const dayEnd = new Date(dayObj.getFullYear(), dayObj.getMonth(), dayObj.getDate(), 23, 59, 59, 999).toISOString();
+        await supabase
+          .from('product_meter_readings' as any)
+          .delete()
+          .eq('meter_id', meter.id)
+          .eq('is_estimated', true)
+          .gte('reading_datetime', dayStart)
+          .lte('reading_datetime', dayEnd);
+      } catch (err) {
+        console.warn('[Operations] Failed to purge orphan estimate on same day:', err);
+      }
     }
 
     const dailyVol = previous != null ? cur - previous : null;
-    const { data: savedRow, error } = await supabase.from('product_meter_readings' as any).insert({
+    const payload: any = {
       meter_id: meter.id,
       plant_id: plantId,
       current_reading: cur,
@@ -142,8 +198,16 @@ function ProductMeterRow({
       recorded_by: userId,
       daily_volume: dailyVol,
       is_meter_replacement: !!meterReplacePending,
-      ...(deviationProduct.tier === 'critical' ? { norm_status: 'pending_review' } : {}),
-    } as any).select('id').single();
+      ...(!editingId && deviationProduct.tier === 'critical' ? { norm_status: 'pending_review' } : {}),
+    };
+
+    const { data: savedRow, error } = editingId
+      ? await supabase.from('product_meter_readings' as any)
+          .update(payload).eq('id', editingId)
+          .select('id, norm_status, current_reading, previous_reading, daily_volume').single()
+      : await supabase.from('product_meter_readings' as any)
+          .insert(payload)
+          .select('id, norm_status, current_reading, previous_reading, daily_volume').single();
     if (error) {
       if ((error as any).code === '23505') {
         toast.error(
@@ -155,6 +219,25 @@ function ProductMeterRow({
       }
       setSaving(false);
       return;
+    }
+
+    if (editingId && editBefore) {
+      const after: Record<string, unknown> = {
+        current_reading: payload.current_reading,
+        reading_datetime: payload.reading_datetime,
+        daily_volume: payload.daily_volume ?? null,
+        is_meter_replacement: !!payload.is_meter_replacement,
+      };
+      await logReadingEdit({
+        table_name: 'product_meter_readings',
+        record_id: editingId,
+        plant_id: plantId,
+        action: 'update',
+        actor_user_id: userId ?? null,
+        actor_label: null,
+        changes: diffFields(editBefore, after),
+        reason: resolveReason(editReason, editCustomReason),
+      });
     }
 
     if (meterReplacePending?.replacementId && (savedRow as any)?.id) {
@@ -191,13 +274,25 @@ function ProductMeterRow({
       });
     }
 
-    if (deviationProduct.tier === 'critical') {
+    if (editingId) {
+      const isPending = (savedRow as any)?.norm_status === 'pending_review';
+      if (isPending) {
+        toast.info(`${meter.name}: edit saved and sent to supervisor for review.`, { duration: 6000 });
+      } else {
+        toast.success(`${meter.name}: reading updated`);
+      }
+    } else if (deviationProduct.tier === 'critical') {
       toast.info(`${meter.name}: reading saved and sent to supervisor for review.`, { duration: 6000 });
     } else {
       toast.success(`${meter.name}: reading saved${productionVolume != null ? ` · ${fmtNum(productionVolume, 2)} m³ produced` : ''}`);
     }
     setReading(''); setSaving(false); onSaved();
     setMeterReplacePending(null); setShowReplaceMeter(false);
+    if (editingId) {
+      setEditBefore(null); setEditReason(''); setEditCustomReason('');
+    }
+    setEditingId(null);
+    setCustomDt(format(new Date(), "yyyy-MM-dd'T'HH:mm"));
   };
 
   if (meter.is_derived) {
@@ -299,6 +394,10 @@ function ProductMeterRow({
                 tone: productionVolume < 0 ? 'danger' : 'primary',
                 label: `Δ ${fmtNum(productionVolume, 2)} m³`,
               },
+              !!editingId && {
+                tone: 'primary',
+                label: 'Editing',
+              },
             ].filter(Boolean)}
             maxVisible={4}
           />
@@ -352,7 +451,8 @@ function ProductMeterRow({
           />
           <div className="flex items-center gap-2">
             <Button
-              onClick={save} disabled={saving || !readingChanged || (showAnomalyBanner && anomalyRemarkRequired)}
+              onClick={save}
+              disabled={saving || !readingChanged || (showAnomalyBanner && anomalyRemarkRequired) || (!!editingId && !isReasonComplete(editReason, editCustomReason))}
               className={cn(
                 'flex-1 h-11 rounded-full text-sm font-semibold shadow-sm transition-all',
                 readingChanged
@@ -361,22 +461,54 @@ function ProductMeterRow({
               )}
               data-testid={`product-meter-save-${meter.id}`}
             >
-              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Save reading'}
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : editingId ? 'Update reading' : 'Save reading'}
             </Button>
-            {canEdit && (
-              <ControlCluster
-                actions={[
-                  {
-                    icon: History,
-                    title: 'View history',
-                    onClick: () => setShowHistory(true),
-                  },
-                ]}
-              />
-            )}
+            <ControlCluster
+              actions={[
+                latest && !editingId && canSelfEdit && {
+                  icon: Pencil,
+                  title: `Edit last reading (${fmtNum(latest.current_reading)})`,
+                  onClick: onStartEdit,
+                },
+                editingId && {
+                  icon: X,
+                  title: 'Cancel edit',
+                  variant: 'danger',
+                  onClick: onCancelEdit,
+                },
+                canEdit && {
+                  icon: History,
+                  title: 'View history',
+                  onClick: () => setShowHistory(true),
+                },
+                isLocked && latest && !editingId && {
+                  icon: Lock,
+                  label: 'Locked',
+                  title: 'Reading approved by supervisor — locked from editing',
+                  variant: 'danger',
+                  disabled: true,
+                  onClick: () => {},
+                },
+                latest && !editingId && canRequest && {
+                  icon: SquarePen,
+                  label: 'Fix',
+                  title: 'Entry is older than 2 hours — submit a correction request for supervisor review',
+                  variant: 'warn',
+                  onClick: handleCorrectionRequest,
+                },
+              ]}
+            />
           </div>
+          {editingId && (
+            <CorrectionReasonField
+              reason={editReason} onReasonChange={setEditReason}
+              customReason={editCustomReason} onCustomReasonChange={setEditCustomReason}
+              label="Reason for this edit"
+            />
+          )}
         </div>
       ) : (
+        <div className="space-y-2.5">
         <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
           <div className="relative flex-1 min-w-0">
             <Gauge className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-primary pointer-events-none" />
@@ -391,7 +523,7 @@ function ProductMeterRow({
           </div>
           <Button
             onClick={save}
-            disabled={saving || !readingChanged || (showAnomalyBanner && anomalyRemarkRequired)}
+            disabled={saving || !readingChanged || (showAnomalyBanner && anomalyRemarkRequired) || (!!editingId && !isReasonComplete(editReason, editCustomReason))}
             className={cn(
               'h-11 px-6 rounded-full text-sm font-semibold shrink-0 shadow-sm transition-all',
               readingChanged
@@ -400,19 +532,51 @@ function ProductMeterRow({
             )}
             data-testid={`product-meter-save-${meter.id}`}
           >
-            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Save reading'}
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : editingId ? 'Update reading' : 'Save reading'}
           </Button>
-          {canEdit && (
-            <ControlCluster
-              actions={[
-                {
-                  icon: History,
-                  title: 'View history',
-                  onClick: () => setShowHistory(true),
-                },
-              ]}
-            />
-          )}
+          <ControlCluster
+            actions={[
+              latest && !editingId && canSelfEdit && {
+                icon: Pencil,
+                title: `Edit last reading (${fmtNum(latest.current_reading)})`,
+                onClick: onStartEdit,
+              },
+              editingId && {
+                icon: X,
+                title: 'Cancel edit',
+                variant: 'danger',
+                onClick: onCancelEdit,
+              },
+              canEdit && {
+                icon: History,
+                title: 'View history',
+                onClick: () => setShowHistory(true),
+              },
+              isLocked && latest && !editingId && {
+                icon: Lock,
+                label: 'Locked',
+                title: 'Reading approved by supervisor — locked from editing',
+                variant: 'danger',
+                disabled: true,
+                onClick: () => {},
+              },
+              latest && !editingId && canRequest && {
+                icon: SquarePen,
+                label: 'Fix',
+                title: 'Entry is older than 2 hours — submit a correction request for supervisor review',
+                variant: 'warn',
+                onClick: handleCorrectionRequest,
+              },
+            ]}
+          />
+        </div>
+        {editingId && (
+          <CorrectionReasonField
+            reason={editReason} onReasonChange={setEditReason}
+            customReason={editCustomReason} onCustomReasonChange={setEditCustomReason}
+            label="Reason for this edit"
+          />
+        )}
         </div>
       )}
 
@@ -500,6 +664,14 @@ function ProductMeterRow({
           onGapReasonSaved?.();
         }}
       />
+
+      {correctionTarget && (
+        <CorrectionRequestDialog
+          target={correctionTarget}
+          onClose={() => setCorrectionTarget(null)}
+          onSubmitted={() => { setCorrectionTarget(null); onSaved(); }}
+        />
+      )}
     </div>
   );
 }

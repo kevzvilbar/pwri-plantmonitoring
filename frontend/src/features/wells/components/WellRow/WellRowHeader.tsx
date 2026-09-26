@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { StatusPill } from '@/components/StatusPill';
 import { MetaStrip } from '@/components/operations/MetaStrip';
 import { ControlCluster } from '@/components/operations/ControlCluster';
-import { CalendarClock, MessageCircleOff, Pencil, X, History, Zap } from 'lucide-react';
+import { CalendarClock, MessageCircleOff, Pencil, X, History, Zap, Lock, SquarePen } from 'lucide-react';
 import { fmtNum, lastReadingFreshness } from '@/lib/format';
 import { reasonCategoryLabel } from '@/lib/reasonCodes';
 import { cn } from '@/lib/utils';
@@ -24,6 +24,10 @@ interface WellRowHeaderProps {
   onCancelEdit: () => void;
   onShowHistory: () => void;
   isManagerOrAdmin: boolean;
+  canSelfEdit: boolean;
+  canRequest: boolean;
+  isLocked: boolean;
+  onFix: () => void;
   isBlending: boolean;
   isInSharedPowerGroup: boolean;
   gapReason: any | null | undefined;
@@ -36,6 +40,7 @@ export function WellRowHeader({
   well, plantId, todayCount, atLimit, customDt, onCustomDtChange, dtInputRef,
   editingId, lastToday, onStartEdit, onCancelEdit, onShowHistory, isManagerOrAdmin,
   isBlending, isInSharedPowerGroup, gapReason, onGapReasonClick, freshDt, pulsing,
+  canSelfEdit, canRequest, isLocked, onFix,
 }: WellRowHeaderProps) {
   return (
     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 px-4 py-3 bg-muted/20 border-b border-border/60">
@@ -112,7 +117,7 @@ export function WellRowHeader({
 
         <ControlCluster
           actions={[
-            lastToday && !editingId && {
+            lastToday && !editingId && canSelfEdit && {
               icon: Pencil,
               title: `Edit last today reading (${fmtNum(lastToday.current_reading)})`,
               onClick: onStartEdit,
@@ -127,6 +132,21 @@ export function WellRowHeader({
               icon: History,
               title: 'View reading history',
               onClick: onShowHistory,
+            },
+            isLocked && lastToday && !editingId && {
+              icon: Lock,
+              label: 'Locked',
+              title: 'Reading approved by supervisor — locked from editing',
+              variant: 'danger',
+              disabled: true,
+              onClick: () => {},
+            },
+            lastToday && !editingId && canRequest && {
+              icon: SquarePen,
+              label: 'Fix',
+              title: 'Entry is older than 2 hours — submit a correction request for supervisor review',
+              variant: 'warn',
+              onClick: onFix,
             },
           ]}
         />

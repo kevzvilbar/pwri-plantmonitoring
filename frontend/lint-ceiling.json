@@ -1,7 +1,13 @@
 {
-  "maxWarnings": 2493,
+  "maxWarnings": 2498,
   "lastUpdated": "2026-09-26",
   "history": [
+    {
+      "date": "2026-09-26",
+      "maxWarnings": 2498,
+      "previous": 2493,
+      "reason": "Wire Wells and Product Meters into the same self-edit / correction-request / locked flow Locators already have (CorrectionRequestDialog, correction_requests). Net +2 over the already-merged main baseline (2496, itself 3 over the prior 2493 ceiling from the meter-multiplier feature landing in between sessions, confirmed on a fresh fetch before touching these files). The +2 is both @typescript-eslint/no-explicit-any on Supabase calls against 'product_meter_readings' as any: one from adding an update-branch alongside the pre-existing insert (same cast the insert already needed, just now needed twice), one from reading back norm_status off the saved row after an edit to decide whether to show the \"sent to supervisor\" toast (tsc rejects the query result's inferred type without it -- verified by trying to drop the cast and re-running tsc before keeping it). Wells needed no new casts: its `lastToday`/`latest`-style row params were already typed `any` in the existing prop interfaces, so no separate cast was needed there. tsc/eslint (0 errors)/1281 tests all clean after the change."
+    },
     {
       "date": "2026-09-10",
       "maxWarnings": 2562,

@@ -2,6 +2,7 @@ import React from 'react';
 import { ReadingHistoryDialog } from '@/components/ReadingHistoryDialog';
 import { ReplaceMeterDialog } from '@/features/plants/components/locators/LocatorDialogs';
 import { ReasonDialog } from '@/components/ReasonDialog';
+import { CorrectionRequestDialog, type CorrectionTarget } from '@/components/CorrectionRequestDialog';
 
 interface WellRowDialogsProps {
   showHistory: boolean;
@@ -20,6 +21,9 @@ interface WellRowDialogsProps {
   onSetReading: (v: string) => void;
   meterReplacePending: { newInitialReading: number | null; replacementId: string | null } | null;
   onMeterReplacePendingChange: (v: { newInitialReading: number | null; replacementId: string | null } | null) => void;
+  correctionTarget: CorrectionTarget | null;
+  onCloseCorrectionTarget: () => void;
+  onCorrectionSubmitted: () => void;
 }
 
 export function WellRowDialogs({
@@ -27,6 +31,7 @@ export function WellRowDialogs({
   gapDialogOpen, onCloseGapDialog, gapSaving, onSaveGapReason,
   well, plantId, userId, reading, previousMeter, onSetReading,
   meterReplacePending, onMeterReplacePendingChange,
+  correctionTarget, onCloseCorrectionTarget, onCorrectionSubmitted,
 }: WellRowDialogsProps) {
   return (
     <>
@@ -67,6 +72,14 @@ export function WellRowDialogs({
         busy={gapSaving}
         onConfirm={(category, detail) => onSaveGapReason(category, detail)}
       />
+
+      {correctionTarget && (
+        <CorrectionRequestDialog
+          target={correctionTarget}
+          onClose={onCloseCorrectionTarget}
+          onSubmitted={onCorrectionSubmitted}
+        />
+      )}
     </>
   );
 }

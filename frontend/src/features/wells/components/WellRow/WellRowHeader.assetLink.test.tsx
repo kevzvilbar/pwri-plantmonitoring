@@ -50,6 +50,10 @@ function renderHeader(roles: string[]) {
         onCancelEdit={() => {}}
         onShowHistory={() => {}}
         isManagerOrAdmin={roles.includes('Manager')}
+        canSelfEdit={true}
+        canRequest={false}
+        isLocked={false}
+        onFix={() => {}}
         isBlending={false}
         isInSharedPowerGroup={false}
         gapReason={null}
