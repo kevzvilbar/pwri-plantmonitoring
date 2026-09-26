@@ -1,5 +1,5 @@
 {
-  "maxTotalGzipKb": 1126.0,
+  "maxTotalGzipKb": 1129.5,
   "lastUpdated": "2026-09-26",
   "history": [
     {
@@ -47,6 +47,13 @@
       "maxTotalGzipKb": 1126.0,
       "previous": 1120.0,
       "reason": "Meter-multiplier feature (acd7d0a8 feat(meters), landed for good via the fe91a946/92131001 revert-of-revert) added four new files: data/mutations/meterMultiplier.ts, data/queries/meterEvents.ts, features/plants/components/config/components/MeterMultiplierWorkflowModal.tsx, features/plants/components/config/sections/MeterMultiplierSection.tsx -- a real, shipped workflow (multiplier cutover/replacement audit for wells/locators/product meters), not an accidental dependency import. +6.0 kB gzipped for that is in line with similar single-feature additions elsewhere in this history. Measured via CI's own reported total (1126.0 kB) rather than a from-scratch local build: a clean `npm ci && npm run build` on this exact commit reproduces 7 of the 8 largest chunks (PlantTopology, generateCategoricalChart, vendor-react, ROTrains, Dashboard, Operations, vendor-supabase) at byte-identical gzip sizes to the CI log, confirming the code is right, but lands ~25 kB lower overall locally -- all of it in the shared `index` entry chunk. That gap tracks with vite.config.ts's Sentry-plugin branch (`mode === 'production'`, gated on SENTRY_ORG/PROJECT/AUTH_TOKEN), which only runs with real values for those in CI; not investigated further since it doesn't touch app code and isn't this feature's doing. Re-baseline here uses CI's authoritative number so the next run compares like for like."
+    },
+    {
+      "date": "2026-09-26",
+      "maxTotalGzipKb": 1129.5,
+      "previous": 1126.0,
+      "reason": "CI (run failing on this repo) reported 1129.5 kB vs. the committed 1126.0 (+3.5, over the +-2 tolerance). Unlike the prior entry, a clean checkout+build reproduces CI closely this time: baseline commit 62ed1c6 built locally at 1126.2 kB (matches its own committed 1126.0), and HEAD (66a337b) built locally at 1129.9 kB -- both within ~0.2-0.4 kB of their respective CI numbers, and this time even the largest chunk (vendor-supabase) comes out byte-identical including its content hash, so whatever caused the prior entry's ~25 kB local/CI gap either isn't in play for this diff or affects both commits equally and cancels out. Diffing every chunk by basename (stripping the content hash) between the two local builds accounts for the full +3.8 kB seen locally: index.js +1.4 kB, Operations.js +1.2 kB, Employees.js +0.9 kB, vendor-react.js +0.2 kB, Auth.js +0.1 kB, useCorrections.js +0.1 kB, UsersPanel.js -0.2 kB. That maps directly onto the three feature commits landed since 62ed1c6 -- 7faeee8 (correction resolution cascade RPCs, touching corrections.ts/useCorrections.ts/CorrectionRequestDialog.tsx), 90b07d2 (self-edit/correction-request flow for product and well meters, touching ProductMeterRow.tsx/WellRow.tsx under the Operations page), and 66a337b (pair-duty attribution: OperatorSwitcher.tsx/ShiftHandoverModal.tsx under Operations, KpiTab.tsx/MiniHeatmap.tsx/useKpiData.ts under Employees, plus shared useKpi.ts/kpi.ts/pairingAudit.ts landing in the index entry) -- three real, already-merged workflows, not a stray dependency. de2a7f4 and 9c11495 (a permissions tweak and a query-staleTime/debounce change) are in the same commit range but don't touch enough code to plausibly account for any of this. Committed value uses CI's reported number (1129.5) per the same rationale as the entry above."
     }
   ]
 }
+
