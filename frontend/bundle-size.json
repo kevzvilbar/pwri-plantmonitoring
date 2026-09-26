@@ -1,6 +1,6 @@
 {
-  "maxTotalGzipKb": 1120.0,
-  "lastUpdated": "2026-09-24",
+  "maxTotalGzipKb": 1126.0,
+  "lastUpdated": "2026-09-26",
   "history": [
     {
       "date": "2026-09-06",
@@ -41,6 +41,12 @@
       "date": "2026-09-24",
       "maxTotalGzipKb": 1120.0,
       "previous": 1092.7
+    },
+    {
+      "date": "2026-09-26",
+      "maxTotalGzipKb": 1126.0,
+      "previous": 1120.0,
+      "reason": "Meter-multiplier feature (acd7d0a8 feat(meters), landed for good via the fe91a946/92131001 revert-of-revert) added four new files: data/mutations/meterMultiplier.ts, data/queries/meterEvents.ts, features/plants/components/config/components/MeterMultiplierWorkflowModal.tsx, features/plants/components/config/sections/MeterMultiplierSection.tsx -- a real, shipped workflow (multiplier cutover/replacement audit for wells/locators/product meters), not an accidental dependency import. +6.0 kB gzipped for that is in line with similar single-feature additions elsewhere in this history. Measured via CI's own reported total (1126.0 kB) rather than a from-scratch local build: a clean `npm ci && npm run build` on this exact commit reproduces 7 of the 8 largest chunks (PlantTopology, generateCategoricalChart, vendor-react, ROTrains, Dashboard, Operations, vendor-supabase) at byte-identical gzip sizes to the CI log, confirming the code is right, but lands ~25 kB lower overall locally -- all of it in the shared `index` entry chunk. That gap tracks with vite.config.ts's Sentry-plugin branch (`mode === 'production'`, gated on SENTRY_ORG/PROJECT/AUTH_TOKEN), which only runs with real values for those in CI; not investigated further since it doesn't touch app code and isn't this feature's doing. Re-baseline here uses CI's authoritative number so the next run compares like for like."
     }
   ]
 }
