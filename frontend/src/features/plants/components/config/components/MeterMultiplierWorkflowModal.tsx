@@ -291,6 +291,7 @@ export function MeterMultiplierWorkflowModal({
 
           <div className="flex items-center justify-between rounded-lg border border-border bg-muted/20 p-2.5">
             <div className="space-y-0.5">
+              {/* eslint-disable-next-line jsx-a11y/label-has-associated-control -- Switch (Radix) renders button[role=switch], not a native input; same false positive as ThemeSelector's Switch. */}
               <Label className="text-xs font-medium cursor-pointer">Enable Multiplier Calculation</Label>
               <p className="text-2xs text-muted-foreground">
                 When enabled, future readings are automatically multiplied by ×{newMultiplier || '10'} to compute daily volume.
