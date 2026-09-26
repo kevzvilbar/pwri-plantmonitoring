@@ -36,8 +36,10 @@ export async function submitMeterMultiplierWorkflow(params: MeterWorkflowParams)
       notes,
     } = params;
 
+    const client = supabase as any;
+
     // 1. Audit event insert
-    const { error: eventErr } = await supabase.from('meter_events' as any).insert({
+    const { error: eventErr } = await client.from('meter_events').insert({
       plant_id: plantId,
       entity_type: entityType,
       entity_id: entityId,
@@ -66,8 +68,8 @@ export async function submitMeterMultiplierWorkflow(params: MeterWorkflowParams)
       entityPatch.meter_serial = newMeterSerial;
     }
 
-    const { error: entityErr } = await supabase
-      .from(entityTable as any)
+    const { error: entityErr } = await client
+      .from(entityTable)
       .update(entityPatch)
       .eq('id', entityId);
 
@@ -94,8 +96,8 @@ export async function submitMeterMultiplierWorkflow(params: MeterWorkflowParams)
       const winFrom = new Date(new Date(effectiveAt).getTime() - 60_000).toISOString();
       const winTo = new Date(new Date(effectiveAt).getTime() + 60_000).toISOString();
 
-      const { data: existing } = await supabase
-        .from(readingTable as any)
+      const { data: existing } = await client
+        .from(readingTable)
         .select('id')
         .eq(foreignKey, entityId)
         .gte('reading_datetime', winFrom)
@@ -104,8 +106,8 @@ export async function submitMeterMultiplierWorkflow(params: MeterWorkflowParams)
         .maybeSingle();
 
       if (existing?.id) {
-        const { error: updateReadingErr } = await supabase
-          .from(readingTable as any)
+        const { error: updateReadingErr } = await client
+          .from(readingTable)
           .update({
             current_reading: newReadingValue,
             reading_datetime: effectiveAt,
@@ -120,8 +122,8 @@ export async function submitMeterMultiplierWorkflow(params: MeterWorkflowParams)
 
         if (updateReadingErr) throw updateReadingErr;
       } else {
-        const { error: insertReadingErr } = await supabase
-          .from(readingTable as any)
+        const { error: insertReadingErr } = await client
+          .from(readingTable)
           .insert({
             [foreignKey]: entityId,
             plant_id: plantId,

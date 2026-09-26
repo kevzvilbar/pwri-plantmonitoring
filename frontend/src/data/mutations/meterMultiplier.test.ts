@@ -1,15 +1,35 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { submitMeterMultiplierWorkflow } from './meterMultiplier';
+import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
+import { createSupabaseQueryMock } from '@/test/mocks/supabaseMock';
+
+vi.mock('@/integrations/supabase/client', () => ({
+  supabase: {
+    from: vi.fn(),
+    rpc: vi.fn().mockResolvedValue({ data: null, error: null }),
+    auth: {
+      getSession: vi.fn().mockResolvedValue({ data: { session: null }, error: null }),
+      getUser: vi.fn().mockResolvedValue({ data: { user: null }, error: null }),
+      onAuthStateChange: vi.fn().mockReturnValue({ data: { subscription: { unsubscribe: vi.fn() } } }),
+    },
+  },
+}));
+
 import { supabase } from '@/integrations/supabase/client';
+import { submitMeterMultiplierWorkflow } from './meterMultiplier';
+
+const fromMock = vi.mocked(supabase).from as unknown as Mock<
+  (table: string) => ReturnType<typeof createSupabaseQueryMock>
+>;
+
+let rows: Record<string, unknown[]> = {};
 
 describe('submitMeterMultiplierWorkflow', () => {
   beforeEach(() => {
+    rows = {};
     vi.clearAllMocks();
+    fromMock.mockImplementation((table: string) => createSupabaseQueryMock(rows[table] ?? []));
   });
 
   it('submits a multiplier cutover event and updates entity table and reading table', async () => {
-    const fromSpy = vi.spyOn(supabase, 'from');
-
     const result = await submitMeterMultiplierWorkflow({
       plantId: 'plant-1',
       entityType: 'well',
@@ -26,14 +46,12 @@ describe('submitMeterMultiplierWorkflow', () => {
     });
 
     expect(result.error).toBeNull();
-    expect(fromSpy).toHaveBeenCalledWith('meter_events');
-    expect(fromSpy).toHaveBeenCalledWith('wells');
-    expect(fromSpy).toHaveBeenCalledWith('well_readings');
+    expect(fromMock).toHaveBeenCalledWith('meter_events');
+    expect(fromMock).toHaveBeenCalledWith('wells');
+    expect(fromMock).toHaveBeenCalledWith('well_readings');
   });
 
   it('submits a physical replacement event with serial numbers', async () => {
-    const fromSpy = vi.spyOn(supabase, 'from');
-
     const result = await submitMeterMultiplierWorkflow({
       plantId: 'plant-1',
       entityType: 'locator',
@@ -51,8 +69,9 @@ describe('submitMeterMultiplierWorkflow', () => {
     });
 
     expect(result.error).toBeNull();
-    expect(fromSpy).toHaveBeenCalledWith('meter_events');
-    expect(fromSpy).toHaveBeenCalledWith('locators');
-    expect(fromSpy).toHaveBeenCalledWith('locator_readings');
+    expect(fromMock).toHaveBeenCalledWith('meter_events');
+    expect(fromMock).toHaveBeenCalledWith('locators');
+    expect(fromMock).toHaveBeenCalledWith('locator_readings');
   });
 });
+

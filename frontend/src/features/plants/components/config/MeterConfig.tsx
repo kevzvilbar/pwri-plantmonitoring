@@ -47,6 +47,7 @@ import { MeterGroupChips } from './components/MeterGroupChips';
 import { LocatorGroupRealitySync } from './components/LocatorGroupRealitySync';
 import { ChemicalsSection } from './components/ChemicalsSection';
 import { PlantComponentTypeCard } from './components/PlantComponentTypeCard';
+import { MeterMultiplierSection } from './sections/MeterMultiplierSection';
 
 export { MeterToggleTile, MeterGroupChips, LocatorGroupRealitySync, CIPChemicalsSection };
 
@@ -59,6 +60,7 @@ const ALL_CONFIG_SECTIONS = [
   'product-meters',
   'wells',
   'locators',
+  'meter-multipliers',
   'power',
   'component-types',
   'chemicals',
@@ -280,6 +282,20 @@ export function PlantMeterConfigCard({ plant }: { plant: any }) {
               </AccordionTrigger>
               <AccordionContent className="space-y-5">
                 <LocatorsMeterSection cfg={cfg} update={update} canEdit={canEdit} locators={locators} configProductMeters={configProductMeters} />
+              </AccordionContent>
+            </AccordionItem>
+
+            <AccordionItem value="meter-multipliers" className="border-border/50">
+              <AccordionTrigger className="py-3 hover:no-underline">
+                <ConfigSectionTitle
+                  icon={<SectionIcon className="bg-primary/15 text-primary"><Gauge className="h-3.5 w-3.5" /></SectionIcon>}
+                  hint="(registers requiring ×10 or custom factors to calculate m³)"
+                >
+                  Meter Multipliers
+                </ConfigSectionTitle>
+              </AccordionTrigger>
+              <AccordionContent className="space-y-5">
+                <MeterMultiplierSection plantId={plant.id} canEdit={canEdit} />
               </AccordionContent>
             </AccordionItem>
 

@@ -120,7 +120,8 @@ export function computeEntityDeltas(
       // (no prior in-memory row) always shows 0, causing a false dip at the
       // start of every range.
       if (r.previous_reading != null) {
-        const rawDelta = +r.current_reading - +r.previous_reading;
+        const mult = Number(r.multiplier_at_reading) || 1;
+        const rawDelta = (+r.current_reading - +r.previous_reading) * mult;
         // On the INITIAL reading: an unflagged replacement, rollover, or backward
         // baseline entry outside the window must not produce a negative delta.
         // If negative, treat as an unanchored initial point.
@@ -136,7 +137,8 @@ export function computeEntityDeltas(
       return { r, delta: 0, rawDelta: null, isMeterReplacement: true };
     }
 
-    const rawDelta = +r.current_reading - lastReading.get(entityKey)!;
+    const mult = Number(r.multiplier_at_reading) || 1;
+    const rawDelta = (+r.current_reading - lastReading.get(entityKey)!) * mult;
     const delta    = rawDelta;
     lastReading.set(entityKey, +r.current_reading);
     return { r, delta, rawDelta, isMeterReplacement: false };

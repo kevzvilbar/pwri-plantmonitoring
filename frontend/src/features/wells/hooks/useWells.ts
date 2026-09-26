@@ -26,6 +26,8 @@ export interface Well {
   meter_installed_date: string | null;
   size: string | null;
   status: 'Active' | 'Inactive';
+  meter_multiplier: number;
+  multiplier_enabled: boolean;
   created_at: string;
   updated_at: string;
 }
