@@ -13,7 +13,7 @@
  * refetch on their own schedule. This maintains RLS security boundaries and
  * eliminates polling storms across concurrent users.
  */
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -176,10 +176,22 @@ export function trainRealtimeInvalidationKeys(): string[] {
   return Array.from(allKeys);
 }
 
+const DEBOUNCE_MS = 2000;
+
 export function useTrainDataRealtime() {
   const qc = useQueryClient();
+  const pendingKeysRef = useRef<Set<string>>(new Set());
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
+    const flushInvalidations = () => {
+      const keysToInvalidate = Array.from(pendingKeysRef.current);
+      pendingKeysRef.current.clear();
+      for (const key of keysToInvalidate) {
+        qc.invalidateQueries({ queryKey: [key] });
+      }
+    };
+
     const channels = APP_REALTIME_TABLES.map((table) => {
       // Fresh uid per effect run for StrictMode double-mount compatibility
       const uid = Math.random().toString(36).slice(2, 9);
@@ -191,14 +203,22 @@ export function useTrainDataRealtime() {
           { event: '*', schema: 'public', table },
           () => {
             for (const key of keys) {
-              qc.invalidateQueries({ queryKey: [key] });
+              pendingKeysRef.current.add(key);
             }
+            if (debounceTimerRef.current !== null) {
+              clearTimeout(debounceTimerRef.current);
+            }
+            debounceTimerRef.current = setTimeout(flushInvalidations, DEBOUNCE_MS);
           },
         )
         .subscribe();
     });
 
     return () => {
+      if (debounceTimerRef.current !== null) {
+        clearTimeout(debounceTimerRef.current);
+        debounceTimerRef.current = null;
+      }
       for (const ch of channels) {
         supabase.removeChannel(ch);
       }

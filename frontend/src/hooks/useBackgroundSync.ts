@@ -27,7 +27,7 @@ import { useEffect, useRef, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useSyncStore } from '@/store/syncStore';
 
-const SYNC_INTERVAL_MS  = 300_000; // 5 minutes (reduced from 120s to cut PostgREST egress by 60%)
+const SYNC_INTERVAL_MS  = 900_000; // 15 minutes (aligned with 5m staleTime and realtime invalidation to eliminate polling storms)
 const RETRY_DELAY_MS    = 10_000;  // 10 seconds between retries
 const MAX_RETRIES       = 3;       // silent retries before surfacing an error
 const IDLE_TIMEOUT_MS   = 15 * 60_000; // 15 min inactivity pauses background polling
