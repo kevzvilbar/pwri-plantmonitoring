@@ -31,6 +31,6 @@ jobs:
       - name: Run Log Quota Guard
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-          SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF || 'sosfbfxovtleuvahxvpm' }}
+          SUPABASE_PROJECT_REF: sosfbfxovtleuvahxvpm
           LOG_REQUEST_THRESHOLD: ${{ inputs.hourly_threshold || '500' }}
         run: node scripts/check-log-quota.mjs
