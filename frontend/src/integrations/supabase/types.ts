@@ -2213,6 +2213,7 @@ export type Database = {
           reading_datetime: string
           recorded_by: string | null
           remarks: string | null
+          multiplier_at_reading: number
         }
         Insert: {
           created_at?: string
@@ -2235,6 +2236,7 @@ export type Database = {
           reading_datetime?: string
           recorded_by?: string | null
           remarks?: string | null
+          multiplier_at_reading?: number
         }
         Update: {
           created_at?: string
@@ -2257,6 +2259,7 @@ export type Database = {
           reading_datetime?: string
           recorded_by?: string | null
           remarks?: string | null
+          multiplier_at_reading?: number
         }
         Relationships: [
           {
@@ -2303,6 +2306,78 @@ export type Database = {
           },
         ]
       }
+      meter_events: {
+        Row: {
+          created_at: string
+          effective_at: string
+          entity_id: string
+          entity_type: string
+          event_type: string
+          id: string
+          new_meter_serial: string | null
+          new_multiplier: number
+          new_multiplier_enabled: boolean
+          new_reading_value: number | null
+          notes: string | null
+          old_meter_serial: string | null
+          old_reading_convention: string | null
+          old_reading_value: number | null
+          performed_by: string | null
+          plant_id: string
+        }
+        Insert: {
+          created_at?: string
+          effective_at?: string
+          entity_id: string
+          entity_type: string
+          event_type: string
+          id?: string
+          new_meter_serial?: string | null
+          new_multiplier?: number
+          new_multiplier_enabled?: boolean
+          new_reading_value?: number | null
+          notes?: string | null
+          old_meter_serial?: string | null
+          old_reading_convention?: string | null
+          old_reading_value?: number | null
+          performed_by?: string | null
+          plant_id: string
+        }
+        Update: {
+          created_at?: string
+          effective_at?: string
+          entity_id?: string
+          entity_type?: string
+          event_type?: string
+          id?: string
+          new_meter_serial?: string | null
+          new_multiplier?: number
+          new_multiplier_enabled?: boolean
+          new_reading_value?: number | null
+          notes?: string | null
+          old_meter_serial?: string | null
+          old_reading_convention?: string | null
+          old_reading_value?: number | null
+          performed_by?: string | null
+          plant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meter_events_performed_by_fkey"
+            columns: ["performed_by"]
+            isOneToOne: false
+            referencedRelation: "user_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meter_events_plant_id_fkey"
+            columns: ["plant_id"]
+            isOneToOne: false
+            referencedRelation: "plants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       locators: {
         Row: {
           address: string | null
@@ -2324,6 +2399,8 @@ export type Database = {
           product_meter_id: string | null
           status: Database["public"]["Enums"]["plant_status"]
           updated_at: string
+          meter_multiplier: number
+          multiplier_enabled: boolean
         }
         Insert: {
           address?: string | null
@@ -2345,6 +2422,8 @@ export type Database = {
           product_meter_id?: string | null
           status?: Database["public"]["Enums"]["plant_status"]
           updated_at?: string
+          meter_multiplier?: number
+          multiplier_enabled?: boolean
         }
         Update: {
           address?: string | null
@@ -2366,6 +2445,8 @@ export type Database = {
           product_meter_id?: string | null
           status?: Database["public"]["Enums"]["plant_status"]
           updated_at?: string
+          meter_multiplier?: number
+          multiplier_enabled?: boolean
         }
         Relationships: [
           {
@@ -3231,6 +3312,7 @@ export type Database = {
           production_volume: number | null
           reading_datetime: string
           recorded_by: string | null
+          multiplier_at_reading: number
         }
         Insert: {
           created_at?: string
@@ -3250,6 +3332,7 @@ export type Database = {
           production_volume?: number | null
           reading_datetime?: string
           recorded_by?: string | null
+          multiplier_at_reading?: number
         }
         Update: {
           created_at?: string
@@ -3269,6 +3352,7 @@ export type Database = {
           production_volume?: number | null
           reading_datetime?: string
           recorded_by?: string | null
+          multiplier_at_reading?: number
         }
         Relationships: [
           {
@@ -3423,6 +3507,8 @@ export type Database = {
           sort_order: number
           status: string
           updated_at: string
+          meter_multiplier: number
+          multiplier_enabled: boolean
         }
         Insert: {
           created_at?: string
@@ -3435,6 +3521,8 @@ export type Database = {
           sort_order?: number
           status?: string
           updated_at?: string
+          meter_multiplier?: number
+          multiplier_enabled?: boolean
         }
         Update: {
           created_at?: string
@@ -3447,6 +3535,8 @@ export type Database = {
           sort_order?: number
           status?: string
           updated_at?: string
+          meter_multiplier?: number
+          multiplier_enabled?: boolean
         }
         Relationships: [
           {
@@ -5215,6 +5305,7 @@ export type Database = {
           tds_ppm: number | null
           turbidity_ntu: number | null
           well_id: string
+          multiplier_at_reading: number
         }
         Insert: {
           created_at?: string
@@ -5241,6 +5332,7 @@ export type Database = {
           tds_ppm?: number | null
           turbidity_ntu?: number | null
           well_id: string
+          multiplier_at_reading?: number
         }
         Update: {
           created_at?: string
@@ -5267,6 +5359,7 @@ export type Database = {
           tds_ppm?: number | null
           turbidity_ntu?: number | null
           well_id?: string
+          multiplier_at_reading?: number
         }
         Relationships: [
           {
@@ -5336,6 +5429,8 @@ export type Database = {
           size: string | null
           status: Database["public"]["Enums"]["plant_status"]
           updated_at: string
+          meter_multiplier: number
+          multiplier_enabled: boolean
         }
         Insert: {
           created_at?: string
@@ -5359,6 +5454,8 @@ export type Database = {
           size?: string | null
           status?: Database["public"]["Enums"]["plant_status"]
           updated_at?: string
+          meter_multiplier?: number
+          multiplier_enabled?: boolean
         }
         Update: {
           created_at?: string
@@ -5382,6 +5479,8 @@ export type Database = {
           size?: string | null
           status?: Database["public"]["Enums"]["plant_status"]
           updated_at?: string
+          meter_multiplier?: number
+          multiplier_enabled?: boolean
         }
         Relationships: [
           {
