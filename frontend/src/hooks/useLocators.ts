@@ -32,8 +32,6 @@ export interface Locator {
    * case so movement while locked can be caught.
    */
   is_locked: boolean;
-  meter_multiplier: number;
-  multiplier_enabled: boolean;
   created_at: string;
   updated_at: string;
 }

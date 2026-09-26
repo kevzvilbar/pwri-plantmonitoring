@@ -91,14 +91,4 @@ describe('computeEntityDeltas', () => {
     const out = computeEntityDeltas(readings, 'well_id', null);
     expect(out.map((o) => o.delta)).toEqual([100, 100]);
   });
-
-  it('multiplies raw deltas by multiplier_at_reading when configured on readings', () => {
-    const readings = [
-      { well_id: 'w1', reading_datetime: iso('2026-07-01'), current_reading: 10, previous_reading: 0, multiplier_at_reading: 10 },
-      { well_id: 'w1', reading_datetime: iso('2026-07-02'), current_reading: 25, multiplier_at_reading: 10 },
-    ];
-    const out = computeEntityDeltas(readings, 'well_id', null);
-    // (10 - 0) * 10 = 100; (25 - 10) * 10 = 150
-    expect(out.map((o) => o.delta)).toEqual([100, 150]);
-  });
 });
