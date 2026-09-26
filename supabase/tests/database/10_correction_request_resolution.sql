@@ -64,6 +64,10 @@ BEGIN
   VALUES (f.well_id, f.plant_id, 'Test Well 1', 'Active');
 
   -- Create Users
+  -- user_profiles.id has a foreign key to auth.users(id) (user_profiles_id_fkey),
+  -- so the auth.users row must exist first -- see 01/03/05/08/09 for the same pattern.
+  INSERT INTO auth.users (id) VALUES (f.reviewer_id), (f.operator_id);
+
   INSERT INTO public.user_profiles (id, first_name, last_name, status, plant_assignments)
   VALUES (f.reviewer_id, 'Admin', 'User', 'Active'::profile_status, ARRAY[f.plant_id]);
   INSERT INTO public.user_roles (user_id, role) VALUES (f.reviewer_id, 'Admin');

@@ -41,6 +41,10 @@ BEGIN
     'independent', 'AFM', 'Cartridge Filter', false, true
   );
 
+  -- shift_duty_log.operator_id / partner_operator_id reference auth.users
+  -- (not user_profiles) directly -- see 20260926000003_shift_duty_log.sql.
+  INSERT INTO auth.users (id) VALUES (f.op1_id), (f.op2_id);
+
   INSERT INTO public.shift_duty_log (
     plant_id, operator_id, partner_operator_id, is_dual_duty, cycle_key
   ) VALUES (
