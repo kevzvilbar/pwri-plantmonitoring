@@ -163,8 +163,8 @@ export function usePowerFormState() {
       return (minimal ?? []) as any[];
     },
     enabled: !!plantId,
-    staleTime: 120_000,
-    refetchInterval: 120_000,
+    staleTime: 5 * 60_000,
+    refetchInterval: false,
   });
 
   const { data: powerHistory14d } = useQuery({

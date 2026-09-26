@@ -47,8 +47,8 @@ export function ProductMetersStat({ plantId, variant = 'default' }: { plantId: s
       );
       return results.flatMap((r) => r);
     },
-    staleTime: 60_000,
-    refetchInterval: 60_000,
+    staleTime: 5 * 60_000,
+    refetchInterval: false,
     enabled: !!plantId && meterIds.length > 0,
   });
 

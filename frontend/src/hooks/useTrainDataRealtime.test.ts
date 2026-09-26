@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook } from '@testing-library/react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useTrainDataRealtime, trainRealtimeInvalidationKeys, TABLE_INVALIDATION_KEYS } from './useTrainDataRealtime';
@@ -58,6 +58,8 @@ describe('useTrainDataRealtime', () => {
     expect(keys.length).toEqual(uniqueKeys.size);
     expect(keys).toContain('trains');
     expect(keys).toContain('well-readings');
+    expect(keys).toContain('op-power-recent');
+    expect(keys).toContain('product-readings-latest-v2');
   });
 
   it('subscribes to channels and debounces invalidation bursts', () => {
@@ -87,4 +89,16 @@ describe('useTrainDataRealtime', () => {
       expect(mockInvalidateQueries).toHaveBeenCalledWith({ queryKey: [key] });
     }
   });
+
+  it('subscribes with plant filter when plantIdOverride is provided', () => {
+    renderHook(() => useTrainDataRealtime('plant-123'));
+
+    expect(supabase.channel).toHaveBeenCalledWith(expect.stringContaining('plant-123'));
+    expect(mockChannel.on).toHaveBeenCalledWith(
+      'postgres_changes',
+      expect.objectContaining({ filter: 'plant_id=eq.plant-123' }),
+      expect.any(Function),
+    );
+  });
 });
+

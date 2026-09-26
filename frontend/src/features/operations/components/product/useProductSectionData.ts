@@ -97,6 +97,8 @@ export function useProductSectionData({
 
   const meterIds = useMemo(() => (meters ?? []).map((m: any) => m.id as string), [meters]);
 
+  const PRODUCT_LATEST_FIELDS = 'id, plant_id, meter_id, reading_datetime, current_reading, recorded_by, remarks, is_estimated, norm_status' as const;
+
   const { data: latestReadings } = useQuery({
     queryKey: ['product-readings-latest-v2', plantId, meterIds],
     queryFn: async () => {
@@ -105,7 +107,7 @@ export function useProductSectionData({
         meterIds.map(async (id) => {
           const { data, error } = await supabase
             .from('product_meter_readings' as any)
-            .select('*')
+            .select(PRODUCT_LATEST_FIELDS)
             .eq('meter_id', id)
             .or('norm_status.is.null,norm_status.neq.retracted')
             .order('reading_datetime', { ascending: false })
@@ -113,7 +115,7 @@ export function useProductSectionData({
           if (error) {
             const { data: fallback } = await supabase
               .from('product_meter_readings' as any)
-              .select('*')
+              .select(PRODUCT_LATEST_FIELDS)
               .eq('meter_id', id)
               .order('reading_datetime', { ascending: false })
               .limit(1);
@@ -125,8 +127,8 @@ export function useProductSectionData({
       return results.flatMap((r) => r);
     },
     enabled: !!plantId && meterIds.length > 0,
-    staleTime: 60_000,
-    refetchInterval: 60_000,
+    staleTime: 5 * 60_000,
+    refetchInterval: false,
   });
 
   const latestByMeter = useMemo(() => {

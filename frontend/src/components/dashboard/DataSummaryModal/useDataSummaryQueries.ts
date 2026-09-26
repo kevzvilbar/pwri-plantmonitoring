@@ -56,9 +56,9 @@ export function useDataSummaryQueries({ open, plantIds }: DataSummaryQueriesOpti
   const startISO = new Date(fromStr + 'T00:00:00').toISOString();
   const endISO   = new Date(toStr   + 'T23:59:59').toISOString();
 
-  // EGRESS OPTIMIZATION: Relax open-modal polling from 30s to 2min (cuts egress by 75%)
-  const MODAL_STALE_TIME = 2 * 60_000;
-  const MODAL_REFETCH_INTERVAL = open ? 2 * 60_000 : false;
+  // EGRESS & LOG QUOTA OPTIMIZATION: Realtime invalidations handle data updates
+  const MODAL_STALE_TIME = 5 * 60_000;
+  const MODAL_REFETCH_INTERVAL = false;
 
   const { data: locators, isLoading: locatorsLoading } = useQuery({
     queryKey: ['dsm-locators', plantIds],

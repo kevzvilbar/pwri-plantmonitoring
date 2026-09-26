@@ -15,8 +15,8 @@ export function usePendingApprovalsCount(enabled = true): number {
   const { data } = useQuery({
     queryKey: PENDING_APPROVALS_COUNT_KEY,
     enabled,
-    staleTime: 30_000,
-    refetchInterval: 60_000,
+    staleTime: 60_000,
+    refetchInterval: 5 * 60_000,
     queryFn: async () => {
       const { count, error } = await supabase
         .from('user_profiles')

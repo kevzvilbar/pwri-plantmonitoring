@@ -16,6 +16,7 @@
 import { useEffect, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { usePlantStore } from '@/store/plantStore';
 
 /** The tables this hook subscribes to via Supabase Realtime. */
 export const APP_REALTIME_TABLES = [
@@ -92,10 +93,12 @@ export const TABLE_INVALIDATION_KEYS: Record<string, string[]> = {
     'well-readings',
     'op-wells',
     'op-well-recent',
+    'op-well-latest',
     'op-well-latest-fresh',
     'wells-summary-counts',
     'well-gaps',
     'well-reading-gaps',
+    'well-gap-reasons',
     'reading-coverage',
     'water-balance-totals',
     'plant-freshness',
@@ -115,6 +118,8 @@ export const TABLE_INVALIDATION_KEYS: Record<string, string[]> = {
     'locator-readings',
     'locator-gaps',
     'locator-reading-gaps',
+    'locator-gap-reasons',
+    'derived-review-flag',
     'reading-coverage',
     'water-balance-totals',
     'plant-freshness',
@@ -130,6 +135,8 @@ export const TABLE_INVALIDATION_KEYS: Record<string, string[]> = {
     'trend-power',
     'power-readings',
     'power-summary',
+    'op-power-recent',
+    'op-power-history-14d',
     'alerts-feed',
   ],
   product_meter_readings: [
@@ -139,6 +146,11 @@ export const TABLE_INVALIDATION_KEYS: Record<string, string[]> = {
     'trend-product',
     'plant-freshness',
     'op-product-recent',
+    'product-readings-latest-v2',
+    'product-readings-10day',
+    'product-meter-last-readings',
+    'product-meter-latest-readings-stat',
+    'product-gap-reasons',
     'dashboard-pending-counts',
     'wb-product-readings',
   ],
@@ -178,8 +190,10 @@ export function trainRealtimeInvalidationKeys(): string[] {
 
 const DEBOUNCE_MS = 2000;
 
-export function useTrainDataRealtime() {
+export function useTrainDataRealtime(plantIdOverride?: string | null) {
   const qc = useQueryClient();
+  const selectedPlantId = usePlantStore((s) => s.selectedPlantId);
+  const activePlantId = plantIdOverride !== undefined ? plantIdOverride : selectedPlantId;
   const pendingKeysRef = useRef<Set<string>>(new Set());
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -196,11 +210,19 @@ export function useTrainDataRealtime() {
       // Fresh uid per effect run for StrictMode double-mount compatibility
       const uid = Math.random().toString(36).slice(2, 9);
       const keys = TABLE_INVALIDATION_KEYS[table] ?? [];
+      const channelName = activePlantId
+        ? `rt-${table}-${activePlantId}-${uid}`
+        : `rt-${table}-${uid}`;
+
+      const changeConfig = activePlantId
+        ? ({ event: '*', schema: 'public', table, filter: `plant_id=eq.${activePlantId}` } as const)
+        : ({ event: '*', schema: 'public', table } as const);
+
       return supabase
-        .channel(`rt-${table}-${uid}`)
+        .channel(channelName)
         .on(
           'postgres_changes',
-          { event: '*', schema: 'public', table },
+          changeConfig as any,
           () => {
             for (const key of keys) {
               pendingKeysRef.current.add(key);
@@ -223,5 +245,5 @@ export function useTrainDataRealtime() {
         supabase.removeChannel(ch);
       }
     };
-  }, [qc]);
+  }, [qc, activePlantId]);
 }

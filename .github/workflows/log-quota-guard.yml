@@ -1,0 +1,36 @@
+name: Log Quota and Traffic Regression Guard
+
+# Weekly automated audit (LOG-QUOTA-REMEDIATION-PLAN.md & EGRESS-REDUCTION-PLAN.md Phase 6)
+# Queries Supabase Edge Logs over a 1-hour window to ensure no REST endpoint
+# has regressed into unthrottled periodic polling loops.
+# Runs every Monday at 02:00 UTC (10:00 PHT).
+
+on:
+  schedule:
+    - cron: '0 2 * * 1'
+  workflow_dispatch:
+    inputs:
+      hourly_threshold:
+        description: 'Max allowed requests per hour per endpoint (default: 500)'
+        required: false
+        default: '500'
+
+jobs:
+  check-traffic:
+    name: Check REST Log Volume & Codebase Polling
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Run Log Quota Guard
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF || 'sosfbfxovtleuvahxvpm' }}
+          LOG_REQUEST_THRESHOLD: ${{ inputs.hourly_threshold || '500' }}
+        run: node scripts/check-log-quota.mjs

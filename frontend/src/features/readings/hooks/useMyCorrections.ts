@@ -17,7 +17,7 @@ export function useMyCorrections() {
     queryKey: queryKeys.corrections.myRequests(userId),
     queryFn: () => fetchMyCorrectionRequests(userId),
     enabled: Boolean(userId),
-    staleTime: 30_000,
-    refetchInterval: 60_000,
+    staleTime: 60_000,
+    refetchInterval: 5 * 60_000,
   });
 }

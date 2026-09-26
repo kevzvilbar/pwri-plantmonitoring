@@ -69,9 +69,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // genuine sign-in apart from a same-user event (TOKEN_REFRESHED, etc.).
   const userIdRef = useRef<string | null>(null);
 
+  const USER_PROFILE_FIELDS = 'id, username, first_name, middle_name, last_name, suffix, designation, immediate_head_id, plant_assignments, status, profile_complete, confirmed' as const;
+
   const loadProfileAndRoles = async (uid: string) => {
     const [{ data: prof }, { data: roleRows }] = await Promise.all([
-      supabase.from('user_profiles').select('*').eq('id', uid).maybeSingle(),
+      supabase.from('user_profiles').select(USER_PROFILE_FIELDS).eq('id', uid).maybeSingle(),
       supabase.from('user_roles').select('role').eq('user_id', uid),
     ]);
     setProfile((prof as Profile) ?? null);
@@ -85,7 +87,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Load the selected operator's profile whenever activeOperatorId changes
   useEffect(() => {
     if (!activeOperatorId) { setOperatorProfile(null); return; }
-    supabase.from('user_profiles').select('*').eq('id', activeOperatorId).maybeSingle().then(({ data }) => {
+    supabase.from('user_profiles').select(USER_PROFILE_FIELDS).eq('id', activeOperatorId).maybeSingle().then(({ data }) => {
       if (!data) { setActiveOperatorIdRef.current(null); setOperatorProfile(null); return; }
       setOperatorProfile(data as Profile);
     });

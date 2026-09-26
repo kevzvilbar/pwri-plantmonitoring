@@ -61,8 +61,8 @@ export function DerivedMeterPanel({
       return data as { id: string; date_key: string; flagged_at: string } | null;
     },
     enabled: !!locator.is_derived,
-    staleTime: 60_000,
-    refetchInterval: 60_000,
+    staleTime: 5 * 60_000,
+    refetchInterval: false,
   });
 
   if (!locator.is_derived) return null;

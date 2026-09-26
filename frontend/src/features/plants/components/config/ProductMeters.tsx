@@ -153,8 +153,8 @@ export function ProductMetersCard({ plant, highlightId }: { plant: any; highligh
       return results.flatMap((r) => r);
     },
     enabled: !!plant.id && meterIds.length > 0,
-    staleTime: 60_000,
-    refetchInterval: 60_000,
+    staleTime: 5 * 60_000,
+    refetchInterval: false,
   });
   const latestDtByMeter = useMemo(() => {
     const map: Record<string, string> = {};
