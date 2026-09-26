@@ -121,12 +121,19 @@ export function PretreatmentAndROLog() {
   // prevPretreatReadings resolve independently of the trains query, so applying this
   // the instant `train` loads can lock in a default computed from a stale/missing
   // lastReadingTime (and never re-check, since it only runs once per train).
+  //
+  // Key the guard on "trainId + settled" so the effect re-runs once after loading
+  // completes. Without the ":settled" suffix the effect fires when the train first
+  // mounts (loading = true, skipped by the guard), sets the ref, then when loading
+  // flips to false the guard sees the same trainId and skips — leaving offlineReason
+  // stuck at '' even when latestStatusLog.reason already holds "High Pressure trip".
   const autoInitializedTrainId = useRef<string | null>(null);
   useEffect(() => {
     if (!train) return;
     if (data.isStatusLoading) return;
-    if (autoInitializedTrainId.current !== train.id) {
-      autoInitializedTrainId.current = train.id;
+    const guardKey = `${train.id}:settled`;
+    if (autoInitializedTrainId.current !== guardKey) {
+      autoInitializedTrainId.current = guardKey;
       if (data.isEffectivelyOffline) {
         form.setTrainOnline(false);
         // Requirement: "The start time of the offline period will be set automatically from the auto-flag trigger time."
