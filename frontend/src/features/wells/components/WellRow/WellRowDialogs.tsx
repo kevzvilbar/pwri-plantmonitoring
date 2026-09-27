@@ -42,6 +42,7 @@ export function WellRowDialogs({
           entityId={well.id}
           plantId={plantId}
           assetMeterSerial={well.meter_serial}
+          multiplier={well.multiplier_enabled ? Number(well.meter_multiplier ?? 1) : 1}
           onClose={onCloseHistory}
         />
       )}

@@ -386,6 +386,7 @@ function LocatorRow({
           plantId={plantId}
           assetMeterSerial={locator.meter_serial}
           defaultInputMode={locator.default_input_mode === 'direct' ? 'direct' : 'raw'}
+          multiplier={locator.multiplier_enabled ? Number(locator.meter_multiplier ?? 1) : 1}
           onClose={() => setShowHistory(false)}
         />
       )}
