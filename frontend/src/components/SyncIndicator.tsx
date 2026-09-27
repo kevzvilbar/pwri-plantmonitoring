@@ -21,6 +21,8 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
+import { usePendingOutboxCount } from '@/lib/offlineOutbox';
+
 export interface SyncIndicatorProps {
   trigger?: React.ReactNode;
   showOnlyActiveOnMobile?: boolean;
@@ -34,6 +36,7 @@ export function SyncIndicator({
 }: SyncIndicatorProps = {}) {
   const { status, lastSynced, error, setStatus, setLastSynced, setError } = useSyncStore();
   const qc = useQueryClient();
+  const pendingOutboxCount = usePendingOutboxCount();
 
   const lastToastedErr = useRef<string | null>(null);
 
@@ -41,6 +44,8 @@ export function SyncIndicator({
     if (status === 'syncing') return;
     setStatus('syncing');
     try {
+      // Resume any paused offline mutations first
+      await qc.resumePausedMutations();
       await qc.refetchQueries({ type: 'active' }, { throwOnError: true });
       setLastSynced(new Date());
       setError(null);
@@ -72,6 +77,8 @@ export function SyncIndicator({
     label = 'Syncing…';
   } else if (status === 'error') {
     label = 'Sync failed — data may be stale';
+  } else if (pendingOutboxCount > 0) {
+    label = `${pendingOutboxCount} update${pendingOutboxCount === 1 ? '' : 's'} waiting to sync`;
   } else if (lastSynced) {
     label = 'Last synced ' + formatDistanceToNow(lastSynced, { addSuffix: true });
   } else {
@@ -82,7 +89,7 @@ export function SyncIndicator({
   const isError   = status === 'error';
 
   // If configured to only show when active on mobile and currently idle, hide it
-  if (showOnlyActiveOnMobile && !isSyncing && !isError) {
+  if (showOnlyActiveOnMobile && !isSyncing && !isError && pendingOutboxCount === 0) {
     return null;
   }
 
@@ -112,11 +119,24 @@ export function SyncIndicator({
             {!isSyncing && !isError && (
               <Clock className="h-4 w-4" aria-hidden />
             )}
+            {pendingOutboxCount > 0 && !isSyncing && (
+              <span
+                aria-label={`${pendingOutboxCount} offline changes pending sync`}
+                className="absolute -top-1 -right-1 bg-amber-500 text-zinc-950 text-[10px] font-bold rounded-full h-4 min-w-[16px] px-1 flex items-center justify-center shadow pointer-events-none"
+              >
+                {pendingOutboxCount > 99 ? '99+' : pendingOutboxCount}
+              </span>
+            )}
           </button>
         )}
       </PopoverTrigger>
       <PopoverContent side="bottom" align="end" className="w-56 p-3 text-xs">
         <p className={cn('font-medium', isError ? 'text-warn' : 'text-foreground')}>{label}</p>
+        {pendingOutboxCount > 0 && (
+          <p className="text-[11px] text-muted-foreground mt-1">
+            {pendingOutboxCount} offline modification{pendingOutboxCount === 1 ? '' : 's'} will automatically upload when network returns.
+          </p>
+        )}
         <Button
           size="sm"
           variant="outline"

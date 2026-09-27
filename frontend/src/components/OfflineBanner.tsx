@@ -25,15 +25,24 @@ import { useOnlineStatus } from '@/hooks/useOnlineStatus';
  * visible, and collapses back to nothing the moment connectivity returns.
  */
 import { InstrumentBanner } from '@/components/InstrumentBanner';
+import { usePendingOutboxCount } from '@/lib/offlineOutbox';
 
 export function OfflineBanner() {
   const isOnline = useOnlineStatus();
+  const pendingCount = usePendingOutboxCount();
   if (isOnline) return null;
 
   return (
     <div className="px-4 py-2 bg-background border-b border-border/60">
       <InstrumentBanner tone="warn" icon={WifiOff} className="max-w-[1600px] mx-auto">
-        <span><strong className="font-semibold text-warn">Offline Mode Active:</strong> You are currently offline. Reference and configuration data are served from offline cache. Unsaved form inputs are preserved in local drafts until connection is restored.</span>
+        <span>
+          <strong className="font-semibold text-warn">Offline Mode Active:</strong>{' '}
+          {pendingCount > 0 ? (
+            <>{pendingCount} offline update{pendingCount === 1 ? '' : 's'} queued to sync on reconnect. Reference and configuration data are served from offline cache.</>
+          ) : (
+            <>You are currently offline. Reference and configuration data are served from offline cache. Unsaved form inputs are preserved in local drafts until connection is restored.</>
+          )}
+        </span>
       </InstrumentBanner>
     </div>
   );
