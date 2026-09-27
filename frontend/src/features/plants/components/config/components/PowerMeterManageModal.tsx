@@ -47,10 +47,18 @@ export function PowerMeterManageModal({
     if (activeCfg.solar_meter_count != null) setSolarCount(activeCfg.solar_meter_count);
     if (activeCfg.grid_meter_count != null) setGridCount(activeCfg.grid_meter_count);
     if (Array.isArray(activeCfg.solar_meter_names) && activeCfg.solar_meter_names.length) {
-      setSolarNames(activeCfg.solar_meter_names);
+      setSolarNames(prev => {
+        const next = [...prev];
+        activeCfg.solar_meter_names!.forEach((n, idx) => { next[idx] = n; });
+        return next;
+      });
     }
     if (Array.isArray(activeCfg.grid_meter_names) && activeCfg.grid_meter_names.length) {
-      setGridNames(activeCfg.grid_meter_names);
+      setGridNames(prev => {
+        const next = [...prev];
+        activeCfg.grid_meter_names!.forEach((n, idx) => { next[idx] = n; });
+        return next;
+      });
     }
     isDirty.current = false;
   }, [activeCfg, open]);

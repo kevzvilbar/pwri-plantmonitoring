@@ -31,25 +31,27 @@ export const UNSYNCED_POWER_CONFIG_LS = (plantId: string) => `plant_power_config
 export function normalizePowerConfig(raw: any): PlantPowerConfig {
   if (!raw || typeof raw !== 'object') return { ...DEFAULT_POWER_CONFIG };
 
-  const gridCount = typeof raw.grid_meter_count === 'number' && raw.grid_meter_count > 0
-    ? Math.min(20, Math.max(1, raw.grid_meter_count))
-    : DEFAULT_POWER_CONFIG.grid_meter_count;
-
-  const solarCount = typeof raw.solar_meter_count === 'number' && raw.solar_meter_count > 0
-    ? Math.min(20, Math.max(1, raw.solar_meter_count))
-    : DEFAULT_POWER_CONFIG.solar_meter_count;
-
   const rawGridNames = Array.isArray(raw.grid_meter_names) ? raw.grid_meter_names : [];
+  const rawGridMults = Array.isArray(raw.grid_meter_multipliers) ? raw.grid_meter_multipliers : [];
+  const rawSolarNames = Array.isArray(raw.solar_meter_names) ? raw.solar_meter_names : [];
+  const rawSolarMults = Array.isArray(raw.solar_meter_multipliers) ? raw.solar_meter_multipliers : [];
+
+  const explicitGridCount =
+    typeof raw.grid_meter_count === 'number' && raw.grid_meter_count > 0 ? raw.grid_meter_count : 1;
+  const gridCount = Math.min(20, Math.max(explicitGridCount, rawGridNames.length, rawGridMults.length, 1));
+
+  const explicitSolarCount =
+    typeof raw.solar_meter_count === 'number' && raw.solar_meter_count > 0 ? raw.solar_meter_count : 1;
+  const solarCount = Math.min(20, Math.max(explicitSolarCount, rawSolarNames.length, rawSolarMults.length, 1));
+
   const gridNames: string[] = Array.from({ length: gridCount }, (_, i) => {
     return rawGridNames[i] || (gridCount === 1 ? 'Grid Meter' : `Grid Meter ${i + 1}`);
   });
 
-  const rawSolarNames = Array.isArray(raw.solar_meter_names) ? raw.solar_meter_names : [];
   const solarNames: string[] = Array.from({ length: solarCount }, (_, i) => {
     return rawSolarNames[i] || (solarCount === 1 ? 'Solar Meter' : `Solar Meter ${i + 1}`);
   });
 
-  const rawGridMults = Array.isArray(raw.grid_meter_multipliers) ? raw.grid_meter_multipliers : [];
   const gridMultipliers: number[] = Array.from({ length: gridCount }, (_, i) => {
     const val = Number(rawGridMults[i]);
     return Number.isFinite(val) && val > 0 ? val : 1;
@@ -61,7 +63,6 @@ export function normalizePowerConfig(raw: any): PlantPowerConfig {
     return gridMultipliers[i] > 1;
   });
 
-  const rawSolarMults = Array.isArray(raw.solar_meter_multipliers) ? raw.solar_meter_multipliers : [];
   const solarMultipliers: number[] = Array.from({ length: solarCount }, (_, i) => {
     const val = Number(rawSolarMults[i]);
     return Number.isFinite(val) && val > 0 ? val : 1;
@@ -93,30 +94,59 @@ export function usePlantPowerConfig(plantId: string | null | undefined) {
     enabled: !!plantId,
     staleTime: 30_000,
     queryFn: async () => {
-      // 1. Try Supabase DB first
+      // 1. Read localStorage first for any local multi-meter configuration
+      let localRaw: string | null = null;
+      try {
+        localRaw =
+          localStorage.getItem(UNSYNCED_POWER_CONFIG_LS(plantId!)) ||
+          localStorage.getItem(POWER_CONFIG_LS(plantId!)) ||
+          localStorage.getItem(`plant_power_config_${plantId}`) ||
+          localStorage.getItem(`plant_power_config_unsynced_${plantId}`);
+      } catch {
+        /* ignore */
+      }
+
+      let localCfg: PlantPowerConfig | null = null;
+      if (localRaw) {
+        try {
+          localCfg = normalizePowerConfig(JSON.parse(localRaw));
+        } catch {
+          /* ignore */
+        }
+      }
+
+      // 2. Query Supabase DB
+      let dbCfg: PlantPowerConfig | null = null;
       try {
         const { data, error } = await (supabase.from('plant_power_config' as any) as any)
-          .select('solar_meter_count, solar_meter_names, solar_meter_multipliers, solar_meter_multipliers_enabled, grid_meter_count, grid_meter_names, grid_meter_multipliers, grid_meter_multipliers_enabled')
+          .select(
+            'solar_meter_count, solar_meter_names, solar_meter_multipliers, solar_meter_multipliers_enabled, grid_meter_count, grid_meter_names, grid_meter_multipliers, grid_meter_multipliers_enabled'
+          )
           .eq('plant_id', plantId)
           .maybeSingle();
 
         if (!error && data) {
-          return normalizePowerConfig(data);
+          dbCfg = normalizePowerConfig(data);
         }
       } catch {
         /* table may not exist yet or query failed */
       }
 
-      // 2. Fall back to localStorage (unsynced or standard key)
-      try {
-        const unsyncedRaw = localStorage.getItem(UNSYNCED_POWER_CONFIG_LS(plantId!));
-        if (unsyncedRaw) return normalizePowerConfig(JSON.parse(unsyncedRaw));
-
-        const standardRaw = localStorage.getItem(POWER_CONFIG_LS(plantId!));
-        if (standardRaw) return normalizePowerConfig(JSON.parse(standardRaw));
-      } catch {
-        /* ignore localStorage parse issues */
+      // Precedence Protection:
+      // If local storage contains richer multi-meter data than a default/empty 1-meter DB row,
+      // preserve the local multi-meter configuration so it is NEVER lost!
+      if (
+        localCfg &&
+        (localCfg.grid_meter_count > (dbCfg?.grid_meter_count ?? 1) ||
+          localCfg.solar_meter_count > (dbCfg?.solar_meter_count ?? 1) ||
+          (localCfg.grid_meter_names.some((n, i) => n !== `Grid Meter ${i + 1}` && n !== 'Grid Meter') &&
+            (!dbCfg || dbCfg.grid_meter_names.every((n, i) => n === `Grid Meter ${i + 1}` || n === 'Grid Meter'))))
+      ) {
+        return localCfg;
       }
+
+      if (dbCfg) return dbCfg;
+      if (localCfg) return localCfg;
 
       return { ...DEFAULT_POWER_CONFIG };
     },
@@ -161,35 +191,33 @@ export function usePlantPowerConfig(plantId: string | null | undefined) {
   );
 
   // ── Retry-on-load / Self-healing sync ─────────────────────────────────────
-  // If a previous savePowerConfig() failed to reach DB, or if legacy local-only
-  // configuration exists on this device, push to Supabase on mount.
   useEffect(() => {
     if (!plantId) return;
     let cancelled = false;
 
     (async () => {
-      let pendingRaw: string | null = null;
+      let pendingCfg: PlantPowerConfig | null = null;
       try {
-        pendingRaw = localStorage.getItem(UNSYNCED_POWER_CONFIG_LS(plantId));
+        const unsyncedRaw = localStorage.getItem(UNSYNCED_POWER_CONFIG_LS(plantId));
+        if (unsyncedRaw) pendingCfg = normalizePowerConfig(JSON.parse(unsyncedRaw));
       } catch {
         /* ignore */
       }
 
-      // If no unsynced marker, check for local storage configuration that needs syncing
-      if (!pendingRaw) {
+      if (!pendingCfg) {
         try {
-          const localRaw = localStorage.getItem(POWER_CONFIG_LS(plantId));
+          const localRaw =
+            localStorage.getItem(POWER_CONFIG_LS(plantId)) ||
+            localStorage.getItem(`plant_power_config_${plantId}`) ||
+            localStorage.getItem(`power_config_${plantId}`);
           if (localRaw) {
-            // Check if DB lacks multi-meter configuration
-            const parsed = JSON.parse(localRaw);
+            const parsed = normalizePowerConfig(JSON.parse(localRaw));
             if (
-              parsed &&
-              (parsed.grid_meter_count > 1 ||
-                parsed.solar_meter_count > 1 ||
-                (Array.isArray(parsed.grid_meter_names) && parsed.grid_meter_names.length > 1) ||
-                (Array.isArray(parsed.grid_meter_multipliers) && parsed.grid_meter_multipliers.length > 1))
+              parsed.grid_meter_count > 1 ||
+              parsed.solar_meter_count > 1 ||
+              parsed.grid_meter_names.some((n, i) => n !== `Grid Meter ${i + 1}` && n !== 'Grid Meter')
             ) {
-              pendingRaw = localRaw;
+              pendingCfg = parsed;
             }
           }
         } catch {
@@ -197,15 +225,14 @@ export function usePlantPowerConfig(plantId: string | null | undefined) {
         }
       }
 
-      if (!pendingRaw) return;
+      if (!pendingCfg) return;
 
       try {
-        const pending = normalizePowerConfig(JSON.parse(pendingRaw));
-        const ok = await pushToDb(pending);
+        const ok = await pushToDb(pendingCfg);
         if (ok && !cancelled) {
           try {
             localStorage.removeItem(UNSYNCED_POWER_CONFIG_LS(plantId));
-            localStorage.setItem(POWER_CONFIG_LS(plantId), JSON.stringify(pending));
+            localStorage.setItem(POWER_CONFIG_LS(plantId), JSON.stringify(pendingCfg));
           } catch {
             /* ignore */
           }
@@ -255,10 +282,56 @@ export function usePlantPowerConfig(plantId: string | null | undefined) {
     return savedToDb;
   };
 
+  const addMeter = async (
+    kind: 'grid' | 'solar',
+    customName?: string,
+    multiplier: number = 1,
+    multiplierEnabled: boolean = false
+  ) => {
+    if (!plantId) return false;
+    const current = powerConfig ?? DEFAULT_POWER_CONFIG;
+    if (kind === 'grid') {
+      const nextCount = Math.min(20, current.grid_meter_count + 1);
+      const nextNames = [...current.grid_meter_names];
+      nextNames.push(customName?.trim() || `Grid Meter ${nextCount}`);
+      const nextMults = [...current.grid_meter_multipliers];
+      nextMults.push(multiplier > 0 ? multiplier : 1);
+      const nextEnabled = [...current.grid_meter_multipliers_enabled];
+      nextEnabled.push(multiplierEnabled);
+
+      const nextCfg: PlantPowerConfig = {
+        ...current,
+        grid_meter_count: nextCount,
+        grid_meter_names: nextNames,
+        grid_meter_multipliers: nextMults,
+        grid_meter_multipliers_enabled: nextEnabled,
+      };
+      return await savePowerConfig(nextCfg);
+    } else {
+      const nextCount = Math.min(20, current.solar_meter_count + 1);
+      const nextNames = [...current.solar_meter_names];
+      nextNames.push(customName?.trim() || `Solar Meter ${nextCount}`);
+      const nextMults = [...current.solar_meter_multipliers];
+      nextMults.push(multiplier > 0 ? multiplier : 1);
+      const nextEnabled = [...current.solar_meter_multipliers_enabled];
+      nextEnabled.push(multiplierEnabled);
+
+      const nextCfg: PlantPowerConfig = {
+        ...current,
+        solar_meter_count: nextCount,
+        solar_meter_names: nextNames,
+        solar_meter_multipliers: nextMults,
+        solar_meter_multipliers_enabled: nextEnabled,
+      };
+      return await savePowerConfig(nextCfg);
+    }
+  };
+
   return {
     powerConfig: powerConfig ?? DEFAULT_POWER_CONFIG,
     isLoading,
     savePowerConfig,
+    addMeter,
     isLocalOnly,
   };
 }

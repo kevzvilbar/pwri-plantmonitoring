@@ -40,6 +40,17 @@ describe('usePlantPowerConfig and normalizePowerConfig', () => {
     expect(config.solar_meter_multipliers_enabled).toEqual([false]);
   });
 
+  it('infers count from array length if count is omitted or smaller', () => {
+    const raw = {
+      grid_meter_names: ['STP', 'Pumphouse', 'Main'],
+      grid_meter_multipliers: [1, 120, 2400],
+    };
+    const config = normalizePowerConfig(raw);
+    expect(config.grid_meter_count).toBe(3);
+    expect(config.grid_meter_names).toEqual(['STP', 'Pumphouse', 'Main']);
+    expect(config.grid_meter_multipliers).toEqual([1, 120, 2400]);
+  });
+
   it('generates proper localStorage keys for standard and unsynced data', () => {
     expect(POWER_CONFIG_LS('plant-srp-123')).toBe('power_config_plant-srp-123');
     expect(UNSYNCED_POWER_CONFIG_LS('plant-srp-123')).toBe('plant_power_config_unsynced_plant-srp-123');
