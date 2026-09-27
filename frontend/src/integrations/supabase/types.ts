@@ -2100,6 +2100,10 @@ export type Database = {
           remarks: string | null
           replaced_by: string | null
           replacement_date: string
+          old_multiplier: number | null
+          old_multiplier_enabled: boolean | null
+          new_multiplier: number | null
+          new_multiplier_enabled: boolean | null
         }
         Insert: {
           created_at?: string
@@ -2119,6 +2123,10 @@ export type Database = {
           remarks?: string | null
           replaced_by?: string | null
           replacement_date: string
+          old_multiplier?: number | null
+          old_multiplier_enabled?: boolean | null
+          new_multiplier?: number | null
+          new_multiplier_enabled?: boolean | null
         }
         Update: {
           created_at?: string
@@ -2138,6 +2146,10 @@ export type Database = {
           remarks?: string | null
           replaced_by?: string | null
           replacement_date?: string
+          old_multiplier?: number | null
+          old_multiplier_enabled?: boolean | null
+          new_multiplier?: number | null
+          new_multiplier_enabled?: boolean | null
         }
         Relationships: [
           {
@@ -3404,6 +3416,10 @@ export type Database = {
           remarks: string | null
           replaced_by: string | null
           replacement_date: string
+          old_multiplier: number | null
+          old_multiplier_enabled: boolean | null
+          new_multiplier: number | null
+          new_multiplier_enabled: boolean | null
         }
         Insert: {
           created_at?: string
@@ -3423,6 +3439,10 @@ export type Database = {
           remarks?: string | null
           replaced_by?: string | null
           replacement_date: string
+          old_multiplier?: number | null
+          old_multiplier_enabled?: boolean | null
+          new_multiplier?: number | null
+          new_multiplier_enabled?: boolean | null
         }
         Update: {
           created_at?: string
@@ -3442,6 +3462,10 @@ export type Database = {
           remarks?: string | null
           replaced_by?: string | null
           replacement_date?: string
+          old_multiplier?: number | null
+          old_multiplier_enabled?: boolean | null
+          new_multiplier?: number | null
+          new_multiplier_enabled?: boolean | null
         }
         Relationships: [
           {
@@ -5153,6 +5177,10 @@ export type Database = {
           replaced_by: string | null
           replacement_date: string
           well_id: string
+          old_multiplier: number | null
+          old_multiplier_enabled: boolean | null
+          new_multiplier: number | null
+          new_multiplier_enabled: boolean | null
         }
         Insert: {
           created_at?: string
@@ -5170,6 +5198,10 @@ export type Database = {
           replaced_by?: string | null
           replacement_date: string
           well_id: string
+          old_multiplier?: number | null
+          old_multiplier_enabled?: boolean | null
+          new_multiplier?: number | null
+          new_multiplier_enabled?: boolean | null
         }
         Update: {
           created_at?: string
@@ -5187,6 +5219,10 @@ export type Database = {
           replaced_by?: string | null
           replacement_date?: string
           well_id?: string
+          old_multiplier?: number | null
+          old_multiplier_enabled?: boolean | null
+          new_multiplier?: number | null
+          new_multiplier_enabled?: boolean | null
         }
         Relationships: [
           {
