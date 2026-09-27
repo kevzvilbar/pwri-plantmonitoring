@@ -23,13 +23,17 @@ interface StandardRowProps {
   isToggling: boolean;
   rowEditable: boolean;
   isEditing: boolean;
+  /** Entity-level multiplier passed in from the parent locator/well config.
+   *  Used as a display fallback for rows where multiplier_at_reading = 1
+   *  but the entity actually has an active multiplier (pre-backfill rows). */
+  entityMultiplier?: number;
 }
 
 export function StandardRow({
   r, i, rows, predecessor, module, isDirectMode,
   anyEditable, hasFullAccess, activeOperatorId, actions,
   dateStr, isMeterReplacement, isEstimated, isDeleting,
-  isToggling, rowEditable, isEditing,
+  isToggling, rowEditable, isEditing, entityMultiplier,
 }: StandardRowProps) {
   const prevReading = predecessor != null
     ? +predecessor.current_reading
@@ -39,11 +43,12 @@ export function StandardRow({
         !!r.is_meter_rollover, r.meter_rollover_max != null ? +r.meter_rollover_max : null)
     : null;
   // multiplier_at_reading is stamped per-row by the DB trigger at insert time (defaults
-  // to 1 when the entity has no multiplier configured). Prefer the server-computed
-  // daily_volume — it's authoritative (matches dashboard aggregates and isn't subject to
-  // the client-side rounding in calc.dailyVolume) — falling back to a local rawDelta ×
-  // multiplier calc only when daily_volume hasn't been fetched/populated yet.
-  const mult = r.multiplier_at_reading != null ? +r.multiplier_at_reading : 1;
+  // to 1 when the entity has no multiplier configured). For rows that predate the
+  // historical backfill (multiplier_at_reading == 1) but the entity currently has an
+  // active multiplier > 1, fall back to the entity-level multiplier so the table
+  // correctly shows ×N and the volume reflects the real multiplied value.
+  const storedMult = r.multiplier_at_reading != null ? +r.multiplier_at_reading : 1;
+  const mult = storedMult !== 1 ? storedMult : (entityMultiplier ?? 1);
   const effectiveDelta = r.daily_volume != null
     ? +r.daily_volume
     : (rawDelta != null ? rawDelta * mult : null);

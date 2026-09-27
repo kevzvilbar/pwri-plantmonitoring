@@ -19,10 +19,14 @@ interface TableBodyProps {
   getHistGridMult: (idx: number) => number;
   resolvedGridCount: number;
   meterFilter?: { type: 'solar'; idx: number } | { type: 'grid'; idx: number };
+  /** Entity-level multiplier (from the locator/well config). Used as a display
+   *  fallback for rows whose multiplier_at_reading is still the column DEFAULT (1)
+   *  before the historical backfill is applied. */
+  entityMultiplier?: number;
 }
 
 export function TableBody(props: TableBodyProps) {
-  const { rows, module, isDirectMode, isSolarDirectMode, solarDirectVal, anyEditable, hasFullAccess, activeOperatorId, actions, getHistGridLabel, getHistGridMult, resolvedGridCount, meterFilter } = props;
+  const { rows, module, isDirectMode, isSolarDirectMode, solarDirectVal, anyEditable, hasFullAccess, activeOperatorId, actions, getHistGridLabel, getHistGridMult, resolvedGridCount, meterFilter, entityMultiplier } = props;
 
   return (
     <tbody>
@@ -82,6 +86,7 @@ export function TableBody(props: TableBodyProps) {
             isMeterReplacement={isMeterReplacement}
             isEstimated={!!r.is_estimated} isDeleting={isDeleting}
             isToggling={isToggling} rowEditable={rowEditable} isEditing={isEditing}
+            entityMultiplier={entityMultiplier}
           />
         );
       })}

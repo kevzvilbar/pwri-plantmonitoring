@@ -1,6 +1,6 @@
 {
-  "maxWarnings": 2513,
-  "lastUpdated": "2026-09-26",
+  "maxWarnings": 2512,
+  "lastUpdated": "2026-09-27",
   "history": [
     {
       "date": "2026-09-26",
@@ -266,6 +266,11 @@
       "maxWarnings": 2513,
       "previous": 2512,
       "reason": "CI reported actual 2513 vs. committed 2512 (+1). Off-by-one from the prior reconciliation (2512 entry): the jsx-a11y/label-has-associated-control count is 15 in CI vs. the 14 that was used when the 2512 baseline was committed (ShiftHandoverModal.tsx Label without a paired control -- the same false-positive pattern as WellDialogs.tsx/ThemeSelector, not yet given the eslint-disable treatment). No frontend source changed; ceiling-only update. Only ESLint re-run to confirm count."
+    },
+    {
+      "date": "2026-09-27",
+      "maxWarnings": 2512,
+      "previous": 2513
     }
   ]
 }

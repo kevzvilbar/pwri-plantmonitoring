@@ -13,6 +13,10 @@ function normalize(kind: ReplacementKind, row: any): NormalizedReplacement {
       newSerial: strOrNull(row.new_serial), newInitial: numOrNull(row.new_initial_reading),
       installedDate: strOrNull(row.new_installed_date),
       replacedBy: strOrNull(row.replaced_by), remarks: strOrNull(row.remarks), raw: row,
+      oldMultiplier: numOrNull(row.old_multiplier),
+      oldMultiplierEnabled: row.old_multiplier_enabled != null ? !!row.old_multiplier_enabled : null,
+      newMultiplier: numOrNull(row.new_multiplier),
+      newMultiplierEnabled: row.new_multiplier_enabled != null ? !!row.new_multiplier_enabled : null,
     };
   }
   if (kind === 'power') {
@@ -42,6 +46,10 @@ function normalize(kind: ReplacementKind, row: any): NormalizedReplacement {
     newSerial: strOrNull(row.new_meter_serial), newInitial: numOrNull(row.new_meter_initial_reading),
     installedDate: strOrNull(row.new_meter_installed_date),
     replacedBy: strOrNull(row.replaced_by), remarks: strOrNull(row.remarks), raw: row,
+    oldMultiplier: numOrNull(row.old_multiplier),
+    oldMultiplierEnabled: row.old_multiplier_enabled != null ? !!row.old_multiplier_enabled : null,
+    newMultiplier: numOrNull(row.new_multiplier),
+    newMultiplierEnabled: row.new_multiplier_enabled != null ? !!row.new_multiplier_enabled : null,
   };
 }
 

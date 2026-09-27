@@ -113,6 +113,7 @@ export function ReadingHistoryTable(props: any) {
               activeOperatorId={activeOperatorId ?? undefined} actions={actions}
               getHistGridLabel={getHistGridLabel} getHistGridMult={getHistGridMult}
               resolvedGridCount={resolvedGridCount} meterFilter={meterFilter}
+              entityMultiplier={multiplier}
             />
           </table>
         )}

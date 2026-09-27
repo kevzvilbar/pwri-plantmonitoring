@@ -99,6 +99,20 @@ export function MeterReplacementDetailDialog({
                     <Field label="Initial reading" value={rec.newInitial} />
                   </div>
                 </div>
+                {rec.newMultiplier != null && (
+                  <div className="flex items-center gap-1.5 text-xs">
+                    <span className="text-2xs uppercase tracking-wide text-muted-foreground font-medium">Multiplier:</span>
+                    <span className="font-mono-num font-medium">×{rec.oldMultiplier ?? 1}</span>
+                    {rec.oldMultiplierEnabled != null && (
+                      <span className="text-2xs text-muted-foreground">({rec.oldMultiplierEnabled ? 'Active' : 'Off'})</span>
+                    )}
+                    <span className="text-muted-foreground">→</span>
+                    <span className="font-mono-num font-medium">×{rec.newMultiplier}</span>
+                    {rec.newMultiplierEnabled != null && (
+                      <span className="text-2xs text-muted-foreground">({rec.newMultiplierEnabled ? 'Active' : 'Off'})</span>
+                    )}
+                  </div>
+                )}
                 <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
                   <Field label="Replaced by" value={rec.replacerName ?? rec.replacedBy} />
                   <Field label="Remarks" value={rec.remarks} span />
