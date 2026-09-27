@@ -46,7 +46,16 @@ export function useLocators(plantId?: string | string[]) {
   return useQuery({
     queryKey: ['locators', ids ?? 'all'],
     queryFn: async () => {
-      let q = supabase.from('locators').select('*').order('name');
+      // Explicit column list (matches Locator interface) — avoids select=* egress overhead.
+      // If you add a field to the Locator interface, add it here too.
+      let q = supabase
+        .from('locators')
+        .select(
+          'id, name, plant_id, address, location_desc, gps_lat, gps_lng, ' +
+          'meter_brand, meter_size, meter_serial, meter_installed_date, ' +
+          'status, is_locked, meter_multiplier, multiplier_enabled, created_at, updated_at',
+        )
+        .order('name');
       if (ids?.length) q = (q as any).in('plant_id', ids);
       const { data, error } = await q;
       if (error) throw error;

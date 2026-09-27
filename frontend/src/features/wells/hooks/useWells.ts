@@ -40,7 +40,16 @@ export function useWells(plantId?: string | string[]) {
   return useQuery({
     queryKey: ['wells', ids ?? 'all'],
     queryFn: async () => {
-      let q = supabase.from('wells').select('*').order('name');
+      // Explicit column list (matches Well interface) — avoids select=* egress overhead.
+      // If you add a field to the Well interface, add it here too.
+      let q = supabase
+        .from('wells')
+        .select(
+          'id, name, plant_id, diameter, drilling_depth_m, gps_lat, gps_lng, ' +
+          'has_power_meter, meter_brand, meter_size, meter_serial, meter_installed_date, ' +
+          'size, status, meter_multiplier, multiplier_enabled, created_at, updated_at',
+        )
+        .order('name');
       if (ids?.length) q = (q as any).in('plant_id', ids);
       const { data, error } = await q;
       if (error) throw error;

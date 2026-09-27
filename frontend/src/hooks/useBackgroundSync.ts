@@ -32,6 +32,46 @@ const RETRY_DELAY_MS    = 10_000;  // 10 seconds between retries
 const MAX_RETRIES       = 3;       // silent retries before surfacing an error
 const IDLE_TIMEOUT_MS   = 15 * 60_000; // 15 min inactivity pauses background polling
 
+/**
+ * Query key prefixes whose data is already kept fresh by Supabase Realtime
+ * postgres_changes subscriptions (useTrainDataRealtime, useTrendChartState).
+ *
+ * The 15-min background sweep SKIPS these to avoid redundant network round-trips.
+ * If realtime ever changes for a table, update this list accordingly.
+ *
+ * Covered tables (as of 2026-09-27):
+ *  - ro_train_readings  → useTrainDataRealtime
+ *  - power_readings     → useTrendChartState
+ *  - chemical_dosages   → useTrendChartState
+ *  - product_meter_readings → useTrendChartState
+ *  - user_profiles      → hooks.ts (staff page realtime)
+ */
+const REALTIME_COVERED_PREFIXES = [
+  'dash-ro-recent',
+  'dash-ro-history',
+  'dash-ro-permeate-today',
+  'dash-ro-permeate-yest',
+  'dash-power-today',
+  'dash-power-yest',
+  'dash-power-history',
+  'trend-power',
+  'trend-cost',
+  'trend-bill-multiplier',
+  'trend-power-config',
+  'dash-product-meters-today',
+  'dash-product-meters-yest',
+  'dash-all-permeate-today',
+  'dash-pretreatment-recent',
+  'fleet-status',
+];
+
+/** Returns true for query keys that should be skipped by the background sync sweep. */
+function isRealtimeCovered(queryKey: readonly unknown[]): boolean {
+  if (!queryKey.length) return false;
+  const first = String(queryKey[0]);
+  return REALTIME_COVERED_PREFIXES.some((p) => first === p || first.startsWith(p));
+}
+
 export function useBackgroundSync() {
   const qc                  = useQueryClient();
   const { setStatus, setLastSynced, setError } = useSyncStore();
@@ -65,12 +105,18 @@ export function useBackgroundSync() {
     setStatus('syncing');
 
     try {
-      // PERF FIX: Only refetch queries where the cache is older than staleTime.
-      // By passing stale:true, we skip queries that are still fresh, reducing
-      // network calls. Each query's staleTime controls its own freshness interval.
-      // react-query will merge updated data into the cache; React's virtual DOM
-      // then diffs and re-paints only the changed nodes — no full re-render.
-      await qc.refetchQueries({ type: 'active', stale: true }, { throwOnError: true });
+      // EGRESS OPTIMIZATION: Skip queries already kept fresh by realtime subscriptions.
+      // The predicate filters out query keys in REALTIME_COVERED_PREFIXES so we only
+      // refetch reference/config data that is NOT invalidated by postgres_changes events.
+      // PERF FIX: stale:true ensures we only re-fetch queries older than their staleTime.
+      await qc.refetchQueries(
+        {
+          type: 'active',
+          stale: true,
+          predicate: (query) => !isRealtimeCovered(query.queryKey),
+        },
+        { throwOnError: true },
+      );
 
       if (!isMountedRef.current) return true;
 

@@ -49,7 +49,7 @@ export const CACHE_MAX_AGE = 24 * 60 * 60 * 1000;
 export const CACHE_BUSTER =
   import.meta.env.VITE_APP_VERSION ||
   import.meta.env.VITE_RELEASE ||
-  'pwri-cache-v2';
+  'pwri-cache-v3'; // bumped: invalidates pre-317462a5 Set/Map-corrupted entries
 
 /**
  * Query key prefixes explicitly allowed to dehydrate to IndexedDB.
@@ -84,6 +84,10 @@ const PERSIST_ALLOWLIST_PREFIXES = [
 /**
  * Denylist patterns to prevent any accidental persistence of telemetry/readings
  * even if nested or named similarly to an allowlisted entity.
+ *
+ * Also excludes computed/derived queries that are derived from allowlisted master
+ * data — persisting them is redundant and risks serving stale derived IDs after
+ * an entity is added or removed.
  */
 const PERSIST_DENYLIST_PREFIXES = [
   'wellReadings',
@@ -96,6 +100,15 @@ const PERSIST_DENYLIST_PREFIXES = [
   'reading-history',
   'well-raw-readings',
   'well-pms',
+  // Computed/derived from master data — exclude to avoid stale derived IDs
+  'dash-locator-direct-ids',
+  'dash-meter-direct-ids',
+  'dash-power-config-map',
+  'dash-quality-train-meta',
+  'wb-product-meter-direct-ids',
+  'wb-locator-meta',
+  'wb-plant-meter-config',
+  'ro-trains-recent',
   'dash-ro-recent',
   'dash-ro-history',
   'dash-ro-permeate-today',
