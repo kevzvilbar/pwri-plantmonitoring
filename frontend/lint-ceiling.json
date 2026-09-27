@@ -1,13 +1,7 @@
 {
-  "maxWarnings": 2512,
-  "lastUpdated": "2026-09-27",
+  "maxWarnings": 2513,
+  "lastUpdated": "2026-09-26",
   "history": [
-    {
-      "date": "2026-09-27",
-      "maxWarnings": 2512,
-      "previous": 2513,
-      "reason": "Meter Replace x Multiplier wiring: wired multiplier capture and application into ReplaceMeterDialog, unrequired starting reading on cutover branch of MeterMultiplierWorkflowModal, and added multiplier transition display in MeterReplacementDetailDialog. Resolved -1 jsx-a11y warning by pairing the Switch control in MeterMultiplierWorkflowModal with its Label."
-    },
     {
       "date": "2026-09-26",
       "maxWarnings": 2498,

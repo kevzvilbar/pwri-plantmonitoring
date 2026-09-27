@@ -12,10 +12,6 @@ function normalize(kind: ReplacementKind, row: any): NormalizedReplacement {
       newBrand: strOrNull(row.new_brand), newSize: strOrNull(row.new_size),
       newSerial: strOrNull(row.new_serial), newInitial: numOrNull(row.new_initial_reading),
       installedDate: strOrNull(row.new_installed_date),
-      oldMultiplier: numOrNull(row.old_multiplier),
-      oldMultiplierEnabled: row.old_multiplier_enabled != null ? Boolean(row.old_multiplier_enabled) : null,
-      newMultiplier: numOrNull(row.new_multiplier),
-      newMultiplierEnabled: row.new_multiplier_enabled != null ? Boolean(row.new_multiplier_enabled) : null,
       replacedBy: strOrNull(row.replaced_by), remarks: strOrNull(row.remarks), raw: row,
     };
   }
@@ -26,10 +22,7 @@ function normalize(kind: ReplacementKind, row: any): NormalizedReplacement {
       oldFinal: numOrNull(row.old_meter_final_reading),
       replacementDate: strOrNull(row.change_date),
       newInitial: numOrNull(row.new_meter_initial_reading),
-      oldMultiplier: numOrNull(row.old_multiplier),
-      oldMultiplierEnabled: row.old_multiplier != null ? true : null,
-      newMultiplier: numOrNull(row.new_multiplier),
-      newMultiplierEnabled: row.new_multiplier != null ? true : null,
+      oldMultiplier: numOrNull(row.old_multiplier), newMultiplier: numOrNull(row.new_multiplier),
       replacedBy: strOrNull(row.changed_by), remarks: strOrNull(row.notes), raw: row,
     };
   }
@@ -48,10 +41,6 @@ function normalize(kind: ReplacementKind, row: any): NormalizedReplacement {
     newBrand: strOrNull(row.new_meter_brand), newSize: strOrNull(row.new_meter_size),
     newSerial: strOrNull(row.new_meter_serial), newInitial: numOrNull(row.new_meter_initial_reading),
     installedDate: strOrNull(row.new_meter_installed_date),
-    oldMultiplier: numOrNull(row.old_multiplier),
-    oldMultiplierEnabled: row.old_multiplier_enabled != null ? Boolean(row.old_multiplier_enabled) : null,
-    newMultiplier: numOrNull(row.new_multiplier),
-    newMultiplierEnabled: row.new_multiplier_enabled != null ? Boolean(row.new_multiplier_enabled) : null,
     replacedBy: strOrNull(row.replaced_by), remarks: strOrNull(row.remarks), raw: row,
   };
 }

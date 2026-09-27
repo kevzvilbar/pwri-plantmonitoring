@@ -2091,14 +2091,10 @@ export type Database = {
           new_meter_installed_date: string | null
           new_meter_serial: string | null
           new_meter_size: string | null
-          new_multiplier: number | null
-          new_multiplier_enabled: boolean | null
           old_meter_brand: string | null
           old_meter_final_reading: number | null
           old_meter_serial: string | null
           old_meter_size: string | null
-          old_multiplier: number | null
-          old_multiplier_enabled: boolean | null
           plant_id: string
           reading_id: string | null
           remarks: string | null
@@ -2114,14 +2110,10 @@ export type Database = {
           new_meter_installed_date?: string | null
           new_meter_serial?: string | null
           new_meter_size?: string | null
-          new_multiplier?: number | null
-          new_multiplier_enabled?: boolean | null
           old_meter_brand?: string | null
           old_meter_final_reading?: number | null
           old_meter_serial?: string | null
           old_meter_size?: string | null
-          old_multiplier?: number | null
-          old_multiplier_enabled?: boolean | null
           plant_id: string
           reading_id?: string | null
           remarks?: string | null
@@ -2137,14 +2129,10 @@ export type Database = {
           new_meter_installed_date?: string | null
           new_meter_serial?: string | null
           new_meter_size?: string | null
-          new_multiplier?: number | null
-          new_multiplier_enabled?: boolean | null
           old_meter_brand?: string | null
           old_meter_final_reading?: number | null
           old_meter_serial?: string | null
           old_meter_size?: string | null
-          old_multiplier?: number | null
-          old_multiplier_enabled?: boolean | null
           plant_id?: string
           reading_id?: string | null
           remarks?: string | null
@@ -3407,14 +3395,10 @@ export type Database = {
           new_meter_installed_date: string | null
           new_meter_serial: string | null
           new_meter_size: string | null
-          new_multiplier: number | null
-          new_multiplier_enabled: boolean | null
           old_meter_brand: string | null
           old_meter_final_reading: number | null
           old_meter_serial: string | null
           old_meter_size: string | null
-          old_multiplier: number | null
-          old_multiplier_enabled: boolean | null
           plant_id: string
           reading_id: string | null
           remarks: string | null
@@ -3430,14 +3414,10 @@ export type Database = {
           new_meter_installed_date?: string | null
           new_meter_serial?: string | null
           new_meter_size?: string | null
-          new_multiplier?: number | null
-          new_multiplier_enabled?: boolean | null
           old_meter_brand?: string | null
           old_meter_final_reading?: number | null
           old_meter_serial?: string | null
           old_meter_size?: string | null
-          old_multiplier?: number | null
-          old_multiplier_enabled?: boolean | null
           plant_id: string
           reading_id?: string | null
           remarks?: string | null
@@ -3453,14 +3433,10 @@ export type Database = {
           new_meter_installed_date?: string | null
           new_meter_serial?: string | null
           new_meter_size?: string | null
-          new_multiplier?: number | null
-          new_multiplier_enabled?: boolean | null
           old_meter_brand?: string | null
           old_meter_final_reading?: number | null
           old_meter_serial?: string | null
           old_meter_size?: string | null
-          old_multiplier?: number | null
-          old_multiplier_enabled?: boolean | null
           plant_id?: string
           reading_id?: string | null
           remarks?: string | null
@@ -5167,13 +5143,9 @@ export type Database = {
           new_brand: string | null
           new_initial_reading: number | null
           new_installed_date: string | null
-          new_multiplier: number | null
-          new_multiplier_enabled: boolean | null
           new_serial: string | null
           new_size: string | null
           old_final_reading: number | null
-          old_multiplier: number | null
-          old_multiplier_enabled: boolean | null
           old_serial: string | null
           plant_id: string
           reading_id: string | null
@@ -5188,13 +5160,9 @@ export type Database = {
           new_brand?: string | null
           new_initial_reading?: number | null
           new_installed_date?: string | null
-          new_multiplier?: number | null
-          new_multiplier_enabled?: boolean | null
           new_serial?: string | null
           new_size?: string | null
           old_final_reading?: number | null
-          old_multiplier?: number | null
-          old_multiplier_enabled?: boolean | null
           old_serial?: string | null
           plant_id: string
           reading_id?: string | null
@@ -5209,13 +5177,9 @@ export type Database = {
           new_brand?: string | null
           new_initial_reading?: number | null
           new_installed_date?: string | null
-          new_multiplier?: number | null
-          new_multiplier_enabled?: boolean | null
           new_serial?: string | null
           new_size?: string | null
           old_final_reading?: number | null
-          old_multiplier?: number | null
-          old_multiplier_enabled?: boolean | null
           old_serial?: string | null
           plant_id?: string
           reading_id?: string | null

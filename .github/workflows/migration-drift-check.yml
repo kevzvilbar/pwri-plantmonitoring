@@ -31,8 +31,6 @@ jobs:
   drift-check:
     name: Diff production schema against committed migrations
     runs-on: ubuntu-latest
-    env:
-      SKIP_DRIFT_CHECK: 'false'
     steps:
       - uses: actions/checkout@v4
 
@@ -59,8 +57,7 @@ jobs:
         if: env.SKIP_DRIFT_CHECK != 'true'
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
-        run: supabase link --project-ref sosfbfxovtleuvahxvpm --password "$SUPABASE_DB_PASSWORD"
+        run: supabase link --project-ref sosfbfxovtleuvahxvpm --password "${{ secrets.SUPABASE_DB_PASSWORD }}"
 
       - name: Diff remote schema against supabase/migrations/
         if: env.SKIP_DRIFT_CHECK != 'true'

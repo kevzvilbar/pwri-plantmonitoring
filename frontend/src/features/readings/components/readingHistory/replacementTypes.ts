@@ -27,9 +27,7 @@ export interface NormalizedReplacement {
   newInitial?: number | null;
   installedDate?: string | null;
   oldMultiplier?: number | null;
-  oldMultiplierEnabled?: boolean | null;
   newMultiplier?: number | null;
-  newMultiplierEnabled?: boolean | null;
   replacedBy?: string | null;
   replacerName?: string | null;
   remarks?: string | null;
