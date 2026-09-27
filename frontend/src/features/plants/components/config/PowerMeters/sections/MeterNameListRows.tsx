@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Pencil, X, Check } from 'lucide-react';
 import { Sun } from 'lucide-react';
+import { GridPylonIcon } from '@/features/plants/shared';
 
 export function MeterNameListRows({
   count, names, accentColor, defaultPrefix, onSave, onRemoveLast,
@@ -20,6 +21,16 @@ export function MeterNameListRows({
   const border = isYellow ? 'border-warn/60' : 'border-info/60';
   const headerBg = isYellow ? 'bg-warn-soft/60' : 'bg-info-soft/60';
   const ring = isYellow ? 'focus:ring-warn' : 'focus:ring-info';
+
+  const sourceBadge = isYellow ? (
+    <span className="inline-flex items-center gap-1 text-2xs font-semibold px-2 py-0.5 rounded-full bg-warn-soft text-warn border border-warn/40">
+      <Sun className="h-2.5 w-2.5" /> Solar Gen
+    </span>
+  ) : (
+    <span className="inline-flex items-center gap-1 text-2xs font-semibold px-2 py-0.5 rounded-full bg-info-soft text-info border border-info/40">
+      <GridPylonIcon className="h-2.5 w-2.5" /> Grid Import
+    </span>
+  );
 
   const startEdit  = (i: number) => { setConfirmDeleteIdx(-1); setEditingIdx(i); setEditVal(names[i] ?? `${defaultPrefix} ${i + 1}`); };
   const commitEdit = () => {
@@ -65,9 +76,7 @@ export function MeterNameListRows({
               onKeyDown={e => { if (e.key === 'Enter') commitEdit(); if (e.key === 'Escape') cancelEdit(); }}
               className={`text-sm bg-transparent border-b ${isYellow ? 'border-warn' : 'border-info'} focus:outline-none focus:ring-1 ${ring} rounded-t w-full px-1`} />
             <div className="flex items-center justify-center">
-              <span className="inline-flex items-center gap-1 text-2xs font-semibold px-2 py-0.5 rounded-full bg-warn-soft text-warn border border-warn/40">
-                <Sun className="h-2.5 w-2.5" /> Solar Gen
-              </span>
+              {sourceBadge}
             </div>
             <div className="flex items-center gap-1 w-10 justify-end">
               <button onClick={commitEdit} className="inline-flex items-center justify-center h-6 w-6 rounded-full text-accent hover:bg-accent-soft transition-colors" aria-label="Save name">
@@ -84,9 +93,7 @@ export function MeterNameListRows({
           <div key={i} className={`group grid grid-cols-[1fr_110px_auto] items-center gap-2 px-3 py-2 border-b border-border/50 last:border-b-0 bg-background hover:${headerBg}/40 transition-colors`}>
             <span className="text-sm truncate font-medium text-foreground" title={name}>{name}</span>
             <div className="flex items-center justify-center">
-              <span className="inline-flex items-center gap-1 text-2xs font-semibold px-2 py-0.5 rounded-full bg-warn-soft text-warn border border-warn/40">
-                <Sun className="h-2.5 w-2.5" /> Solar Gen
-              </span>
+              {sourceBadge}
             </div>
             <div className="flex items-center gap-0.5 w-10 justify-end">
               <button
