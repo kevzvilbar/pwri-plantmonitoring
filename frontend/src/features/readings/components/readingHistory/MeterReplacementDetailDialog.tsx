@@ -3,7 +3,8 @@ import { format } from 'date-fns';
 import { Dialog, DialogContent, DialogHeader } from '@/components/ui/dialog';
 import { DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Loader2, Pencil, ExternalLink, Trash2 } from 'lucide-react';
+import { Loader2, Pencil, ExternalLink, Trash2, Info } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import type { NormalizedReplacement, ReplacementDetailHost } from './replacementTypes';
 
 function Field({ label, value, span }: { label: string; value: any; span?: boolean }) {
@@ -99,6 +100,32 @@ export function MeterReplacementDetailDialog({
                     <Field label="Initial reading" value={rec.newInitial} />
                   </div>
                 </div>
+                {rec.newMultiplier != null && (
+                  <div className="rounded-lg bg-muted/30 p-2.5 flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="text-2xs uppercase tracking-wide text-muted-foreground font-medium">Multiplier:</span>
+                      <span className="font-mono-num text-muted-foreground">
+                        ×{rec.oldMultiplier != null ? rec.oldMultiplier : '—'} <span className="text-3xs opacity-80">({rec.oldMultiplierEnabled ? 'Active' : 'Off'})</span>
+                      </span>
+                      <span className="text-muted-foreground">→</span>
+                      <span className="font-mono-num font-semibold text-foreground">
+                        ×{rec.newMultiplier} <span className="text-3xs font-medium text-foreground">({rec.newMultiplierEnabled ? 'Active' : 'Off'})</span>
+                      </span>
+                    </div>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button type="button" className="text-muted-foreground hover:text-foreground cursor-help inline-flex p-0.5" aria-label="Multiplier details">
+                            <Info className="h-3.5 w-3.5" />
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-xs text-xs">
+                          Multiplier recorded at this replacement. Future readings use this value until it&apos;s changed again — readings already logged aren&apos;t affected.
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </div>
+                )}
                 <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
                   <Field label="Replaced by" value={rec.replacerName ?? rec.replacedBy} />
                   <Field label="Remarks" value={rec.remarks} span />

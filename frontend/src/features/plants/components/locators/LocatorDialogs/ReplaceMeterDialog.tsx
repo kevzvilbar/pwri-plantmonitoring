@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
+import { Switch } from '@/components/ui/switch';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 import { friendlyError } from '@/lib/supabaseErrors';
@@ -19,6 +20,7 @@ const readingTableFor = (k: 'locator' | 'well' | 'product') =>
 const upsertReplRow = async (
   readingTable: string, entityField: string, assetId: string, plantId: string,
   dtIso: string, newInitial: number, actorId: string | null,
+  multiplierAtReading: number = 1,
 ): Promise<string | null> => {
   const winFrom = new Date(new Date(dtIso).getTime() - 60_000).toISOString();
   const winTo = new Date(new Date(dtIso).getTime() + 60_000).toISOString();
@@ -32,7 +34,13 @@ const upsertReplRow = async (
     .maybeSingle();
   if (existing?.id) {
     const { error: repErr } = await (supabase.from(readingTable as any) as any)
-      .update({ current_reading: newInitial, reading_datetime: dtIso, is_meter_replacement: true, daily_volume: 0 })
+      .update({
+        current_reading: newInitial,
+        reading_datetime: dtIso,
+        is_meter_replacement: true,
+        daily_volume: 0,
+        multiplier_at_reading: multiplierAtReading,
+      })
       .eq('id', existing.id);
     if (repErr) { toast.error(`Couldn't flag the installed reading: ${friendlyError(repErr)}`); return null; }
     return existing.id;
@@ -46,6 +54,7 @@ const upsertReplRow = async (
       is_meter_replacement: true,
       daily_volume: 0,
       recorded_by: actorId,
+      multiplier_at_reading: multiplierAtReading,
     })
     .select('id')
     .single();
@@ -67,6 +76,10 @@ export function ReplaceMeterDialog({
     id: string; readingId?: string | null; replacementDate: string | null; oldFinal: string;
     newBrand: string; newSize: string; newSerial: string; newInitial: string;
     installedDate: string | null; remarks: string; rawOldSerial?: string | null;
+    oldMultiplier?: number | null;
+    oldMultiplierEnabled?: boolean | null;
+    newMultiplier?: number | null;
+    newMultiplierEnabled?: boolean | null;
   } | null;
   /** When passed, this specific reading is flagged is_meter_replacement = true
    *  once the replacement record + asset update succeed — lets the row that
@@ -85,6 +98,23 @@ export function ReplaceMeterDialog({
   // The record's original old serial in edit mode — the `oldSerial` prop is the
   // asset's CURRENT serial and would clobber history if written back on edit.
   const effectiveOldSerial = isEdit ? (initial?.rawOldSerial ?? oldSerial) : oldSerial;
+
+  const [currentMultiplier, setCurrentMultiplier] = useState<{
+    multiplier: number;
+    enabled: boolean;
+  } | null>(() => {
+    if (isEdit && initial?.oldMultiplier != null) {
+      return {
+        multiplier: initial.oldMultiplier,
+        enabled: initial.oldMultiplierEnabled ?? false,
+      };
+    }
+    return null;
+  });
+
+  const [multiplierEdited, setMultiplierEdited] = useState(false);
+  const [multiplierEnabledEdited, setMultiplierEnabledEdited] = useState(false);
+
   const [form, setForm] = useState(() => ({
     replacement_date: initial?.replacementDate || format(new Date(), "yyyy-MM-dd'T'HH:mm"),
     old_final_reading: initial?.oldFinal ?? '',
@@ -92,7 +122,47 @@ export function ReplaceMeterDialog({
     new_serial: initial?.newSerial ?? '', new_initial_reading: initial?.newInitial ?? '',
     new_installed_date: initial?.installedDate || format(new Date(), "yyyy-MM-dd'T'HH:mm"),
     remarks: initial?.remarks ?? '',
+    old_multiplier: isEdit ? (initial?.oldMultiplier ?? null) : null,
+    old_multiplier_enabled: isEdit ? (initial?.oldMultiplierEnabled ?? null) : null,
+    new_multiplier: isEdit && initial?.newMultiplier != null ? String(initial.newMultiplier) : '1',
+    new_multiplier_enabled: isEdit ? (initial?.newMultiplierEnabled ?? false) : false,
   }));
+
+  // Create mode: fetch entity's current multiplier to prefill and snapshot (D5/D6).
+  useEffect(() => {
+    if (isEdit) return;
+    let active = true;
+    const fetchMultiplier = async () => {
+      let mult = 1;
+      let en = false;
+      if (kind === 'locator') {
+        const { data } = await supabase.from('locators').select('meter_multiplier, multiplier_enabled').eq('id', assetId).maybeSingle();
+        if (data) { mult = data.meter_multiplier ?? 1; en = data.multiplier_enabled ?? false; }
+      } else if (kind === 'well') {
+        const { data } = await supabase.from('wells').select('meter_multiplier, multiplier_enabled').eq('id', assetId).maybeSingle();
+        if (data) { mult = data.meter_multiplier ?? 1; en = data.multiplier_enabled ?? false; }
+      } else {
+        const { data } = await supabase.from('product_meters').select('meter_multiplier, multiplier_enabled').eq('id', assetId).maybeSingle();
+        if (data) { mult = data.meter_multiplier ?? 1; en = data.multiplier_enabled ?? false; }
+      }
+      if (!active) return;
+      setCurrentMultiplier({ multiplier: mult, enabled: en });
+      setForm((f) => ({
+        ...f,
+        old_multiplier: mult,
+        old_multiplier_enabled: en,
+        new_multiplier: !multiplierEdited ? String(mult) : f.new_multiplier,
+        new_multiplier_enabled: !multiplierEnabledEdited ? en : f.new_multiplier_enabled,
+      }));
+    };
+    fetchMultiplier();
+    return () => { active = false; };
+  }, [assetId, isEdit, kind, multiplierEdited, multiplierEnabledEdited]);
+
+  const currentMultiplierDisplay = currentMultiplier
+    ? `×${currentMultiplier.multiplier} (${currentMultiplier.enabled ? 'Active' : 'Off'})`
+    : '—';
+
   const submit = async () => {
     // Required: new serial (who's now installed), the old meter's last reading,
     // the new meter's starting reading, and the date it happened — without
@@ -122,10 +192,24 @@ export function ReplaceMeterDialog({
     const replDateOnly = form.replacement_date ? form.replacement_date.slice(0, 10) : '';
     const instDateOnly = installedLocal.slice(0, 10);
 
+    const newMultNum = form.new_multiplier !== '' && !isNaN(Number(form.new_multiplier)) && Number(form.new_multiplier) > 0
+      ? Number(form.new_multiplier)
+      : 1;
+    const newMultEnabled = Boolean(form.new_multiplier_enabled);
+    const oldMultNum = form.old_multiplier != null ? Number(form.old_multiplier) : null;
+    const oldMultEnabled = form.old_multiplier_enabled != null ? Boolean(form.old_multiplier_enabled) : null;
+
+    const oldEffectiveMult = oldMultEnabled ? (oldMultNum ?? 1) : 1;
+    const newEffectiveMult = newMultEnabled ? newMultNum : 1;
+
     const payload: any = {
       plant_id: plantId, replacement_date: replDateOnly,
       reading_id: readingId ?? null,
       replaced_by: activeOperator?.id ?? user?.id, remarks: form.remarks || null,
+      old_multiplier: oldMultNum,
+      old_multiplier_enabled: oldMultEnabled,
+      new_multiplier: newMultNum,
+      new_multiplier_enabled: newMultEnabled,
     };
     let replacementTable: 'locator_meter_replacements' | 'well_meter_replacements' | 'product_meter_replacements';
     let assetTable: 'locators' | 'wells' | 'product_meters';
@@ -210,12 +294,13 @@ export function ReplaceMeterDialog({
             reading_datetime: dtNewInitial,
             is_meter_replacement: true,
             daily_volume: 0,
+            multiplier_at_reading: newEffectiveMult,
           })
           .eq('id', linkedId);
         if (linkErr) toast.error(`Replacement updated, but couldn't sync the reading: ${friendlyError(linkErr)}`);
         else replRowId = linkedId;
       } else {
-        replRowId = await upsertReplRow(readingTable, entityField, assetId, plantId, dtNewInitial, +form.new_initial_reading, actorId);
+        replRowId = await upsertReplRow(readingTable, entityField, assetId, plantId, dtNewInitial, +form.new_initial_reading, actorId, newEffectiveMult);
       }
 
       // Keep the replacement record pointing at the row that carries the flag.
@@ -245,7 +330,11 @@ export function ReplaceMeterDialog({
         const { data: prevOldRow } = await q.maybeSingle();
         if (prevOldRow?.id && prevOldRow.id !== replRowId) {
           await (supabase.from(readingTable as any) as any)
-            .update({ current_reading: +form.old_final_reading, reading_datetime: dtOldFinal })
+            .update({
+              current_reading: +form.old_final_reading,
+              reading_datetime: dtOldFinal,
+              multiplier_at_reading: oldEffectiveMult,
+            })
             .eq('id', prevOldRow.id);
         } else if (!prevOldRow?.id) {
           await (supabase.from(readingTable as any) as any).insert({
@@ -255,15 +344,27 @@ export function ReplaceMeterDialog({
             reading_datetime: dtOldFinal,
             is_meter_replacement: false,
             recorded_by: actorId,
+            multiplier_at_reading: oldEffectiveMult,
           });
         }
       }
 
       // Keep the asset's current-meter identity in sync with the edit too.
       if (assetTable === 'product_meters') {
-        await supabase.from(assetTable as any).update({ meter_serial: form.new_serial || null }).eq('id', assetId);
+        await supabase.from(assetTable as any).update({
+          meter_serial: form.new_serial || null,
+          meter_multiplier: newMultNum,
+          multiplier_enabled: newMultEnabled,
+        }).eq('id', assetId);
       } else {
-        await supabase.from(assetTable as any).update({ meter_brand: form.new_brand, meter_size: form.new_size, meter_serial: form.new_serial, meter_installed_date: instDateOnly }).eq('id', assetId);
+        await supabase.from(assetTable as any).update({
+          meter_brand: form.new_brand,
+          meter_size: form.new_size,
+          meter_serial: form.new_serial,
+          meter_installed_date: instDateOnly,
+          meter_multiplier: newMultNum,
+          multiplier_enabled: newMultEnabled,
+        }).eq('id', assetId);
       }
 
       // ── Step 4: renormalize the chain so downstream rows' Δ recomputes ──
@@ -280,9 +381,20 @@ export function ReplaceMeterDialog({
     if (error) { toast.error(friendlyError(error)); return; }
 
     if (assetTable === 'product_meters') {
-      await supabase.from(assetTable as any).update({ meter_serial: form.new_serial || null }).eq('id', assetId);
+      await supabase.from(assetTable as any).update({
+        meter_serial: form.new_serial || null,
+        meter_multiplier: newMultNum,
+        multiplier_enabled: newMultEnabled,
+      }).eq('id', assetId);
     } else {
-      await supabase.from(assetTable as any).update({ meter_brand: form.new_brand, meter_size: form.new_size, meter_serial: form.new_serial, meter_installed_date: instDateOnly }).eq('id', assetId);
+      await supabase.from(assetTable as any).update({
+        meter_brand: form.new_brand,
+        meter_size: form.new_size,
+        meter_serial: form.new_serial,
+        meter_installed_date: instDateOnly,
+        meter_multiplier: newMultNum,
+        multiplier_enabled: newMultEnabled,
+      }).eq('id', assetId);
     }
 
     const readingTable = kind === 'well' ? 'well_readings' : kind === 'locator' ? 'locator_readings' : 'product_meter_readings';
@@ -296,12 +408,14 @@ export function ReplaceMeterDialog({
         //    - reading_datetime = installed datetime (e.g. 09:00 AM)
         //    - is_meter_replacement = true (checkbox checked [✓], repl. tag shown, Δ = 0.00)
         //    - daily_volume = 0
+        //    - multiplier_at_reading = newEffectiveMult
         const { error: updateErr } = await (supabase.from(readingTable as any) as any)
           .update({
             current_reading: +form.new_initial_reading,
             reading_datetime: dtNewInitial,
             is_meter_replacement: true,
             daily_volume: 0,
+            multiplier_at_reading: newEffectiveMult,
           })
           .eq('id', readingId);
         if (updateErr) toast.error(`Meter replaced, but couldn't update replacement reading: ${friendlyError(updateErr)}`);
@@ -310,6 +424,7 @@ export function ReplaceMeterDialog({
         //    - current_reading = old final reading (e.g. 5331.00)
         //    - reading_datetime = date & time changed (e.g. 08:58 AM)
         //    - is_meter_replacement = false
+        //    - multiplier_at_reading = oldEffectiveMult
         const { error: oldErr } = await (supabase.from(readingTable as any) as any).insert({
           [entityField]: assetId,
           plant_id: plantId,
@@ -317,6 +432,7 @@ export function ReplaceMeterDialog({
           reading_datetime: dtOldFinal,
           is_meter_replacement: false,
           recorded_by: actorId,
+          multiplier_at_reading: oldEffectiveMult,
         });
         if (oldErr) toast.error(`Meter replaced, but couldn't insert old-meter reading: ${friendlyError(oldErr)}`);
       } else {
@@ -329,6 +445,7 @@ export function ReplaceMeterDialog({
           reading_datetime: dtOldFinal,
           is_meter_replacement: false,
           recorded_by: actorId,
+          multiplier_at_reading: oldEffectiveMult,
         });
         if (oldErr) toast.error(`Meter replaced, but couldn't insert old-meter reading: ${friendlyError(oldErr)}`);
 
@@ -341,6 +458,7 @@ export function ReplaceMeterDialog({
           is_meter_replacement: true,
           daily_volume: 0,
           recorded_by: actorId,
+          multiplier_at_reading: newEffectiveMult,
         });
         if (newErr) toast.error(`Meter replaced, but couldn't insert new-meter reading: ${friendlyError(newErr)}`);
     }
@@ -367,11 +485,45 @@ export function ReplaceMeterDialog({
             <div><Label htmlFor="locatordialogs-date-changed">Date &amp; time changed *</Label><Input type="datetime-local" value={form.replacement_date} onChange={e => setForm({ ...form, replacement_date: e.target.value })} id="locatordialogs-date-changed"/></div>
             <div><Label htmlFor="locatordialogs-old-meter-s-final-reading">Old meter's final reading *</Label><Input type="number" value={form.old_final_reading} onChange={e => setForm({ ...form, old_final_reading: e.target.value })} id="locatordialogs-old-meter-s-final-reading"/></div>
           </div>
-          <div className="text-xs text-muted-foreground">Old serial: <span className="font-mono-num">{effectiveOldSerial ?? '—'}</span></div>
+          <div className="text-xs text-muted-foreground flex items-center justify-between">
+            <span>Old serial: <span className="font-mono-num">{effectiveOldSerial ?? '—'}</span></span>
+            <span>Current multiplier: <span className="font-mono-num">{currentMultiplierDisplay}</span></span>
+          </div>
           <div className="grid grid-cols-3 gap-2">
             <div><Label htmlFor="locatordialogs-new-brand">New brand</Label><Input value={form.new_brand} onChange={e => setForm({ ...form, new_brand: e.target.value })} id="locatordialogs-new-brand"/></div>
             <div><Label htmlFor="locatordialogs-new-size">New size</Label><Input value={form.new_size} onChange={e => setForm({ ...form, new_size: e.target.value })} id="locatordialogs-new-size"/></div>
             <div><Label htmlFor="locatordialogs-new-serial">New serial *</Label><Input value={form.new_serial} onChange={e => setForm({ ...form, new_serial: e.target.value })} id="locatordialogs-new-serial"/></div>
+          </div>
+          <div className="grid grid-cols-2 gap-2 items-center">
+            <div>
+              <Label htmlFor="locatordialogs-multiplier-factor">Multiplier Factor (e.g. 10)</Label>
+              <Input
+                id="locatordialogs-multiplier-factor"
+                type="number"
+                step="any"
+                value={form.new_multiplier}
+                onChange={e => {
+                  setMultiplierEdited(true);
+                  setForm({ ...form, new_multiplier: e.target.value });
+                }}
+                placeholder="1"
+              />
+            </div>
+            <div className="flex items-center justify-between rounded-lg border border-border bg-muted/20 p-2 mt-4">
+              <div className="space-y-0.5">
+                <Label htmlFor="locatordialogs-multiplier-switch" className="text-xs font-medium cursor-pointer">Enable Multiplier</Label>
+                <p className="text-3xs text-muted-foreground">Apply ×{form.new_multiplier || '1'} to future readings</p>
+              </div>
+              <Switch
+                id="locatordialogs-multiplier-switch"
+                checked={form.new_multiplier_enabled}
+                onCheckedChange={checked => {
+                  setMultiplierEnabledEdited(true);
+                  setForm({ ...form, new_multiplier_enabled: checked });
+                }}
+                className="data-[state=checked]:bg-primary"
+              />
+            </div>
           </div>
           <div className="grid grid-cols-2 gap-2">
             <div><Label htmlFor="locatordialogs-new-meter-s-initial-reading">New meter's initial reading *</Label><Input type="number" value={form.new_initial_reading} onChange={e => setForm({ ...form, new_initial_reading: e.target.value })} id="locatordialogs-new-meter-s-initial-reading"/></div>
@@ -384,3 +536,4 @@ export function ReplaceMeterDialog({
     </Dialog>
   );
 }
+

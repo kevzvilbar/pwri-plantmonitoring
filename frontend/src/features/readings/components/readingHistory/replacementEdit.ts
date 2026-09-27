@@ -16,6 +16,10 @@ export interface ReplacementInitial {
   newInitial: string;
   installedDate: string | null;
   remarks: string;
+  oldMultiplier?: number | null;
+  oldMultiplierEnabled?: boolean | null;
+  newMultiplier?: number | null;
+  newMultiplierEnabled?: boolean | null;
 }
 
 const toLocalInput = (v: any): string => {
@@ -33,6 +37,10 @@ export function replacementToInitial(rec: NormalizedReplacement): ReplacementIni
   const raw = rec.raw ?? {};
   const oldFinal = rec.oldFinal ?? raw.old_final_reading ?? raw.old_meter_final_reading ?? '';
   const newInitial = rec.newInitial ?? raw.new_initial_reading ?? raw.new_meter_initial_reading ?? '';
+  const oldMultiplier = rec.oldMultiplier != null ? rec.oldMultiplier : (raw.old_multiplier != null ? Number(raw.old_multiplier) : null);
+  const oldMultiplierEnabled = rec.oldMultiplierEnabled != null ? rec.oldMultiplierEnabled : (raw.old_multiplier_enabled != null ? Boolean(raw.old_multiplier_enabled) : null);
+  const newMultiplier = rec.newMultiplier != null ? rec.newMultiplier : (raw.new_multiplier != null ? Number(raw.new_multiplier) : null);
+  const newMultiplierEnabled = rec.newMultiplierEnabled != null ? rec.newMultiplierEnabled : (raw.new_multiplier_enabled != null ? Boolean(raw.new_multiplier_enabled) : null);
   return {
     id: rec.id,
     readingId: (rec.raw?.reading_id ?? null) as string | null,
@@ -47,5 +55,9 @@ export function replacementToInitial(rec: NormalizedReplacement): ReplacementIni
     newInitial: newInitial === '' || newInitial == null ? '' : String(newInitial),
     installedDate: toLocalInput(rec.installedDate),
     remarks: rec.remarks ?? raw.remarks ?? raw.notes ?? '',
+    oldMultiplier,
+    oldMultiplierEnabled,
+    newMultiplier,
+    newMultiplierEnabled,
   };
 }

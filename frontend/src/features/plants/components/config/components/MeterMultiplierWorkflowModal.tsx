@@ -78,9 +78,16 @@ export function MeterMultiplierWorkflowModal({
       toast.error('Missing plant context');
       return;
     }
-    if (newReading === '' || isNaN(Number(newReading))) {
-      toast.error('Valid new starting reading is required');
-      return;
+    if (isPhysical) {
+      if (newReading === '' || isNaN(Number(newReading))) {
+        toast.error('Valid new starting reading is required');
+        return;
+      }
+    } else {
+      if (newReading !== '' && isNaN(Number(newReading))) {
+        toast.error('Starting reading must be a valid number');
+        return;
+      }
     }
     if (newMultiplier === '' || isNaN(Number(newMultiplier)) || Number(newMultiplier) <= 0) {
       toast.error('Multiplier must be a positive number');
@@ -103,7 +110,7 @@ export function MeterMultiplierWorkflowModal({
         oldReadingValue: oldReading !== '' ? Number(oldReading) : null,
         oldReadingConvention: isPhysical ? 'raw' : oldConvention,
         oldMeterSerial: oldSerial || null,
-        newReadingValue: Number(newReading),
+        newReadingValue: newReading !== '' ? Number(newReading) : null,
         newMultiplier: Number(newMultiplier),
         newMultiplierEnabled: newMultiplierEnabled,
         newMeterSerial: isPhysical ? newSerial.trim() : target.meter_serial,
@@ -258,7 +265,8 @@ export function MeterMultiplierWorkflowModal({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label htmlFor="new_reading" className="text-xs font-medium">
-                {isPhysical ? 'New Meter Initial Dial Reading' : 'New Starting Raw Reading'} <span className="text-destructive">*</span>
+                {isPhysical ? 'New Meter Initial Dial Reading' : 'New Starting Raw Reading'}{' '}
+                {isPhysical && <span className="text-destructive">*</span>}
               </Label>
               <Input
                 id="new_reading"
@@ -266,10 +274,16 @@ export function MeterMultiplierWorkflowModal({
                 step="any"
                 value={newReading}
                 onChange={(e) => setNewReading(e.target.value)}
-                placeholder="e.g. 0 or dial value"
+                placeholder={isPhysical ? 'e.g. 0 or dial value' : 'Leave blank to skip reset boundary'}
                 className="text-xs h-8 font-mono"
-                required
+                required={isPhysical}
               />
+              {!isPhysical && newReading === '' && (
+                <p className="text-3xs text-amber-500/90 leading-tight mt-1 flex items-center gap-1">
+                  <AlertTriangle className="h-3 w-3 shrink-0" />
+                  <span>Leaving this blank skips the reset boundary for this cutover — the next logged reading may show a one-time volume spike until a real reading re-anchors the delta.</span>
+                </p>
+              )}
             </div>
 
             <div className="space-y-1.5">
@@ -291,12 +305,13 @@ export function MeterMultiplierWorkflowModal({
 
           <div className="flex items-center justify-between rounded-lg border border-border bg-muted/20 p-2.5">
             <div className="space-y-0.5">
-              <Label className="text-xs font-medium cursor-pointer">Enable Multiplier Calculation</Label>
+              <Label htmlFor="enable-multiplier-switch" className="text-xs font-medium cursor-pointer">Enable Multiplier Calculation</Label>
               <p className="text-2xs text-muted-foreground">
                 When enabled, future readings are automatically multiplied by ×{newMultiplier || '10'} to compute daily volume.
               </p>
             </div>
             <Switch
+              id="enable-multiplier-switch"
               checked={newMultiplierEnabled}
               onCheckedChange={setNewMultiplierEnabled}
               className="data-[state=checked]:bg-primary"

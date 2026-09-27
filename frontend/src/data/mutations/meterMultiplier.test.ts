@@ -73,5 +73,26 @@ describe('submitMeterMultiplierWorkflow', () => {
     expect(fromMock).toHaveBeenCalledWith('locators');
     expect(fromMock).toHaveBeenCalledWith('locator_readings');
   });
+
+  it('skips reading table write when newReadingValue is null', async () => {
+    const result = await submitMeterMultiplierWorkflow({
+      plantId: 'plant-1',
+      entityType: 'product',
+      entityId: 'prod-1',
+      eventType: 'multiplier_cutover',
+      effectiveAt: '2026-09-26T08:00:00Z',
+      oldReadingValue: 500,
+      newReadingValue: null,
+      newMultiplier: 10,
+      newMultiplierEnabled: true,
+      performedBy: 'user-1',
+      notes: 'Cutover without reset boundary',
+    });
+
+    expect(result.error).toBeNull();
+    expect(fromMock).toHaveBeenCalledWith('meter_events');
+    expect(fromMock).toHaveBeenCalledWith('product_meters');
+    expect(fromMock).not.toHaveBeenCalledWith('product_meter_readings');
+  });
 });
 
