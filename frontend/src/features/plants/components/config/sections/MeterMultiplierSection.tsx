@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useWellsForPlant } from '@/hooks/useWells';
@@ -12,7 +13,6 @@ import {
   PowerMeterMultiplierModal,
   type PowerMeterWorkflowTarget,
 } from '../components/PowerMeterMultiplierModal';
-import { PowerMeterManageModal } from '../components/PowerMeterManageModal';
 import {
   MeterMultiplierTableRow,
   type UnifiedMeterRow,
@@ -22,7 +22,7 @@ import { usePlantMeterConfig } from '@/features/plants/shared';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
-import { Gauge, Settings2 } from 'lucide-react';
+import { Gauge, Zap, ArrowUpRight } from 'lucide-react';
 
 import { usePlantPowerConfig } from '@/features/plants/hooks/usePlantPowerConfig';
 
@@ -34,6 +34,7 @@ interface MeterMultiplierSectionProps {
 type MeterCategory = 'all' | 'product' | 'well' | 'locator' | 'power';
 
 export function MeterMultiplierSection({ plantId, canEdit }: MeterMultiplierSectionProps) {
+  const navigate = useNavigate();
   const [filter, setFilter] = useState<MeterCategory>('all');
   const [expandedMeters, setExpandedMeters] = useState<Set<string>>(new Set());
 
@@ -46,7 +47,6 @@ export function MeterMultiplierSection({ plantId, canEdit }: MeterMultiplierSect
   const [powerModalOpen, setPowerModalOpen] = useState(false);
   const [powerTarget, setPowerTarget] = useState<PowerMeterWorkflowTarget | null>(null);
   const [powerEventType, setPowerEventType] = useState<'physical_replacement' | 'multiplier_cutover'>('multiplier_cutover');
-  const [powerManageOpen, setPowerManageOpen] = useState(false);
 
   // Meter configuration flags
   const { config: meterConfig } = usePlantMeterConfig(plantId);
@@ -325,11 +325,12 @@ export function MeterMultiplierSection({ plantId, canEdit }: MeterMultiplierSect
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setPowerManageOpen(true)}
+              onClick={() => navigate(`/plants/${plantId}?tab=power`)}
               className="h-7 text-2xs px-2.5 gap-1 text-foreground"
-              title="Manage Power Meter Counts & Names"
+              title="Manage power meter counts & names in Power & Energy"
             >
-              <Settings2 className="h-3 w-3 text-muted-foreground" /> Power Sources
+              <Zap className="h-3 w-3 text-muted-foreground" /> Power Sources
+              <ArrowUpRight className="h-3 w-3 text-muted-foreground" />
             </Button>
           )}
         </div>
@@ -400,15 +401,6 @@ export function MeterMultiplierSection({ plantId, canEdit }: MeterMultiplierSect
         plantId={plantId}
         target={powerTarget}
         eventType={powerEventType}
-      />
-
-      <PowerMeterManageModal
-        open={powerManageOpen}
-        onOpenChange={setPowerManageOpen}
-        plantId={plantId}
-        hasSolar={hasSolar}
-        hasGrid={hasGrid}
-        initialConfig={powerConfig}
       />
     </div>
   );

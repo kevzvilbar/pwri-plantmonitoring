@@ -6,7 +6,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Gauge, Sun, Loader2, SlidersHorizontal, ArrowUpRight } from 'lucide-react';
+import { Gauge, Sun, Loader2, SlidersHorizontal, ArrowUpRight, Settings2 } from 'lucide-react';
 import { ChangeMeterIcon } from '@/components/icons/water-icons';
 import { usePlantMeterConfig, GridPylonIcon } from '../../../shared';
 import { usePlantPowerConfig } from '@/features/plants/hooks/usePlantPowerConfig';
@@ -15,6 +15,7 @@ import { PowerChartHeader } from '../sections/PowerChartHeader';
 import { PowerKpiStrip } from '../sections/PowerKpiStrip';
 import { PowerChart } from '../sections/PowerChart';
 import { PowerMeterMultiplierModal, type PowerMeterWorkflowTarget } from '../components/PowerMeterMultiplierModal';
+import { PowerMeterManageModal } from '../components/PowerMeterManageModal';
 import { PowerMeterChangeForm } from '../sections/PowerMeterChangeForm';
 
 export { PowerMeterChangeForm as PowerMeterChangeDialog } from '../sections/PowerMeterChangeForm';
@@ -33,6 +34,7 @@ export function PowerMetersCard({ plant }: { plant: any }) {
 
   const [modalOpen, setModalOpen] = useState(false);
   const [modalTarget, setModalTarget] = useState<PowerMeterWorkflowTarget | null>(null);
+  const [manageOpen, setManageOpen] = useState(false);
 
   const solarCount = savedConfig?.solar_meter_count ?? 1;
   const gridCount = savedConfig?.grid_meter_count ?? 1;
@@ -105,7 +107,7 @@ export function PowerMetersCard({ plant }: { plant: any }) {
                 </div>
               </div>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Power meter counts, names, and multipliers are uniformly managed in{' '}
+                Power source counts and names are managed here. Per-meter multipliers are set via{' '}
                 <strong className="text-foreground font-medium">Plant Config → Meter Multipliers</strong>.
               </p>
             </div>
@@ -114,6 +116,16 @@ export function PowerMetersCard({ plant }: { plant: any }) {
           <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
             {canEdit && (
               <>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setManageOpen(true)}
+                  className="gap-1.5 h-8 text-xs font-medium"
+                  title="Manage Power Meter Counts & Names"
+                >
+                  <Settings2 className="h-3.5 w-3.5 text-muted-foreground" />
+                  <span>Power Sources</span>
+                </Button>
                 <Button
                   size="sm"
                   variant="outline"
@@ -221,6 +233,15 @@ export function PowerMetersCard({ plant }: { plant: any }) {
         onSuccess={() => {
           qc.invalidateQueries({ queryKey: ['plant-power-config', plant.id] });
         }}
+      />
+
+      <PowerMeterManageModal
+        open={manageOpen}
+        onOpenChange={setManageOpen}
+        plantId={plant.id}
+        hasSolar={hasSolar}
+        hasGrid={hasGrid}
+        initialConfig={savedConfig}
       />
     </div>
   );
