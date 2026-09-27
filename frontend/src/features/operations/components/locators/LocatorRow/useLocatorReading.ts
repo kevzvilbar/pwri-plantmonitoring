@@ -184,6 +184,9 @@ export function useLocatorReading({
       return;
     }
 
+    let guardUnverified = false;
+    let guardPendingReview = false;
+
     if (!editingId && userId) {
       setSaving(true);
       const guard = await evaluateReadingGuard(
@@ -207,7 +210,15 @@ export function useLocatorReading({
         return;
       }
       if (guard.status === 'pending_review') {
+        guardPendingReview = true;
         toast.info(`${locator.name}: ${guard.detail}`, { duration: 8000 });
+      }
+      if (guard.status === 'unverified') {
+        guardUnverified = true;
+        toast.info(
+          `${locator.name}: Offline entry saved to outbox — integrity checks will complete when synced and flagged for supervisor review.`,
+          { duration: 6000 },
+        );
       }
     }
 
@@ -228,6 +239,9 @@ export function useLocatorReading({
       is_estimated: false,
       is_meter_replacement: false,
     };
+    if (guardPendingReview || guardUnverified) {
+      payload.norm_status = 'pending_review';
+    }
 
     if (!editingId) {
       try {

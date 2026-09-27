@@ -55,11 +55,15 @@ function makeQueryResult(data: MockRow[] | null, error: unknown = null): Supabas
  * Pass [] (not null) for "no rows found", matching what supabase-js actually
  * returns for a query that matched nothing.
  */
-function queueSupabaseResponses(...dataList: Array<MockRow[] | null>) {
+function queueSupabaseResponses(...dataList: Array<MockRow[] | null | { data: MockRow[] | null; error: unknown }>) {
   const mockFrom = supabase.from as unknown as Mock;
   mockFrom.mockReset();
-  dataList.forEach((data) => {
-    mockFrom.mockImplementationOnce(() => makeQueryResult(data));
+  dataList.forEach((item) => {
+    if (item && typeof item === 'object' && ('data' in item || 'error' in item) && !Array.isArray(item)) {
+      mockFrom.mockImplementationOnce(() => makeQueryResult((item as any).data, (item as any).error));
+    } else {
+      mockFrom.mockImplementationOnce(() => makeQueryResult(item as MockRow[] | null));
+    }
   });
 }
 
@@ -332,6 +336,33 @@ describe('evaluateReadingGuard — clean path', () => {
   });
 });
 
+describe('evaluateReadingGuard — network error / offline degradation', () => {
+  it('returns unverified instead of ok when cooldown check query errors out offline', async () => {
+    const readingDatetime = new Date('2026-01-15T12:00:00Z');
+    queueSupabaseResponses({ data: null, error: { message: 'Failed to fetch (offline)' } });
+
+    const r = await evaluateReadingGuard('well', 'well-1', 'plant-1', 'user-1', 105, readingDatetime, false, false, 10);
+    expect(r.status).toBe('unverified');
+    if (r.status === 'unverified') {
+      expect(r.reason).toBe('offline_or_network_error');
+    }
+  });
+
+  it('returns unverified instead of ok when last good reading query errors out offline', async () => {
+    const readingDatetime = new Date('2026-01-15T12:00:00Z');
+    queueSupabaseResponses(
+      [], // cooldown ok
+      { data: null, error: { message: 'Failed to fetch (offline)' } }, // lastGood error
+    );
+
+    const r = await evaluateReadingGuard('well', 'well-1', 'plant-1', 'user-1', 105, readingDatetime, false, false, 10);
+    expect(r.status).toBe('unverified');
+    if (r.status === 'unverified') {
+      expect(r.reason).toBe('offline_or_network_error');
+    }
+  });
+});
+
 describe('fetchLastGoodReading', () => {
   it('returns the parsed reading and date when a row is found', async () => {
     const dt = new Date('2026-01-10T08:00:00Z');
@@ -351,6 +382,14 @@ describe('fetchLastGoodReading', () => {
     queueSupabaseResponses(null);
     const r = await fetchLastGoodReading('well', 'well-1', 'plant-1', new Date());
     expect(r).toEqual({ reading: null, dt: null });
+  });
+
+  it('returns error when query fails', async () => {
+    queueSupabaseResponses({ data: null, error: { message: 'Network error' } });
+    const r = await fetchLastGoodReading('well', 'well-1', 'plant-1', new Date());
+    expect(r.reading).toBeNull();
+    expect(r.dt).toBeNull();
+    expect(r.error).toBeDefined();
   });
 });
 

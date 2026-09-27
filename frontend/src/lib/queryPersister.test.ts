@@ -40,6 +40,7 @@ describe('queryPersister', () => {
         ['ro_trains'],
         ['plant-meter-config', 'plant-1'],
         ['plant-meter-config-permeate', 'plant-1'],
+        ['plant-power-config', 'plant-1'],
         ['dash-compliance-thresholds', 'plant-1'],
         ['compliance-thresholds', 'plant-1'],
         ['thresholds', 'global'],
@@ -57,6 +58,14 @@ describe('queryPersister', () => {
         const query = createMockQuery(key, 'success', { sample: true });
         expect(shouldDehydrateQuery(query), `Key ${JSON.stringify(key)} should be allowed`).toBe(true);
       }
+    });
+
+    it('rejects non-JSON-safe query data like Map and Set', () => {
+      const mapQuery = createMockQuery(['wells', 'plant-1'], 'success', new Map([['a', 1]]));
+      expect(shouldDehydrateQuery(mapQuery)).toBe(false);
+
+      const setQuery = createMockQuery(['wells', 'plant-1'], 'success', new Set([1, 2, 3]));
+      expect(shouldDehydrateQuery(setQuery)).toBe(false);
     });
 
     it('rejects hot telemetry, readings, and live event queries', () => {

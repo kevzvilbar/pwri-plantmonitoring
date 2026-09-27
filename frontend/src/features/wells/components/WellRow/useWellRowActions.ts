@@ -284,7 +284,8 @@ export function useWellRowActions({
       return;
     }
 
-    let guardReason: 'backward' | 'spike' | null = null;
+    let guardReason: 'backward' | 'spike' | 'unverified' | null = null;
+    let guardUnverified = false;
 
     if (!editingId && userId) {
       setSaving(true);
@@ -308,6 +309,14 @@ export function useWellRowActions({
       if (guard.status === 'pending_review') {
         guardReason = guard.reason;
         toast.info(`${well.name}: ${guard.detail}`, { duration: 8000 });
+      }
+      if (guard.status === 'unverified') {
+        guardReason = 'unverified';
+        guardUnverified = true;
+        toast.info(
+          `${well.name}: Offline entry saved to outbox — integrity checks will complete when synced and flagged for supervisor review.`,
+          { duration: 6000 },
+        );
       }
     }
 
@@ -334,6 +343,9 @@ export function useWellRowActions({
       gps_lat, gps_lng, off_location_flag: false, recorded_by: userId,
       reading_datetime: new Date(customDt).toISOString(),
     };
+    if (guardReason === 'backward' || guardReason === 'spike' || guardUnverified) {
+      payload.norm_status = 'pending_review';
+    }
     if (tdsReading) payload.tds_ppm = +tdsReading;
     if (ntuReading) payload.turbidity_ntu = +ntuReading;
     if (pressureReading) payload.pressure_psi = +pressureReading;

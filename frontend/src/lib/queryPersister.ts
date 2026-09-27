@@ -68,6 +68,7 @@ const PERSIST_ALLOWLIST_PREFIXES = [
   'ro_trains',
   'plant-meter-config',
   'plant-meter-config-permeate',
+  'plant-power-config',
   'dash-compliance-thresholds',
   'compliance-thresholds',
   'thresholds',
@@ -143,6 +144,11 @@ const PERSIST_DENYLIST_PREFIXES = [
 export function shouldDehydrateQuery(query: Query): boolean {
   // Only persist successful queries that contain actual data
   if (query.state.status !== 'success' || query.state.data === undefined) {
+    return false;
+  }
+
+  // Defensively reject Map/Set or non-serializable root structures
+  if (query.state.data instanceof Map || query.state.data instanceof Set) {
     return false;
   }
 

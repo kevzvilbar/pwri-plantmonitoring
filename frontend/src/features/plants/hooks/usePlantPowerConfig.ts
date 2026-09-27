@@ -140,7 +140,9 @@ export function usePlantPowerConfig(plantId: string | null | undefined) {
         (localCfg.grid_meter_count > (dbCfg?.grid_meter_count ?? 1) ||
           localCfg.solar_meter_count > (dbCfg?.solar_meter_count ?? 1) ||
           (localCfg.grid_meter_names.some((n, i) => n !== `Grid Meter ${i + 1}` && n !== 'Grid Meter') &&
-            (!dbCfg || dbCfg.grid_meter_names.every((n, i) => n === `Grid Meter ${i + 1}` || n === 'Grid Meter'))))
+            (!dbCfg || dbCfg.grid_meter_names.every((n, i) => n === `Grid Meter ${i + 1}` || n === 'Grid Meter'))) ||
+          (localCfg.solar_meter_names.some((n, i) => n !== `Solar Meter ${i + 1}` && n !== 'Solar Meter') &&
+            (!dbCfg || dbCfg.solar_meter_names.every((n, i) => n === `Solar Meter ${i + 1}` || n === 'Solar Meter'))))
       ) {
         return localCfg;
       }
@@ -215,7 +217,8 @@ export function usePlantPowerConfig(plantId: string | null | undefined) {
             if (
               parsed.grid_meter_count > 1 ||
               parsed.solar_meter_count > 1 ||
-              parsed.grid_meter_names.some((n, i) => n !== `Grid Meter ${i + 1}` && n !== 'Grid Meter')
+              parsed.grid_meter_names.some((n, i) => n !== `Grid Meter ${i + 1}` && n !== 'Grid Meter') ||
+              parsed.solar_meter_names.some((n, i) => n !== `Solar Meter ${i + 1}` && n !== 'Solar Meter')
             ) {
               pendingCfg = parsed;
             }

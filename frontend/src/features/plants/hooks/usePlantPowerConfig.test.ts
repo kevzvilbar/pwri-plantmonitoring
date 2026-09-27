@@ -73,4 +73,19 @@ describe('usePlantPowerConfig and normalizePowerConfig', () => {
     expect(config.solar_meter_multipliers.length).toBe(20);
     expect(config.solar_meter_multipliers_enabled.length).toBe(20);
   });
+
+  it('preserves solar-only custom meter names and multiplier configurations', () => {
+    const solarCustom = {
+      solar_meter_count: 2,
+      solar_meter_names: ['Rooftop Array A', 'Carport Array B'],
+      solar_meter_multipliers: [10, 20],
+      solar_meter_multipliers_enabled: [true, true],
+    };
+
+    const config = normalizePowerConfig(solarCustom);
+    expect(config.solar_meter_count).toBe(2);
+    expect(config.solar_meter_names).toEqual(['Rooftop Array A', 'Carport Array B']);
+    expect(config.solar_meter_multipliers).toEqual([10, 20]);
+    expect(config.solar_meter_multipliers_enabled).toEqual([true, true]);
+  });
 });

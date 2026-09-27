@@ -29,7 +29,8 @@ export type GuardResult =
   | { status: 'ok' }
   | { status: 'pending_review'; reason: 'backward' | 'spike'; detail: string }
   | { status: 'blocked'; reason: 'cooldown'; minutesLeft: number; availableAt: Date }
-  | { status: 'blocked'; reason: 'duplicate'; detail: string };
+  | { status: 'blocked'; reason: 'duplicate'; detail: string }
+  | { status: 'unverified'; reason: 'offline_or_network_error'; detail: string };
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -104,7 +105,7 @@ export async function evaluateReadingGuard(
   const entityCol = entityType === 'locator' ? 'locator_id' : 'well_id';
 
   // ── 1. Cooldown check (per user, per entity) ──────────────────────────────
-  const { data: recentUserEntry } = await (supabase
+  const { data: recentUserEntry, error: cooldownError } = await (supabase
     .from(table as any)
     .select('reading_datetime')
     .eq(entityCol, entityId)
@@ -113,6 +114,14 @@ export async function evaluateReadingGuard(
     .not('norm_status', 'in', '("retracted")')
     .order('reading_datetime', { ascending: false })
     .limit(1) as any);
+
+  if (cooldownError) {
+    return {
+      status: 'unverified',
+      reason: 'offline_or_network_error',
+      detail: 'Unable to verify cooldown status while offline. Reading will be queued and submitted for supervisor review.',
+    };
+  }
 
   if (recentUserEntry?.length) {
     const lastDt = new Date(recentUserEntry[0].reading_datetime);
@@ -125,7 +134,7 @@ export async function evaluateReadingGuard(
   }
 
   // ── 2. Fetch last good reading (non-retracted, non-pending_review) ────────
-  const { data: lastGood } = await (supabase
+  const { data: lastGood, error: lastGoodError } = await (supabase
     .from(table as any)
     .select('current_reading, reading_datetime')
     .eq(entityCol, entityId)
@@ -134,6 +143,14 @@ export async function evaluateReadingGuard(
     .lt('reading_datetime', readingDatetime.toISOString())
     .order('reading_datetime', { ascending: false })
     .limit(1) as any);
+
+  if (lastGoodError) {
+    return {
+      status: 'unverified',
+      reason: 'offline_or_network_error',
+      detail: 'Unable to verify against prior readings while offline. Reading will be queued and submitted for supervisor review.',
+    };
+  }
 
   const prevReading: number | null = lastGood?.length ? Number(lastGood[0].current_reading) : null;
   const prevDt: Date | null = lastGood?.length ? new Date(lastGood[0].reading_datetime) : null;
@@ -245,11 +262,11 @@ export async function fetchLastGoodReading(
   entityId: string,
   plantId: string,
   beforeDatetime: Date,
-): Promise<{ reading: number | null; dt: Date | null }> {
+): Promise<{ reading: number | null; dt: Date | null; error?: any }> {
   const table = entityType === 'locator' ? 'locator_readings' : 'well_readings';
   const entityCol = entityType === 'locator' ? 'locator_id' : 'well_id';
 
-  const { data } = await (supabase
+  const { data, error } = await (supabase
     .from(table as any)
     .select('current_reading, reading_datetime')
     .eq(entityCol, entityId)
@@ -259,6 +276,7 @@ export async function fetchLastGoodReading(
     .order('reading_datetime', { ascending: false })
     .limit(1) as any);
 
+  if (error) return { reading: null, dt: null, error };
   if (!data?.length) return { reading: null, dt: null };
   return {
     reading: Number(data[0].current_reading),

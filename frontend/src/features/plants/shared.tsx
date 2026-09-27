@@ -269,6 +269,38 @@ export const METER_CONFIG_LS = (plantId: string) => `plant_meter_config_${plantI
 // every production/consumption calculation until it actually syncs.
 const UNSYNCED_CONFIG_LS = (plantId: string) => `plant_meter_config_unsynced_${plantId}`;
 
+export function isMeterConfigCustomized(cfg: Partial<PlantMeterConfig> | null | undefined): boolean {
+  if (!cfg) return false;
+  if (cfg.ro_production_source && cfg.ro_production_source !== 'product') return true;
+  if (cfg.permeate_is_production) return true;
+  if (cfg.permeate_cutoff_time && cfg.permeate_cutoff_time !== '00:20') return true;
+  if (cfg.permeate_cutoff_enabled === false) return true;
+  if (cfg.nrw_enabled) return true;
+  if (cfg.has_billed_volume_meter) return true;
+  if (cfg.has_solar) return true;
+  if (cfg.has_grid === false) return true;
+  if (cfg.solar_capacity_kw !== null && cfg.solar_capacity_kw !== undefined) return true;
+  if (cfg.solar_meter_count && cfg.solar_meter_count > 1) return true;
+  if (cfg.grid_meter_count && cfg.grid_meter_count > 1) return true;
+  if (cfg.default_solar_input_mode && cfg.default_solar_input_mode !== 'raw') return true;
+  if (cfg.locator_readings_per_day && cfg.locator_readings_per_day !== 3) return true;
+  if (Array.isArray(cfg.enabled_chemicals) && cfg.enabled_chemicals.length > 0) return true;
+  if (Array.isArray(cfg.wells_shared_electric_groups) && cfg.wells_shared_electric_groups.length > 0) return true;
+  if (Array.isArray(cfg.wells_dedicated_electric_ids) && cfg.wells_dedicated_electric_ids.length > 0) return true;
+  if (cfg.wells_no_electric) return true;
+  if (Array.isArray(cfg.locators_dedicated_bulk_ids) && cfg.locators_dedicated_bulk_ids.length > 0) return true;
+  if (Array.isArray(cfg.locators_shared_bulk_groups) && cfg.locators_shared_bulk_groups.length > 0) return true;
+  if (cfg.locators_no_bulk) return true;
+  if (cfg.ro_has_per_train_electricity || cfg.ro_has_per_train_water) return true;
+  if (cfg.ro_train_em_config && Object.keys(cfg.ro_train_em_config).length > 0) return true;
+  if (Array.isArray(cfg.cip_chemicals)) {
+    if (cfg.cip_chemicals.length !== 3) return true;
+    const defaultCipNames = ['Caustic Soda', 'HCl', 'SLS'];
+    if (cfg.cip_chemicals.some((c, i) => c.name !== defaultCipNames[i])) return true;
+  }
+  return false;
+}
+
 export function usePlantMeterConfig(plantId: string | null | undefined) {
   const qc = useQueryClient();
 
@@ -277,21 +309,42 @@ export function usePlantMeterConfig(plantId: string | null | undefined) {
     enabled: !!plantId,
     staleTime: 30_000,
     queryFn: async () => {
-      // Try DB first
+      // 1. Read localStorage first
+      let localCfg: PlantMeterConfig | null = null;
+      try {
+        const raw =
+          localStorage.getItem(UNSYNCED_CONFIG_LS(plantId!)) ||
+          localStorage.getItem(METER_CONFIG_LS(plantId!));
+        if (raw) {
+          localCfg = { ...DEFAULT_METER_CONFIG, ...JSON.parse(raw) } as PlantMeterConfig;
+        }
+      } catch {
+        /* ignore */
+      }
+
+      // 2. Try DB
+      let dbCfg: PlantMeterConfig | null = null;
       try {
         const { data, error } = await (supabase.from('plant_meter_config' as any) as any)
           .select('config')
           .eq('plant_id', plantId)
           .maybeSingle();
         if (!error && data?.config) {
-          return { ...DEFAULT_METER_CONFIG, ...data.config } as PlantMeterConfig;
+          dbCfg = { ...DEFAULT_METER_CONFIG, ...data.config } as PlantMeterConfig;
         }
-      } catch { /* table may not exist yet */ }
-      // Fall back to localStorage
-      try {
-        const raw = localStorage.getItem(METER_CONFIG_LS(plantId!));
-        if (raw) return { ...DEFAULT_METER_CONFIG, ...JSON.parse(raw) } as PlantMeterConfig;
-      } catch { /* ignore */ }
+      } catch {
+        /* table may not exist yet */
+      }
+
+      // Precedence Protection:
+      // If local storage contains customized meter settings while DB has only default/blank config,
+      // preserve the local configuration so settings are never lost!
+      if (localCfg && isMeterConfigCustomized(localCfg) && (!dbCfg || !isMeterConfigCustomized(dbCfg))) {
+        return localCfg;
+      }
+
+      if (dbCfg) return dbCfg;
+      if (localCfg) return localCfg;
       return DEFAULT_METER_CONFIG;
     },
   });
@@ -326,31 +379,57 @@ export function usePlantMeterConfig(plantId: string | null | undefined) {
     return !error;
   }, [plantId]);
 
-  // ── Retry-on-load ───────────────────────────────────────────────────────
+  // ── Retry-on-load / Self-healing sync ─────────────────────────────────────
   // If a previous saveConfig() couldn't reach Supabase (missing table, RLS
   // block, offline device) it's marked local-only via UNSYNCED_CONFIG_LS.
-  // Every time this hook mounts/re-mounts for a plant with that marker set,
-  // silently retry the push — so a config that was only ever "saved" in one
-  // operator's browser has a chance to reach the DB (and every screen that
-  // reads it directly) without anyone having to notice and re-save by hand.
+  // Also checks if localStorage contains customized settings that need syncing.
   useEffect(() => {
     if (!plantId) return;
     let cancelled = false;
     (async () => {
-      let pendingRaw: string | null = null;
-      try { pendingRaw = localStorage.getItem(UNSYNCED_CONFIG_LS(plantId)); } catch { /* ignore */ }
-      if (!pendingRaw) return;
+      let pending: PlantMeterConfig | null = null;
       try {
-        const pending = JSON.parse(pendingRaw) as PlantMeterConfig;
+        const pendingRaw = localStorage.getItem(UNSYNCED_CONFIG_LS(plantId));
+        if (pendingRaw) {
+          pending = JSON.parse(pendingRaw) as PlantMeterConfig;
+        }
+      } catch {
+        /* ignore */
+      }
+
+      if (!pending) {
+        try {
+          const localRaw = localStorage.getItem(METER_CONFIG_LS(plantId));
+          if (localRaw) {
+            const parsed = { ...DEFAULT_METER_CONFIG, ...JSON.parse(localRaw) } as PlantMeterConfig;
+            if (isMeterConfigCustomized(parsed)) {
+              pending = parsed;
+            }
+          }
+        } catch {
+          /* ignore */
+        }
+      }
+
+      if (!pending) return;
+
+      try {
         const ok = await pushToDb(pending);
         if (ok && !cancelled) {
-          try { localStorage.removeItem(UNSYNCED_CONFIG_LS(plantId)); } catch { /* ignore */ }
+          try {
+            localStorage.removeItem(UNSYNCED_CONFIG_LS(plantId));
+            localStorage.setItem(METER_CONFIG_LS(plantId), JSON.stringify(pending));
+          } catch {
+            /* ignore */
+          }
           setIsLocalOnly(false);
           qc.invalidateQueries({ queryKey: ['plant-meter-config', plantId] });
           qc.invalidateQueries();
           toast.success('A meter configuration change that was saved locally has now synced to the database.');
         }
-      } catch { /* still unreachable — leave the marker, try again next visit */ }
+      } catch {
+        /* still unreachable — leave the marker, try again next visit */
+      }
     })();
     return () => { cancelled = true; };
   }, [plantId, qc, pushToDb]);
