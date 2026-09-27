@@ -49,8 +49,7 @@ export const CACHE_MAX_AGE = 24 * 60 * 60 * 1000;
 export const CACHE_BUSTER =
   import.meta.env.VITE_APP_VERSION ||
   import.meta.env.VITE_RELEASE ||
-  import.meta.env.MODE ||
-  'pwri-v1';
+  'pwri-cache-v2';
 
 /**
  * Query key prefixes explicitly allowed to dehydrate to IndexedDB.
@@ -79,15 +78,6 @@ const PERSIST_ALLOWLIST_PREFIXES = [
   'custom-roles',
   'custom-role-overrides',
   'daily-reading-limits',
-  'dash-plant-meter-configs',
-  'dash-power-config-map',
-  'dash-locator-ids',
-  'dash-locator-direct-ids',
-  'dash-meter-direct-ids',
-  'dash-well-ids',
-  'dash-permeate-train-ids',
-  'dash-quality-train-meta',
-  'dash-well-names-for-trains',
   'blending-wells-tags',
 ];
 

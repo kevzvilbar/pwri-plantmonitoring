@@ -50,13 +50,6 @@ describe('queryPersister', () => {
         ['custom-roles'],
         ['custom-role-overrides', 'r1'],
         ['daily-reading-limits'],
-        ['dash-plant-meter-configs', ['p1']],
-        ['dash-power-config-map', ['p1']],
-        ['dash-locator-ids', ['p1']],
-        ['dash-well-ids', ['p1']],
-        ['dash-permeate-train-ids', ['p1']],
-        ['dash-quality-train-meta', ['p1']],
-        ['dash-well-names-for-trains', ['p1']],
         ['blending-wells-tags', 'p1'],
       ];
 

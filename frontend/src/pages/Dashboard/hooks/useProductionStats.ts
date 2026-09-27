@@ -253,22 +253,31 @@ export function useProductionStats({
   const { data: _permeateTrainMeta } = useQuery({
     queryKey: ['dash-permeate-train-ids', permeateProductionPlantIds],
     queryFn: async () => {
-      if (!permeateProductionPlantIds.length) return { ids: [] as string[], trainPlantMap: new Map<string, string>() };
+      if (!permeateProductionPlantIds.length) return { ids: [] as string[], trainPlantMap: {} as Record<string, string> };
       const { data, error } = await supabase
         .from('ro_trains')
         .select('id, plant_id, unit_type')
         .in('plant_id', permeateProductionPlantIds);
       if (error) throw error;
       const rows = (data ?? []).filter((t) => t.unit_type !== 'secondary');
-      const trainPlantMap = new Map<string, string>();
-      rows.forEach((t) => trainPlantMap.set(t.id, t.plant_id));
+      const trainPlantMap: Record<string, string> = {};
+      rows.forEach((t) => { trainPlantMap[t.id] = t.plant_id; });
       return { ids: rows.map((t) => t.id), trainPlantMap };
     },
     enabled: needsClientFallback && permeateProductionPlantIds.length > 0,
     staleTime: 10 * 60_000,
   });
   const permeateTrainIds = _permeateTrainMeta?.ids ?? [];
-  const permeateTrainPlantMap = _permeateTrainMeta?.trainPlantMap ?? new Map<string, string>();
+  const permeateTrainPlantMap = useMemo(() => {
+    const raw = _permeateTrainMeta?.trainPlantMap;
+    if (!raw) return new Map<string, string>();
+    if (raw instanceof Map) return raw;
+    const map = new Map<string, string>();
+    if (typeof raw === 'object') {
+      Object.entries(raw).forEach(([k, v]) => map.set(k, String(v)));
+    }
+    return map;
+  }, [_permeateTrainMeta]);
 
   const { data: todayRoPermeate = [] } = useQuery({
     queryKey: ['dash-ro-permeate-today', permeateTrainIds, _localDateStr],

@@ -21,42 +21,63 @@ export function useQualityStats({
   const { data: _qualityTrainMeta } = useQuery({
     queryKey: ['dash-quality-train-meta', plantIds],
     queryFn: async () => {
-      if (!plantIds.length) return { ids: [] as string[], metaMap: new Map<string, { plant_id: string; train_number: number | null; train_name: string | null; well_id: string | null; unit_type: string | null }>() };
+      if (!plantIds.length) return { ids: [] as string[], metaMap: {} as Record<string, { plant_id: string; train_number: number | null; train_name: string | null; well_id: string | null; unit_type: string | null }> };
       const { data, error } = await supabase
         .from('ro_trains')
         .select('id, plant_id, train_number, name, well_id, unit_type')
         .in('plant_id', plantIds);
       if (error) throw error;
       const rows = data ?? [];
-      const metaMap = new Map<string, { plant_id: string; train_number: number | null; train_name: string | null; well_id: string | null; unit_type: string | null }>();
-      rows.forEach((t) => metaMap.set(t.id, {
-        plant_id:     t.plant_id,
-        train_number: t.train_number ?? null,
-        train_name:   t.name ?? null,
-        well_id:      t.well_id ?? null,
-        unit_type:    t.unit_type ?? 'primary',
-      }));
+      const metaMap: Record<string, { plant_id: string; train_number: number | null; train_name: string | null; well_id: string | null; unit_type: string | null }> = {};
+      rows.forEach((t) => {
+        metaMap[t.id] = {
+          plant_id:     t.plant_id,
+          train_number: t.train_number ?? null,
+          train_name:   t.name ?? null,
+          well_id:      t.well_id ?? null,
+          unit_type:    t.unit_type ?? 'primary',
+        };
+      });
       return { ids: rows.map((t) => t.id), metaMap };
     },
     enabled: plantIds.length > 0,
     staleTime: 10 * 60_000,
   });
-  const qualityTrainIds   = _qualityTrainMeta?.ids    ?? EMPTY_TRAIN_IDS;
-  const qualityTrainMeta2 = _qualityTrainMeta?.metaMap ?? EMPTY_TRAIN_META_MAP;
+  const qualityTrainIds = _qualityTrainMeta?.ids ?? EMPTY_TRAIN_IDS;
+  const qualityTrainMeta2 = useMemo(() => {
+    const raw = _qualityTrainMeta?.metaMap;
+    if (!raw) return EMPTY_TRAIN_META_MAP;
+    if (raw instanceof Map) return raw;
+    const map = new Map<string, { plant_id: string; train_number: number | null; train_name: string | null; well_id: string | null; unit_type: string | null }>();
+    if (typeof raw === 'object') {
+      Object.entries(raw).forEach(([k, v]) => map.set(k, v));
+    }
+    return map;
+  }, [_qualityTrainMeta]);
 
-  const { data: wellNamesByTrainWell = new Map<string, string>() } = useQuery({
+  const { data: rawWellNames = {} } = useQuery({
     queryKey: ['dash-well-names-for-trains', plantIds],
     queryFn: async () => {
-      if (!plantIds.length) return new Map<string, string>();
+      if (!plantIds.length) return {} as Record<string, string>;
       const { data, error } = await supabase.from('wells').select('id, name').in('plant_id', plantIds);
       if (error) throw error;
-      const map = new Map<string, string>();
-      (data ?? []).forEach((w) => map.set(w.id, w.name));
+      const map: Record<string, string> = {};
+      (data ?? []).forEach((w) => { map[w.id] = w.name; });
       return map;
     },
     enabled: plantIds.length > 0,
     staleTime: 10 * 60_000,
   });
+
+  const wellNamesByTrainWell = useMemo(() => {
+    if (!rawWellNames) return new Map<string, string>();
+    if (rawWellNames instanceof Map) return rawWellNames;
+    const map = new Map<string, string>();
+    if (typeof rawWellNames === 'object') {
+      Object.entries(rawWellNames).forEach(([k, v]) => map.set(k, String(v)));
+    }
+    return map;
+  }, [rawWellNames]);
 
   const { data: latestRO = [] } = useQuery({
     queryKey: ['dash-ro-recent', qualityTrainIds],
