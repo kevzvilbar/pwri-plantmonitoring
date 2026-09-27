@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { useMutation } from '@tanstack/react-query';
 import { useDraft } from '@/hooks/useDraft';
 import { supabase } from '@/integrations/supabase/client';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -76,6 +77,127 @@ export function useWellRowActions({
   const [showReplaceMeter, setShowReplaceMeter] = useState(false);
   const [meterReplacePending, setMeterReplacePending] = useState<{ newInitialReading: number | null; replacementId: string | null } | null>(null);
   const [wellLastSavePending, setWellLastSavePending] = useState(false);
+
+  const saveWellMutation = useMutation({
+    mutationKey: ['save-well-reading', well.id],
+    mutationFn: async ({ payload, isEdit, editId }: { payload: any; isEdit: boolean; editId: string | null }) => {
+      const { data, error } = isEdit
+        ? await (supabase.from('well_readings').update(payload).eq('id', editId!).select('id,norm_status,current_reading,previous_reading,daily_volume').single() as any)
+        : await (supabase.from('well_readings').insert(payload).select('id,norm_status,current_reading,previous_reading,daily_volume').single() as any);
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const savePowerMutation = useMutation({
+    mutationKey: ['save-well-power', well.id],
+    mutationFn: async ({ val, lastTodayId, customDtIso }: { val: number; lastTodayId: string | null; customDtIso: string }) => {
+      if (lastTodayId) {
+        const { error } = await supabase.from('well_readings')
+          .update({ power_meter_reading: val }).eq('id', lastTodayId);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from('well_readings').insert({
+          well_id: well.id, plant_id: plantId,
+          current_reading: previousMeter ?? 0, previous_reading: previousMeter,
+          power_meter_reading: val, recorded_by: userId,
+          reading_datetime: customDtIso,
+        } as any);
+        if (error) throw error;
+      }
+    },
+  });
+
+  const saveTdsMutation = useMutation({
+    mutationKey: ['save-well-tds', well.id],
+    mutationFn: async ({ val, lastTodayId, customDtIso }: { val: number; lastTodayId: string | null; customDtIso: string }) => {
+      if (lastTodayId) {
+        const { error } = await (supabase.from('well_readings') as any).update({ tds_ppm: val }).eq('id', lastTodayId);
+        if (error) throw error;
+      } else {
+        const { error } = await (supabase.from('well_readings') as any).insert({
+          well_id: well.id, plant_id: plantId,
+          current_reading: previousMeter ?? 0, previous_reading: previousMeter,
+          tds_ppm: val, recorded_by: userId,
+          reading_datetime: customDtIso,
+        });
+        if (error) throw error;
+      }
+    },
+  });
+
+  const saveNtuMutation = useMutation({
+    mutationKey: ['save-well-ntu', well.id],
+    mutationFn: async ({ val, lastTodayId, customDtIso }: { val: number; lastTodayId: string | null; customDtIso: string }) => {
+      if (lastTodayId) {
+        const { error } = await (supabase.from('well_readings') as any).update({ turbidity_ntu: val }).eq('id', lastTodayId);
+        if (error) throw error;
+      } else {
+        const { error } = await (supabase.from('well_readings') as any).insert({
+          well_id: well.id, plant_id: plantId,
+          current_reading: previousMeter ?? 0, previous_reading: previousMeter,
+          turbidity_ntu: val, recorded_by: userId,
+          reading_datetime: customDtIso,
+        });
+        if (error) throw error;
+      }
+    },
+  });
+
+  const savePressureMutation = useMutation({
+    mutationKey: ['save-well-pressure', well.id],
+    mutationFn: async ({ val, lastTodayId, customDtIso }: { val: number; lastTodayId: string | null; customDtIso: string }) => {
+      if (lastTodayId) {
+        const { error } = await (supabase.from('well_readings') as any).update({ pressure_psi: val }).eq('id', lastTodayId);
+        if (error) throw error;
+      } else {
+        const { error } = await (supabase.from('well_readings') as any).insert({
+          well_id: well.id, plant_id: plantId,
+          current_reading: previousMeter ?? 0, previous_reading: previousMeter,
+          pressure_psi: val, recorded_by: userId,
+          reading_datetime: customDtIso,
+        });
+        if (error) throw error;
+      }
+    },
+  });
+
+  const saveSharedPowerMutation = useMutation({
+    mutationKey: ['save-well-shared-power', well.id],
+    mutationFn: async ({ val, primaryWellId, prevPower, customDtIso }: { val: number; primaryWellId: string; prevPower: number | null; customDtIso: string }) => {
+      const startOfDay = new Date(); startOfDay.setHours(0, 0, 0, 0);
+      const { data: todayRecs, error: fetchErr } = await supabase
+        .from('well_readings').select('id')
+        .eq('well_id', primaryWellId)
+        .gte('reading_datetime', startOfDay.toISOString())
+        .order('reading_datetime', { ascending: false }).limit(1);
+      if (fetchErr) throw fetchErr;
+      if (todayRecs?.length) {
+        const { error } = await supabase.from('well_readings')
+          .update({ power_meter_reading: val }).eq('id', (todayRecs[0] as any).id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from('well_readings').insert({
+          well_id: primaryWellId, plant_id: plantId,
+          current_reading: prevPower ?? 0,
+          power_meter_reading: val, recorded_by: userId,
+          reading_datetime: customDtIso,
+        } as any);
+        if (error) throw error;
+      }
+    },
+  });
+
+  const saveGapReasonMutation = useMutation({
+    mutationKey: ['save-well-gap-reason', well.id],
+    mutationFn: async (payload: { entity_type: string; entity_id: string; plant_id: string; gap_date: string; reason_category: string; reason_detail: string | null; meter_key: string; logged_by: string | null }) => {
+      const { error } = await supabase.from('reading_gap_reasons' as any).upsert(
+        [payload] as any,
+        { onConflict: 'entity_type,entity_id,gap_date,meter_key' },
+      );
+      if (error) throw error;
+    },
+  });
 
   const { draft: draftWell, setDraft: setDraftWell, clearDraft: clearDraftWell } =
     useDraft(`well-reading-${well.id}`, { value: '' });
@@ -233,14 +355,16 @@ export function useWellRowActions({
       }
     }
 
-    const { data: savedRow, error } = editingId
-      ? await (supabase.from('well_readings').update(payload).eq('id', editingId).select('id,norm_status,current_reading,previous_reading,daily_volume').single() as any)
-      : await (supabase.from('well_readings').insert(payload).select('id,norm_status,current_reading,previous_reading,daily_volume').single() as any);
-
-    setSaving(false);
-
-    if (error) {
-      if (error.code === '23505') {
+    let savedRow: any = null;
+    try {
+      savedRow = await saveWellMutation.mutateAsync({
+        payload,
+        isEdit: !!editingId,
+        editId: editingId,
+      });
+    } catch (error: any) {
+      setSaving(false);
+      if (error?.code === '23505') {
         toast.error(
           `${well.name}: a reading was already submitted for this time. Check the log before resubmitting.`,
           { duration: 8000 },
@@ -250,6 +374,8 @@ export function useWellRowActions({
       }
       return;
     }
+
+    setSaving(false);
 
     if (editingId && editBefore) {
       const after: Record<string, unknown> = {
@@ -338,146 +464,113 @@ export function useWellRowActions({
     if (!powerReading) { toast.error(`${well.name}: enter a power reading`); return; }
     setSavingPower(true);
     const val = +powerReading;
-    if (lastToday) {
-      const { error } = await supabase.from('well_readings')
-        .update({ power_meter_reading: val }).eq('id', lastToday.id);
+    try {
+      await savePowerMutation.mutateAsync({
+        val,
+        lastTodayId: lastToday?.id ?? null,
+        customDtIso: new Date(customDt).toISOString(),
+      });
+      toast.success(`${well.name}: power saved`);
+      setPowerReading(''); onSaved();
+    } catch (error: any) {
+      toast.error(friendlyError(error));
+    } finally {
       setSavingPower(false);
-      if (error) { toast.error(friendlyError(error)); return; }
-    } else {
-      const { error } = await supabase.from('well_readings').insert({
-        well_id: well.id, plant_id: plantId,
-        current_reading: previousMeter ?? 0, previous_reading: previousMeter,
-        power_meter_reading: val, recorded_by: userId,
-        reading_datetime: new Date(customDt).toISOString(),
-      } as any);
-      setSavingPower(false);
-      if (error) { toast.error(friendlyError(error)); return; }
     }
-    toast.success(`${well.name}: power saved`);
-    setPowerReading(''); onSaved();
-  }, [powerReading, well.name, well.id, plantId, lastToday, previousMeter, userId, customDt, onSaved]);
+  }, [powerReading, well.name, lastToday, customDt, onSaved, savePowerMutation]);
 
   const saveTds = useCallback(async () => {
     if (!tdsReading) { toast.error(`${well.name}: enter a TDS value`); return; }
     setSavingTds(true);
     const val = +tdsReading;
     try {
-      let error: any;
-      if (lastToday) {
-        ({ error } = await (supabase.from('well_readings') as any).update({ tds_ppm: val }).eq('id', lastToday.id));
-      } else {
-        ({ error } = await (supabase.from('well_readings') as any).insert({
-          well_id: well.id, plant_id: plantId,
-          current_reading: previousMeter ?? 0, previous_reading: previousMeter,
-          tds_ppm: val, recorded_by: userId,
-          reading_datetime: new Date(customDt).toISOString(),
-        }));
-      }
-      if (error) throw new Error(error.message);
+      await saveTdsMutation.mutateAsync({
+        val,
+        lastTodayId: lastToday?.id ?? null,
+        customDtIso: new Date(customDt).toISOString(),
+      });
       toast.success(`${well.name}: TDS saved`);
       setTdsReading(''); onSaved();
     } catch (e) {
       toast.error(friendlyError(e));
       console.error('saveTds error:', e);
     } finally { setSavingTds(false); }
-  }, [tdsReading, well.name, well.id, plantId, lastToday, previousMeter, userId, customDt, onSaved]);
+  }, [tdsReading, well.name, lastToday, customDt, onSaved, saveTdsMutation]);
 
   const saveNtu = useCallback(async () => {
     if (!ntuReading) { toast.error(`${well.name}: enter a turbidity value`); return; }
     setSavingNtu(true);
     const val = +ntuReading;
     try {
-      let error: any;
-      if (lastToday) {
-        ({ error } = await (supabase.from('well_readings') as any).update({ turbidity_ntu: val }).eq('id', lastToday.id));
-      } else {
-        ({ error } = await (supabase.from('well_readings') as any).insert({
-          well_id: well.id, plant_id: plantId,
-          current_reading: previousMeter ?? 0, previous_reading: previousMeter,
-          turbidity_ntu: val, recorded_by: userId,
-          reading_datetime: new Date(customDt).toISOString(),
-        }));
-      }
-      if (error) throw new Error(error.message);
+      await saveNtuMutation.mutateAsync({
+        val,
+        lastTodayId: lastToday?.id ?? null,
+        customDtIso: new Date(customDt).toISOString(),
+      });
       toast.success(`${well.name}: NTU saved`);
       setNtuReading(''); onSaved();
     } catch (e) {
       toast.error(friendlyError(e));
       console.error('saveNtu error:', e);
     } finally { setSavingNtu(false); }
-  }, [ntuReading, well.name, well.id, plantId, lastToday, previousMeter, userId, customDt, onSaved]);
+  }, [ntuReading, well.name, lastToday, customDt, onSaved, saveNtuMutation]);
 
   const savePressure = useCallback(async () => {
     if (!pressureReading) { toast.error(`${well.name}: enter a pressure value`); return; }
     setSavingPressure(true);
     const val = +pressureReading;
     try {
-      let error: any;
-      if (lastToday) {
-        ({ error } = await (supabase.from('well_readings') as any).update({ pressure_psi: val }).eq('id', lastToday.id));
-      } else {
-        ({ error } = await (supabase.from('well_readings') as any).insert({
-          well_id: well.id, plant_id: plantId,
-          current_reading: previousMeter ?? 0, previous_reading: previousMeter,
-          pressure_psi: val, recorded_by: userId,
-          reading_datetime: new Date(customDt).toISOString(),
-        }));
-      }
-      if (error) throw new Error(error.message);
+      await savePressureMutation.mutateAsync({
+        val,
+        lastTodayId: lastToday?.id ?? null,
+        customDtIso: new Date(customDt).toISOString(),
+      });
       toast.success(`${well.name}: pressure saved`);
       setPressureReading(''); onSaved();
     } catch (e) {
       toast.error(`Pressure save failed: ${friendlyError(e)}`);
       console.error('savePressure error:', e);
     } finally { setSavingPressure(false); }
-  }, [pressureReading, well.name, well.id, plantId, lastToday, previousMeter, userId, customDt, onSaved]);
+  }, [pressureReading, well.name, lastToday, customDt, onSaved, savePressureMutation]);
 
   const saveSharedPower = useCallback(async () => {
     if (!sharedPower || !sharedPowerReading) { toast.error(`${sharedPower?.groupName ?? 'Group'}: enter a power meter reading`); return; }
     setSavingSharedPower(true);
     const val = +sharedPowerReading;
-    const startOfDay = new Date(); startOfDay.setHours(0, 0, 0, 0);
-    const { data: todayRecs } = await supabase
-      .from('well_readings').select('id')
-      .eq('well_id', sharedPower.primaryWellId)
-      .gte('reading_datetime', startOfDay.toISOString())
-      .order('reading_datetime', { ascending: false }).limit(1);
-    if (todayRecs?.length) {
-      const { error } = await supabase.from('well_readings')
-        .update({ power_meter_reading: val }).eq('id', (todayRecs[0] as any).id);
+    try {
+      await saveSharedPowerMutation.mutateAsync({
+        val,
+        primaryWellId: sharedPower.primaryWellId,
+        prevPower: sharedPower.previousPower ?? null,
+        customDtIso: new Date(customDt).toISOString(),
+      });
+      toast.success(`${sharedPower.groupName}: power meter saved`);
+      setSharedPowerReading(''); onSaved();
+    } catch (error: any) {
+      toast.error(friendlyError(error));
+    } finally {
       setSavingSharedPower(false);
-      if (error) { toast.error(friendlyError(error)); return; }
-    } else {
-      const { error } = await supabase.from('well_readings').insert({
-        well_id: sharedPower.primaryWellId, plant_id: plantId,
-        current_reading: sharedPower.previousPower ?? 0,
-        power_meter_reading: val, recorded_by: userId,
-        reading_datetime: new Date(customDt).toISOString(),
-      } as any);
-      setSavingSharedPower(false);
-      if (error) { toast.error(friendlyError(error)); return; }
     }
-    toast.success(`${sharedPower.groupName}: power meter saved`);
-    setSharedPowerReading(''); onSaved();
-  }, [sharedPower, sharedPowerReading, well.id, plantId, userId, customDt, onSaved]);
+  }, [sharedPower, sharedPowerReading, customDt, onSaved, saveSharedPowerMutation]);
 
   const saveGapReason = useCallback(async (category: string, detail: string) => {
     setGapSaving(true);
     const todayDateStr = format(new Date(), 'yyyy-MM-dd');
-    const { error } = await supabase.from('reading_gap_reasons' as any).upsert(
-      [{
+    try {
+      await saveGapReasonMutation.mutateAsync({
         entity_type: 'well', entity_id: well.id, plant_id: plantId,
         gap_date: todayDateStr, reason_category: category, reason_detail: detail || null,
         meter_key: '', logged_by: userId ?? null,
-      }] as any,
-      { onConflict: 'entity_type,entity_id,gap_date,meter_key' },
-    );
-    setGapSaving(false);
-    if (error) { toast.error(friendlyError(error)); return; }
-    toast.success(`${well.name}: reason logged`);
-    setGapDialogOpen(false);
-    onGapReasonSaved?.();
-  }, [well.id, well.name, plantId, userId, onGapReasonSaved]);
+      });
+      toast.success(`${well.name}: reason logged`);
+      setGapDialogOpen(false);
+      onGapReasonSaved?.();
+    } catch (error: any) {
+      toast.error(friendlyError(error));
+    } finally {
+      setGapSaving(false);
+    }
+  }, [well.id, well.name, plantId, userId, onGapReasonSaved, saveGapReasonMutation]);
 
   const onStartEdit = useCallback(() => {
     if (!lastToday) return;

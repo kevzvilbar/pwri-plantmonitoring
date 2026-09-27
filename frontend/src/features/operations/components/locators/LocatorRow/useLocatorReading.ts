@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQueryClient, useMutation } from '@tanstack/react-query';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useAuth } from '@/hooks/useAuth';
 import { useDraft } from '@/hooks/useDraft';
@@ -63,6 +63,17 @@ export function useLocatorReading({
   const [overrideSaving, setOverrideSaving] = useState(false);
   const [recalcSaving, setRecalcSaving] = useState(false);
   const [importOverrideOpen, setImportOverrideOpen] = useState(false);
+
+  const saveLocatorMutation = useMutation({
+    mutationKey: ['save-locator-reading', locator.id],
+    mutationFn: async ({ payload, isEdit, editId }: { payload: any; isEdit: boolean; editId: string | null }) => {
+      const { data, error } = isEdit
+        ? await (supabase.from('locator_readings').update(payload).eq('id', editId!).select('id,norm_status,current_reading,previous_reading,daily_volume').single() as any)
+        : await (supabase.from('locator_readings').insert(payload).select('id,norm_status,current_reading,previous_reading,daily_volume').single() as any);
+      if (error) throw error;
+      return data;
+    },
+  });
 
   const { draft: draftReading, setDraft: setDraftReading, clearDraft: clearDraftReading } =
     useDraft(`loc-reading-${locator.id}`, { value: '' });
@@ -235,14 +246,16 @@ export function useLocatorReading({
       }
     }
 
-    const { data: savedRow, error } = editingId
-      ? await (supabase.from('locator_readings').update(payload).eq('id', editingId).select('id,norm_status,current_reading,previous_reading,daily_volume').single() as any)
-      : await (supabase.from('locator_readings').insert(payload).select('id,norm_status,current_reading,previous_reading,daily_volume').single() as any);
-
-    setSaving(false);
-
-    if (error) {
-      if (error.code === '23505') {
+    let savedRow: any = null;
+    try {
+      savedRow = await saveLocatorMutation.mutateAsync({
+        payload,
+        isEdit: !!editingId,
+        editId: editingId,
+      });
+    } catch (error: any) {
+      setSaving(false);
+      if (error?.code === '23505') {
         toast.error(
           `${locator.name}: a reading was already submitted for this time. Check the log before resubmitting.`,
           { duration: 8000 },
@@ -252,6 +265,8 @@ export function useLocatorReading({
       }
       return;
     }
+
+    setSaving(false);
 
     if (editingId && editBefore) {
       const after: Record<string, unknown> = {

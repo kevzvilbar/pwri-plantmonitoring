@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useMutation } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { friendlyError } from '@/lib/supabaseErrors';
 import { getHourBucket, isOfflineRORecord } from '@/lib/hourlyReadingGuard';
@@ -43,6 +44,28 @@ export function usePretreatmentActions(rawOpts: PretreatmentActionsOptions) {
     numFilterHousings: rawOpts.train?.num_filter_housings ?? 0,
     pwrCurr: rawOpts.data.prevPowerMeter,
   };
+
+  const saveRoReadingMutation = useMutation({
+    mutationKey: ['save-ro-reading', rawOpts.trainId],
+    mutationFn: async (payload: any) => {
+      const { data, error } = await (opts.supabase
+        .from('ro_train_readings')
+        .insert(payload)
+        .select('id,permeate_meter_delta,feed_meter_delta')
+        .single() as any);
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const savePretreatReadingMutation = useMutation({
+    mutationKey: ['save-pretreatment-reading', rawOpts.trainId],
+    mutationFn: async (payload: any) => {
+      const { error } = await opts.supabase.from('ro_pretreatment_readings').insert(payload as any);
+      if (error) throw error;
+    },
+  });
+
   const submit = async () => {
     if (isSaving) return;
     if (!opts.plantId || !opts.trainId) { toast.error('Select plant and train'); return; }
@@ -455,13 +478,11 @@ export function usePretreatmentActions(rawOpts: PretreatmentActionsOptions) {
         recorded_by: opts.activeOperator?.id,
       };
 
-      const { data: savedRow, error: roError } = await (opts.supabase
-        .from('ro_train_readings')
-        .insert(roPayload)
-        .select('id,permeate_meter_delta,feed_meter_delta')
-        .single() as any);
-      if (roError) {
-        if (roError.code === '23505') {
+      let savedRow: any = null;
+      try {
+        savedRow = await saveRoReadingMutation.mutateAsync(roPayload);
+      } catch (roError: any) {
+        if (roError?.code === '23505') {
           toast.error(
             `${opts.train?.name ?? `Train ${opts.train?.train_number ?? ''}`}: a reading was already submitted for this exact timestamp. Check the log before resubmitting.`,
             { duration: 8000 },
@@ -693,21 +714,25 @@ export function usePretreatmentActions(rawOpts: PretreatmentActionsOptions) {
         filterHousingReasonList.length ? filterHousingReasonList.join('; ') : null,
       ].filter((p): p is string => p !== null);
 
-      const { error: pretreatError } = await opts.supabase.from('ro_pretreatment_readings').insert({
-        plant_id: opts.plantId, train_id: opts.trainId,
-        reading_datetime: new Date(opts.dt).toISOString(),
-        backwash_start: opts.isSynchronized && opts.syncBwOn && opts.syncBwStart ? new Date(opts.syncBwStart).toISOString() : null,
-        backwash_end: opts.isSynchronized && opts.syncBwOn && opts.syncBwEnd ? new Date(opts.syncBwEnd).toISOString() : null,
-        mmf_readings, booster_pumps, afm_units, filter_housings, cartridge_filter_housings,
-        hpp_target_pressure_psi: opts.hppTarget ? +opts.hppTarget : null,
-        bag_filters_changed: +opts.bagsChanged || 0,
-        remarks: opts.remarks || null,
-        ...(pretreatReasonParts.length ? { incomplete_reason: pretreatReasonParts.join(' | ') }
-          : !opts.trainOnline ? { incomplete_reason: `Offline${opts.offlineReason ? `: ${opts.offlineReason}` : ''}` }
-          : {}),
-        recorded_by: opts.activeOperator?.id,
-      } as any);
-      if (pretreatError) { toast.error(friendlyError(pretreatError)); return; }
+      try {
+        await savePretreatReadingMutation.mutateAsync({
+          plant_id: opts.plantId, train_id: opts.trainId,
+          reading_datetime: new Date(opts.dt).toISOString(),
+          backwash_start: opts.isSynchronized && opts.syncBwOn && opts.syncBwStart ? new Date(opts.syncBwStart).toISOString() : null,
+          backwash_end: opts.isSynchronized && opts.syncBwOn && opts.syncBwEnd ? new Date(opts.syncBwEnd).toISOString() : null,
+          mmf_readings, booster_pumps, afm_units, filter_housings, cartridge_filter_housings,
+          hpp_target_pressure_psi: opts.hppTarget ? +opts.hppTarget : null,
+          bag_filters_changed: +opts.bagsChanged || 0,
+          remarks: opts.remarks || null,
+          ...(pretreatReasonParts.length ? { incomplete_reason: pretreatReasonParts.join(' | ') }
+            : !opts.trainOnline ? { incomplete_reason: `Offline${opts.offlineReason ? `: ${opts.offlineReason}` : ''}` }
+            : {}),
+          recorded_by: opts.activeOperator?.id,
+        });
+      } catch (pretreatError: any) {
+        toast.error(friendlyError(pretreatError));
+        return;
+      }
 
       const pmDelta = (savedRow as any)?.permeate_meter_delta;
       const fmDelta = (savedRow as any)?.feed_meter_delta;
