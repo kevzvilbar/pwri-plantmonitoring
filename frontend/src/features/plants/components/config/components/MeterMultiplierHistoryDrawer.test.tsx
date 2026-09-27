@@ -23,7 +23,7 @@ describe('MeterMultiplierHistoryDrawer', () => {
         new_meter_initial_reading: 10,
         notes: 'Swapped CT to 240:1',
         created_at: '2026-09-27T10:00:00Z',
-        user_profiles: { first_name: 'John', last_name: 'Doe' },
+        user_profiles: { first_name: 'John', last_name: 'Doe', email: 'john@example.com' },
       },
       {
         id: 'pc-2',
@@ -38,7 +38,7 @@ describe('MeterMultiplierHistoryDrawer', () => {
         new_meter_initial_reading: null,
         notes: 'Applied CT factor',
         created_at: '2026-09-20T10:00:00Z',
-        user_profiles: { first_name: 'Jane', last_name: 'Smith' },
+        user_profiles: { first_name: 'Jane', last_name: 'Smith', email: 'jane@example.com' },
       },
     ];
 
@@ -83,7 +83,7 @@ describe('MeterMultiplierHistoryDrawer', () => {
         performed_by: 'u-1',
         notes: 'Replaced mechanical dial',
         created_at: '2026-09-27T12:00:00Z',
-        performer: { first_name: 'Alice', last_name: 'Admin' },
+        performer: { first_name: 'Alice', last_name: 'Admin', email: 'alice@example.com' },
       },
     ];
 
