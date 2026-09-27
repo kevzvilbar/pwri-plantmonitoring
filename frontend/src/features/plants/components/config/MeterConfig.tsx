@@ -289,7 +289,7 @@ export function PlantMeterConfigCard({ plant }: { plant: any }) {
               <AccordionTrigger className="py-3 hover:no-underline">
                 <ConfigSectionTitle
                   icon={<SectionIcon className="bg-primary/15 text-primary"><Gauge className="h-3.5 w-3.5" /></SectionIcon>}
-                  hint="(registers requiring ×10 or custom factors to calculate m³)"
+                  hint="(registers requiring ×10, CT ratios, or custom factors)"
                 >
                   Meter Multipliers
                 </ConfigSectionTitle>

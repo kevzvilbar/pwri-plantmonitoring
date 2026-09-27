@@ -87,7 +87,7 @@ export function PowerMeterSection({ cfg, update, canEdit }: PowerMeterSectionPro
         </div>
       )}
       <p className="text-xs text-muted-foreground mt-2">
-        Power meter names (Solar/Grid meter count &amp; labels) are configured in the <strong className="font-medium">Power tab</strong>.
+        Power meter names, counts, and CT multipliers are configured in the <strong className="font-medium">Meter Multipliers</strong> section.
       </p>
     </div>
   );
