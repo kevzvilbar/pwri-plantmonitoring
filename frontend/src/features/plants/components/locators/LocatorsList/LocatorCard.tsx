@@ -184,7 +184,13 @@ export function LocatorCard({
       </div>
       {selectedLocator === l.id && (
         <div className="mt-3 pt-3 border-t">
-          <EntityHistoryChart entityId={l.id} entityType="locator" entityName={l.name} defaultInputMode={l.default_input_mode === 'direct' ? 'direct' : 'raw'} />
+          <EntityHistoryChart
+            entityId={l.id}
+            entityType="locator"
+            entityName={l.name}
+            defaultInputMode={l.default_input_mode === 'direct' ? 'direct' : 'raw'}
+            entityMultiplier={l.multiplier_enabled ? Number(l.meter_multiplier ?? 1) : 1}
+          />
         </div>
       )}
     </Card>

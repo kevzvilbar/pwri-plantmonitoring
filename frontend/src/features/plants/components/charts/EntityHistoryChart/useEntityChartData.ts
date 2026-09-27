@@ -42,6 +42,37 @@ export function useEntityChartData(
     queryFn: async () => {
       const days = range === 'all' ? 9999 : parseInt(range);
       const since = new Date(Date.now() - days * 86400_000).toISOString();
+      let effectiveEntityMult = entityMultiplier ?? 1;
+      if (effectiveEntityMult === 1) {
+        if (entityType === 'locator') {
+          const { data: ent } = await supabase
+            .from('locators')
+            .select('meter_multiplier, multiplier_enabled')
+            .eq('id', entityId)
+            .maybeSingle();
+          if (ent?.multiplier_enabled && ent?.meter_multiplier) {
+            effectiveEntityMult = Number(ent.meter_multiplier);
+          }
+        } else if (entityType === 'well') {
+          const { data: ent } = await supabase
+            .from('wells')
+            .select('meter_multiplier, multiplier_enabled')
+            .eq('id', entityId)
+            .maybeSingle();
+          if (ent?.multiplier_enabled && ent?.meter_multiplier) {
+            effectiveEntityMult = Number(ent.meter_multiplier);
+          }
+        } else if (entityType === 'product_meter') {
+          const { data: ent } = await supabase
+            .from('product_meters')
+            .select('meter_multiplier, multiplier_enabled')
+            .eq('id', entityId)
+            .maybeSingle();
+          if (ent?.multiplier_enabled && ent?.meter_multiplier) {
+            effectiveEntityMult = Number(ent.meter_multiplier);
+          }
+        }
+      }
       let raw: any[] = [];
       if (entityType === 'locator') {
         const { data, error: sbError } = await supabase
@@ -75,7 +106,7 @@ export function useEntityChartData(
       return raw.map((r: any) => {
         const dateStr = fmtIsoDate(r.reading_datetime);
         const rowMult = r.multiplier_at_reading != null ? +r.multiplier_at_reading : 1;
-        const mult = rowMult !== 1 ? rowMult : entityMultiplier;
+        const mult = rowMult !== 1 ? rowMult : effectiveEntityMult;
         let consumption = 0;
         if (isDirectMode) {
           consumption = r.current_reading != null ? +r.current_reading : 0;

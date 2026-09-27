@@ -186,7 +186,13 @@ export function WellCard({
       </div>
       {selectedWell === w.id && (
         <div className="mt-3 pt-3 border-t">
-          <EntityHistoryChart entityId={w.id} entityType="well" entityName={w.name} isBlendingWell={isBlending} />
+          <EntityHistoryChart
+            entityId={w.id}
+            entityType="well"
+            entityName={w.name}
+            isBlendingWell={isBlending}
+            entityMultiplier={w.multiplier_enabled ? Number(w.meter_multiplier ?? 1) : 1}
+          />
         </div>
       )}
     </Card>
