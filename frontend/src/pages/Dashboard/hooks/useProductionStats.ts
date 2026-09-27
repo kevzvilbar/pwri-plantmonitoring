@@ -92,42 +92,54 @@ export function useProductionStats({
     staleTime: 10 * 60_000,
   });
 
-  const { data: directLocatorIds = new Set<string>() } = useQuery({
+  const { data: _rawDirectLocatorIds } = useQuery<string[]>({
     queryKey: ['dash-locator-direct-ids', plantIds],
     queryFn: async () => {
-      if (!plantIds.length) return new Set<string>();
+      if (!plantIds.length) return [];
       const { data, error } = await supabase
         .from('locators')
         .select('id,default_input_mode,is_derived')
         .in('plant_id', plantIds)
         .eq('status', 'Active');
       if (error) throw error;
-      return new Set(
-        (data ?? [])
-          .filter((l) => l.default_input_mode === 'direct' || l.is_derived === true)
-          .map((l) => l.id),
-      );
+      return (data ?? [])
+        .filter((l) => l.default_input_mode === 'direct' || l.is_derived === true)
+        .map((l) => l.id);
     },
     enabled: needsClientFallback && plantIds.length > 0,
     staleTime: 10 * 60_000,
   });
 
-  const { data: directProductMeterIds = new Set<string>() } = useQuery({
+  const directLocatorIds = useMemo(() => {
+    if (!_rawDirectLocatorIds) return new Set<string>();
+    if (_rawDirectLocatorIds instanceof Set) return _rawDirectLocatorIds;
+    if (Array.isArray(_rawDirectLocatorIds)) return new Set(_rawDirectLocatorIds);
+    if (typeof _rawDirectLocatorIds === 'object') return new Set(Object.keys(_rawDirectLocatorIds));
+    return new Set<string>();
+  }, [_rawDirectLocatorIds]);
+
+  const { data: _rawDirectProductMeterIds } = useQuery<string[]>({
     queryKey: ['dash-meter-direct-ids', plantIds],
     queryFn: async () => {
-      if (!plantIds.length) return new Set<string>();
+      if (!plantIds.length) return [];
       const { data, error } = await supabase
         .from('product_meters')
         .select('id,is_derived')
         .in('plant_id', plantIds);
       if (error) throw error;
-      return new Set<string>(
-        (data ?? []).filter((m) => m.is_derived === true).map((m) => m.id),
-      );
+      return (data ?? []).filter((m) => m.is_derived === true).map((m) => m.id);
     },
     enabled: needsClientFallback && plantIds.length > 0,
     staleTime: 10 * 60_000,
   });
+
+  const directProductMeterIds = useMemo(() => {
+    if (!_rawDirectProductMeterIds) return new Set<string>();
+    if (_rawDirectProductMeterIds instanceof Set) return _rawDirectProductMeterIds;
+    if (Array.isArray(_rawDirectProductMeterIds)) return new Set(_rawDirectProductMeterIds);
+    if (typeof _rawDirectProductMeterIds === 'object') return new Set(Object.keys(_rawDirectProductMeterIds));
+    return new Set<string>();
+  }, [_rawDirectProductMeterIds]);
 
   // EGRESS: wellIds/todayWells/plantMeterConfigs used to run unconditionally
   // (missing the needsClientFallback gate every sibling query already has),
@@ -472,7 +484,9 @@ export function useProductionStats({
     if (combined > 0) return combined;
 
     const fallbackTotal = todayAllPermeate.reduce((s: number, r: any) => {
-      const trainMeta = qualityTrainMeta?.get(r.train_id);
+      const trainMeta = qualityTrainMeta instanceof Map
+        ? qualityTrainMeta.get(r.train_id)
+        : (qualityTrainMeta as any)?.[r.train_id];
       if (trainMeta?.unit_type === 'secondary') return s;
       if (trainMeta?.plant_id && permeateProductionPlantIds.includes(trainMeta.plant_id)) return s;
       return s + (+(r.permeate_meter_delta ?? 0));

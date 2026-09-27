@@ -43,12 +43,12 @@ function useWaterBalancePeriodTotals(plantIds: string[]) {
       const { data } = await (supabase.from('plant_meter_config' as any) as any)
         .select('plant_id, permeate_is_production, config')
         .in('plant_id', plantIds);
-      const permeateCounts = new Set<string>();
-      const productExcluded = new Set<string>();
+      const permeateCounts: string[] = [];
+      const productExcluded: string[] = [];
       (data ?? []).forEach((row: any) => {
         const permeateOn = row.permeate_is_production === true || row.config?.permeate_is_production === true;
-        if (permeateOn) permeateCounts.add(row.plant_id);
-        if (row.config?.ro_production_source === 'permeate' && permeateOn) productExcluded.add(row.plant_id);
+        if (permeateOn) permeateCounts.push(row.plant_id);
+        if (row.config?.ro_production_source === 'permeate' && permeateOn) productExcluded.push(row.plant_id);
       });
       return { permeateCounts, productExcluded };
     },
@@ -56,14 +56,23 @@ function useWaterBalancePeriodTotals(plantIds: string[]) {
     staleTime: 10 * 60_000,
   });
 
-  const permeateIsProductionPlants = useMemo(
-    () => permeateConfig?.permeateCounts ?? new Set<string>(),
-    [permeateConfig],
-  );
-  const productExcludedPlants = useMemo(
-    () => permeateConfig?.productExcluded ?? new Set<string>(),
-    [permeateConfig],
-  );
+  const permeateIsProductionPlants = useMemo(() => {
+    const raw = permeateConfig?.permeateCounts;
+    if (!raw) return new Set<string>();
+    if (raw instanceof Set) return raw;
+    if (Array.isArray(raw)) return new Set(raw);
+    if (typeof raw === 'object') return new Set(Object.keys(raw));
+    return new Set<string>();
+  }, [permeateConfig]);
+
+  const productExcludedPlants = useMemo(() => {
+    const raw = permeateConfig?.productExcluded;
+    if (!raw) return new Set<string>();
+    if (raw instanceof Set) return raw;
+    if (Array.isArray(raw)) return new Set(raw);
+    if (typeof raw === 'object') return new Set(Object.keys(raw));
+    return new Set<string>();
+  }, [permeateConfig]);
 
   // EGRESS: was its own ['wb-ro-train-ids', plantIds] query pulling
   // id/plant_id/unit_type from ro_trains — an exact duplicate, by column
@@ -92,17 +101,25 @@ function useWaterBalancePeriodTotals(plantIds: string[]) {
     [roTrainMeta],
   );
 
-  const { data: directProductMeterIds } = useQuery({
+  const { data: _rawDirectProductMeterIds } = useQuery<string[]>({
     queryKey: ['wb-product-meter-direct-ids', plantIds],
     queryFn: async () => {
       const { data } = await (supabase.from('product_meters' as never) as any)
         .select('id,is_derived')
         .in('plant_id', plantIds);
-      return new Set<string>((data ?? []).filter((m: any) => m.is_derived === true).map((m: any) => m.id as string));
+      return (data ?? []).filter((m: any) => m.is_derived === true).map((m: any) => m.id as string);
     },
     enabled: hasPlants,
     staleTime: 10 * 60_000,
   });
+
+  const directProductMeterIds = useMemo(() => {
+    if (!_rawDirectProductMeterIds) return new Set<string>();
+    if (_rawDirectProductMeterIds instanceof Set) return _rawDirectProductMeterIds;
+    if (Array.isArray(_rawDirectProductMeterIds)) return new Set(_rawDirectProductMeterIds);
+    if (typeof _rawDirectProductMeterIds === 'object') return new Set(Object.keys(_rawDirectProductMeterIds));
+    return new Set<string>();
+  }, [_rawDirectProductMeterIds]);
 
   const { data: locatorMeta } = useQuery({
     queryKey: ['wb-locator-meta', plantIds],
@@ -113,19 +130,21 @@ function useWaterBalancePeriodTotals(plantIds: string[]) {
       const rows = data ?? [];
       return {
         ids: rows.map((l) => l.id as string),
-        directIds: new Set<string>(
-          rows.filter((l: any) => l.default_input_mode === 'direct' || l.is_derived === true).map((l) => l.id as string),
-        ),
+        directIds: rows.filter((l: any) => l.default_input_mode === 'direct' || l.is_derived === true).map((l) => l.id as string),
       };
     },
     enabled: hasPlants,
     staleTime: 10 * 60_000,
   });
   const locatorIds = locatorMeta?.ids ?? [];
-  const directLocatorIds = useMemo(
-    () => locatorMeta?.directIds ?? new Set<string>(),
-    [locatorMeta],
-  );
+  const directLocatorIds = useMemo(() => {
+    const raw = locatorMeta?.directIds;
+    if (!raw) return new Set<string>();
+    if (raw instanceof Set) return raw;
+    if (Array.isArray(raw)) return new Set(raw);
+    if (typeof raw === 'object') return new Set(Object.keys(raw));
+    return new Set<string>();
+  }, [locatorMeta]);
 
   const { data: wellReadings, isFetching: fWell, error: eWell } = useQuery({
     queryKey: ['wb-well-readings', plantIds, startKey, endKey],

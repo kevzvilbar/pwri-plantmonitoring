@@ -22,15 +22,15 @@ export interface UsePowerStatsParams {
   plantIds: string[];
   today: string;
   yesterday: string;
-  tariffByPlant?: Map<string, number>;
+  tariffByPlant?: Map<string, number> | Record<string, number>;
   production?: number | null;
 }
 
 export function computePowerKwh(
   currentRows: PowerRow[],
   prevRows: PowerRow[],
-  configMap: Map<string, number[]> | undefined,
-  tariffByPlant?: Map<string, number>,
+  configMap: Map<string, number[]> | Record<string, number[]> | undefined,
+  tariffByPlant?: Map<string, number> | Record<string, number>,
 ): { kwh: number; powerCostPeso: number | null } {
   const prevByPlant = new Map<string, PowerRow>();
   for (const p of prevRows) prevByPlant.set(p.plant_id, p);
@@ -41,7 +41,7 @@ export function computePowerKwh(
     if (r.is_meter_replacement) continue;
     const pid     = r.plant_id;
     const prev    = prevByPlant.get(pid);
-    const multArr = configMap?.get(pid) ?? [1];
+    const multArr = (configMap instanceof Map ? configMap.get(pid) : (configMap as any)?.[pid]) ?? [1];
     const rGmr    = r.grid_meter_readings as Record<string, number> | null | undefined;
     const pGmr    = prev?.grid_meter_readings as Record<string, number> | null | undefined;
     let kwh = 0;
@@ -70,7 +70,7 @@ export function computePowerKwh(
     }
     totalKwh += kwh;
 
-    const rate = tariffByPlant?.get(pid) ?? null;
+    const rate = (tariffByPlant instanceof Map ? tariffByPlant.get(pid) : (tariffByPlant as any)?.[pid]) ?? null;
     if (rate != null && kwh > 0) {
       totalCostPeso += kwh * rate;
       hasTariff = true;
@@ -86,10 +86,10 @@ export function usePowerStats({
   tariffByPlant,
   production,
 }: UsePowerStatsParams) {
-  const { data: dashPowerConfigMap } = useQuery({
+  const { data: rawPowerConfigMap } = useQuery<Record<string, number[]>>({
     queryKey: ['dash-power-config-map', plantIds],
     queryFn: async () => {
-      const map = new Map<string, number[]>();
+      const map: Record<string, number[]> = {};
       try {
         const { data } = await supabase
           .from('plant_power_config')
@@ -98,7 +98,7 @@ export function usePowerStats({
         for (const cfg of data ?? []) {
           const mArr = cfg.grid_meter_multipliers as unknown[];
           if (Array.isArray(mArr) && mArr.length > 0)
-            map.set(cfg.plant_id, mArr.map((v) => Number(v) > 0 ? Number(v) : 1));
+            map[cfg.plant_id] = mArr.map((v) => Number(v) > 0 ? Number(v) : 1);
         }
       } catch { /* plant_power_config may not exist */ }
       return map;
@@ -106,6 +106,18 @@ export function usePowerStats({
     enabled: plantIds.length > 0,
     staleTime: 10 * 60_000,
   });
+
+  const dashPowerConfigMap = useMemo(() => {
+    if (!rawPowerConfigMap) return new Map<string, number[]>();
+    if (rawPowerConfigMap instanceof Map) return rawPowerConfigMap;
+    const m = new Map<string, number[]>();
+    if (typeof rawPowerConfigMap === 'object') {
+      Object.entries(rawPowerConfigMap).forEach(([k, v]) => {
+        if (Array.isArray(v)) m.set(k, v);
+      });
+    }
+    return m;
+  }, [rawPowerConfigMap]);
 
   const { data: todayPowerRaw } = useQuery({
     queryKey: ['dash-power-today', plantIds],

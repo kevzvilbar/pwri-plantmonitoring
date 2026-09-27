@@ -107,7 +107,7 @@ export function sanitizeReadingsForEntity<T extends SanitizableReading>(
 export function sanitizeReadings<T extends SanitizableReading>(
   readings: T[],
   entityKeyField: string,
-  directModeIds?: Set<string>,
+  directModeIds?: Set<string> | string[] | Record<string, unknown>,
 ): T[] {
   if (!readings || readings.length === 0) return [];
 
@@ -120,7 +120,13 @@ export function sanitizeReadings<T extends SanitizableReading>(
 
   const result: T[] = [];
   for (const [entityId, group] of groups.entries()) {
-    const isDirect = directModeIds ? directModeIds.has(entityId) : false;
+    const isDirect = directModeIds instanceof Set
+      ? directModeIds.has(entityId)
+      : Array.isArray(directModeIds)
+        ? (directModeIds as string[]).includes(entityId)
+        : directModeIds && typeof directModeIds === 'object'
+          ? entityId in directModeIds
+          : false;
     result.push(...sanitizeReadingsForEntity(group, isDirect));
   }
 

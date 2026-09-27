@@ -52,56 +52,98 @@ export function useTrendChartQueries({
     queryKey: ['entity-names-wells', plantIds],
     queryFn: async () => {
       const { data } = await supabase.from('wells').select('id, name, meter_multiplier, multiplier_enabled').in('plant_id', plantIds);
-      const nameMap = new Map<string, string>();
-      const multMap = new Map<string, number>();
+      const nameMap: Record<string, string> = {};
+      const multMap: Record<string, number> = {};
       (data ?? []).forEach((w: { id: string; name: string; meter_multiplier?: number | null; multiplier_enabled?: boolean | null }) => {
-        nameMap.set(w.id, w.name);
-        if (w.multiplier_enabled && w.meter_multiplier) multMap.set(w.id, Number(w.meter_multiplier));
+        nameMap[w.id] = w.name;
+        if (w.multiplier_enabled && w.meter_multiplier) multMap[w.id] = Number(w.meter_multiplier);
       });
       return { nameMap, multMap };
     },
     enabled: plantIds.length > 0 && needsWellReadings,
     staleTime: 10 * 60_000,
   });
-  const wellNames = wellMeta?.nameMap;
-  const wellMultipliers = wellMeta?.multMap;
+  const wellNames = useMemo(() => {
+    const raw = wellMeta?.nameMap;
+    if (!raw) return new Map<string, string>();
+    if (raw instanceof Map) return raw;
+    const m = new Map<string, string>();
+    if (typeof raw === 'object') Object.entries(raw).forEach(([k, v]) => m.set(k, String(v)));
+    return m;
+  }, [wellMeta]);
+  const wellMultipliers = useMemo(() => {
+    const raw = wellMeta?.multMap;
+    if (!raw) return new Map<string, number>();
+    if (raw instanceof Map) return raw;
+    const m = new Map<string, number>();
+    if (typeof raw === 'object') Object.entries(raw).forEach(([k, v]) => m.set(k, Number(v)));
+    return m;
+  }, [wellMeta]);
 
   const { data: locatorsMeta } = useQuery({
     queryKey: ['entity-names-locators', plantIds],
     queryFn: async () => {
       const { data } = await supabase.from('locators').select('id, name, meter_multiplier, multiplier_enabled').in('plant_id', plantIds);
-      const nameMap = new Map<string, string>();
-      const multMap = new Map<string, number>();
+      const nameMap: Record<string, string> = {};
+      const multMap: Record<string, number> = {};
       (data ?? []).forEach((l: { id: string; name: string; meter_multiplier?: number | null; multiplier_enabled?: boolean | null }) => {
-        nameMap.set(l.id, l.name);
-        if (l.multiplier_enabled && l.meter_multiplier) multMap.set(l.id, Number(l.meter_multiplier));
+        nameMap[l.id] = l.name;
+        if (l.multiplier_enabled && l.meter_multiplier) multMap[l.id] = Number(l.meter_multiplier);
       });
       return { nameMap, multMap };
     },
     enabled: plantIds.length > 0 && needsLocReadings,
     staleTime: 10 * 60_000,
   });
-  const locatorNames = locatorsMeta?.nameMap;
-  const locatorMultipliers = locatorsMeta?.multMap;
+  const locatorNames = useMemo(() => {
+    const raw = locatorsMeta?.nameMap;
+    if (!raw) return new Map<string, string>();
+    if (raw instanceof Map) return raw;
+    const m = new Map<string, string>();
+    if (typeof raw === 'object') Object.entries(raw).forEach(([k, v]) => m.set(k, String(v)));
+    return m;
+  }, [locatorsMeta]);
+  const locatorMultipliers = useMemo(() => {
+    const raw = locatorsMeta?.multMap;
+    if (!raw) return new Map<string, number>();
+    if (raw instanceof Map) return raw;
+    const m = new Map<string, number>();
+    if (typeof raw === 'object') Object.entries(raw).forEach(([k, v]) => m.set(k, Number(v)));
+    return m;
+  }, [locatorsMeta]);
 
   const { data: productMetersMeta } = useQuery({
     queryKey: ['entity-names-product-meters', plantIds],
     queryFn: async () => {
       const { data } = await supabase.from('product_meters')
         .select('id, name, meter_multiplier, multiplier_enabled').in('plant_id', plantIds);
-      const nameMap = new Map<string, string>();
-      const multMap = new Map<string, number>();
+      const nameMap: Record<string, string> = {};
+      const multMap: Record<string, number> = {};
       (data ?? []).forEach((m: { id: string; name: string; meter_multiplier?: number | null; multiplier_enabled?: boolean | null }) => {
-        nameMap.set(m.id, m.name);
-        if (m.multiplier_enabled && m.meter_multiplier) multMap.set(m.id, Number(m.meter_multiplier));
+        nameMap[m.id] = m.name;
+        if (m.multiplier_enabled && m.meter_multiplier) multMap[m.id] = Number(m.meter_multiplier);
       });
       return { nameMap, multMap };
     },
     enabled: plantIds.length > 0 && needsProductMeterReadings,
     staleTime: 10 * 60_000,
   });
-  const productMeterNames = productMetersMeta?.nameMap;
-  const productMeterMultipliers = productMetersMeta?.multMap;
+  const productMeterNames = useMemo(() => {
+    const raw = productMetersMeta?.nameMap;
+    if (!raw) return new Map<string, string>();
+    if (raw instanceof Map) return raw;
+    const m = new Map<string, string>();
+    if (typeof raw === 'object') Object.entries(raw).forEach(([k, v]) => m.set(k, String(v)));
+    return m;
+  }, [productMetersMeta]);
+  const productMeterMultipliers = useMemo(() => {
+    const raw = productMetersMeta?.multMap;
+    if (!raw) return new Map<string, number>();
+    if (raw instanceof Map) return raw;
+    const m = new Map<string, number>();
+    if (typeof raw === 'object') Object.entries(raw).forEach(([k, v]) => m.set(k, Number(v)));
+    return m;
+  }, [productMetersMeta]);
 
   // Product meters whose is_derived = true — mirrored/residual meters like
   // Mambaling's "HAMAS" (mirrored from SRP's derived "HAMAS (Mambaling)"
@@ -115,36 +157,48 @@ export function useTrendChartQueries({
   // fix as DataSummaryModal.tsx's prodPivot (Production / Prod vs Consum
   // tabs) — this mirrors that fix here so the main trend chart agrees with
   // ProductSection.tsx's own History dialog for these meters.
-  const { data: _directProductMeterIds } = useQuery({
+  const { data: _rawDirectProductMeterIds } = useQuery<string[]>({
     queryKey: ['trend-meter-direct-ids', plantIds],
     queryFn: async () => {
-      if (!plantIds.length) return new Set<string>();
+      if (!plantIds.length) return [];
       const { data } = await supabase.from('product_meters')
         .select('id,is_derived')
         .in('plant_id', plantIds);
-      return new Set<string>(
-        (data ?? [])
-          .filter((m) => m.is_derived === true)
-          .map((m) => m.id),
-      );
+      return (data ?? [])
+        .filter((m) => m.is_derived === true)
+        .map((m) => m.id);
     },
     enabled: plantIds.length > 0 && needsProductMeterReadings,
     staleTime: 10 * 60_000,
   });
+  const _directProductMeterIds = useMemo(() => {
+    if (!_rawDirectProductMeterIds) return new Set<string>();
+    if (_rawDirectProductMeterIds instanceof Set) return _rawDirectProductMeterIds;
+    if (Array.isArray(_rawDirectProductMeterIds)) return new Set(_rawDirectProductMeterIds);
+    if (typeof _rawDirectProductMeterIds === 'object') return new Set(Object.keys(_rawDirectProductMeterIds));
+    return new Set<string>();
+  }, [_rawDirectProductMeterIds]);
 
   // Plant names are used for power meter replacement messages and for the permeate-source
   // tooltip note when permeate_is_production = true.
-  const { data: plantNames } = useQuery({
+  const { data: rawPlantNames } = useQuery<Record<string, string>>({
     queryKey: ['entity-names-plants', plantIds],
     queryFn: async () => {
       const { data } = await supabase.from('plants').select('id, name').in('id', plantIds);
-      const map = new Map<string, string>();
-      (data ?? []).forEach((p: any) => map.set(p.id, p.name));
+      const map: Record<string, string> = {};
+      (data ?? []).forEach((p: any) => { map[p.id] = p.name; });
       return map;
     },
     enabled: plantIds.length > 0 && (needsPowerReadings || needsPermeateProduction),
     staleTime: 10 * 60_000,
   });
+  const plantNames = useMemo(() => {
+    if (!rawPlantNames) return new Map<string, string>();
+    if (rawPlantNames instanceof Map) return rawPlantNames;
+    const m = new Map<string, string>();
+    if (typeof rawPlantNames === 'object') Object.entries(rawPlantNames).forEach(([k, v]) => m.set(k, String(v)));
+    return m;
+  }, [rawPlantNames]);
 
   const supaSelect = async <T,>(table: string, cols: string) => {
     const { data, error } = await supabase.from(table as never).select(cols)
@@ -193,22 +247,27 @@ export function useTrendChartQueries({
   // (only guaranteed correct for fn_sweep_derived_meters()'s own writes,
   // which always zero previous_reading — not guaranteed for a manual
   // override entered through the normal reading form).
-  const { data: _directLocatorIds } = useQuery({
+  const { data: _rawDirectLocatorIds } = useQuery<string[]>({
     queryKey: ['trend-loc-direct-ids', plantIds],
     queryFn: async () => {
-      if (!plantIds.length) return new Set<string>();
+      if (!plantIds.length) return [];
       const { data } = await supabase
         .from('locators').select('id,default_input_mode,is_derived')
         .in('plant_id', plantIds).eq('status', 'Active');
-      return new Set(
-        (data ?? [])
-          .filter((l: any) => l.default_input_mode === 'direct' || l.is_derived === true)
-          .map((l: any) => l.id as string),
-      );
+      return (data ?? [])
+        .filter((l: any) => l.default_input_mode === 'direct' || l.is_derived === true)
+        .map((l: any) => l.id as string);
     },
     enabled: plantIds.length > 0 && needsLocReadings,
     staleTime: 10 * 60_000,
   });
+  const _directLocatorIds = useMemo(() => {
+    if (!_rawDirectLocatorIds) return new Set<string>();
+    if (_rawDirectLocatorIds instanceof Set) return _rawDirectLocatorIds;
+    if (Array.isArray(_rawDirectLocatorIds)) return new Set(_rawDirectLocatorIds);
+    if (typeof _rawDirectLocatorIds === 'object') return new Set(Object.keys(_rawDirectLocatorIds));
+    return new Set<string>();
+  }, [_rawDirectLocatorIds]);
 
   const { data: locReadings, isFetching: fetchingLoc, error: errLoc, refetch: refetchLoc } = useQuery({
     queryKey: ['trend-loc', metric, startKey, endKey, plantIds],
@@ -401,19 +460,26 @@ export function useTrendChartQueries({
   });
 
   // RO train name lookup — reuses the IDs already fetched above
-  const { data: roTrainNames } = useQuery({
+  const { data: rawRoTrainNames } = useQuery<Record<string, string>>({
     queryKey: ['entity-names-ro-trains', plantIds],
     queryFn: async () => {
       const { data } = await supabase.from('ro_trains')
         .select('id, name')
         .in('plant_id', plantIds);
-      const map = new Map<string, string>();
-      (data ?? []).forEach((t) => map.set(t.id, t.name ?? `Train ${String(t.id).slice(-4)}`));
+      const map: Record<string, string> = {};
+      (data ?? []).forEach((t) => { map[t.id] = t.name ?? `Train ${String(t.id).slice(-4)}`; });
       return map;
     },
     enabled: plantIds.length > 0 && (needsRoReadings || needsPermeateProduction),
     staleTime: 10 * 60_000,
   });
+  const roTrainNames = useMemo(() => {
+    if (!rawRoTrainNames) return new Map<string, string>();
+    if (rawRoTrainNames instanceof Map) return rawRoTrainNames;
+    const m = new Map<string, string>();
+    if (typeof rawRoTrainNames === 'object') Object.entries(rawRoTrainNames).forEach(([k, v]) => m.set(k, String(v)));
+    return m;
+  }, [rawRoTrainNames]);
 
   // ── Plant meter config — fetch permeate_is_production flag per plant ────────
   // The entire PlantMeterConfig is stored as a single JSONB blob in the `config`
@@ -427,27 +493,41 @@ export function useTrendChartQueries({
       const { data } = await supabase.from('plant_meter_config')
         .select('plant_id, permeate_is_production, config')
         .in('plant_id', plantIds);
-      const permeateCounts = new Set<string>();
+      const permeateCounts: string[] = [];
       // Plants in EXCLUSIVE permeate mode (ro_production_source === 'permeate')
       // measure the same water on their product meter as on the RO permeate
       // meter — Step 1 below must exclude their product-meter readings to avoid
       // double-counting. Plants in 'both' mode have two independent sources and
       // keep BOTH their product meter reading (Step 1) and their permeate delta
       // (Step 2) — they stay OUT of this set.
-      const productExcluded = new Set<string>();
+      const productExcluded: string[] = [];
       (data ?? []).forEach((row) => {
         const cfg = row.config as Record<string, unknown> | null;
         const permeateOn = row.permeate_is_production === true || cfg?.permeate_is_production === true;
-        if (permeateOn) permeateCounts.add(row.plant_id);
-        if (cfg?.ro_production_source === 'permeate' && permeateOn) productExcluded.add(row.plant_id);
+        if (permeateOn) permeateCounts.push(row.plant_id);
+        if (cfg?.ro_production_source === 'permeate' && permeateOn) productExcluded.push(row.plant_id);
       });
       return { permeateCounts, productExcluded };
     },
     enabled: plantIds.length > 0 && needsPermeateProduction,
     staleTime: 10 * 60_000,
   });
-  const permeateIsProductionPlants = permeateConfigData?.permeateCounts;
-  const productExcludedPlants      = permeateConfigData?.productExcluded;
+  const permeateIsProductionPlants = useMemo(() => {
+    const raw = permeateConfigData?.permeateCounts;
+    if (!raw) return new Set<string>();
+    if (raw instanceof Set) return raw;
+    if (Array.isArray(raw)) return new Set(raw);
+    if (typeof raw === 'object') return new Set(Object.keys(raw));
+    return new Set<string>();
+  }, [permeateConfigData]);
+  const productExcludedPlants = useMemo(() => {
+    const raw = permeateConfigData?.productExcluded;
+    if (!raw) return new Set<string>();
+    if (raw instanceof Set) return raw;
+    if (Array.isArray(raw)) return new Set(raw);
+    if (typeof raw === 'object') return new Set(Object.keys(raw));
+    return new Set<string>();
+  }, [permeateConfigData]);
 
 
   // Power readings — fetches the full ordered history for each plant so
@@ -670,10 +750,10 @@ export function useTrendChartQueries({
   // Adding the bill multiplier as an intermediate fallback matches PowerChart behaviour exactly,
   // ensuring the kwh bars are correct even when individual reading rows lack a multiplier value.
   // Only fetched for the `kwh` metric so other metrics don't pay the extra Supabase round-trip.
-  const { data: billMultiplierMap } = useQuery({
+  const { data: rawBillMultiplierMap } = useQuery<Record<string, number>>({
     queryKey: ['trend-bill-multipliers', plantIds],
     queryFn: async () => {
-      const map = new Map<string, number>();
+      const map: Record<string, number> = {};
       try {
         const { data } = await supabase.from('electric_bills')
           .select('plant_id,multiplier')
@@ -681,8 +761,8 @@ export function useTrendChartQueries({
           .order('billing_month', { ascending: false });
         for (const b of data ?? []) {
           // Keep only the FIRST (most-recent) entry per plant — query is DESC by billing_month.
-          if (!map.has(b.plant_id) && +(b.multiplier ?? 0) > 0)
-            map.set(b.plant_id, +b.multiplier);
+          if (map[b.plant_id] == null && +(b.multiplier ?? 0) > 0)
+            map[b.plant_id] = +b.multiplier;
         }
       } catch { /* electric_bills table may not exist — silently default to row.multiplier */ }
       return map;
@@ -690,14 +770,23 @@ export function useTrendChartQueries({
     enabled: plantIds.length > 0 && metric === 'kwh',
     staleTime: 5 * 60_000,
   });
+  const billMultiplierMap = useMemo(() => {
+    if (!rawBillMultiplierMap) return new Map<string, number>();
+    if (rawBillMultiplierMap instanceof Map) return rawBillMultiplierMap;
+    const m = new Map<string, number>();
+    if (typeof rawBillMultiplierMap === 'object') {
+      Object.entries(rawBillMultiplierMap).forEach(([k, v]) => m.set(k, Number(v)));
+    }
+    return m;
+  }, [rawBillMultiplierMap]);
 
   // Per-plant, per-meter CT multiplier arrays from plant_power_config.
   // Used by the power delta computation below (mirrors Plants.tsx priority order).
   // Falls back to billMultiplierMap / 1 when the table is absent.
-  const { data: powerConfigMap } = useQuery({
+  const { data: rawPowerConfigMap } = useQuery<Record<string, number[]>>({
     queryKey: ['trend-power-config', plantIds],
     queryFn: async () => {
-      const map = new Map<string, number[]>();
+      const map: Record<string, number[]> = {};
       try {
         const { data } = await supabase.from('plant_power_config')
           .select('plant_id,grid_meter_multipliers')
@@ -705,7 +794,7 @@ export function useTrendChartQueries({
         for (const cfg of data ?? []) {
           const mArr = cfg.grid_meter_multipliers as unknown[];
           if (Array.isArray(mArr) && mArr.length > 0)
-            map.set(cfg.plant_id, mArr.map((v) => Number(v) > 0 ? Number(v) : 1));
+            map[cfg.plant_id] = mArr.map((v) => Number(v) > 0 ? Number(v) : 1);
         }
       } catch { /* plant_power_config table may not exist — keep defaults */ }
       return map;
@@ -713,6 +802,17 @@ export function useTrendChartQueries({
     enabled: plantIds.length > 0 && metric === 'kwh',
     staleTime: 5 * 60_000,
   });
+  const powerConfigMap = useMemo(() => {
+    if (!rawPowerConfigMap) return new Map<string, number[]>();
+    if (rawPowerConfigMap instanceof Map) return rawPowerConfigMap;
+    const m = new Map<string, number[]>();
+    if (typeof rawPowerConfigMap === 'object') {
+      Object.entries(rawPowerConfigMap).forEach(([k, v]) => {
+        if (Array.isArray(v)) m.set(k, v);
+      });
+    }
+    return m;
+  }, [rawPowerConfigMap]);
 
   const isFetching = fetchingLoc || fetchingWell || fetchingRo || fetchingPower || fetchingCost || fetchingProduct;
   const queryError = (errLoc || errWell || errRo || errPower || errCost || errProduct) as Error | null;

@@ -54,10 +54,10 @@ export function computeEntityDeltas(
     // IDs (e.g. locator_id) whose default_input_mode = 'direct' —
     // current_reading already IS the period's volume for these. Mirrors
     // EntityHistoryChart.tsx's isDirectMode branch.
-    directModeIds?: Set<string>;
+    directModeIds?: Set<string> | string[] | Record<string, unknown>;
     // Entity-level multiplier map (e.g. locator_id -> meter_multiplier).
     // Used as fallback when row multiplier_at_reading is 1 (pre-backfill rows).
-    entityMultipliers?: Map<string, number>;
+    entityMultipliers?: Map<string, number> | Record<string, number>;
   },
 ): { r: any; delta: number; rawDelta: number | null; isMeterReplacement: boolean }[] {
   // skipAfterRepl=true: the replacement row already sets lastReading to the
@@ -78,7 +78,11 @@ export function computeEntityDeltas(
   return sorted.map((r) => {
     const entityKey = r[entityKeyField] ?? r.plant_id ?? '__';
     const isMR      = !!r.is_meter_replacement;
-    const entityMult = entityMultipliers?.get(entityKey) ?? 1;
+    const entityMult = entityMultipliers instanceof Map
+      ? (entityMultipliers.get(entityKey) ?? 1)
+      : entityMultipliers && typeof entityMultipliers === 'object'
+        ? (Number((entityMultipliers as any)[entityKey]) || 1)
+        : 1;
     const rowMult   = r.multiplier_at_reading != null ? Number(r.multiplier_at_reading) : 1;
     const mult      = rowMult !== 1 ? rowMult : entityMult;
 
@@ -94,7 +98,15 @@ export function computeEntityDeltas(
       return { r, delta: 0, rawDelta: null, isMeterReplacement: false };
     }
 
-    if (directModeIds?.has(entityKey)) {
+    const isDirect = directModeIds instanceof Set
+      ? directModeIds.has(entityKey)
+      : Array.isArray(directModeIds)
+        ? (directModeIds as string[]).includes(entityKey)
+        : directModeIds && typeof directModeIds === 'object'
+          ? entityKey in directModeIds
+          : false;
+
+    if (isDirect) {
       // Direct mode: current_reading already IS the period's volume — no
       // diff, no dependence on daily_volume/previous_reading.
       const delta = r.current_reading != null ? Math.max(0, +r.current_reading) : 0;

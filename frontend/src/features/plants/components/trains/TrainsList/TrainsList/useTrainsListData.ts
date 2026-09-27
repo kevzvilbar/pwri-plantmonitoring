@@ -13,11 +13,11 @@ export function useTrainsListData(plantId: string) {
   const { data: trains } = useROTrainsForPlant(plantId);
 
   const trainIdsKey = (trains ?? []).map((t: any) => t.id).join(',');
-  const { data: recentTrainIds } = useQuery({
+  const { data: recentTrainIds } = useQuery<string[]>({
     queryKey: ['ro-trains-recent', plantId, trainIdsKey],
     queryFn: async () => {
       const ids = (trains ?? []).map((t: any) => t.id);
-      if (!ids.length) return new Set<string>();
+      if (!ids.length) return [];
       const ONE_HOUR_MS = 60 * 60 * 1000;
       const oneHourAgo = new Date(Date.now() - ONE_HOUR_MS).toISOString();
       const { data } = await supabase
@@ -25,10 +25,18 @@ export function useTrainsListData(plantId: string) {
         .select('train_id')
         .in('train_id', ids)
         .gte('reading_datetime', oneHourAgo);
-      return new Set((data ?? []).map((r: any) => r.train_id));
+      return (data ?? []).map((r: any) => r.train_id as string);
     },
     enabled: (trains ?? []).length > 0,
   });
+
+  const runningTrainIds = useMemo(() => {
+    if (!recentTrainIds) return new Set<string>();
+    if (recentTrainIds instanceof Set) return recentTrainIds;
+    if (Array.isArray(recentTrainIds)) return new Set(recentTrainIds);
+    if (typeof recentTrainIds === 'object') return new Set(Object.keys(recentTrainIds));
+    return new Set<string>();
+  }, [recentTrainIds]);
 
   const { data: trainMeterReplacements } = useQuery({
     queryKey: ['ro-train-meter-replacements', plantId],
@@ -53,7 +61,7 @@ export function useTrainsListData(plantId: string) {
 
   const deriveTrainStatus = (t: any): 'Running' | 'Maintenance' | 'Offline' => {
     if (t.status === 'Maintenance') return 'Maintenance';
-    if (recentTrainIds?.has(t.id)) return 'Running';
+    if (runningTrainIds.has(t.id)) return 'Running';
     return 'Offline';
   };
 
