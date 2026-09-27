@@ -8,8 +8,11 @@ import {
   MeterMultiplierWorkflowModal,
   type MeterWorkflowTarget,
 } from '../components/MeterMultiplierWorkflowModal';
+import {
+  PowerMeterMultiplierModal,
+  type PowerMeterWorkflowTarget,
+} from '../components/PowerMeterMultiplierModal';
 import { PowerMeterManageModal } from '../components/PowerMeterManageModal';
-import { PowerMeterChangeForm } from './PowerMeterChangeForm';
 import {
   MeterMultiplierTableRow,
   type UnifiedMeterRow,
@@ -20,7 +23,6 @@ import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Gauge, Settings2 } from 'lucide-react';
-import { POWER_CONFIG_KEY } from '../PowerMeters/PowerMeters';
 
 interface MeterMultiplierSectionProps {
   plantId: string;
@@ -39,9 +41,10 @@ export function MeterMultiplierSection({ plantId, canEdit }: MeterMultiplierSect
   const [modalEventType, setModalEventType] = useState<'physical_replacement' | 'multiplier_cutover'>('multiplier_cutover');
 
   // Power meter modal states
+  const [powerModalOpen, setPowerModalOpen] = useState(false);
+  const [powerTarget, setPowerTarget] = useState<PowerMeterWorkflowTarget | null>(null);
+  const [powerEventType, setPowerEventType] = useState<'physical_replacement' | 'multiplier_cutover'>('multiplier_cutover');
   const [powerManageOpen, setPowerManageOpen] = useState(false);
-  const [powerChangeOpen, setPowerChangeOpen] = useState(false);
-  const [selectedGridIndex, setSelectedGridIndex] = useState<number>(0);
 
   // Meter configuration flags
   const { config: meterConfig } = usePlantMeterConfig(plantId);
@@ -72,22 +75,16 @@ export function MeterMultiplierSection({ plantId, canEdit }: MeterMultiplierSect
   // 4. Fetch Water Meter Events
   const { data: meterEvents = [], isLoading: eventsLoading } = useMeterEvents(plantId);
 
-  // 5. Fetch Power Config
+  // 5. Fetch Power Config directly from Supabase (no localStorage fallback)
   const { data: powerConfig, isLoading: powerLoading } = useQuery({
     queryKey: ['plant-power-config', plantId],
     queryFn: async () => {
-      try {
-        const { data, error } = await (supabase.from('plant_power_config' as any) as any)
-          .select('solar_meter_count, solar_meter_names, grid_meter_count, grid_meter_names, grid_meter_multipliers')
-          .eq('plant_id', plantId)
-          .maybeSingle();
-        if (!error && data) return data as any;
-      } catch { /* table may not exist */ }
-      try {
-        const raw = localStorage.getItem(POWER_CONFIG_KEY(plantId));
-        if (raw) return JSON.parse(raw);
-      } catch { /* ignore */ }
-      return null;
+      const { data, error } = await (supabase.from('plant_power_config' as any) as any)
+        .select('solar_meter_count, solar_meter_names, solar_meter_multipliers, solar_meter_multipliers_enabled, grid_meter_count, grid_meter_names, grid_meter_multipliers, grid_meter_multipliers_enabled')
+        .eq('plant_id', plantId)
+        .maybeSingle();
+      if (error) return null;
+      return data as any;
     },
     enabled: !!plantId,
   });
@@ -97,12 +94,12 @@ export function MeterMultiplierSection({ plantId, canEdit }: MeterMultiplierSect
     queryKey: ['power-meter-changes', plantId],
     queryFn: async () => {
       const { data, error } = await (supabase.from('power_meter_changes' as any) as any)
-        .select('id, plant_id, meter_index, change_date, old_multiplier, new_multiplier, old_meter_final_reading, new_meter_initial_reading, notes, created_at, changed_by, user_profiles:changed_by (first_name, last_name, email)')
+        .select('id, plant_id, meter_index, power_kind, event_type, change_date, old_multiplier, old_multiplier_enabled, new_multiplier, new_multiplier_enabled, old_meter_final_reading, new_meter_initial_reading, notes, created_at, changed_by, user_profiles:changed_by (first_name, last_name, email)')
         .eq('plant_id', plantId)
         .order('change_date', { ascending: false });
       if (error) {
         const { data: fallback, error: fbErr } = await (supabase.from('power_meter_changes' as any) as any)
-          .select('id, plant_id, meter_index, change_date, old_multiplier, new_multiplier, old_meter_final_reading, new_meter_initial_reading, notes, created_at, changed_by')
+          .select('id, plant_id, meter_index, power_kind, event_type, change_date, old_multiplier, old_multiplier_enabled, new_multiplier, new_multiplier_enabled, old_meter_final_reading, new_meter_initial_reading, notes, created_at, changed_by')
           .eq('plant_id', plantId)
           .order('change_date', { ascending: false });
         if (fbErr) return [];
@@ -161,16 +158,19 @@ export function MeterMultiplierSection({ plantId, canEdit }: MeterMultiplierSect
       const gridCount = powerConfig?.grid_meter_count ?? 1;
       const gridNames: string[] = Array.isArray(powerConfig?.grid_meter_names) ? powerConfig.grid_meter_names : [];
       const gridMultipliers: number[] = Array.isArray(powerConfig?.grid_meter_multipliers) ? powerConfig.grid_meter_multipliers : [];
+      const gridEnabled: boolean[] = Array.isArray(powerConfig?.grid_meter_multipliers_enabled) ? powerConfig.grid_meter_multipliers_enabled : [];
+
       for (let i = 0; i < gridCount; i++) {
         const mult = Number(gridMultipliers[i] ?? 1);
+        const enabled = gridEnabled[i] != null ? Boolean(gridEnabled[i]) : mult > 1;
         list.push({
           id: `power-grid-${i}`,
           name: gridNames[i] || (gridCount === 1 ? 'Grid Meter' : `Grid Meter ${i + 1}`),
           type: 'power',
-          typeLabel: 'Grid Power Meter (CT Ratio)',
+          typeLabel: 'Grid Meter',
           meter_serial: null,
           meter_multiplier: mult > 0 ? mult : 1,
-          multiplier_enabled: mult > 1,
+          multiplier_enabled: enabled,
           powerKind: 'grid',
           meterIndex: i,
         });
@@ -181,15 +181,20 @@ export function MeterMultiplierSection({ plantId, canEdit }: MeterMultiplierSect
     if (hasSolar) {
       const solarCount = powerConfig?.solar_meter_count ?? 1;
       const solarNames: string[] = Array.isArray(powerConfig?.solar_meter_names) ? powerConfig.solar_meter_names : [];
+      const solarMultipliers: number[] = Array.isArray(powerConfig?.solar_meter_multipliers) ? powerConfig.solar_meter_multipliers : [];
+      const solarEnabled: boolean[] = Array.isArray(powerConfig?.solar_meter_multipliers_enabled) ? powerConfig.solar_meter_multipliers_enabled : [];
+
       for (let i = 0; i < solarCount; i++) {
+        const mult = Number(solarMultipliers[i] ?? 1);
+        const enabled = solarEnabled[i] != null ? Boolean(solarEnabled[i]) : mult > 1;
         list.push({
           id: `power-solar-${i}`,
           name: solarNames[i] || (solarCount === 1 ? 'Solar Meter' : `Solar Meter ${i + 1}`),
           type: 'power',
-          typeLabel: 'Solar Power Meter',
+          typeLabel: 'Solar Meter',
           meter_serial: null,
-          meter_multiplier: 1,
-          multiplier_enabled: false,
+          meter_multiplier: mult > 0 ? mult : 1,
+          multiplier_enabled: enabled,
           powerKind: 'solar',
           meterIndex: i,
         });
@@ -217,13 +222,15 @@ export function MeterMultiplierSection({ plantId, canEdit }: MeterMultiplierSect
     return map;
   }, [meterEvents]);
 
-  // Group power changes by grid meter_index
-  const powerChangesByMeterIndex = useMemo(() => {
-    const map = new Map<number, PowerMeterChangeRow[]>();
+  // Group power changes by power_kind and meter_index
+  const powerChangesByKey = useMemo(() => {
+    const map = new Map<string, PowerMeterChangeRow[]>();
     powerMeterChanges.forEach((pc) => {
-      const arr = map.get(pc.meter_index) || [];
+      const kind = pc.power_kind || 'grid';
+      const key = `${kind}-${pc.meter_index}`;
+      const arr = map.get(key) || [];
       arr.push(pc);
-      map.set(pc.meter_index, arr);
+      map.set(key, arr);
     });
     return map;
   }, [powerMeterChanges]);
@@ -254,16 +261,24 @@ export function MeterMultiplierSection({ plantId, canEdit }: MeterMultiplierSect
     setModalOpen(true);
   };
 
-  const openPowerReplace = (gridIndex: number) => {
-    setSelectedGridIndex(gridIndex);
-    setPowerChangeOpen(true);
+  const openPowerMultiplier = (
+    target: UnifiedMeterRow,
+    eventType: 'physical_replacement' | 'multiplier_cutover'
+  ) => {
+    setPowerTarget({
+      name: target.name,
+      powerKind: target.powerKind || 'grid',
+      meterIndex: target.meterIndex ?? 0,
+      meter_serial: target.meter_serial,
+      meter_multiplier: target.meter_multiplier,
+      multiplier_enabled: target.multiplier_enabled,
+      last_reading: target.last_reading,
+    });
+    setPowerEventType(eventType);
+    setPowerModalOpen(true);
   };
 
   const isLoading = pmLoading || wellsLoading || locatorsLoading || powerLoading || eventsLoading || powerChangesLoading;
-
-  const currentGridCount = powerConfig?.grid_meter_count ?? 1;
-  const currentGridNames = Array.isArray(powerConfig?.grid_meter_names) ? powerConfig.grid_meter_names : [];
-  const currentGridMultipliers = Array.isArray(powerConfig?.grid_meter_multipliers) ? powerConfig.grid_meter_multipliers : [];
 
   return (
     <div className="space-y-4">
@@ -346,9 +361,8 @@ export function MeterMultiplierSection({ plantId, canEdit }: MeterMultiplierSect
                 const isExpanded = expandedMeters.has(m.id);
                 const isPower = m.type === 'power';
                 const waterEvents = !isPower ? (eventsByEntity.get(m.id) || []) : [];
-                const powerChanges = isPower && m.powerKind === 'grid' && m.meterIndex != null
-                  ? (powerChangesByMeterIndex.get(m.meterIndex) || [])
-                  : [];
+                const powerKey = isPower ? `${m.powerKind || 'grid'}-${m.meterIndex ?? 0}` : '';
+                const powerChanges = isPower ? (powerChangesByKey.get(powerKey) || []) : [];
 
                 return (
                   <MeterMultiplierTableRow
@@ -360,8 +374,7 @@ export function MeterMultiplierSection({ plantId, canEdit }: MeterMultiplierSect
                     powerChanges={powerChanges}
                     onToggleExpand={toggleExpand}
                     onOpenWaterWorkflow={openWaterWorkflow}
-                    onOpenPowerManage={() => setPowerManageOpen(true)}
-                    onOpenPowerReplace={openPowerReplace}
+                    onOpenPowerMultiplier={openPowerMultiplier}
                   />
                 );
               })
@@ -378,6 +391,14 @@ export function MeterMultiplierSection({ plantId, canEdit }: MeterMultiplierSect
         eventType={modalEventType}
       />
 
+      <PowerMeterMultiplierModal
+        open={powerModalOpen}
+        onOpenChange={setPowerModalOpen}
+        plantId={plantId}
+        target={powerTarget}
+        eventType={powerEventType}
+      />
+
       <PowerMeterManageModal
         open={powerManageOpen}
         onOpenChange={setPowerManageOpen}
@@ -386,17 +407,6 @@ export function MeterMultiplierSection({ plantId, canEdit }: MeterMultiplierSect
         hasGrid={hasGrid}
         initialConfig={powerConfig}
       />
-
-      {powerChangeOpen && (
-        <PowerMeterChangeForm
-          plant={{ id: plantId }}
-          gridMeterCount={currentGridCount}
-          gridMeterNames={currentGridNames}
-          currentMultipliers={currentGridMultipliers}
-          initialMeterIndex={selectedGridIndex}
-          onClose={() => setPowerChangeOpen(false)}
-        />
-      )}
     </div>
   );
 }

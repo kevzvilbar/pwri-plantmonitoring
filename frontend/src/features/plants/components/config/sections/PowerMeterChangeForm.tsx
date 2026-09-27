@@ -112,6 +112,8 @@ export function PowerMeterChangeForm({
       const { data: inserted } = await (supabase.from('power_meter_changes' as any) as any).insert({
         plant_id: plant.id,
         meter_index: form.meterIndex,
+        power_kind: 'grid',
+        event_type: 'physical_replacement',
         change_date: form.changeDate,
         old_multiplier: oldMultiplier,
         new_multiplier: newMult,

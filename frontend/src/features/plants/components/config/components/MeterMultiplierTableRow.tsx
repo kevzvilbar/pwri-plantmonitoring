@@ -41,8 +41,7 @@ interface MeterMultiplierTableRowProps {
   powerChanges: PowerMeterChangeRow[];
   onToggleExpand: (id: string) => void;
   onOpenWaterWorkflow: (target: UnifiedMeterRow, eventType: 'physical_replacement' | 'multiplier_cutover') => void;
-  onOpenPowerManage: () => void;
-  onOpenPowerReplace: (gridIndex: number) => void;
+  onOpenPowerMultiplier: (target: UnifiedMeterRow, eventType: 'physical_replacement' | 'multiplier_cutover') => void;
 }
 
 export function MeterMultiplierTableRow({
@@ -53,8 +52,7 @@ export function MeterMultiplierTableRow({
   powerChanges,
   onToggleExpand,
   onOpenWaterWorkflow,
-  onOpenPowerManage,
-  onOpenPowerReplace,
+  onOpenPowerMultiplier,
 }: MeterMultiplierTableRowProps) {
   const isPower = m.type === 'power';
   const historyCount = isPower ? powerChanges.length : waterEvents.length;
@@ -92,10 +90,7 @@ export function MeterMultiplierTableRow({
         </TableCell>
         <TableCell className="py-2.5">
           <div className="flex items-center gap-2">
-            <div className={cn(
-              "h-6 w-6 rounded flex items-center justify-center shrink-0",
-              m.powerKind === 'solar' ? "bg-warn-soft" : m.powerKind === 'grid' ? "bg-info-soft" : "bg-muted/60"
-            )}>
+            <div className="h-6 w-6 rounded bg-muted/60 flex items-center justify-center shrink-0">
               {icon}
             </div>
             <div>
@@ -110,15 +105,11 @@ export function MeterMultiplierTableRow({
         <TableCell className="py-2.5">
           {m.multiplier_enabled ? (
             <Badge variant="outline" className="border-primary/50 text-primary bg-primary-soft text-2xs font-mono font-semibold">
-              ×{m.meter_multiplier} {isPower ? 'CT Active' : 'Active'}
+              ×{m.meter_multiplier} Active
             </Badge>
           ) : m.meter_multiplier > 1 ? (
             <Badge variant="outline" className="border-warn/50 text-warn bg-warn-soft text-2xs font-mono">
               Configured Off (×{m.meter_multiplier})
-            </Badge>
-          ) : isPower && m.powerKind === 'solar' ? (
-            <Badge variant="outline" className="border-border text-muted-foreground text-2xs font-mono">
-              Direct / Raw (×1)
             </Badge>
           ) : (
             <Badge variant="outline" className="border-border text-muted-foreground text-2xs font-mono">
@@ -128,51 +119,24 @@ export function MeterMultiplierTableRow({
         </TableCell>
         <TableCell className="py-2.5 text-right">
           <div className="flex items-center justify-end gap-1.5">
-            {isPower ? (
-              <>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={onOpenPowerManage}
-                  disabled={!canEdit}
-                  className="h-7 text-2xs px-2.5 gap-1 text-foreground"
-                >
-                  <Sliders className="h-3 w-3 text-muted-foreground" /> Configure
-                </Button>
-                {m.powerKind === 'grid' && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => onOpenPowerReplace(m.meterIndex ?? 0)}
-                    disabled={!canEdit}
-                    className="h-7 text-2xs px-2.5 gap-1 text-foreground"
-                  >
-                    <RotateCw className="h-3 w-3 text-muted-foreground" /> Replace
-                  </Button>
-                )}
-              </>
-            ) : (
-              <>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => onOpenWaterWorkflow(m, 'multiplier_cutover')}
-                  disabled={!canEdit}
-                  className="h-7 text-2xs px-2.5 gap-1 text-foreground"
-                >
-                  <Sliders className="h-3 w-3 text-muted-foreground" /> Configure
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => onOpenWaterWorkflow(m, 'physical_replacement')}
-                  disabled={!canEdit}
-                  className="h-7 text-2xs px-2.5 gap-1 text-foreground"
-                >
-                  <RotateCw className="h-3 w-3 text-muted-foreground" /> Replace
-                </Button>
-              </>
-            )}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => isPower ? onOpenPowerMultiplier(m, 'multiplier_cutover') : onOpenWaterWorkflow(m, 'multiplier_cutover')}
+              disabled={!canEdit}
+              className="h-7 text-2xs px-2.5 gap-1 text-foreground"
+            >
+              <Sliders className="h-3 w-3 text-muted-foreground" /> Configure
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => isPower ? onOpenPowerMultiplier(m, 'physical_replacement') : onOpenWaterWorkflow(m, 'physical_replacement')}
+              disabled={!canEdit}
+              className="h-7 text-2xs px-2.5 gap-1 text-foreground"
+            >
+              <RotateCw className="h-3 w-3 text-muted-foreground" /> Replace
+            </Button>
           </div>
         </TableCell>
       </TableRow>

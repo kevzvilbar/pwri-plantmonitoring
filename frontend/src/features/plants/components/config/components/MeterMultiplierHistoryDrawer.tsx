@@ -9,9 +9,13 @@ export interface PowerMeterChangeRow {
   id: string;
   plant_id: string;
   meter_index: number;
+  power_kind?: 'grid' | 'solar';
+  event_type?: 'physical_replacement' | 'multiplier_cutover';
   change_date: string;
   old_multiplier: number;
+  old_multiplier_enabled?: boolean | null;
   new_multiplier: number;
+  new_multiplier_enabled?: boolean | null;
   old_meter_final_reading: number | null;
   new_meter_initial_reading: number | null;
   notes: string | null;
@@ -48,58 +52,69 @@ export function MeterMultiplierHistoryDrawer({
             </p>
           ) : isPower ? (
             <div className="space-y-1.5">
-              {powerChanges.map((pc) => (
-                <div
-                  key={pc.id}
-                  className="rounded border border-border/60 bg-card p-2 text-2xs space-y-1 shadow-2xs"
-                >
-                  <div className="flex items-center justify-between font-medium">
-                    <div className="flex items-center gap-2">
-                      <Badge
-                        variant="outline"
-                        className="text-3xs px-1.5 py-0 border-info text-info bg-info-soft"
-                      >
-                        CT Change / Replacement
-                      </Badge>
-                      <span className="text-foreground">
-                        {format(parseISO(pc.change_date), 'MMM d, yyyy')}
+              {powerChanges.map((pc) => {
+                const isPhysical = pc.event_type === 'physical_replacement';
+                return (
+                  <div
+                    key={pc.id}
+                    className="rounded border border-border/60 bg-card p-2 text-2xs space-y-1 shadow-2xs"
+                  >
+                    <div className="flex items-center justify-between font-medium">
+                      <div className="flex items-center gap-2">
+                        <Badge
+                          variant="outline"
+                          className={cn(
+                            'text-3xs px-1.5 py-0',
+                            isPhysical
+                              ? 'border-info text-info bg-info-soft'
+                              : 'border-primary text-primary bg-primary-soft'
+                          )}
+                        >
+                          {isPhysical ? 'Physical Replacement' : 'Multiplier Cutover'}
+                        </Badge>
+                        <span className="text-foreground">
+                          {format(parseISO(pc.change_date), 'MMM d, yyyy')}
+                        </span>
+                      </div>
+                      <span className="text-muted-foreground">
+                        {pc.user_profiles?.first_name
+                          ? `${pc.user_profiles.first_name} ${pc.user_profiles.last_name || ''}`
+                          : pc.user_profiles?.email || 'System'}
                       </span>
                     </div>
-                    <span className="text-muted-foreground">
-                      {pc.user_profiles?.first_name
-                        ? `${pc.user_profiles.first_name} ${pc.user_profiles.last_name || ''}`
-                        : pc.user_profiles?.email || 'System'}
-                    </span>
-                  </div>
 
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-0.5 text-muted-foreground font-mono">
-                    <div>
-                      Old CT: <span className="text-foreground">×{pc.old_multiplier}</span>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-0.5 text-muted-foreground font-mono">
+                      <div>
+                        Old Multiplier: <span className="text-foreground">×{pc.old_multiplier}</span>
+                      </div>
+                      <div>
+                        New Multiplier:{' '}
+                        <span className="text-foreground font-semibold">
+                          {pc.new_multiplier_enabled !== false ? `×${pc.new_multiplier}` : 'Off (×1)'}
+                        </span>
+                      </div>
+                      <div>
+                        Old Final Read:{' '}
+                        <span className="text-foreground">
+                          {pc.old_meter_final_reading != null ? `${pc.old_meter_final_reading} kWh` : '—'}
+                        </span>
+                      </div>
+                      <div>
+                        New Initial Read:{' '}
+                        <span className="text-foreground font-semibold">
+                          {pc.new_meter_initial_reading != null ? `${pc.new_meter_initial_reading} kWh` : '—'}
+                        </span>
+                      </div>
                     </div>
-                    <div>
-                      New CT: <span className="text-foreground font-semibold">×{pc.new_multiplier}</span>
-                    </div>
-                    <div>
-                      Old Final Read:{' '}
-                      <span className="text-foreground">
-                        {pc.old_meter_final_reading != null ? `${pc.old_meter_final_reading} kWh` : '—'}
-                      </span>
-                    </div>
-                    <div>
-                      New Initial Read:{' '}
-                      <span className="text-foreground font-semibold">
-                        {pc.new_meter_initial_reading != null ? `${pc.new_meter_initial_reading} kWh` : '—'}
-                      </span>
-                    </div>
-                  </div>
 
-                  {pc.notes && (
-                    <p className="text-3xs text-muted-foreground italic pt-0.5 border-t border-border/30 mt-1">
-                      Note: {pc.notes}
-                    </p>
-                  )}
-                </div>
-              ))}
+                    {pc.notes && (
+                      <p className="text-3xs text-muted-foreground italic pt-0.5 border-t border-border/30 mt-1">
+                        Note: {pc.notes}
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           ) : (
             <div className="space-y-1.5">

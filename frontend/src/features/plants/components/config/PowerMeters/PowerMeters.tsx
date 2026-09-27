@@ -6,18 +6,17 @@ import { useAuth } from '@/hooks/useAuth';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Gauge, Sun, Zap, Loader2, SlidersHorizontal, ArrowUpRight } from 'lucide-react';
+import { Gauge, Sun, Loader2, SlidersHorizontal, ArrowUpRight } from 'lucide-react';
 import { ChangeMeterIcon } from '@/components/icons/water-icons';
 import { usePlantMeterConfig, GridPylonIcon } from '../../../shared';
 import { usePowerHistoryQuery } from '../hooks/usePowerHistoryQuery';
 import { PowerChartHeader } from '../sections/PowerChartHeader';
 import { PowerKpiStrip } from '../sections/PowerKpiStrip';
 import { PowerChart } from '../sections/PowerChart';
+import { PowerMeterMultiplierModal, type PowerMeterWorkflowTarget } from '../components/PowerMeterMultiplierModal';
 import { PowerMeterChangeForm } from '../sections/PowerMeterChangeForm';
 
 export { PowerMeterChangeForm as PowerMeterChangeDialog } from '../sections/PowerMeterChangeForm';
-
-export const POWER_CONFIG_KEY = (plantId: string) => `power_config_${plantId}`;
 
 export function PowerMetersCard({ plant }: { plant: any }) {
   const navigate = useNavigate();
@@ -32,28 +31,45 @@ export function PowerMetersCard({ plant }: { plant: any }) {
   const { data: savedConfig, isLoading } = useQuery({
     queryKey: ['plant-power-config', plant.id],
     queryFn: async () => {
-      try {
-        const { data, error } = await (supabase.from('plant_power_config' as any) as any)
-          .select('solar_meter_count, solar_meter_names, grid_meter_count, grid_meter_names, grid_meter_multipliers')
-          .eq('plant_id', plant.id)
-          .maybeSingle();
-        if (!error && data) return data as any;
-      } catch { /* table may not exist */ }
-      try {
-        const raw = localStorage.getItem(POWER_CONFIG_KEY(plant.id));
-        if (raw) return JSON.parse(raw);
-      } catch { /* ignore */ }
-      return null;
+      const { data, error } = await (supabase.from('plant_power_config' as any) as any)
+        .select('solar_meter_count, solar_meter_names, solar_meter_multipliers, solar_meter_multipliers_enabled, grid_meter_count, grid_meter_names, grid_meter_multipliers, grid_meter_multipliers_enabled')
+        .eq('plant_id', plant.id)
+        .maybeSingle();
+      if (error) return null;
+      return data as any;
     },
   });
 
-  const [changeMeterOpen, setChangeMeterOpen] = useState(false);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalTarget, setModalTarget] = useState<PowerMeterWorkflowTarget | null>(null);
 
   const solarCount = savedConfig?.solar_meter_count ?? 1;
   const gridCount = savedConfig?.grid_meter_count ?? 1;
   const solarNames: string[] = Array.isArray(savedConfig?.solar_meter_names) ? savedConfig.solar_meter_names : [];
   const gridNames: string[] = Array.isArray(savedConfig?.grid_meter_names) ? savedConfig.grid_meter_names : [];
   const gridMultipliers: number[] = Array.isArray(savedConfig?.grid_meter_multipliers) ? savedConfig.grid_meter_multipliers : [];
+  const gridEnabled: boolean[] = Array.isArray(savedConfig?.grid_meter_multipliers_enabled) ? savedConfig.grid_meter_multipliers_enabled : [];
+  const solarMultipliers: number[] = Array.isArray(savedConfig?.solar_meter_multipliers) ? savedConfig.solar_meter_multipliers : [];
+  const solarEnabled: boolean[] = Array.isArray(savedConfig?.solar_meter_multipliers_enabled) ? savedConfig.solar_meter_multipliers_enabled : [];
+
+  const openReplace = (powerKind: 'grid' | 'solar', index: number) => {
+    const name = powerKind === 'grid'
+      ? (gridNames[index] || (gridCount === 1 ? 'Grid Meter' : `Grid Meter ${index + 1}`))
+      : (solarNames[index] || (solarCount === 1 ? 'Solar Meter' : `Solar Meter ${index + 1}`));
+    const mult = powerKind === 'grid' ? (gridMultipliers[index] ?? 1) : (solarMultipliers[index] ?? 1);
+    const enabled = powerKind === 'grid'
+      ? (gridEnabled[index] != null ? Boolean(gridEnabled[index]) : mult > 1)
+      : (solarEnabled[index] != null ? Boolean(solarEnabled[index]) : mult > 1);
+
+    setModalTarget({
+      name,
+      powerKind,
+      meterIndex: index,
+      meter_multiplier: mult,
+      multiplier_enabled: enabled,
+    });
+    setModalOpen(true);
+  };
 
   if (isLoading) return (
     <div className="flex items-center gap-2 p-4 text-sm text-muted-foreground">
@@ -71,7 +87,7 @@ export function PowerMetersCard({ plant }: { plant: any }) {
             </div>
             <div>
               <div className="flex items-center gap-2 flex-wrap">
-                <h3 className="font-semibold text-sm text-foreground">Power Meter Configuration &amp; CT Multipliers</h3>
+                <h3 className="font-semibold text-sm text-foreground">Power Meter Configuration &amp; Multipliers</h3>
                 <div className="flex items-center gap-1.5">
                   {hasSolar && (
                     <span className="inline-flex items-center gap-1 text-2xs font-medium px-2 py-0.5 rounded-full bg-warn-soft text-warn border border-warn/30">
@@ -86,7 +102,7 @@ export function PowerMetersCard({ plant }: { plant: any }) {
                 </div>
               </div>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Power meter counts, names, and CT multipliers are uniformly managed in{' '}
+                Power meter counts, names, and multipliers are uniformly managed in{' '}
                 <strong className="text-foreground font-medium">Plant Config → Meter Multipliers</strong>.
               </p>
             </div>
@@ -98,11 +114,11 @@ export function PowerMetersCard({ plant }: { plant: any }) {
                 <Button
                   size="sm"
                   variant="outline"
-                  onClick={() => setChangeMeterOpen(true)}
+                  onClick={() => openReplace('grid', 0)}
                   className="gap-1.5 h-8 text-xs font-medium"
                 >
                   <ChangeMeterIcon className="h-3.5 w-3.5 text-primary" />
-                  <span>Change Meter / CT Ratio</span>
+                  <span>Replace Meter</span>
                 </Button>
                 <Button
                   size="sm"
@@ -124,6 +140,7 @@ export function PowerMetersCard({ plant }: { plant: any }) {
           {hasGrid && Array.from({ length: gridCount }).map((_, i) => {
             const name = gridNames[i] || (gridCount === 1 ? 'Grid Meter' : `Grid Meter ${i + 1}`);
             const mult = gridMultipliers[i] ?? 1;
+            const enabled = gridEnabled[i] != null ? Boolean(gridEnabled[i]) : mult > 1;
             return (
               <div
                 key={`grid-summary-${i}`}
@@ -139,9 +156,9 @@ export function PowerMetersCard({ plant }: { plant: any }) {
                   </div>
                 </div>
                 <div className="shrink-0 ml-2 font-mono">
-                  {mult > 1 ? (
+                  {enabled && mult > 1 ? (
                     <Badge variant="outline" className="border-primary/50 text-primary bg-primary-soft text-3xs font-semibold">
-                      ×{mult} CT Active
+                      ×{mult} Active
                     </Badge>
                   ) : (
                     <Badge variant="outline" className="border-border text-muted-foreground text-3xs">
@@ -155,6 +172,8 @@ export function PowerMetersCard({ plant }: { plant: any }) {
 
           {hasSolar && Array.from({ length: solarCount }).map((_, i) => {
             const name = solarNames[i] || (solarCount === 1 ? 'Solar Meter' : `Solar Meter ${i + 1}`);
+            const mult = solarMultipliers[i] ?? 1;
+            const enabled = solarEnabled[i] != null ? Boolean(solarEnabled[i]) : mult > 1;
             return (
               <div
                 key={`solar-summary-${i}`}
@@ -170,9 +189,15 @@ export function PowerMetersCard({ plant }: { plant: any }) {
                   </div>
                 </div>
                 <div className="shrink-0 ml-2 font-mono">
-                  <Badge variant="outline" className="border-border text-muted-foreground text-3xs">
-                    Direct / Raw (×1)
-                  </Badge>
+                  {enabled && mult > 1 ? (
+                    <Badge variant="outline" className="border-primary/50 text-primary bg-primary-soft text-3xs font-semibold">
+                      ×{mult} Active
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="border-border text-muted-foreground text-3xs">
+                      ×1 Multiplier
+                    </Badge>
+                  )}
                 </div>
               </div>
             );
@@ -184,18 +209,16 @@ export function PowerMetersCard({ plant }: { plant: any }) {
         <PowerConsumptionEnergyMixWrapper plantId={plant.id} hasSolar={hasSolar} hasGrid={hasGrid} />
       </Card>
 
-      {changeMeterOpen && (
-        <PowerMeterChangeForm
-          plant={plant}
-          gridMeterCount={gridCount}
-          gridMeterNames={gridNames}
-          currentMultipliers={gridMultipliers}
-          onClose={() => {
-            setChangeMeterOpen(false);
-            qc.invalidateQueries({ queryKey: ['plant-power-config', plant.id] });
-          }}
-        />
-      )}
+      <PowerMeterMultiplierModal
+        open={modalOpen}
+        onOpenChange={setModalOpen}
+        plantId={plant.id}
+        target={modalTarget}
+        eventType="physical_replacement"
+        onSuccess={() => {
+          qc.invalidateQueries({ queryKey: ['plant-power-config', plant.id] });
+        }}
+      />
     </div>
   );
 }

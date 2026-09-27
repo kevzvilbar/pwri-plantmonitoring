@@ -2843,27 +2843,36 @@ export type Database = {
         Row: {
           grid_meter_count: number
           grid_meter_multipliers: number[]
+          grid_meter_multipliers_enabled: boolean[]
           grid_meter_names: string[]
           plant_id: string
           solar_meter_count: number
+          solar_meter_multipliers: number[]
+          solar_meter_multipliers_enabled: boolean[]
           solar_meter_names: string[]
           updated_at: string
         }
         Insert: {
           grid_meter_count?: number
           grid_meter_multipliers?: number[]
+          grid_meter_multipliers_enabled?: boolean[]
           grid_meter_names?: string[]
           plant_id: string
           solar_meter_count?: number
+          solar_meter_multipliers?: number[]
+          solar_meter_multipliers_enabled?: boolean[]
           solar_meter_names?: string[]
           updated_at?: string
         }
         Update: {
           grid_meter_count?: number
           grid_meter_multipliers?: number[]
+          grid_meter_multipliers_enabled?: boolean[]
           grid_meter_names?: string[]
           plant_id?: string
           solar_meter_count?: number
+          solar_meter_multipliers?: number[]
+          solar_meter_multipliers_enabled?: boolean[]
           solar_meter_names?: string[]
           updated_at?: string
         }
@@ -3065,42 +3074,54 @@ export type Database = {
           change_date: string
           changed_by: string | null
           created_at: string
+          event_type: 'physical_replacement' | 'multiplier_cutover'
           id: string
           meter_index: number
           new_meter_initial_reading: number | null
           new_multiplier: number
+          new_multiplier_enabled: boolean | null
           notes: string | null
           old_meter_final_reading: number | null
           old_multiplier: number
+          old_multiplier_enabled: boolean | null
           plant_id: string
+          power_kind: 'grid' | 'solar'
           reading_id: string | null
         }
         Insert: {
           change_date: string
           changed_by?: string | null
           created_at?: string
+          event_type?: 'physical_replacement' | 'multiplier_cutover'
           id?: string
           meter_index?: number
           new_meter_initial_reading?: number | null
           new_multiplier?: number
+          new_multiplier_enabled?: boolean | null
           notes?: string | null
           old_meter_final_reading?: number | null
           old_multiplier?: number
+          old_multiplier_enabled?: boolean | null
           plant_id: string
+          power_kind?: 'grid' | 'solar'
           reading_id?: string | null
         }
         Update: {
           change_date?: string
           changed_by?: string | null
           created_at?: string
+          event_type?: 'physical_replacement' | 'multiplier_cutover'
           id?: string
           meter_index?: number
           new_meter_initial_reading?: number | null
           new_multiplier?: number
+          new_multiplier_enabled?: boolean | null
           notes?: string | null
           old_meter_final_reading?: number | null
           old_multiplier?: number
+          old_multiplier_enabled?: boolean | null
           plant_id?: string
+          power_kind?: 'grid' | 'solar'
           reading_id?: string | null
         }
         Relationships: [

@@ -4,10 +4,9 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Plus, Minus, Check, Sun, Loader2 } from 'lucide-react';
-import { GridPylonIcon } from '@/components/icons/water-icons';
+import { GridPylonIcon } from '@/features/plants/shared';
 import { MeterNameListRows } from '../PowerMeters/sections/MeterNameListRows';
-import { GridMeterListRows } from '../PowerMeters/sections/GridMeterListRows';
-import { POWER_CONFIG_KEY } from '../PowerMeters/PowerMeters';
+import { friendlyError } from '@/lib/supabaseErrors';
 import { toast } from 'sonner';
 
 interface PowerMeterManageModalProps {
@@ -21,7 +20,6 @@ interface PowerMeterManageModalProps {
     solar_meter_names?: string[] | null;
     grid_meter_count?: number | null;
     grid_meter_names?: string[] | null;
-    grid_meter_multipliers?: number[] | null;
   } | null;
 }
 
@@ -44,9 +42,6 @@ export function PowerMeterManageModal({
   const [gridNames, setGridNames] = useState<string[]>(
     Array.from({ length: MAX_METERS }, (_, i) => `Grid Meter ${i + 1}`)
   );
-  const [gridMultipliers, setGridMultipliers] = useState<number[]>(
-    Array.from({ length: MAX_METERS }, () => 1)
-  );
   const [saving, setSaving] = useState(false);
   const isDirty = useRef(false);
 
@@ -60,15 +55,6 @@ export function PowerMeterManageModal({
     if (Array.isArray(initialConfig.grid_meter_names) && initialConfig.grid_meter_names.length) {
       setGridNames(initialConfig.grid_meter_names);
     }
-    if (Array.isArray(initialConfig.grid_meter_multipliers) && initialConfig.grid_meter_multipliers.length) {
-      setGridMultipliers(prev => {
-        const next = [...prev];
-        (initialConfig.grid_meter_multipliers as number[]).forEach((m, i) => {
-          next[i] = m > 0 ? m : 1;
-        });
-        return next;
-      });
-    }
     isDirty.current = false;
   }, [initialConfig, open]);
 
@@ -80,29 +66,21 @@ export function PowerMeterManageModal({
       solar_meter_names: solarNames.slice(0, solarCount),
       grid_meter_count: gridCount,
       grid_meter_names: gridNames.slice(0, gridCount),
-      grid_meter_multipliers: gridMultipliers.slice(0, gridCount),
       updated_at: new Date().toISOString(),
     };
 
-    let savedToDb = false;
-    try {
-      const { error } = await (supabase.from('plant_power_config' as any) as any)
-        .upsert(payload, { onConflict: 'plant_id' });
-      if (!error) savedToDb = true;
-    } catch {
-      // Ignore database table absence fallback
-    }
-
-    try {
-      localStorage.setItem(POWER_CONFIG_KEY(plantId), JSON.stringify(payload));
-    } catch {
-      // Ignore local storage error
-    }
+    const { error } = await (supabase.from('plant_power_config' as any) as any)
+      .upsert(payload, { onConflict: 'plant_id' });
 
     setSaving(false);
+    if (error) {
+      toast.error(friendlyError(error));
+      return;
+    }
+
     isDirty.current = false;
     qc.invalidateQueries({ queryKey: ['plant-power-config', plantId] });
-    toast.success(savedToDb ? 'Power meter configuration saved' : 'Power meter configuration saved (local)');
+    toast.success('Power meter structure saved');
     onOpenChange(false);
   };
 
@@ -111,10 +89,10 @@ export function PowerMeterManageModal({
       <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-base font-semibold flex items-center gap-2">
-            <GridPylonIcon className="h-4 w-4 text-primary" /> Power Meter Sources &amp; Multipliers
+            <GridPylonIcon className="h-4 w-4 text-primary" /> Power Meter Sources &amp; Asset Configuration
           </DialogTitle>
           <DialogDescription className="text-xs text-muted-foreground">
-            Configure power meter counts, custom names, and CT (Current Transformer) ratio multiplier factors for this plant.
+            Configure power meter quantities and custom names. Multipliers are managed per meter via the Configure and Replace actions.
           </DialogDescription>
         </DialogHeader>
 
@@ -226,22 +204,15 @@ export function PowerMeterManageModal({
                   </div>
 
                   <div className="space-y-1">
-                    <p className="text-3xs text-muted-foreground font-mono uppercase tracking-wider">Meter Names &amp; CT Multipliers</p>
-                    <GridMeterListRows
+                    <p className="text-3xs text-muted-foreground font-mono uppercase tracking-wider">Meter Names</p>
+                    <MeterNameListRows
                       count={gridCount}
                       names={gridNames}
-                      multipliers={gridMultipliers}
-                      onSaveNames={names => {
+                      accentColor="blue"
+                      defaultPrefix="Grid Meter"
+                      onSave={names => {
                         isDirty.current = true;
                         setGridNames(names);
-                      }}
-                      onSaveMultiplier={(idx, val) => {
-                        isDirty.current = true;
-                        setGridMultipliers(prev => {
-                          const next = [...prev];
-                          next[idx] = val;
-                          return next;
-                        });
                       }}
                       onRemoveLast={() => {
                         isDirty.current = true;
