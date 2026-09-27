@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Gauge, Sun, Loader2, SlidersHorizontal, ArrowUpRight } from 'lucide-react';
 import { ChangeMeterIcon } from '@/components/icons/water-icons';
 import { usePlantMeterConfig, GridPylonIcon } from '../../../shared';
+import { usePlantPowerConfig } from '@/features/plants/hooks/usePlantPowerConfig';
 import { usePowerHistoryQuery } from '../hooks/usePowerHistoryQuery';
 import { PowerChartHeader } from '../sections/PowerChartHeader';
 import { PowerKpiStrip } from '../sections/PowerKpiStrip';
@@ -28,17 +29,7 @@ export function PowerMetersCard({ plant }: { plant: any }) {
   const hasSolar = meterConfig.has_solar;
   const hasGrid = meterConfig.has_grid;
 
-  const { data: savedConfig, isLoading } = useQuery({
-    queryKey: ['plant-power-config', plant.id],
-    queryFn: async () => {
-      const { data, error } = await (supabase.from('plant_power_config' as any) as any)
-        .select('solar_meter_count, solar_meter_names, solar_meter_multipliers, solar_meter_multipliers_enabled, grid_meter_count, grid_meter_names, grid_meter_multipliers, grid_meter_multipliers_enabled')
-        .eq('plant_id', plant.id)
-        .maybeSingle();
-      if (error) return null;
-      return data as any;
-    },
-  });
+  const { powerConfig: savedConfig, isLoading, isLocalOnly } = usePlantPowerConfig(plant.id);
 
   const [modalOpen, setModalOpen] = useState(false);
   const [modalTarget, setModalTarget] = useState<PowerMeterWorkflowTarget | null>(null);
@@ -79,6 +70,18 @@ export function PowerMetersCard({ plant }: { plant: any }) {
 
   return (
     <div className="space-y-3">
+      {isLocalOnly && (
+        <div className="flex items-start gap-2 text-xs text-warn bg-warn-soft border border-warn rounded-md px-3 py-2">
+          <span className="mt-0.5">⚠</span>
+          <span>
+            A saved change to this plant's power meter configuration hasn't reached the database yet — it's stored
+            only on this device. Power consumption totals elsewhere won't reflect it until it syncs. This retries
+            automatically in the background; keep this app open on this device for it to take effect, or ask an admin
+            to check the <code className="font-mono">plant_power_config</code> table/RLS setup.
+          </span>
+        </div>
+      )}
+
       <Card className="p-4 sm:p-5 space-y-3.5 rounded-lg border border-border shadow-xs bg-card">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-start gap-2.5">

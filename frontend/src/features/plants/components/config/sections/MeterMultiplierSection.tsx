@@ -24,6 +24,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Gauge, Settings2 } from 'lucide-react';
 
+import { usePlantPowerConfig } from '@/features/plants/hooks/usePlantPowerConfig';
+
 interface MeterMultiplierSectionProps {
   plantId: string;
   canEdit: boolean;
@@ -75,19 +77,8 @@ export function MeterMultiplierSection({ plantId, canEdit }: MeterMultiplierSect
   // 4. Fetch Water Meter Events
   const { data: meterEvents = [], isLoading: eventsLoading } = useMeterEvents(plantId);
 
-  // 5. Fetch Power Config directly from Supabase (no localStorage fallback)
-  const { data: powerConfig, isLoading: powerLoading } = useQuery({
-    queryKey: ['plant-power-config', plantId],
-    queryFn: async () => {
-      const { data, error } = await (supabase.from('plant_power_config' as any) as any)
-        .select('solar_meter_count, solar_meter_names, solar_meter_multipliers, solar_meter_multipliers_enabled, grid_meter_count, grid_meter_names, grid_meter_multipliers, grid_meter_multipliers_enabled')
-        .eq('plant_id', plantId)
-        .maybeSingle();
-      if (error) return null;
-      return data as any;
-    },
-    enabled: !!plantId,
-  });
+  // 5. Fetch Power Config (dual-persistence + auto-retry sync)
+  const { powerConfig, isLoading: powerLoading, isLocalOnly: isPowerLocalOnly } = usePlantPowerConfig(plantId);
 
   // 6. Fetch Power Meter Changes
   const { data: powerMeterChanges = [], isLoading: powerChangesLoading } = useQuery<PowerMeterChangeRow[]>({
@@ -282,6 +273,18 @@ export function MeterMultiplierSection({ plantId, canEdit }: MeterMultiplierSect
 
   return (
     <div className="space-y-4">
+      {isPowerLocalOnly && (
+        <div className="flex items-start gap-2 text-xs text-warn bg-warn-soft border border-warn rounded-md px-3 py-2">
+          <span className="mt-0.5">⚠</span>
+          <span>
+            A saved change to this plant's power meter configuration hasn't reached the database yet — it's stored
+            only on this device. Power consumption totals elsewhere won't reflect it until it syncs. This retries
+            automatically in the background; keep this app open on this device for it to take effect, or ask an admin
+            to check the <code className="font-mono">plant_power_config</code> table/RLS setup.
+          </span>
+        </div>
+      )}
+
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
         <div>
           <h4 className="text-xs font-semibold uppercase tracking-wide text-foreground flex items-center gap-1.5">

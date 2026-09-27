@@ -14,6 +14,8 @@ import { friendlyError } from '@/lib/supabaseErrors';
 import { Loader2, AlertTriangle, RotateCw, Zap } from 'lucide-react';
 import { GridPylonIcon } from '@/features/plants/shared';
 
+import { usePlantPowerConfig, type PlantPowerConfig, normalizePowerConfig } from '@/features/plants/hooks/usePlantPowerConfig';
+
 export interface PowerMeterWorkflowTarget {
   name: string;
   powerKind: 'grid' | 'solar';
@@ -43,6 +45,7 @@ export function PowerMeterMultiplierModal({
 }: PowerMeterMultiplierModalProps) {
   const { user } = useAuth();
   const qc = useQueryClient();
+  const { powerConfig, savePowerConfig } = usePlantPowerConfig(plantId);
   const [submitting, setSubmitting] = useState(false);
 
   const isPhysical = eventType === 'physical_replacement';
@@ -104,10 +107,16 @@ export function PowerMeterMultiplierModal({
       const isoDatetime = new Date(effectiveAt).toISOString();
 
       // 1. Fetch current power config to preserve other meters in array
-      const { data: currentCfg } = await (supabase.from('plant_power_config' as any) as any)
-        .select('*')
-        .eq('plant_id', plantId)
-        .maybeSingle();
+      let currentCfg: PlantPowerConfig = powerConfig;
+      try {
+        const { data: dbCfg } = await (supabase.from('plant_power_config' as any) as any)
+          .select('*')
+          .eq('plant_id', plantId)
+          .maybeSingle();
+        if (dbCfg) currentCfg = normalizePowerConfig(dbCfg);
+      } catch {
+        /* DB read failed, fall back to current hook powerConfig */
+      }
 
       const isGrid = target.powerKind === 'grid';
       const count = isGrid ? (currentCfg?.grid_meter_count ?? 1) : (currentCfg?.solar_meter_count ?? 1);
@@ -126,28 +135,14 @@ export function PowerMeterMultiplierModal({
       multipliers[target.meterIndex] = multNum;
       enabledFlags[target.meterIndex] = newMultiplierEnabled;
 
-      const patchPayload = isGrid
-        ? {
-            plant_id: plantId,
-            grid_meter_multipliers: multipliers,
-            grid_meter_multipliers_enabled: enabledFlags,
-            updated_at: new Date().toISOString(),
-          }
-        : {
-            plant_id: plantId,
-            solar_meter_multipliers: multipliers,
-            solar_meter_multipliers_enabled: enabledFlags,
-            updated_at: new Date().toISOString(),
-          };
+      const updatedPowerCfg: PlantPowerConfig = {
+        ...currentCfg,
+        ...(isGrid
+          ? { grid_meter_multipliers: multipliers, grid_meter_multipliers_enabled: enabledFlags }
+          : { solar_meter_multipliers: multipliers, solar_meter_multipliers_enabled: enabledFlags }),
+      };
 
-      const { error: cfgErr } = await (supabase.from('plant_power_config' as any) as any)
-        .upsert(patchPayload, { onConflict: 'plant_id' });
-
-      if (cfgErr) {
-        toast.error(friendlyError(cfgErr));
-        setSubmitting(false);
-        return;
-      }
+      await savePowerConfig(updatedPowerCfg);
 
       // 2. Insert audit record into power_meter_changes
       const { data: insertedChange, error: changeErr } = await (supabase.from('power_meter_changes' as any) as any)

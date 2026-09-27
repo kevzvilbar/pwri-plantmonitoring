@@ -1,12 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
-import { supabase } from '@/integrations/supabase/client';
 import { useQueryClient } from '@tanstack/react-query';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Plus, Minus, Check, Sun, Loader2 } from 'lucide-react';
 import { GridPylonIcon } from '@/features/plants/shared';
 import { MeterNameListRows } from '../PowerMeters/sections/MeterNameListRows';
-import { friendlyError } from '@/lib/supabaseErrors';
+import { usePlantPowerConfig, type PlantPowerConfig } from '@/features/plants/hooks/usePlantPowerConfig';
 import { toast } from 'sonner';
 
 interface PowerMeterManageModalProps {
@@ -15,12 +14,7 @@ interface PowerMeterManageModalProps {
   plantId: string;
   hasSolar?: boolean;
   hasGrid?: boolean;
-  initialConfig?: {
-    solar_meter_count?: number | null;
-    solar_meter_names?: string[] | null;
-    grid_meter_count?: number | null;
-    grid_meter_names?: string[] | null;
-  } | null;
+  initialConfig?: Partial<PlantPowerConfig> | null;
 }
 
 const MAX_METERS = 20;
@@ -34,6 +28,7 @@ export function PowerMeterManageModal({
   initialConfig,
 }: PowerMeterManageModalProps) {
   const qc = useQueryClient();
+  const { powerConfig, savePowerConfig } = usePlantPowerConfig(plantId);
   const [solarCount, setSolarCount] = useState(1);
   const [gridCount, setGridCount] = useState(1);
   const [solarNames, setSolarNames] = useState<string[]>(
@@ -45,42 +40,47 @@ export function PowerMeterManageModal({
   const [saving, setSaving] = useState(false);
   const isDirty = useRef(false);
 
+  const activeCfg = initialConfig || powerConfig;
+
   useEffect(() => {
-    if (!initialConfig || !open) return;
-    if (initialConfig.solar_meter_count != null) setSolarCount(initialConfig.solar_meter_count);
-    if (initialConfig.grid_meter_count != null) setGridCount(initialConfig.grid_meter_count);
-    if (Array.isArray(initialConfig.solar_meter_names) && initialConfig.solar_meter_names.length) {
-      setSolarNames(initialConfig.solar_meter_names);
+    if (!activeCfg || !open) return;
+    if (activeCfg.solar_meter_count != null) setSolarCount(activeCfg.solar_meter_count);
+    if (activeCfg.grid_meter_count != null) setGridCount(activeCfg.grid_meter_count);
+    if (Array.isArray(activeCfg.solar_meter_names) && activeCfg.solar_meter_names.length) {
+      setSolarNames(activeCfg.solar_meter_names);
     }
-    if (Array.isArray(initialConfig.grid_meter_names) && initialConfig.grid_meter_names.length) {
-      setGridNames(initialConfig.grid_meter_names);
+    if (Array.isArray(activeCfg.grid_meter_names) && activeCfg.grid_meter_names.length) {
+      setGridNames(activeCfg.grid_meter_names);
     }
     isDirty.current = false;
-  }, [initialConfig, open]);
+  }, [activeCfg, open]);
 
   const saveConfig = async () => {
     setSaving(true);
-    const payload = {
-      plant_id: plantId,
-      solar_meter_count: solarCount,
-      solar_meter_names: solarNames.slice(0, solarCount),
+    const existingGridMults = powerConfig?.grid_meter_multipliers || initialConfig?.grid_meter_multipliers || [];
+    const existingGridEnabled = powerConfig?.grid_meter_multipliers_enabled || initialConfig?.grid_meter_multipliers_enabled || [];
+    const existingSolarMults = powerConfig?.solar_meter_multipliers || initialConfig?.solar_meter_multipliers || [];
+    const existingSolarEnabled = powerConfig?.solar_meter_multipliers_enabled || initialConfig?.solar_meter_multipliers_enabled || [];
+
+    const payload: PlantPowerConfig = {
       grid_meter_count: gridCount,
       grid_meter_names: gridNames.slice(0, gridCount),
-      updated_at: new Date().toISOString(),
+      grid_meter_multipliers: Array.from({ length: gridCount }, (_, i) => existingGridMults[i] ?? 1),
+      grid_meter_multipliers_enabled: Array.from({ length: gridCount }, (_, i) => existingGridEnabled[i] ?? false),
+      solar_meter_count: solarCount,
+      solar_meter_names: solarNames.slice(0, solarCount),
+      solar_meter_multipliers: Array.from({ length: solarCount }, (_, i) => existingSolarMults[i] ?? 1),
+      solar_meter_multipliers_enabled: Array.from({ length: solarCount }, (_, i) => existingSolarEnabled[i] ?? false),
     };
 
-    const { error } = await (supabase.from('plant_power_config' as any) as any)
-      .upsert(payload, { onConflict: 'plant_id' });
-
+    const saved = await savePowerConfig(payload);
     setSaving(false);
-    if (error) {
-      toast.error(friendlyError(error));
-      return;
-    }
-
     isDirty.current = false;
-    qc.invalidateQueries({ queryKey: ['plant-power-config', plantId] });
-    toast.success('Power meter structure saved');
+    if (saved) {
+      toast.success('Power meter structure saved');
+    } else {
+      toast.warning('Power meter structure saved locally (offline or database unreachable)');
+    }
     onOpenChange(false);
   };
 
