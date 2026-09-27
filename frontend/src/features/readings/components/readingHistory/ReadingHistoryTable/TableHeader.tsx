@@ -35,6 +35,8 @@ export function TableHeader({ module, isDirectMode, anyEditable, resolvedGridCou
         </> : <>
           <th className="px-3 py-2 font-medium text-right whitespace-nowrap">Reading</th>
           <th className="px-3 py-2 font-medium text-right whitespace-nowrap">Δ</th>
+          <th className="px-2 py-2 font-medium text-center text-muted-foreground whitespace-nowrap">×</th>
+          <th className="px-3 py-2 font-medium text-right whitespace-nowrap">Volume (m³)</th>
           <th className="px-2 py-2 font-medium text-center whitespace-nowrap">Repl.</th>
           <th className="px-3 py-2 font-medium whitespace-nowrap">Flags</th>
         </>)}
@@ -49,6 +51,8 @@ export function TableHeader({ module, isDirectMode, anyEditable, resolvedGridCou
         </> : <>
           <th className="px-3 py-2 font-medium text-right whitespace-nowrap">Water</th>
           <th className="px-3 py-2 font-medium text-right whitespace-nowrap">Δ</th>
+          <th className="px-2 py-2 font-medium text-center text-muted-foreground whitespace-nowrap">×</th>
+          <th className="px-3 py-2 font-medium text-right whitespace-nowrap">Volume (m³)</th>
           <th className="px-2 py-2 font-medium text-center whitespace-nowrap">Repl.</th>
           <th className="px-3 py-2 font-medium text-right whitespace-nowrap">Power (kWh)</th>
           <th className="px-3 py-2 font-medium text-right whitespace-nowrap">TDS (ppm)</th>

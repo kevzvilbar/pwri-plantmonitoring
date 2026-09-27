@@ -99,7 +99,7 @@ export function ProductMeterHistoryDialog({ meter, plantId, onClose }: ProductMe
       }
       const { data, error } = await supabase
         .from('product_meter_readings' as any)
-        .select('id, current_reading, previous_reading, daily_volume, reading_datetime, is_meter_replacement, is_estimated, recorded_by, created_at, norm_status')
+        .select('id, current_reading, previous_reading, daily_volume, multiplier_at_reading, reading_datetime, is_meter_replacement, is_estimated, recorded_by, created_at, norm_status')
         .eq('meter_id', meter.id)
         .gte('reading_datetime', sinceIso)
         .lte('reading_datetime', untilIso)
@@ -360,6 +360,8 @@ export function ProductMeterHistoryDialog({ meter, plantId, onClose }: ProductMe
                   ) : (
                     <>
                       <th className="px-3 py-2 font-medium text-right">Reading</th>
+                      <th className="px-3 py-2 font-medium text-right">Δ</th>
+                      <th className="px-2 py-2 font-medium text-center text-muted-foreground">×</th>
                       <th className="px-3 py-2 font-medium text-right">Production (m³)</th>
                     </>
                   )}
@@ -371,6 +373,14 @@ export function ProductMeterHistoryDialog({ meter, plantId, onClose }: ProductMe
                 {rows.map((r: any, i: number) => {
                   const predecessor: any = rows[i + 1] ?? null;
                   const vol = predecessor != null ? r.current_reading - predecessor.current_reading : null;
+                  // multiplier_at_reading is stamped per-row by trg_product_meter_reading_integrity
+                  // at insert time (defaults to 1 when the meter has no multiplier configured).
+                  // Prefer the server-computed daily_volume — authoritative, matches dashboard
+                  // aggregates — falling back to a local vol × multiplier calc otherwise.
+                  const mult = r.multiplier_at_reading != null ? +r.multiplier_at_reading : 1;
+                  const effectiveVol = r.daily_volume != null
+                    ? +r.daily_volume
+                    : (vol != null ? vol * mult : null);
                   const isEditing = editRow?.id === r.id;
                   const isDeleting = deletingId === r.id;
                   const isToggling = togglingId === r.id;
@@ -426,14 +436,23 @@ export function ProductMeterHistoryDialog({ meter, plantId, onClose }: ProductMe
                           <td className={cn('px-3 py-1.5 text-right font-mono-num', isRetracted && 'text-muted-foreground')}>
                             {fmtNum(r.current_reading, 2)}
                           </td>
+                          <td className={cn('px-3 py-1.5 text-right font-mono-num', isRetracted && 'text-muted-foreground')}>
+                            {isMeterReplacement
+                              ? <span className="text-kpi-solar font-medium">0.00</span>
+                              : vol != null ? <span className={vol < 0 ? 'text-destructive font-semibold' : ''}>{fmtNum(vol, 2)}</span> : '—'
+                            }
+                          </td>
+                          <td className="px-2 py-1.5 text-center font-mono-num text-muted-foreground text-2xs">
+                            {mult !== 1 ? `×${mult}` : '×1'}
+                          </td>
                           <td className="px-3 py-1.5 text-right font-mono-num text-primary">
                             {isMeterReplacement
                               ? <span className="text-kpi-solar font-medium">0.00</span>
                               : isRetracted
                                 ? <span className="text-muted-foreground line-through decoration-1" title="Retracted — excluded from Data Summary totals; that day's volume rolls into the next valid reading">
-                                    {vol != null ? fmtNum(vol, 2) : '—'}
+                                    {effectiveVol != null ? fmtNum(effectiveVol, 2) : '—'}
                                   </span>
-                                : vol != null ? <span className={vol < 0 ? 'text-destructive font-semibold' : ''}>{fmtNum(vol, 2)}</span> : '—'
+                                : effectiveVol != null ? <span className={effectiveVol < 0 ? 'text-destructive font-semibold' : ''}>{fmtNum(effectiveVol, 2)}</span> : '—'
                             }
                           </td>
                         </>

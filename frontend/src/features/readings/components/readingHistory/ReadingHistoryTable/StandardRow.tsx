@@ -38,6 +38,28 @@ export function StandardRow({
     ? calc.dailyVolume(+r.current_reading, prevReading,
         !!r.is_meter_rollover, r.meter_rollover_max != null ? +r.meter_rollover_max : null)
     : null;
+  // multiplier_at_reading is stamped per-row by the DB trigger at insert time (defaults
+  // to 1 when the entity has no multiplier configured). Prefer the server-computed
+  // daily_volume — it's authoritative (matches dashboard aggregates and isn't subject to
+  // the client-side rounding in calc.dailyVolume) — falling back to a local rawDelta ×
+  // multiplier calc only when daily_volume hasn't been fetched/populated yet.
+  const mult = r.multiplier_at_reading != null ? +r.multiplier_at_reading : 1;
+  const effectiveDelta = r.daily_volume != null
+    ? +r.daily_volume
+    : (rawDelta != null ? rawDelta * mult : null);
+  const multCell = (
+    <td className="px-2 py-1.5 text-center font-mono-num whitespace-nowrap text-muted-foreground text-2xs">
+      {mult !== 1 ? `×${mult}` : '×1'}
+    </td>
+  );
+  const effectiveDeltaCell = (
+    <td className="px-3 py-1.5 text-right font-mono-num whitespace-nowrap font-medium">
+      {isMeterReplacement
+        ? <span className="text-kpi-solar font-medium">0.00</span>
+        : effectiveDelta != null ? <span className={effectiveDelta < 0 ? 'text-destructive font-semibold' : ''}>{fmtNum(effectiveDelta, 2)}</span> : '—'
+      }
+    </td>
+  );
 
   const replCell = (
     <td className="px-2 py-1.5 text-center">
@@ -140,6 +162,8 @@ export function StandardRow({
             : rawDelta != null ? <span className={rawDelta < 0 ? 'text-destructive font-semibold' : ''}>{fmtNum(rawDelta, 2)}</span> : '—'
           }
         </td>
+        {multCell}
+        {effectiveDeltaCell}
         {replCell}
         {flagsCell}
       </>)}
@@ -168,6 +192,8 @@ export function StandardRow({
             : rawDelta != null ? <span className={rawDelta < 0 ? 'text-destructive font-semibold' : ''}>{fmtNum(rawDelta, 2)}</span> : '—'
           }
         </td>
+        {multCell}
+        {effectiveDeltaCell}
         {replCell}
         <td className="px-3 py-1.5 text-right font-mono-num whitespace-nowrap">
           {r.power_meter_reading != null ? fmtNum(r.power_meter_reading, 2) : '—'}

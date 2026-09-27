@@ -29,7 +29,7 @@ export function useReadingHistoryQuery({ module, entityId, days, appliedFrom, ap
       if (module === 'locator') {
         const { data, error } = await supabase
           .from('locator_readings')
-          .select('id, current_reading, previous_reading, reading_datetime, off_location_flag, is_meter_replacement, is_meter_rollover, meter_rollover_max, is_estimated, recorded_by, created_at, norm_status')
+          .select('id, current_reading, previous_reading, daily_volume, multiplier_at_reading, reading_datetime, off_location_flag, is_meter_replacement, is_meter_rollover, meter_rollover_max, is_estimated, recorded_by, created_at, norm_status')
           .eq('locator_id', entityId)
           .gte('reading_datetime', sinceDate)
           .lt('reading_datetime', untilNextDay)
@@ -51,7 +51,7 @@ export function useReadingHistoryQuery({ module, entityId, days, appliedFrom, ap
       if (module === 'well') {
         const { data, error } = await supabase
           .from('well_readings')
-          .select('id, current_reading, previous_reading, power_meter_reading, tds_ppm, turbidity_ntu, pressure_psi, reading_datetime, is_meter_replacement, is_meter_rollover, meter_rollover_max, is_estimated, recorded_by, created_at, norm_status')
+          .select('id, current_reading, previous_reading, daily_volume, multiplier_at_reading, power_meter_reading, tds_ppm, turbidity_ntu, pressure_psi, reading_datetime, is_meter_replacement, is_meter_rollover, meter_rollover_max, is_estimated, recorded_by, created_at, norm_status')
           .eq('well_id', entityId)
           .gte('reading_datetime', sinceDate)
           .lt('reading_datetime', untilNextDay)
