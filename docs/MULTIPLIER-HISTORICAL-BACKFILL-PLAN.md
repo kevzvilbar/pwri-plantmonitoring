@@ -210,9 +210,10 @@ The "heavier" option from the prior revision — `meter_events` — turns out to
   `effective_at` is the *run date* of this correction, not backdated into the reading window — it's logging when the data was fixed, not re-asserting a historical cutover moment that already has its own `meter_events` row from when ×10 was first configured.
 
 ### Phase 4 — Verification
-- [ ] **P4-1** Spot-check "UHRI (8)"'s reading history (or reports/dashboard for that period) before/after — numbers should jump by the multiplier factor for the corrected window and nowhere else.
+- [ ] **P4-1** Spot-check "UHRI (8)"'s reading history via the **dashboard/report path** (`get_dashboard_aggregates`, §1) — **not** the reading-history dialog (History → 30D/60D/Custom table). That dialog's Δ column, for the `locator`/`well` modules, is computed client-side as a plain `current − previous` with no multiplier term, and doesn't render `multiplier_at_reading` at all — so it will show no visible change before/after this backfill even once "UHRI (8)" is corrected, and isn't a valid check either way. The dashboard/report path sums the real, multiplier-aware `daily_volume` column the DB trigger computes, so numbers should jump by the multiplier factor for the corrected window and nowhere else.
 - [ ] **P4-2** Confirm nothing after Sept 26 changed (it shouldn't have — the allow-list only ever contains pre-migration ids).
 - [ ] **P4-3** Confirm the Phase 3 `meter_events` row is visible in whatever UI/query already lists these (`frontend/src/data/queries/meterEvents.ts`), since that's presumably how this gets reviewed going forward.
+- [ ] **P4-4 (follow-up, not a blocker for this backfill)** The reading-history dialog's missing multiplier column and unmultiplied Δ, found while working out P4-1, is a real gap independent of this backfill — flagged and scoped separately in `docs/HISTORY-TABLE-MULTIPLIER-DISPLAY-PLAN.md`. It doesn't need to land before or with this correction; it's here so it isn't lost.
 
 ---
 
