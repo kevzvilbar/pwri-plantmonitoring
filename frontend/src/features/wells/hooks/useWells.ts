@@ -45,15 +45,13 @@ export function useWells(plantId?: string | string[]) {
       let q = supabase
         .from('wells')
         .select(
-          'id, name, plant_id, diameter, drilling_depth_m, gps_lat, gps_lng, ' +
-          'has_power_meter, meter_brand, meter_size, meter_serial, meter_installed_date, ' +
-          'size, status, meter_multiplier, multiplier_enabled, created_at, updated_at',
+          'id, name, plant_id, diameter, drilling_depth_m, gps_lat, gps_lng, has_power_meter, meter_brand, meter_size, meter_serial, meter_installed_date, size, status, meter_multiplier, multiplier_enabled, created_at, updated_at',
         )
         .order('name');
       if (ids?.length) q = (q as any).in('plant_id', ids);
       const { data, error } = await q;
       if (error) throw error;
-      return (data ?? []) as Well[];
+      return (data ?? []) as unknown as Well[];
     },
     staleTime: 10 * 60_000,
   });

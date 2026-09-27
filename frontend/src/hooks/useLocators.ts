@@ -51,15 +51,13 @@ export function useLocators(plantId?: string | string[]) {
       let q = supabase
         .from('locators')
         .select(
-          'id, name, plant_id, address, location_desc, gps_lat, gps_lng, ' +
-          'meter_brand, meter_size, meter_serial, meter_installed_date, ' +
-          'status, is_locked, meter_multiplier, multiplier_enabled, created_at, updated_at',
+          'id, name, plant_id, address, location_desc, gps_lat, gps_lng, meter_brand, meter_size, meter_serial, meter_installed_date, status, is_locked, meter_multiplier, multiplier_enabled, created_at, updated_at',
         )
         .order('name');
       if (ids?.length) q = (q as any).in('plant_id', ids);
       const { data, error } = await q;
       if (error) throw error;
-      return (data ?? []) as Locator[];
+      return (data ?? []) as unknown as Locator[];
     },
     staleTime: 10 * 60_000,
   });

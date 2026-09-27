@@ -72,12 +72,7 @@ export function useROTrains(plantId?: string | string[]) {
       let q = supabase
         .from('ro_trains')
         .select(
-          'id, name, plant_id, train_number, filter_housing_type, filter_media_type, ' +
-          'num_afm, num_booster_pumps, num_cartridge_filters, num_controllers, ' +
-          'num_filter_housings, num_hp_pumps, shared_power_meter_group, ' +
-          'uses_em_meter, em_all_streams, em_stream_feed, em_stream_permeate, ' +
-          'em_stream_reject, has_feed_meter, has_permeate_meter, has_reject_meter, ' +
-          'unit_type, status, well_id, created_at, updated_at',
+          'id, name, plant_id, train_number, filter_housing_type, filter_media_type, num_afm, num_booster_pumps, num_cartridge_filters, num_controllers, num_filter_housings, num_hp_pumps, shared_power_meter_group, uses_em_meter, em_all_streams, em_stream_feed, em_stream_permeate, em_stream_reject, has_feed_meter, has_permeate_meter, has_reject_meter, unit_type, status, well_id, created_at, updated_at',
         )
         .order('name');
       if (ids?.length) q = (q as any).in('plant_id', ids);
