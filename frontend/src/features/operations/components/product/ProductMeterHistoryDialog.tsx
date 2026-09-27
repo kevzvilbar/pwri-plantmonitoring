@@ -377,9 +377,11 @@ export function ProductMeterHistoryDialog({ meter, plantId, onClose }: ProductMe
                   // at insert time (defaults to 1 when the meter has no multiplier configured).
                   // Prefer the server-computed daily_volume — authoritative, matches dashboard
                   // aggregates — falling back to a local vol × multiplier calc otherwise.
-                  const mult = r.multiplier_at_reading != null ? +r.multiplier_at_reading : 1;
+                  const entityMult = meter?.multiplier_enabled ? Number(meter?.meter_multiplier ?? 1) : 1;
+                  const storedMult = r.multiplier_at_reading != null ? +r.multiplier_at_reading : 1;
+                  const mult = r.multiplier_at_reading != null ? +r.multiplier_at_reading : entityMult;
                   const effectiveVol = r.daily_volume != null
-                    ? +r.daily_volume
+                    ? ((storedMult === 1 && entityMult !== 1) ? +r.daily_volume * entityMult : +r.daily_volume)
                     : (vol != null ? vol * mult : null);
                   const isEditing = editRow?.id === r.id;
                   const isDeleting = deletingId === r.id;

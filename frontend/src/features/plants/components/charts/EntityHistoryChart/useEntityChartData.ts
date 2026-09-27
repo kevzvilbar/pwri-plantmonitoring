@@ -22,6 +22,7 @@ export function useEntityChartData(
   defaultInputMode: 'raw' | 'direct',
   siblingLocators: SiblingLocator[] = [],
   isBlendingWell?: boolean,
+  entityMultiplier: number = 1,
 ) {
   const isDirectMode =
     ((entityType === 'locator' || entityType === 'well') && defaultInputMode === 'direct') ||
@@ -37,7 +38,7 @@ export function useEntityChartData(
   const qc = useQueryClient();
 
   const { data: rows = [], isLoading, error, refetch } = useQuery<HistoryRow[]>({
-    queryKey: ['entity-history', entityType, entityId, range, defaultInputMode],
+    queryKey: ['entity-history', entityType, entityId, range, defaultInputMode, entityMultiplier],
     queryFn: async () => {
       const days = range === 'all' ? 9999 : parseInt(range);
       const since = new Date(Date.now() - days * 86400_000).toISOString();
@@ -45,7 +46,7 @@ export function useEntityChartData(
       if (entityType === 'locator') {
         const { data, error: sbError } = await supabase
           .from('locator_readings')
-          .select('reading_datetime, current_reading, previous_reading, daily_volume')
+          .select('reading_datetime, current_reading, previous_reading, daily_volume, multiplier_at_reading')
           .eq('locator_id', entityId)
           .gte('reading_datetime', since)
           .order('reading_datetime', { ascending: true });
@@ -54,7 +55,7 @@ export function useEntityChartData(
       } else if (entityType === 'well') {
         const { data, error: sbError } = await supabase
           .from('well_readings')
-          .select('reading_datetime, current_reading, previous_reading, daily_volume')
+          .select('reading_datetime, current_reading, previous_reading, daily_volume, multiplier_at_reading')
           .eq('well_id', entityId)
           .gte('reading_datetime', since)
           .order('reading_datetime', { ascending: true });
@@ -63,7 +64,7 @@ export function useEntityChartData(
       } else {
         const { data, error: sbError } = await supabase
           .from('product_meter_readings' as any)
-          .select('reading_datetime, current_reading, previous_reading, daily_volume')
+          .select('reading_datetime, current_reading, previous_reading, daily_volume, multiplier_at_reading')
           .eq('meter_id', entityId)
           .gte('reading_datetime', since)
           .order('reading_datetime', { ascending: true });
@@ -73,15 +74,17 @@ export function useEntityChartData(
       let last: number | null = null;
       return raw.map((r: any) => {
         const dateStr = fmtIsoDate(r.reading_datetime);
+        const rowMult = r.multiplier_at_reading != null ? +r.multiplier_at_reading : 1;
+        const mult = rowMult !== 1 ? rowMult : entityMultiplier;
         let consumption = 0;
         if (isDirectMode) {
           consumption = r.current_reading != null ? +r.current_reading : 0;
         } else if (last != null && r.current_reading != null) {
-          consumption = Math.max(0, +r.current_reading - last);
+          consumption = Math.max(0, (+r.current_reading - last) * mult);
         } else if (r.daily_volume != null && +r.daily_volume > 0) {
-          consumption = +r.daily_volume;
+          consumption = (rowMult === 1 && mult !== 1) ? +r.daily_volume * mult : +r.daily_volume;
         } else if (r.current_reading != null && r.previous_reading != null) {
-          consumption = Math.max(0, +r.current_reading - +r.previous_reading);
+          consumption = Math.max(0, (+r.current_reading - +r.previous_reading) * mult);
         }
         if (r.current_reading != null) last = +r.current_reading;
         return { date: dateStr, consumption: +consumption.toFixed(2), reading: r.current_reading != null ? +r.current_reading : undefined };

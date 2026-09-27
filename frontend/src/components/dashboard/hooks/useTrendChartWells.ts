@@ -60,7 +60,7 @@ export function useWellEntities(p: Record<string, any>) {
 }
 
 export function useWellPresets(p: Record<string, any>) {
-  const { wellEntities, selectedWellIds, setSelectedWellIds, wellReadings, startKey } = p;
+  const { wellEntities, selectedWellIds, setSelectedWellIds, wellReadings, startKey, wellMultipliers } = p;
 
   const wellTotals = useMemo<Map<string, number>>(() => {
     const totals = new Map<string, number>();
@@ -68,14 +68,14 @@ export function useWellPresets(p: Record<string, any>) {
     const sorted = [...wellReadings].sort(
       (a, b) => new Date(a.reading_datetime).getTime() - new Date(b.reading_datetime).getTime(),
     );
-    const { pivot } = buildEntityPivot(sorted, 'well_id', undefined, startKey);
+    const { pivot } = buildEntityPivot(sorted, 'well_id', undefined, startKey, wellMultipliers);
     pivot.forEach((entityMap: any) => {
       entityMap.forEach((val: any, id: any) => {
         totals.set(id, (totals.get(id) ?? 0) + val);
       });
     });
     return totals;
-  }, [wellReadings, startKey]);
+  }, [wellReadings, startKey, wellMultipliers]);
 
   const selectTopNWells = (n: number) => {
     const sorted = [...wellEntities].sort((a: any, b: any) => (wellTotals.get(b.id) ?? 0) - (wellTotals.get(a.id) ?? 0));
@@ -87,16 +87,16 @@ export function useWellPresets(p: Record<string, any>) {
 }
 
 export function useWellEntityRows(p: Record<string, any>) {
-  const { metric, rawwaterBreakdown, wellReadings, visibleWellEntities, viewGran, startKey, endKey } = p;
+  const { metric, rawwaterBreakdown, wellReadings, visibleWellEntities, viewGran, startKey, endKey, wellMultipliers } = p;
 
   const wellEntityRows = useMemo(() => {
     if (metric !== 'rawwater' || rawwaterBreakdown !== 'by-well') return [];
     const sorted = [...(wellReadings ?? [])].sort(
       (a, b) => new Date(a.reading_datetime).getTime() - new Date(b.reading_datetime).getTime(),
     );
-    const { pivot, dateKeys } = buildEntityPivot(sorted, 'well_id', undefined, startKey);
+    const { pivot, dateKeys } = buildEntityPivot(sorted, 'well_id', undefined, startKey, wellMultipliers);
     return buildEntityPivotRows(pivot, dateKeys, visibleWellEntities, viewGran, startKey, endKey);
-  }, [metric, rawwaterBreakdown, wellReadings, visibleWellEntities, viewGran, startKey, endKey]);
+  }, [metric, rawwaterBreakdown, wellReadings, visibleWellEntities, viewGran, startKey, endKey, wellMultipliers]);
 
   return { wellEntityRows };
 }

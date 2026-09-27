@@ -55,6 +55,9 @@ export function computeEntityDeltas(
     // current_reading already IS the period's volume for these. Mirrors
     // EntityHistoryChart.tsx's isDirectMode branch.
     directModeIds?: Set<string>;
+    // Entity-level multiplier map (e.g. locator_id -> meter_multiplier).
+    // Used as fallback when row multiplier_at_reading is 1 (pre-backfill rows).
+    entityMultipliers?: Map<string, number>;
   },
 ): { r: any; delta: number; rawDelta: number | null; isMeterReplacement: boolean }[] {
   // skipAfterRepl=true: the replacement row already sets lastReading to the
@@ -65,6 +68,7 @@ export function computeEntityDeltas(
   // not be a reliable baseline (locators, wells, product meters).
   const skipAfterRepl = options?.skipAfterRepl ?? false;
   const directModeIds = options?.directModeIds;
+  const entityMultipliers = options?.entityMultipliers;
 
   const sorted = sanitizeReadings(readings, entityKeyField, directModeIds);
 
@@ -74,6 +78,9 @@ export function computeEntityDeltas(
   return sorted.map((r) => {
     const entityKey = r[entityKeyField] ?? r.plant_id ?? '__';
     const isMR      = !!r.is_meter_replacement;
+    const entityMult = entityMultipliers?.get(entityKey) ?? 1;
+    const rowMult   = r.multiplier_at_reading != null ? Number(r.multiplier_at_reading) : 1;
+    const mult      = rowMult !== 1 ? rowMult : entityMult;
 
     if (isMR) {
       lastReading.set(entityKey, +r.current_reading);
@@ -108,7 +115,7 @@ export function computeEntityDeltas(
       // Preserve negative daily_volume so drops/flaws are reflected rather
       // than hidden.
       const storedVol = +r[dailyVolumeField];
-      const delta     = storedVol;
+      const delta     = (rowMult === 1 && mult !== 1) ? storedVol * mult : storedVol;
       lastReading.set(entityKey, +r.current_reading);
       return { r, delta, rawDelta: null, isMeterReplacement: false };
     }
@@ -120,7 +127,6 @@ export function computeEntityDeltas(
       // (no prior in-memory row) always shows 0, causing a false dip at the
       // start of every range.
       if (r.previous_reading != null) {
-        const mult = Number(r.multiplier_at_reading) || 1;
         const rawDelta = (+r.current_reading - +r.previous_reading) * mult;
         // On the INITIAL reading: an unflagged replacement, rollover, or backward
         // baseline entry outside the window must not produce a negative delta.
@@ -137,7 +143,6 @@ export function computeEntityDeltas(
       return { r, delta: 0, rawDelta: null, isMeterReplacement: true };
     }
 
-    const mult = Number(r.multiplier_at_reading) || 1;
     const rawDelta = (+r.current_reading - lastReading.get(entityKey)!) * mult;
     const delta    = rawDelta;
     lastReading.set(entityKey, +r.current_reading);

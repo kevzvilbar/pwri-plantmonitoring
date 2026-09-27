@@ -101,4 +101,15 @@ describe('computeEntityDeltas', () => {
     // (10 - 0) * 10 = 100; (25 - 10) * 10 = 150
     expect(out.map((o) => o.delta)).toEqual([100, 150]);
   });
+
+  it('falls back to entityMultipliers when readings have multiplier_at_reading = 1 (pre-backfill rows)', () => {
+    const readings = [
+      { locator_id: 'loc-uhri', reading_datetime: iso('2026-01-01'), current_reading: 10, previous_reading: 0, multiplier_at_reading: 1, daily_volume: 10 },
+      { locator_id: 'loc-uhri', reading_datetime: iso('2026-01-02'), current_reading: 26, multiplier_at_reading: 1, daily_volume: 16 },
+    ];
+    const multMap = new Map([['loc-uhri', 10]]);
+    const out = computeEntityDeltas(readings, 'locator_id', 'daily_volume', { entityMultipliers: multMap });
+    // 10 * 10 = 100, 16 * 10 = 160
+    expect(out.map((o) => o.delta)).toEqual([100, 160]);
+  });
 });

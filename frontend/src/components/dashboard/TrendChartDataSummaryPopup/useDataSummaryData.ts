@@ -124,6 +124,9 @@ export interface DataSummaryDataProps {
   roTrainNames?: Map<string, string>;
   directLocatorIds?: Set<string>;
   directMeterIds?: Set<string>;
+  locatorMultipliers?: Map<string, number>;
+  wellMultipliers?: Map<string, number>;
+  productMeterMultipliers?: Map<string, number>;
 }
 
 export function useDataSummaryData({
@@ -133,6 +136,7 @@ export function useDataSummaryData({
   permeateIsProductionPlants, productExcludedPlants, trainPlantMap,
   locatorNames, productMeterNames, wellNames, plantNames, roTrainNames,
   directLocatorIds, directMeterIds,
+  locatorMultipliers, wellMultipliers, productMeterMultipliers,
 }: DataSummaryDataProps): DataSummaryData {
   const [tab, setTab] = useState<DSMTab>('overview');
 
@@ -461,6 +465,7 @@ export function useDataSummaryData({
         'well_id',
         undefined,
         filterFrom || undefined, // minDateKey: pre-window rows seed state but are not emitted
+        wellMultipliers,
       );
     }
 
@@ -472,6 +477,8 @@ export function useDataSummaryData({
         [...prodMeterReadingsForPivot].sort((a, b) => new Date(a.reading_datetime).getTime() - new Date(b.reading_datetime).getTime()),
         'meter_id',
         directMeterIds,
+        undefined,
+        productMeterMultipliers,
       );
       meterDateKeys.forEach((dk) => {
         dateKeySet.add(dk);
@@ -502,7 +509,7 @@ export function useDataSummaryData({
 
     return { pivot, dateKeys: Array.from(dateKeySet).sort() };
   }, [metric, wellReadings, filterFrom, hasProductMeterData, hasPermeateData,
-      prodMeterReadingsForPivot, permeateReadingsForPivot, directMeterIds]);
+      prodMeterReadingsForPivot, permeateReadingsForPivot, directMeterIds, wellMultipliers, productMeterMultipliers]);
 
   const prodPivotMap = prodPivot.pivot;
   const prodDateKeys = prodPivot.dateKeys;
@@ -517,7 +524,9 @@ export function useDataSummaryData({
     [...(filteredLocReadings ?? [])].sort((a, b) => new Date(a.reading_datetime).getTime() - new Date(b.reading_datetime).getTime()),
     'locator_id',
     directLocatorIds,
-  ), [filteredLocReadings, directLocatorIds]);
+    undefined,
+    locatorMultipliers,
+  ), [filteredLocReadings, directLocatorIds, locatorMultipliers]);
   const consPivot = consPivotResult.pivot;
   const consDateKeys = consPivotResult.dateKeys;
 

@@ -28,6 +28,7 @@ export function TrendChart({
     wellNames, locatorNames, productMeterNames, plantNames,
     _directLocatorIds, _directProductMeterIds,
     _locatorIdsForReadings,
+    locatorMultipliers, wellMultipliers, productMeterMultipliers,
     locReadings, fetchingLoc, errLoc, refetchLoc,
     productReadings, fetchingProduct, errProduct, refetchProduct,
     wellReadings, fetchingWell, errWell, refetchWell,
@@ -48,6 +49,7 @@ export function TrendChart({
     locReadings, wellReadings, productReadings, roReadings, powerReadings, costReadings,
     powerTariffs, billMultiplierMap, powerConfigMap,
     wellNames, locatorNames, productMeterNames, plantNames,
+    locatorMultipliers, wellMultipliers, productMeterMultipliers,
     permeateIsProductionPlants, productExcludedPlants,
     _trainPlantMap, _trainUnitTypeMap, _directLocatorIds, _directProductMeterIds,
   });
@@ -79,6 +81,7 @@ export function TrendChart({
     startKey: s.startKey, endKey: s.endKey,
     trendRows, chartData,
     wellNames, locatorNames, productMeterNames, plantNames, roTrainNames,
+    locatorMultipliers, wellMultipliers, productMeterMultipliers,
     wellReadings, locReadings, productReadings, roReadings,
     _directLocatorIds, _directProductMeterIds, _roTrainIdsForReadings, _trainPlantMap, _trainUnitTypeMap,
   });
@@ -163,6 +166,9 @@ export function TrendChart({
           roTrainNames={roTrainNames}
           directLocatorIds={_directLocatorIds}
           directMeterIds={_directProductMeterIds}
+          locatorMultipliers={locatorMultipliers}
+          wellMultipliers={wellMultipliers}
+          productMeterMultipliers={productMeterMultipliers}
         />
       )}
 

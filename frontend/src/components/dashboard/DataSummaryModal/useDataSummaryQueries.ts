@@ -65,7 +65,7 @@ export function useDataSummaryQueries({ open, plantIds }: DataSummaryQueriesOpti
     queryFn: async () => {
       if (!plantIds.length) return [];
       const { data } = await supabase
-        .from('locators').select('id,name,plant_id,default_input_mode,is_derived')
+        .from('locators').select('id,name,plant_id,default_input_mode,is_derived,meter_multiplier,multiplier_enabled')
         .in('plant_id', plantIds).eq('status', 'Active');
       return data ?? [];
     },
@@ -91,7 +91,7 @@ export function useDataSummaryQueries({ open, plantIds }: DataSummaryQueriesOpti
       if (!locatorIds.length) return [];
       const { data } = await supabase
         .from('locator_readings_clean')
-        .select('locator_id,daily_volume,current_reading,previous_reading,reading_datetime,is_meter_replacement,is_estimated')
+        .select('locator_id,daily_volume,current_reading,previous_reading,reading_datetime,is_meter_replacement,is_estimated,multiplier_at_reading')
         .in('locator_id', locatorIds)
         .gte('reading_datetime', startISO)
         .lte('reading_datetime', endISO)
@@ -108,7 +108,7 @@ export function useDataSummaryQueries({ open, plantIds }: DataSummaryQueriesOpti
     queryFn: async () => {
       if (!plantIds.length) return [];
       const { data } = await supabase.from('product_meters')
-        .select('id,name,plant_id,is_derived').in('plant_id', plantIds);
+        .select('id,name,plant_id,is_derived,meter_multiplier,multiplier_enabled').in('plant_id', plantIds);
       return data ?? [];
     },
     enabled: open && plantIds.length > 0,
@@ -128,7 +128,7 @@ export function useDataSummaryQueries({ open, plantIds }: DataSummaryQueriesOpti
     queryFn: async () => {
       if (!meterIds.length) return [];
       const { data } = await supabase.from('product_meter_readings')
-        .select('meter_id,daily_volume,current_reading,previous_reading,reading_datetime,is_meter_replacement,is_estimated')
+        .select('meter_id,daily_volume,current_reading,previous_reading,reading_datetime,is_meter_replacement,is_estimated,multiplier_at_reading')
         .in('meter_id', meterIds)
         .gte('reading_datetime', startISO)
         .lte('reading_datetime', endISO)

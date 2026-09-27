@@ -31,6 +31,7 @@ export function computePivotFromReadingsNoCache(
   entityKeyField: string,
   dailyVolumeField: string | null,
   directModeIds?: Set<string>,
+  entityMultipliers?: Map<string, number>,
 ): Map<string, Map<string, number>> {
   const byEntity = new Map<string, any[]>();
   const cleanReadings = sanitizeReadings(readings, entityKeyField, directModeIds);
@@ -42,12 +43,16 @@ export function computePivotFromReadingsNoCache(
   const pivot = new Map<string, Map<string, number>>();
   byEntity.forEach((rows, entityKey) => {
     const isDirect = directModeIds?.has(entityKey) ?? false;
+    const entityMult = entityMultipliers?.get(entityKey) ?? 1;
     const sorted = rows;
     const lastReading = new Map<string, number>();
     const afterRepl   = new Set<string>();
     sorted.forEach((r) => {
       const isMR    = !!r.is_meter_replacement;
       const dateKey = format(new Date(r.reading_datetime), 'yyyy-MM-dd');
+      const rowMult = r.multiplier_at_reading != null ? +r.multiplier_at_reading : 1;
+      const mult = rowMult !== 1 ? rowMult : entityMult;
+
       if (!pivot.has(dateKey)) pivot.set(dateKey, new Map());
       if (isMR) {
         if (r.current_reading != null) lastReading.set(entityKey, +r.current_reading);
@@ -60,11 +65,12 @@ export function computePivotFromReadingsNoCache(
         afterRepl.delete(entityKey);
         let delta = 0;
         if (lastReading.has(entityKey) && r.current_reading != null) {
-          delta = Math.max(0, +r.current_reading - lastReading.get(entityKey)!);
+          delta = Math.max(0, (+r.current_reading - lastReading.get(entityKey)!) * mult);
         } else if (dailyVolumeField && r[dailyVolumeField] != null) {
-          delta = Math.max(0, +r[dailyVolumeField]);
+          const storedVol = +r[dailyVolumeField];
+          delta = (rowMult === 1 && mult !== 1) ? Math.max(0, storedVol * mult) : Math.max(0, storedVol);
         } else if (r.previous_reading != null && r.current_reading != null) {
-          delta = Math.max(0, +r.current_reading - +r.previous_reading);
+          delta = Math.max(0, (+r.current_reading - +r.previous_reading) * mult);
         }
         if (r.current_reading != null) lastReading.set(entityKey, +r.current_reading);
         const prev = pivot.get(dateKey)!.get(entityKey) ?? 0;
@@ -76,14 +82,15 @@ export function computePivotFromReadingsNoCache(
         delta = r.current_reading != null ? Math.max(0, +r.current_reading) : 0;
         lastReading.set(entityKey, +r.current_reading);
       } else if (lastReading.has(entityKey)) {
-        delta = +r.current_reading - lastReading.get(entityKey)!;
+        delta = (+r.current_reading - lastReading.get(entityKey)!) * mult;
         lastReading.set(entityKey, +r.current_reading);
       } else if (dailyVolumeField && r[dailyVolumeField] != null) {
-        delta = +r[dailyVolumeField];
+        const storedVol = +r[dailyVolumeField];
+        delta = (rowMult === 1 && mult !== 1) ? storedVol * mult : storedVol;
         lastReading.set(entityKey, +r.current_reading);
       } else {
         if (r.previous_reading != null && r.current_reading != null)
-          delta = +r.current_reading - +r.previous_reading;
+          delta = (+r.current_reading - +r.previous_reading) * mult;
         lastReading.set(entityKey, +r.current_reading);
       }
       const prev = pivot.get(dateKey)!.get(entityKey) ?? 0;
@@ -122,6 +129,7 @@ export function computePivotFromReadings(
   entityKeyField: string,
   dailyVolumeField: string | null,
   directModeIds?: Set<string>,
+  entityMultipliers?: Map<string, number>,
 ): Map<string, Map<string, number>> {
   const byEntity = new Map<string, any[]>();
   const cleanReadings = sanitizeReadings(readings, entityKeyField, directModeIds);
@@ -133,12 +141,16 @@ export function computePivotFromReadings(
   const pivot = new Map<string, Map<string, number>>();
   byEntity.forEach((rows, entityKey) => {
     const isDirect = directModeIds?.has(entityKey) ?? false;
+    const entityMult = entityMultipliers?.get(entityKey) ?? 1;
     const sorted = rows;
     const lastReading = new Map<string, number>();
     const afterRepl   = new Set<string>();
     sorted.forEach((r) => {
       const isMR    = !!r.is_meter_replacement;
       const dateKey = format(new Date(r.reading_datetime), 'yyyy-MM-dd');
+      const rowMult = r.multiplier_at_reading != null ? +r.multiplier_at_reading : 1;
+      const mult = rowMult !== 1 ? rowMult : entityMult;
+
       if (!pivot.has(dateKey)) pivot.set(dateKey, new Map());
       if (isMR) {
         if (r.current_reading != null) lastReading.set(entityKey, +r.current_reading);
@@ -152,11 +164,12 @@ export function computePivotFromReadings(
         afterRepl.delete(entityKey);
         let delta = 0;
         if (lastReading.has(entityKey) && r.current_reading != null) {
-          delta = Math.max(0, +r.current_reading - lastReading.get(entityKey)!);
+          delta = Math.max(0, (+r.current_reading - lastReading.get(entityKey)!) * mult);
         } else if (dailyVolumeField && r[dailyVolumeField] != null) {
-          delta = Math.max(0, +r[dailyVolumeField]);
+          const storedVol = +r[dailyVolumeField];
+          delta = (rowMult === 1 && mult !== 1) ? Math.max(0, storedVol * mult) : Math.max(0, storedVol);
         } else if (r.previous_reading != null && r.current_reading != null) {
-          delta = Math.max(0, +r.current_reading - +r.previous_reading);
+          delta = Math.max(0, (+r.current_reading - +r.previous_reading) * mult);
         }
         if (r.current_reading != null) lastReading.set(entityKey, +r.current_reading);
         deltaCache.set(entityKey, dateKey, delta, 'computed');
@@ -174,24 +187,17 @@ export function computePivotFromReadings(
         return;
       }
 
-      const cachedDelta = deltaCache.get(entityKey, dateKey);
-      if (cachedDelta !== null) {
-        if (r.current_reading != null) lastReading.set(entityKey, +r.current_reading);
-        const prev = pivot.get(dateKey)!.get(entityKey) ?? 0;
-        pivot.get(dateKey)!.set(entityKey, prev + cachedDelta);
-        return;
-      }
-
       let delta = 0;
       if (lastReading.has(entityKey)) {
-        delta = +r.current_reading - lastReading.get(entityKey)!;
+        delta = (+r.current_reading - lastReading.get(entityKey)!) * mult;
         lastReading.set(entityKey, +r.current_reading);
       } else if (dailyVolumeField && r[dailyVolumeField] != null) {
-        delta = +r[dailyVolumeField];
+        const storedVol = +r[dailyVolumeField];
+        delta = (rowMult === 1 && mult !== 1) ? storedVol * mult : storedVol;
         lastReading.set(entityKey, +r.current_reading);
       } else {
         if (r.previous_reading != null && r.current_reading != null)
-          delta = +r.current_reading - +r.previous_reading;
+          delta = (+r.current_reading - +r.previous_reading) * mult;
         lastReading.set(entityKey, +r.current_reading);
       }
       deltaCache.set(entityKey, dateKey, delta, 'computed');

@@ -58,6 +58,7 @@ export function useTrendChartData({
   locReadings, wellReadings, productReadings, roReadings, powerReadings, costReadings,
   powerTariffs, billMultiplierMap, powerConfigMap,
   wellNames, locatorNames, productMeterNames, plantNames,
+  locatorMultipliers, wellMultipliers, productMeterMultipliers,
   permeateIsProductionPlants, productExcludedPlants,
   _trainPlantMap, _trainUnitTypeMap, _directLocatorIds, _directProductMeterIds,
 }: {
@@ -80,6 +81,9 @@ export function useTrendChartData({
   wellNames: Map<string, string> | undefined;
   locatorNames: Map<string, string> | undefined;
   productMeterNames: Map<string, string> | undefined;
+  locatorMultipliers?: Map<string, number>;
+  wellMultipliers?: Map<string, number>;
+  productMeterMultipliers?: Map<string, number>;
   plantNames: Map<string, string> | undefined;
   permeateIsProductionPlants: Set<string> | undefined;
   productExcludedPlants: Set<string> | undefined;
@@ -121,7 +125,7 @@ export function useTrendChartData({
     // (daily_volume priority → lastSeen sequential → DB previous_reading).
     // buildEntityPivot now uses the same strategy, so the chart line,
     // Overview table, and Per Well "Total Raw" are always consistent.
-    computeEntityDeltas(wellReadings ?? [], 'well_id', null).forEach(({ r, delta, rawDelta, isMeterReplacement }) => {
+    computeEntityDeltas(wellReadings ?? [], 'well_id', null, { entityMultipliers: wellMultipliers }).forEach(({ r, delta, rawDelta, isMeterReplacement }) => {
       const dt = new Date(r.reading_datetime);
       if (dt < new Date(startISO)) return;
       const dateKey = format(dt, 'yyyy-MM-dd');
@@ -153,7 +157,7 @@ export function useTrendChartData({
       (productReadings ?? []).filter((r: any) => !(productExcludedPlants?.has(r.plant_id))),
       'meter_id',
       'daily_volume',
-      { directModeIds: _directProductMeterIds },
+      { directModeIds: _directProductMeterIds, entityMultipliers: productMeterMultipliers },
     ).forEach(({ r, delta, rawDelta, isMeterReplacement }) => {
       const dt = new Date(r.reading_datetime);
       const key = format(dt, 'MMM d');
@@ -323,7 +327,7 @@ export function useTrendChartData({
     // Consumption = sum of locator (distribution/endpoint) meter deltas.
     // NOTE: locReadings are now fetched via locator_id (not plant_id) so all
     // plants return data correctly — see the two-step query above.
-    computeEntityDeltas(locReadings ?? [], 'locator_id', 'daily_volume', { directModeIds: _directLocatorIds }).forEach(({ r, delta, rawDelta, isMeterReplacement }) => {
+    computeEntityDeltas(locReadings ?? [], 'locator_id', 'daily_volume', { directModeIds: _directLocatorIds, entityMultipliers: locatorMultipliers }).forEach(({ r, delta, rawDelta, isMeterReplacement }) => {
       const dt = new Date(r.reading_datetime);
       const key = format(dt, 'MMM d');
       const row = ensure(key, dt.getTime());

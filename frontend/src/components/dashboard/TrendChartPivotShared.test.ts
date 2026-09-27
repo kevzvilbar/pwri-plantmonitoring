@@ -185,5 +185,16 @@ describe('buildEntityPivot — direct-mode meters (HAMAS-style, hamas-production
     // Aug 25 must diff against new meter baseline (134 - 134 = 0), NOT against old meter (134 - 5331 = -5197)
     expect(pivot.get('2026-08-25')!.get('w4')).toBe(0);
   });
+
+  it('multiplies volumes when entityMultipliers map is provided', () => {
+    const readings = [
+      { locator_id: 'uhri', reading_datetime: iso('2026-01-01'), current_reading: 10, previous_reading: 0, multiplier_at_reading: 1, daily_volume: 10 },
+      { locator_id: 'uhri', reading_datetime: iso('2026-01-02'), current_reading: 26, multiplier_at_reading: 1, daily_volume: 16 },
+    ];
+    const multMap = new Map([['uhri', 10]]);
+    const { pivot } = buildEntityPivot(readings, 'locator_id', undefined, undefined, multMap);
+    expect(pivot.get('2026-01-01')!.get('uhri')).toBe(100);
+    expect(pivot.get('2026-01-02')!.get('uhri')).toBe(160);
+  });
 });
 

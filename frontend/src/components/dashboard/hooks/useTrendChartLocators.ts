@@ -109,7 +109,7 @@ export function useTrendChartLocators(p: Record<string, any>) {
 }
 
 export function useLocatorPresets(p: Record<string, any>) {
-  const { activeEntities, selectedLocatorIds, setSelectedLocatorIds, locReadings, _directLocatorIds } = p;
+  const { activeEntities, selectedLocatorIds, setSelectedLocatorIds, locReadings, _directLocatorIds, locatorMultipliers } = p;
 
   const locatorTotals = useMemo<Map<string, number>>(() => {
     const totals = new Map<string, number>();
@@ -117,14 +117,14 @@ export function useLocatorPresets(p: Record<string, any>) {
     const sorted = [...locReadings].sort(
       (a, b) => new Date(a.reading_datetime).getTime() - new Date(b.reading_datetime).getTime(),
     );
-    const { pivot } = buildEntityPivot(sorted, 'locator_id', _directLocatorIds);
+    const { pivot } = buildEntityPivot(sorted, 'locator_id', _directLocatorIds, undefined, locatorMultipliers);
     pivot.forEach((entityMap: any) => {
       entityMap.forEach((val: any, id: any) => {
         totals.set(id, (totals.get(id) ?? 0) + val);
       });
     });
     return totals;
-  }, [locReadings, _directLocatorIds]);
+  }, [locReadings, _directLocatorIds, locatorMultipliers]);
 
   const selectTopNLocators = (n: number) => {
     const sorted = [...activeEntities].sort((a: any, b: any) => (locatorTotals.get(b.id) ?? 0) - (locatorTotals.get(a.id) ?? 0));

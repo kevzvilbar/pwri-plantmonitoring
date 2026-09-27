@@ -47,43 +47,61 @@ export function useTrendChartQueries({
   const chartRefetchInterval = false;
   const chartStaleTime = 5 * 60_000;
 
-  // ── Entity name lookups — fetched once per plant selection ─────────────────
-  const { data: wellNames } = useQuery({
+  // ── Entity name & multiplier lookups — fetched once per plant selection ────
+  const { data: wellMeta } = useQuery({
     queryKey: ['entity-names-wells', plantIds],
     queryFn: async () => {
-      const { data } = await supabase.from('wells').select('id, name').in('plant_id', plantIds);
-      const map = new Map<string, string>();
-      (data ?? []).forEach((w: any) => map.set(w.id, w.name));
-      return map;
+      const { data } = await supabase.from('wells').select('id, name, meter_multiplier, multiplier_enabled').in('plant_id', plantIds);
+      const nameMap = new Map<string, string>();
+      const multMap = new Map<string, number>();
+      (data ?? []).forEach((w: { id: string; name: string; meter_multiplier?: number | null; multiplier_enabled?: boolean | null }) => {
+        nameMap.set(w.id, w.name);
+        if (w.multiplier_enabled && w.meter_multiplier) multMap.set(w.id, Number(w.meter_multiplier));
+      });
+      return { nameMap, multMap };
     },
     enabled: plantIds.length > 0 && needsWellReadings,
     staleTime: 10 * 60_000,
   });
+  const wellNames = wellMeta?.nameMap;
+  const wellMultipliers = wellMeta?.multMap;
 
-  const { data: locatorNames } = useQuery({
+  const { data: locatorsMeta } = useQuery({
     queryKey: ['entity-names-locators', plantIds],
     queryFn: async () => {
-      const { data } = await supabase.from('locators').select('id, name').in('plant_id', plantIds);
-      const map = new Map<string, string>();
-      (data ?? []).forEach((l: any) => map.set(l.id, l.name));
-      return map;
+      const { data } = await supabase.from('locators').select('id, name, meter_multiplier, multiplier_enabled').in('plant_id', plantIds);
+      const nameMap = new Map<string, string>();
+      const multMap = new Map<string, number>();
+      (data ?? []).forEach((l: { id: string; name: string; meter_multiplier?: number | null; multiplier_enabled?: boolean | null }) => {
+        nameMap.set(l.id, l.name);
+        if (l.multiplier_enabled && l.meter_multiplier) multMap.set(l.id, Number(l.meter_multiplier));
+      });
+      return { nameMap, multMap };
     },
     enabled: plantIds.length > 0 && needsLocReadings,
     staleTime: 10 * 60_000,
   });
+  const locatorNames = locatorsMeta?.nameMap;
+  const locatorMultipliers = locatorsMeta?.multMap;
 
-  const { data: productMeterNames } = useQuery({
+  const { data: productMetersMeta } = useQuery({
     queryKey: ['entity-names-product-meters', plantIds],
     queryFn: async () => {
       const { data } = await supabase.from('product_meters')
-        .select('id, name').in('plant_id', plantIds);
-      const map = new Map<string, string>();
-      (data ?? []).forEach((m) => map.set(m.id, m.name));
-      return map;
+        .select('id, name, meter_multiplier, multiplier_enabled').in('plant_id', plantIds);
+      const nameMap = new Map<string, string>();
+      const multMap = new Map<string, number>();
+      (data ?? []).forEach((m: { id: string; name: string; meter_multiplier?: number | null; multiplier_enabled?: boolean | null }) => {
+        nameMap.set(m.id, m.name);
+        if (m.multiplier_enabled && m.meter_multiplier) multMap.set(m.id, Number(m.meter_multiplier));
+      });
+      return { nameMap, multMap };
     },
     enabled: plantIds.length > 0 && needsProductMeterReadings,
     staleTime: 10 * 60_000,
   });
+  const productMeterNames = productMetersMeta?.nameMap;
+  const productMeterMultipliers = productMetersMeta?.multMap;
 
   // Product meters whose is_derived = true — mirrored/residual meters like
   // Mambaling's "HAMAS" (mirrored from SRP's derived "HAMAS (Mambaling)"
@@ -199,7 +217,7 @@ export function useTrendChartQueries({
       if (!locatorIds.length) return [];
       const { data, error } = await supabase
         .from('locator_readings')
-        .select('locator_id,daily_volume,current_reading,previous_reading,reading_datetime,is_meter_replacement,norm_status,is_estimated')
+        .select('locator_id,daily_volume,current_reading,previous_reading,reading_datetime,is_meter_replacement,norm_status,is_estimated,multiplier_at_reading')
         .in('locator_id', locatorIds)
         .gte('reading_datetime', startISO)
         .lte('reading_datetime', endISO)
@@ -225,14 +243,14 @@ export function useTrendChartQueries({
       const { data, error } = await supabase.from('product_meter_readings')
         // Bug fix: include daily_volume so computeEntityDeltas can use it directly,
         // matching how locator_readings are handled (avoids boundary-read delta = 0).
-        .select('meter_id,daily_volume,current_reading,previous_reading,reading_datetime,is_meter_replacement,plant_id,norm_status,is_estimated')
+        .select('meter_id,daily_volume,current_reading,previous_reading,reading_datetime,is_meter_replacement,plant_id,norm_status,is_estimated,multiplier_at_reading')
         .in('plant_id', plantIds)
         .gte('reading_datetime', startISO)
         .lte('reading_datetime', endISO);
       if (error) {
         if (error.message?.includes('is_meter_replacement') || error.message?.includes('is_estimated')) {
           const { data: d2, error: e2 } = await supabase.from('product_meter_readings')
-            .select('meter_id,daily_volume,current_reading,previous_reading,reading_datetime,plant_id,norm_status')
+            .select('meter_id,daily_volume,current_reading,previous_reading,reading_datetime,plant_id,norm_status,multiplier_at_reading')
             .in('plant_id', plantIds)
             .gte('reading_datetime', startISO)
             .lte('reading_datetime', endISO);
@@ -270,10 +288,11 @@ export function useTrendChartQueries({
         plant_id: string;
         norm_status?: string | null;
         is_estimated?: boolean | null;
+        multiplier_at_reading?: number | null;
       };
       const inWindow = await supaSelect<WellReadingRow>(
         'well_readings',
-        'well_id,current_reading,previous_reading,daily_volume,reading_datetime,is_meter_replacement,plant_id,norm_status,is_estimated',
+        'well_id,current_reading,previous_reading,daily_volume,reading_datetime,is_meter_replacement,plant_id,norm_status,is_estimated,multiplier_at_reading',
       );
 
       // Resolve wells for these plants to fetch pre-window baseline rows
@@ -289,7 +308,7 @@ export function useTrendChartQueries({
           wellIds.map(async (wid) => {
             const { data } = await supabase
               .from('well_readings')
-              .select('well_id,current_reading,previous_reading,daily_volume,reading_datetime,is_meter_replacement,plant_id,norm_status,is_estimated')
+              .select('well_id,current_reading,previous_reading,daily_volume,reading_datetime,is_meter_replacement,plant_id,norm_status,is_estimated,multiplier_at_reading')
               .eq('well_id', wid)
               .lt('reading_datetime', startISO)
               .order('reading_datetime', { ascending: false })
@@ -719,6 +738,7 @@ export function useTrendChartQueries({
   return {
     wellNames, locatorNames, productMeterNames, _directProductMeterIds, plantNames,
     _locatorIdsForReadings, _directLocatorIds,
+    locatorMultipliers, wellMultipliers, productMeterMultipliers,
     locReadings, fetchingLoc, errLoc, refetchLoc,
     productReadings, fetchingProduct, errProduct, refetchProduct,
     wellReadings, fetchingWell, errWell, refetchWell,

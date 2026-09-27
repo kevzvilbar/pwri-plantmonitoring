@@ -441,7 +441,13 @@ export function WellDetail({ wellId, plantId, onBack }: { wellId: string; /** Th
 
       {/* Historical Consumption Chart */}
       <Card className="p-3">
-        <EntityHistoryChart entityId={wellId} entityType="well" entityName={well.name} isBlendingWell={!!isBlendingWell} />
+        <EntityHistoryChart
+          entityId={wellId}
+          entityType="well"
+          entityName={well.name}
+          isBlendingWell={!!isBlendingWell}
+          entityMultiplier={well.multiplier_enabled ? Number(well.meter_multiplier ?? 1) : 1}
+        />
       </Card>
 
       {/* Hydraulic data */}

@@ -96,7 +96,13 @@ export function LocatorDetail({ locatorId, onBack }: { locatorId: string; onBack
       </MeterDetailButton>
 
       <Card className="p-3">
-        <EntityHistoryChart entityId={locatorId} entityType="locator" entityName={locator.name} defaultInputMode={locator.default_input_mode === 'direct' ? 'direct' : 'raw'} />
+        <EntityHistoryChart
+          entityId={locatorId}
+          entityType="locator"
+          entityName={locator.name}
+          defaultInputMode={locator.default_input_mode === 'direct' ? 'direct' : 'raw'}
+          entityMultiplier={locator.multiplier_enabled ? Number(locator.meter_multiplier ?? 1) : 1}
+        />
       </Card>
 
       <Card className="p-3">

@@ -9,6 +9,7 @@ export function useEntityRows(p: Record<string, any>) {
     locReadings, productReadings, roReadings,
     usePermeateForSource, visibleEntities,
     _directLocatorIds, _directProductMeterIds,
+    locatorMultipliers, productMeterMultipliers,
     viewGran, startKey, endKey, _trainUnitTypeMap,
   } = p;
 
@@ -44,13 +45,13 @@ export function useEntityRows(p: Record<string, any>) {
       const sorted = [...(productReadings ?? [])].sort(
         (a, b) => new Date(a.reading_datetime).getTime() - new Date(b.reading_datetime).getTime(),
       );
-      const built = buildEntityPivot(sorted, 'meter_id', _directProductMeterIds);
+      const built = buildEntityPivot(sorted, 'meter_id', _directProductMeterIds, undefined, productMeterMultipliers);
       pivot = built.pivot; dateKeys = built.dateKeys;
     } else {
       const sorted = [...(locReadings ?? [])].sort(
         (a, b) => new Date(a.reading_datetime).getTime() - new Date(b.reading_datetime).getTime(),
       );
-      const built = buildEntityPivot(sorted, 'locator_id', _directLocatorIds);
+      const built = buildEntityPivot(sorted, 'locator_id', _directLocatorIds, undefined, locatorMultipliers);
       pivot = built.pivot; dateKeys = built.dateKeys;
     }
 
@@ -60,6 +61,7 @@ export function useEntityRows(p: Record<string, any>) {
     locReadings, productReadings, roReadings,
     usePermeateForSource, visibleEntities,
     _directLocatorIds, _directProductMeterIds,
+    locatorMultipliers, productMeterMultipliers,
     viewGran, startKey, endKey, _trainUnitTypeMap,
   ]);
 

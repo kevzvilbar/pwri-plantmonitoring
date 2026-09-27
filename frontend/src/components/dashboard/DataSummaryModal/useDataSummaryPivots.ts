@@ -102,13 +102,33 @@ export function useDataSummaryPivots({
   roMeterReadings,
   roCurrentReadings,
 }: DataSummaryPivotsOptions): DataSummaryPivotsResult {
+  const locatorMultipliers = useMemo(() => {
+    const map = new Map<string, number>();
+    (locators ?? []).forEach((l: { id: string; meter_multiplier?: number | null; multiplier_enabled?: boolean | null }) => {
+      if (l.multiplier_enabled && l.meter_multiplier) {
+        map.set(l.id, Number(l.meter_multiplier));
+      }
+    });
+    return map;
+  }, [locators]);
+
+  const productMeterMultipliers = useMemo(() => {
+    const map = new Map<string, number>();
+    (productMeters ?? []).forEach((m: { id: string; meter_multiplier?: number | null; multiplier_enabled?: boolean | null }) => {
+      if (m.multiplier_enabled && m.meter_multiplier) {
+        map.set(m.id, Number(m.meter_multiplier));
+      }
+    });
+    return map;
+  }, [productMeters]);
+
   const consPivot = useMemo(() => {
     const sortedLocs = [...(locators ?? [])].sort((a, b) => {
       const pa = plantCodeById.get(a.plant_id) ?? '';
       const pb = plantCodeById.get(b.plant_id) ?? '';
       return pa.localeCompare(pb) || (a.name ?? '').localeCompare(b.name ?? '');
     });
-    const pivot = computePivotFromReadingsNoCache(consReadings ?? [], 'locator_id', 'daily_volume', directLocatorIds);
+    const pivot = computePivotFromReadingsNoCache(consReadings ?? [], 'locator_id', 'daily_volume', directLocatorIds, locatorMultipliers);
 
     const estimatedKeys = new Set<string>();
     (consReadings ?? []).forEach((r: any) => {
@@ -126,7 +146,7 @@ export function useDataSummaryPivots({
       cur.setDate(cur.getDate() + 1);
     }
     return { dates: allDates, entities: sortedLocs, pivot, estimatedKeys };
-  }, [locators, consReadings, plantCodeById, fromStr, toStr, directLocatorIds]);
+  }, [locators, consReadings, plantCodeById, fromStr, toStr, directLocatorIds, locatorMultipliers]);
 
   const prodPivot = useMemo(() => {
     const includedMeters = (productMeters ?? []).filter(
@@ -141,7 +161,7 @@ export function useDataSummaryPivots({
         return pa.localeCompare(pb) || (a.name ?? '').localeCompare(b.name ?? '');
       });
     const includedReadings = (prodReadings ?? []).filter((r: any) => includedMeterIds.has(r.meter_id));
-    const pivot = computePivotFromReadingsNoCache(includedReadings, 'meter_id', 'daily_volume', directMeterIds);
+    const pivot = computePivotFromReadingsNoCache(includedReadings, 'meter_id', 'daily_volume', directMeterIds, productMeterMultipliers);
 
     const estimatedKeys = new Set<string>();
     includedReadings.forEach((r: any) => {

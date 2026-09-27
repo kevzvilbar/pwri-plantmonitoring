@@ -20,6 +20,9 @@ export function DataSummaryPopup({
   locatorNames, productMeterNames, wellNames, plantNames, roTrainNames,
   directLocatorIds,
   directMeterIds,
+  locatorMultipliers,
+  wellMultipliers,
+  productMeterMultipliers,
 }: DataSummaryDataProps & {
   open: boolean;
   onClose: () => void;
@@ -32,6 +35,7 @@ export function DataSummaryPopup({
     permeateIsProductionPlants, productExcludedPlants, trainPlantMap,
     locatorNames, productMeterNames, wellNames, plantNames, roTrainNames,
     directLocatorIds, directMeterIds,
+    locatorMultipliers, wellMultipliers, productMeterMultipliers,
   });
 
   const { handleExportCsv } = useDataSummaryCsvExport({
