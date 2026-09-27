@@ -1,5 +1,13 @@
 import { lazy, Suspense, useEffect } from "react";
-import { QueryClient, QueryClientProvider, QueryCache, MutationCache } from "@tanstack/react-query";
+import { QueryClient, QueryCache, MutationCache } from "@tanstack/react-query";
+import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
+import {
+  queryPersister,
+  CACHE_MAX_AGE,
+  CACHE_BUSTER,
+  shouldDehydrateQuery,
+  shouldDehydrateMutation,
+} from "@/lib/queryPersister";
 import { BrowserRouter, Route, Routes, Navigate } from "react-router-dom";
 import { Toaster as Sonner, toast } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -103,8 +111,24 @@ const queryClient = new QueryClient({
   }),
 });
 
+const persistOptions = {
+  persister: queryPersister,
+  maxAge: CACHE_MAX_AGE,
+  buster: CACHE_BUSTER,
+  dehydrateOptions: {
+    shouldDehydrateQuery,
+    shouldDehydrateMutation,
+  },
+};
+
 const App = () => (
-  <QueryClientProvider client={queryClient}>
+  <PersistQueryClientProvider
+    client={queryClient}
+    persistOptions={persistOptions}
+    onSuccess={() => {
+      void queryClient.resumePausedMutations();
+    }}
+  >
     <ThemeEffect />
     <TooltipProvider>
       <Sonner position="top-center" />
@@ -161,7 +185,7 @@ const App = () => (
         </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>
-  </QueryClientProvider>
+  </PersistQueryClientProvider>
 );
 
 export default App;

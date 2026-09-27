@@ -68,14 +68,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Tracks the currently signed-in user id so onAuthStateChange can tell a
   // genuine sign-in apart from a same-user event (TOKEN_REFRESHED, etc.).
   const userIdRef = useRef<string | null>(null);
+  const lastProfileLoadRef = useRef<{ uid: string; timestamp: number } | null>(null);
+  const PROFILE_CACHE_TTL_MS = 5 * 60 * 1000; // 5-minute TTL guard
 
   const USER_PROFILE_FIELDS = 'id, username, first_name, middle_name, last_name, suffix, designation, immediate_head_id, plant_assignments, status, profile_complete, confirmed' as const;
 
-  const loadProfileAndRoles = async (uid: string) => {
+  const loadProfileAndRoles = async (uid: string, force = false) => {
+    const now = Date.now();
+    if (
+      !force &&
+      lastProfileLoadRef.current?.uid === uid &&
+      now - lastProfileLoadRef.current.timestamp < PROFILE_CACHE_TTL_MS
+    ) {
+      // Profile and roles loaded recently (<5m); skip duplicate egress fetch
+      return;
+    }
+
     const [{ data: prof }, { data: roleRows }] = await Promise.all([
       supabase.from('user_profiles').select(USER_PROFILE_FIELDS).eq('id', uid).maybeSingle(),
       supabase.from('user_roles').select('role').eq('user_id', uid),
     ]);
+    lastProfileLoadRef.current = { uid, timestamp: Date.now() };
     setProfile((prof as Profile) ?? null);
     setRoles(((roleRows ?? []) as { role: Role }[]).map((r) => r.role));
     // Enrich error reports with the operator's role once known (no-op when
@@ -130,6 +143,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }, 0);
       } else {
         userIdRef.current = null;
+        lastProfileLoadRef.current = null;
         setProfile(null);
         setOperatorProfile(null);
         setActiveOperatorIdRef.current(null); // use ref, not reactive setter
@@ -159,10 +173,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []); // intentionally empty — must only run once
 
   const refreshProfile = async () => {
-    if (user) await loadProfileAndRoles(user.id);
+    if (user) await loadProfileAndRoles(user.id, true);
   };
 
   const signOut = async () => {
+    lastProfileLoadRef.current = null;
     setActiveOperatorIdRef.current(null);
     // P5-2: do not leave this person's plant selected for the next one on a
     // shared device.

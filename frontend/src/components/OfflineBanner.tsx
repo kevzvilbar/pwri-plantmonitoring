@@ -33,7 +33,7 @@ export function OfflineBanner() {
   return (
     <div className="px-4 py-2 bg-background border-b border-border/60">
       <InstrumentBanner tone="warn" icon={WifiOff} className="max-w-[1600px] mx-auto">
-        <span><strong className="font-semibold text-warn">Offline Mode Active:</strong> New readings and modifications will be queued locally until connection is restored.</span>
+        <span><strong className="font-semibold text-warn">Offline Mode Active:</strong> You are currently offline. Reference and configuration data are served from offline cache. Unsaved form inputs are preserved in local drafts until connection is restored.</span>
       </InstrumentBanner>
     </div>
   );
