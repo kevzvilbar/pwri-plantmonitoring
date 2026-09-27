@@ -35,6 +35,7 @@ import { CorrectionReasonField } from '@/components/CorrectionReasonField';
 import { resolveReason, isReasonComplete } from '@/lib/correctionReasons';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { useDraft } from '@/hooks/useDraft';
 import { canEditEntry, diffFields, logReadingEdit } from './helpers';
 import { getHourBucket } from '@/lib/hourlyReadingGuard';
 
@@ -81,41 +82,78 @@ export function EditPretreatReadingDialog({ row, trainId, onClose, onSaved }: Pr
   const { isManager, isDataAnalyst, activeOperator, user } = useAuth();
   const hasFullAccess = isManager || isDataAnalyst;
   const [saving, setSaving]         = useState(false);
-  const [dt, setDt]                 = useState(row.reading_datetime
-    ? format(new Date(row.reading_datetime), "yyyy-MM-dd'T'HH:mm") : '');
-  const [hpp, setHpp]               = useState(toStr(row.hpp_target_pressure_psi));
-  const [bagFilters, setBagFilters] = useState(toStr(row.bag_filters_changed));
-  const [remarks, setRemarks]       = useState(row.remarks ?? '');
-  const [reason, setReason]         = useState('');
-  const [customReason, setCustomReason] = useState('');
 
-  const [afmUnits, setAfmUnits] = useState<AfmUnitState[]>(() =>
-    (Array.isArray(row.afm_units) ? row.afm_units : []).map((u) => ({
-      unit:           u.unit,
-      in_psi:         toStr(u.in_psi),
-      out_psi:        toStr(u.out_psi),
-      backwash_start: u.backwash_start ?? null,
-      backwash_end:   u.backwash_end ?? null,
-    })),
-  );
-  const [boosterPumps, setBoosterPumps] = useState<BoosterState[]>(() =>
-    (Array.isArray(row.booster_pumps) ? row.booster_pumps : []).map((p) => ({
-      unit:                 p.unit,
-      target_pressure_psi:  toStr(p.target_pressure_psi),
-      target_hz:            toStr(p.target_hz),
-      amperage:             toStr(p.amperage),
-    })),
-  );
-  const [cartHousings, setCartHousings] = useState<HousingState[]>(() =>
-    (Array.isArray(row.cartridge_filter_housings) ? row.cartridge_filter_housings : []).map((h) => ({
-      unit: h.unit, in_psi: toStr(h.in_psi), out_psi: toStr(h.out_psi),
-    })),
-  );
-  const [filterHousings, setFilterHousings] = useState<HousingState[]>(() =>
-    (Array.isArray(row.filter_housings) ? row.filter_housings : []).map((h) => ({
-      unit: h.unit, in_psi: toStr(h.in_psi), out_psi: toStr(h.out_psi),
-    })),
-  );
+  const initialDt = row.reading_datetime
+    ? format(new Date(row.reading_datetime), "yyyy-MM-dd'T'HH:mm") : '';
+  const initialHpp = toStr(row.hpp_target_pressure_psi);
+  const initialBagFilters = toStr(row.bag_filters_changed);
+  const initialRemarks = row.remarks ?? '';
+
+  const initialAfm: AfmUnitState[] = (Array.isArray(row.afm_units) ? row.afm_units : []).map((u) => ({
+    unit:           u.unit,
+    in_psi:         toStr(u.in_psi),
+    out_psi:        toStr(u.out_psi),
+    backwash_start: u.backwash_start ?? null,
+    backwash_end:   u.backwash_end ?? null,
+  }));
+  const initialBooster: BoosterState[] = (Array.isArray(row.booster_pumps) ? row.booster_pumps : []).map((p) => ({
+    unit:                 p.unit,
+    target_pressure_psi:  toStr(p.target_pressure_psi),
+    target_hz:            toStr(p.target_hz),
+    amperage:             toStr(p.amperage),
+  }));
+  const initialCart: HousingState[] = (Array.isArray(row.cartridge_filter_housings) ? row.cartridge_filter_housings : []).map((h) => ({
+    unit: h.unit, in_psi: toStr(h.in_psi), out_psi: toStr(h.out_psi),
+  }));
+  const initialFilter: HousingState[] = (Array.isArray(row.filter_housings) ? row.filter_housings : []).map((h) => ({
+    unit: h.unit, in_psi: toStr(h.in_psi), out_psi: toStr(h.out_psi),
+  }));
+
+  const { draft, setDraft, clearDraft } = useDraft(`edit-pretreat-reading-${row.id}`, {
+    dt: initialDt,
+    hpp: initialHpp,
+    bagFilters: initialBagFilters,
+    remarks: initialRemarks,
+    reason: '',
+    customReason: '',
+  });
+
+  const [dt, setDt]                 = useState(draft.dt || initialDt);
+  const [hpp, setHpp]               = useState(draft.hpp ?? initialHpp);
+  const [bagFilters, setBagFilters] = useState(draft.bagFilters ?? initialBagFilters);
+  const [remarks, setRemarks]       = useState(draft.remarks ?? initialRemarks);
+  const [reason, setReason]         = useState(draft.reason ?? '');
+  const [customReason, setCustomReason] = useState(draft.customReason ?? '');
+
+  const [afmUnits, setAfmUnits] = useState<AfmUnitState[]>(initialAfm);
+  const [boosterPumps, setBoosterPumps] = useState<BoosterState[]>(initialBooster);
+  const [cartHousings, setCartHousings] = useState<HousingState[]>(initialCart);
+  const [filterHousings, setFilterHousings] = useState<HousingState[]>(initialFilter);
+
+  const handleDtChange = (newDt: string) => {
+    setDt(newDt);
+    setDraft((d) => ({ ...d, dt: newDt }));
+  };
+  const handleHppChange = (newHpp: string) => {
+    setHpp(newHpp);
+    setDraft((d) => ({ ...d, hpp: newHpp }));
+  };
+  const handleBagFiltersChange = (newBf: string) => {
+    setBagFilters(newBf);
+    setDraft((d) => ({ ...d, bagFilters: newBf }));
+  };
+  const handleRemarksChange = (newRem: string) => {
+    setRemarks(newRem);
+    setDraft((d) => ({ ...d, remarks: newRem }));
+  };
+  const handleReasonChange = (newR: string) => {
+    setReason(newR);
+    setDraft((d) => ({ ...d, reason: newR }));
+  };
+  const handleCustomReasonChange = (newCR: string) => {
+    setCustomReason(newCR);
+    setDraft((d) => ({ ...d, customReason: newCR }));
+  };
 
   const canSave = canEditEntry(row, hasFullAccess, activeOperator?.id, true);
 
@@ -208,12 +246,17 @@ export function EditPretreatReadingDialog({ row, trainId, onClose, onSaved }: Pr
     });
 
     setSaving(false);
+    clearDraft();
     toast.success('Reading updated');
     onSaved();
   };
 
+  const handleClose = () => {
+    onClose();
+  };
+
   return (
-    <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
+    <Dialog open onOpenChange={(o) => { if (!o) handleClose(); }}>
       <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Edit Pre-Treatment Reading</DialogTitle>
@@ -224,7 +267,7 @@ export function EditPretreatReadingDialog({ row, trainId, onClose, onSaved }: Pr
             <DateTimePicker
               id="editpretreatreadingdialog-date-time"
               value={dt}
-              onChange={(d) => setDt(d)}
+              onChange={handleDtChange}
               className="h-9 w-full mt-1"
             />
           </div>
@@ -232,11 +275,11 @@ export function EditPretreatReadingDialog({ row, trainId, onClose, onSaved }: Pr
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label htmlFor="editpretreatreadingdialog-hpp-pressure-psi" className="text-xs">HPP Pressure (psi)</Label>
-              <Input type="number" step="any" value={hpp} onChange={(e) => setHpp(e.target.value)} className="h-9" id="editpretreatreadingdialog-hpp-pressure-psi"/>
+              <Input type="number" step="any" value={hpp} onChange={(e) => handleHppChange(e.target.value)} className="h-9" id="editpretreatreadingdialog-hpp-pressure-psi"/>
             </div>
             <div>
               <Label htmlFor="editpretreatreadingdialog-bag-cartridge-filters-changed-coun" className="text-xs">Bag/Cartridge Filters Changed (count)</Label>
-              <Input type="number" step="1" value={bagFilters} onChange={(e) => setBagFilters(e.target.value)} className="h-9" id="editpretreatreadingdialog-bag-cartridge-filters-changed-coun"/>
+              <Input type="number" step="1" value={bagFilters} onChange={(e) => handleBagFiltersChange(e.target.value)} className="h-9" id="editpretreatreadingdialog-bag-cartridge-filters-changed-coun"/>
             </div>
           </div>
 
@@ -374,12 +417,12 @@ export function EditPretreatReadingDialog({ row, trainId, onClose, onSaved }: Pr
 
           <div>
             <Label htmlFor="editpretreatreadingdialog-remarks" className="text-xs">Remarks</Label>
-            <Textarea value={remarks} onChange={(e) => setRemarks(e.target.value)} className="min-h-[60px]" id="editpretreatreadingdialog-remarks"/>
+            <Textarea value={remarks} onChange={(e) => handleRemarksChange(e.target.value)} className="min-h-[60px]" id="editpretreatreadingdialog-remarks"/>
           </div>
 
           <CorrectionReasonField
-            reason={reason} onReasonChange={setReason}
-            customReason={customReason} onCustomReasonChange={setCustomReason}
+            reason={reason} onReasonChange={handleReasonChange}
+            customReason={customReason} onCustomReasonChange={handleCustomReasonChange}
           />
 
           <p className="text-xs text-muted-foreground">
@@ -389,7 +432,7 @@ export function EditPretreatReadingDialog({ row, trainId, onClose, onSaved }: Pr
           </p>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={saving}>Cancel</Button>
+          <Button variant="outline" onClick={handleClose} disabled={saving}>Cancel</Button>
           <Button onClick={handleSave} disabled={saving || !canSave || !isReasonComplete(reason, customReason)}>
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Save changes'}
           </Button>

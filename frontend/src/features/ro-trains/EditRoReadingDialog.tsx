@@ -28,6 +28,7 @@ import { resolveReason, isReasonComplete } from '@/lib/correctionReasons';
 import { supabase } from '@/integrations/supabase/client';
 import type { Database } from '@/integrations/supabase/types';
 import { useAuth } from '@/hooks/useAuth';
+import { useDraft } from '@/hooks/useDraft';
 import { canEditEntry, diffFields, logReadingEdit, recalculateTrainDeltas } from './helpers';
 import { getHourBucket, isOfflineRORecord } from '@/lib/hourlyReadingGuard';
 import { trainEmFlags } from '@/lib/trainEmMeter';
@@ -69,16 +70,57 @@ export function EditRoReadingDialog({ row, trainId, onClose, onSaved }: Props) {
   const { isManager, isDataAnalyst, activeOperator, user } = useAuth();
   const hasFullAccess = isManager || isDataAnalyst;
   const [saving, setSaving] = useState(false);
-  const [dt, setDt]         = useState(row.reading_datetime
-    ? format(new Date(row.reading_datetime), "yyyy-MM-dd'T'HH:mm") : '');
-  const [remarks, setRemarks] = useState(row.remarks ?? '');
-  const [reason, setReason]   = useState('');
-  const [customReason, setCustomReason] = useState('');
-  const [vals, setVals]     = useState<Record<string, string>>(() =>
-    Object.fromEntries(
-      RO_EDIT_NUMERIC_FIELDS.map((f) => [f.key, row[f.key] != null ? String(row[f.key]) : '']),
-    ),
+
+  const initialVals = Object.fromEntries(
+    RO_EDIT_NUMERIC_FIELDS.map((f) => [f.key, row[f.key] != null ? String(row[f.key]) : '']),
   );
+  const initialDt = row.reading_datetime
+    ? format(new Date(row.reading_datetime), "yyyy-MM-dd'T'HH:mm") : '';
+
+  const { draft, setDraft, clearDraft } = useDraft(`edit-ro-reading-${row.id}`, {
+    dt: initialDt,
+    remarks: row.remarks ?? '',
+    reason: '',
+    customReason: '',
+    vals: initialVals,
+  });
+
+  const [dt, setDt]                 = useState(draft.dt || initialDt);
+  const [remarks, setRemarks]       = useState(draft.remarks ?? (row.remarks ?? ''));
+  const [reason, setReason]         = useState(draft.reason ?? '');
+  const [customReason, setCustomReason] = useState(draft.customReason ?? '');
+  const [vals, setVals]             = useState<Record<string, string>>(() => ({
+    ...initialVals,
+    ...(draft.vals ?? {}),
+  }));
+
+  const updateVals = (updater: (prev: Record<string, string>) => Record<string, string>) => {
+    setVals((prev) => {
+      const next = updater(prev);
+      setDraft((d) => ({ ...d, vals: next }));
+      return next;
+    });
+  };
+
+  const handleDtChange = (newDt: string) => {
+    setDt(newDt);
+    setDraft((d) => ({ ...d, dt: newDt }));
+  };
+
+  const handleRemarksChange = (newRemarks: string) => {
+    setRemarks(newRemarks);
+    setDraft((d) => ({ ...d, remarks: newRemarks }));
+  };
+
+  const handleReasonChange = (newReason: string) => {
+    setReason(newReason);
+    setDraft((d) => ({ ...d, reason: newReason }));
+  };
+
+  const handleCustomReasonChange = (newCustom: string) => {
+    setCustomReason(newCustom);
+    setDraft((d) => ({ ...d, customReason: newCustom }));
+  };
 
   const canSave = canEditEntry(row, hasFullAccess, activeOperator?.id, true);
 
@@ -213,12 +255,17 @@ export function EditRoReadingDialog({ row, trainId, onClose, onSaved }: Props) {
     });
 
     setSaving(false);
+    clearDraft();
     toast.success('Reading updated');
     onSaved();
   };
 
+  const handleClose = () => {
+    onClose();
+  };
+
   return (
-    <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
+    <Dialog open onOpenChange={(o) => { if (!o) handleClose(); }}>
       <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Edit RO Reading</DialogTitle>
@@ -229,7 +276,7 @@ export function EditRoReadingDialog({ row, trainId, onClose, onSaved }: Props) {
             <DateTimePicker
               id="editroreadingdialog-date-time"
               value={dt}
-              onChange={(d) => setDt(d)}
+              onChange={handleDtChange}
               className="h-9 w-full mt-1"
             />
           </div>
@@ -240,7 +287,7 @@ export function EditRoReadingDialog({ row, trainId, onClose, onSaved }: Props) {
                 <Input
                   type="number" step="any"
                   value={vals[f.key]}
-                  onChange={(e) => setVals((v) => ({ ...v, [f.key]: e.target.value }))}
+                  onChange={(e) => updateVals((v) => ({ ...v, [f.key]: e.target.value }))}
                   className="h-9"
                 id="editroreadingdialog-field"/>
               </div>
@@ -248,15 +295,15 @@ export function EditRoReadingDialog({ row, trainId, onClose, onSaved }: Props) {
           </div>
           <div>
             <Label htmlFor="editroreadingdialog-remarks" className="text-xs">Remarks</Label>
-            <Textarea value={remarks} onChange={(e) => setRemarks(e.target.value)} className="min-h-[60px]" id="editroreadingdialog-remarks"/>
+            <Textarea value={remarks} onChange={(e) => handleRemarksChange(e.target.value)} className="min-h-[60px]" id="editroreadingdialog-remarks"/>
           </div>
           <CorrectionReasonField
-            reason={reason} onReasonChange={setReason}
-            customReason={customReason} onCustomReasonChange={setCustomReason}
+            reason={reason} onReasonChange={handleReasonChange}
+            customReason={customReason} onCustomReasonChange={handleCustomReasonChange}
           />
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={saving}>Cancel</Button>
+          <Button variant="outline" onClick={handleClose} disabled={saving}>Cancel</Button>
           <Button onClick={handleSave} disabled={saving || !canSave || !isReasonComplete(reason, customReason)}>
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Save changes'}
           </Button>

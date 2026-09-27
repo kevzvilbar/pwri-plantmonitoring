@@ -5,6 +5,7 @@ import { format, subDays } from 'date-fns';
 import { computePivotFromReadingsNoCache, pivotDayTotal } from '@/components/dashboard/DataSummaryModal';
 import { pctDelta } from '@/components/dashboard/types';
 import { calc } from '@/lib/calculations';
+import { reportError } from '@/shared/monitoring';
 
 export interface ServerDashboardAggregates {
   raw_water_vol: number;
@@ -64,6 +65,11 @@ export function useProductionStats({
       });
       if (error) {
         console.warn('[Dashboard] get_dashboard_aggregates failed, falling back to client computation:', error);
+        reportError(error, {
+          where: 'dashboard-rpc-fallback',
+          kind: 'get_dashboard_aggregates',
+          plantIds: plantIds.join(','),
+        });
         return null;
       }
       return (data as unknown) as ServerDashboardAggregates;

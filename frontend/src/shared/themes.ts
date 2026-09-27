@@ -78,10 +78,10 @@ export const COLOR_THEMES: ColorTheme[] = [
     swatches: ['#030816', '#0A97BE', '#0BC9F8', '#f0f6f8'],
   },
   {
-    id: 'cosmic-spark',
-    name: 'Cosmic Spark',
-    description: 'Vivid purple & cobalt with golden energy — electric and bold.',
-    swatches: ['#0A3383', '#047CDF', '#9344F4', '#f2f4fb'],
+    id: 'outdoor-contrast',
+    name: 'Outdoor High-Contrast',
+    description: 'Ultra-high contrast, bold lines, and deep black on pure white for bright sunlight and outdoor tablets.',
+    swatches: ['#000000', '#0284c7', '#059669', '#ffffff'],
   },
 ];
 

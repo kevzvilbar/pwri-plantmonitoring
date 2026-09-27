@@ -36,11 +36,11 @@ export function OfflineBanner() {
     <div className="px-4 py-2 bg-background border-b border-border/60">
       <InstrumentBanner tone="warn" icon={WifiOff} className="max-w-[1600px] mx-auto">
         <span>
-          <strong className="font-semibold text-warn">Offline Mode Active:</strong>{' '}
+          <strong className="font-semibold text-warn">Offline Mode:</strong>{' '}
           {pendingCount > 0 ? (
             <>{pendingCount} offline update{pendingCount === 1 ? '' : 's'} queued to sync on reconnect. Reference and configuration data are served from offline cache.</>
           ) : (
-            <>You are currently offline. Reference and configuration data are served from offline cache. Unsaved form inputs are preserved in local drafts until connection is restored.</>
+            <>You are currently offline. Reference and configuration data are served from offline cache. New reading entries will not be saved until connection is restored.</>
           )}
         </span>
       </InstrumentBanner>

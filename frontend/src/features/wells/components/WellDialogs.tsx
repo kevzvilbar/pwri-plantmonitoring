@@ -37,16 +37,27 @@ import { friendlyError } from '@/lib/supabaseErrors';
 import { format } from 'date-fns';
 
 
+import { useDraft } from '@/hooks/useDraft';
 import { parseCsv, downloadTemplate, CsvPreviewTable } from '@/features/plants/shared';
 
 export function EditWellDialog({ well, onClose }: { well: any; onClose: () => void }) {
-  const [form, setForm] = useState({
+  const initialForm = {
     name: well.name ?? '', diameter: well.diameter ?? '', drilling_depth_m: well.drilling_depth_m?.toString() ?? '',
     meter_brand: well.meter_brand ?? '', meter_size: well.meter_size ?? '', meter_serial: well.meter_serial ?? '',
     meter_rollover_max: well.meter_rollover_max?.toString() ?? '',
     gps_lat: well.gps_lat?.toString() ?? '', gps_lng: well.gps_lng?.toString() ?? '',
-  });
+  };
+  const { draft, setDraft, clearDraft } = useDraft(`edit-well-form-${well.id}`, initialForm);
+  const [form, setFormState] = useState(() => ({ ...initialForm, ...draft }));
   const { user } = useAuth();
+
+  const setForm = (updater: typeof initialForm | ((prev: typeof initialForm) => typeof initialForm)) => {
+    setFormState((prev) => {
+      const next = typeof updater === 'function' ? updater(prev) : updater;
+      setDraft(next);
+      return next;
+    });
+  };
 
   const submit = async () => {
     if (!form.name.trim()) { toast.error('Name Required'); return; }
@@ -71,6 +82,7 @@ export function EditWellDialog({ well, onClose }: { well: any; onClose: () => vo
       error = e2 ?? null;
     }
     if (error) { toast.error(friendlyError(error)); return; }
+    clearDraft();
     toast.success('Well updated'); onClose();
   };
   return (
@@ -109,13 +121,23 @@ export function EditWellDialog({ well, onClose }: { well: any; onClose: () => vo
 }
 
 export function AddWellDialog({ plantId, onClose }: { plantId: string; onClose: () => void }) {
-  const [form, setForm] = useState({
+  const initialAddForm = {
     name: '', diameter: '', drilling_depth_m: '', has_power_meter: false,
     meter_brand: '', meter_size: '', meter_serial: '', meter_installed_date: '',
     electric_meter_brand: '', electric_meter_size: '', electric_meter_serial: '', electric_meter_installed_date: '',
     gps_lat: '', gps_lng: '',
-  });
+  };
+  const { draft, setDraft, clearDraft } = useDraft(`add-well-form-${plantId}`, initialAddForm);
+  const [form, setFormState] = useState(() => ({ ...initialAddForm, ...draft }));
   const [locating, setLocating] = useState(false);
+
+  const setForm = (updater: typeof initialAddForm | ((prev: typeof initialAddForm) => typeof initialAddForm)) => {
+    setFormState((prev) => {
+      const next = typeof updater === 'function' ? updater(prev) : updater;
+      setDraft(next);
+      return next;
+    });
+  };
 
   const useMyLocation = async () => {
     setLocating(true);
@@ -129,8 +151,8 @@ export function AddWellDialog({ plantId, onClose }: { plantId: string; onClose: 
         gps_lng: pos.coords.longitude.toFixed(6),
       }));
       toast.success('Location Captured');
-    } catch (e) {
-      toast.error(`Location Failed: ${e.message || 'Permission Denied'}`);
+    } catch (e: any) {
+      toast.error(`Location Failed: ${e?.message || 'Permission Denied'}`);
     } finally {
       setLocating(false);
     }
@@ -173,6 +195,7 @@ export function AddWellDialog({ plantId, onClose }: { plantId: string; onClose: 
       error = e2 ?? null;
     }
     if (error) { toast.error(friendlyError(error)); return; }
+    clearDraft();
     toast.success(`${form.name.trim()} added`);
     onClose();
   };
