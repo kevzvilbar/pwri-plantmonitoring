@@ -232,3 +232,28 @@ Three things from §2/§3 that are easy to skim past in a checklist but shouldn'
 - **Scope**: Decision 2's "constant ×10, no split" is proven for "UHRI (8)" only. Phase 1 (P1-3) now makes the per-entity `drift_m3` + replacement-table + `meter_events` check a required gate before any other entity gets the same constant treatment — not a suggestion to eyeball if time allows.
 - **Guard clause**: the `1/0` in P2-1 is deliberate and stays as written. The inline comment directly above it in the script is there so whoever runs it in the Supabase SQL editor recognizes a "division by zero" as the safeguard doing its job — not something to debug around.
 - **Trigger disable**: staging dry-run and a second reviewer's sign-off (Decision 4) are both required before P2-1 runs against production, precisely because this technique has no precedent elsewhere in this repo's migration history.
+
+---
+
+## 6. Status update (Sept 27) — scripts recovered, Phase 0 pilot reported, Phase 2 not yet run
+
+- **The Phase 0/2 scripts described in §3 were wiped, then recovered.** `b92ec7ac` ("refactor: remove historical backfill SQL runbooks and audit scripts") emptied these three files to 0 bytes on `main` — the paths are still tracked, the content is not:
+  - `supabase/runbooks/meter_multiplier_historical_backfill.sql`
+  - `supabase/runbooks/meter_multiplier_historical_backfill_audit.sql`
+  - `supabase/migrations_archive/20260927000002_meter_multiplier_historical_backfill.sql`
+
+  Full content was pulled back from `7036d8a7` (the last commit before the wipe). Verified: no commit between `7036d8a7` and `b92ec7ac` touches any of these three paths, so this is an exact restore of what §3 describes, not a reconstruction. They still need to land back in the repo (a PR restoring them) before Phase 0/2 can be re-run from their canonical paths in the Supabase SQL editor.
+
+- **Phase 0 pilot audit for "UHRI (8)" — reported, not yet attached as raw output:**
+
+  | | |
+  |---|---|
+  | Candidate rows | 258 (251 `normal`, 7 already-`retracted` no-ops with zero drift) |
+  | Date range | Jan 2 – Sep 24, 2026 |
+  | Stored `daily_volume` sum | 3,381.67 m³ |
+  | Recomputed (×10) sum | 33,816.70 m³ |
+  | Drift | +30,435.03 m³ |
+
+  Flagging this plainly: these numbers are carried over from wherever the audit script was actually run — this documentation pass has no database connection and did not produce or check them. Before this reaches Decision 4's review gate, attach the real SQL editor output (CSV export or screenshot) alongside this table, so the second reviewer signs off on the actual result set rather than a summary of it.
+
+- **Phase 2 (guarded correction): recovered, not executed.** The correction script pulled from `7036d8a7` matches §3's P2-1 exactly — trigger-disable wrapper, `IS DISTINCT FROM` idempotency guard, divide-by-zero row-count guard. It has not been run against staging or production. Decision 4's gate is unchanged and still outstanding in full: staging dry run, Phase 0 audit re-run afterward as verification, then a second reviewer signing off on the reviewed diff — all before P2-1 touches production.
