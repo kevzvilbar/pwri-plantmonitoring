@@ -50,7 +50,7 @@ export function StandardRow({
   const storedMult = r.multiplier_at_reading != null ? +r.multiplier_at_reading : 1;
   const mult = storedMult !== 1 ? storedMult : (entityMultiplier ?? 1);
   const effectiveDelta = r.daily_volume != null
-    ? +r.daily_volume
+    ? (storedMult === 1 && mult !== 1 ? +r.daily_volume * mult : +r.daily_volume)
     : (rawDelta != null ? rawDelta * mult : null);
   const multCell = (
     <td className="px-2 py-1.5 text-center font-mono-num whitespace-nowrap text-muted-foreground text-2xs">

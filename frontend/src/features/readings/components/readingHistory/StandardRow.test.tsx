@@ -62,6 +62,42 @@ describe('StandardRow multiplier rendering and calculation fallback', () => {
     expect(screen.getByText('160.00')).toBeInTheDocument(); // volume
   });
 
+  it('multiplies stored unmultiplied daily_volume when multiplier_at_reading is 1 but entityMultiplier is 10', () => {
+    const rowWithUnmultipliedDailyVol = {
+      ...baseRow,
+      daily_volume: 16,
+    };
+
+    render(
+      <table>
+        <tbody>
+          <StandardRow
+            r={rowWithUnmultipliedDailyVol}
+            i={0}
+            rows={[rowWithUnmultipliedDailyVol, predecessorRow]}
+            predecessor={predecessorRow}
+            module="locator"
+            isDirectMode={false}
+            anyEditable={false}
+            hasFullAccess={true}
+            actions={defaultActions}
+            dateStr="Sep 24, 2026 17:21"
+            isMeterReplacement={false}
+            isEstimated={false}
+            isDeleting={false}
+            isToggling={false}
+            rowEditable={false}
+            isEditing={false}
+            entityMultiplier={10}
+          />
+        </tbody>
+      </table>
+    );
+
+    expect(screen.getByText('×10')).toBeInTheDocument();
+    expect(screen.getByText('160.00')).toBeInTheDocument(); // 16 × 10
+  });
+
   it('prefers stored multiplier_at_reading when it is > 1 over entityMultiplier', () => {
     const rowWithStoredMult = {
       ...baseRow,
