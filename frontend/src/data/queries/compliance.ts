@@ -233,8 +233,29 @@ export async function fetchChemDaysOfSupply(
   plantId: string,
   lookbackDays = 30,
 ): Promise<ChemSupply[]> {
+  try {
+    const { data: rpcData, error: rpcError } = await (supabase.rpc as any)('fn_chem_stock', {
+      p_plant_id: plantId,
+    });
+    if (!rpcError && rpcData && Array.isArray(rpcData) && rpcData.length > 0) {
+      const supplies: ChemSupply[] = [];
+      rpcData.forEach((row: any) => {
+        if (row.days_of_supply !== null && row.days_of_supply !== undefined) {
+          supplies.push({
+            name: row.chemical_name,
+            days: +row.days_of_supply,
+            unit: row.base_unit ?? null,
+          });
+        }
+      });
+      if (supplies.length > 0) return supplies;
+    }
+  } catch (err) {
+    console.warn('fn_chem_stock RPC fallback in compliance:', err);
+  }
+
   const [{ data: deliveries }, { data: dosing }, { data: inventory }] = await Promise.all([
-    supabase.from('chemical_deliveries').select('chemical_name, quantity').eq('plant_id', plantId),
+    supabase.from('chemical_deliveries').select('chemical_name, quantity, qty_base').eq('plant_id', plantId),
     supabase.from('chemical_dosing_logs')
       .select('chlorine_kg, smbs_kg, anti_scalant_l, soda_ash_kg, log_datetime')
       .eq('plant_id', plantId),
@@ -246,7 +267,8 @@ export async function fetchChemDaysOfSupply(
 
   const received = new Map<string, number>();
   (deliveries ?? []).forEach((d: any) => {
-    received.set(d.chemical_name, (received.get(d.chemical_name) ?? 0) + (+d.quantity || 0));
+    const qty = +(d.qty_base ?? d.quantity) || 0;
+    received.set(d.chemical_name, (received.get(d.chemical_name) ?? 0) + qty);
   });
 
   const dosingRows = (dosing ?? []) as Array<Record<string, any>>;
