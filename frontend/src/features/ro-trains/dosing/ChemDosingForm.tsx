@@ -21,6 +21,13 @@ import { ChemPlantPick } from './ChemPlantPick';
 import { DosingMobileSummary } from './DosingMobileSummary';
 import { ImportDosingDialog } from './ImportDosingDialog';
 import { useChemCatalog } from './useChemCatalog';
+import {
+  buildQuickUnitOptions,
+  findQuickUnit,
+  quickToBase,
+  DEFAULT_QUICK_UNITS,
+  QuickChemKey,
+} from './quickUnits';
 import { ChemProductCard, ChemProductCardItem } from './components/ChemProductCard';
 import { ResidualTestsCard, ResidualTestSample } from './components/ResidualTestsCard';
 import { ConsumablesCard } from './components/ConsumablesCard';
@@ -85,6 +92,44 @@ export function ChemDosingForm() {
     free_chlorine_reagent_pcs: '0',
   });
 
+  // Unit each Quick Mode amount is typed in. The saved values are always kg / L
+  // (see quickBase), so changing the unit never changes what the database holds.
+  const [quickUnits, setQuickUnits] = useState<Record<QuickChemKey, string>>({
+    ...DEFAULT_QUICK_UNITS,
+  });
+
+  const quickPlantId = plantId || selectedPlantId || null;
+  const quickUnitOptions = useMemo(
+    () => ({
+      chlorine_kg: buildQuickUnitOptions('chlorine_kg', catalogData?.catalog, catalogData?.units, quickPlantId),
+      smbs_kg: buildQuickUnitOptions('smbs_kg', catalogData?.catalog, catalogData?.units, quickPlantId),
+      soda_ash_kg: buildQuickUnitOptions('soda_ash_kg', catalogData?.catalog, catalogData?.units, quickPlantId),
+      anti_scalant_l: buildQuickUnitOptions('anti_scalant_l', catalogData?.catalog, catalogData?.units, quickPlantId),
+    }),
+    [catalogData?.catalog, catalogData?.units, quickPlantId],
+  );
+
+  // Quick Mode amounts converted to the base unit (kg / L): this is what feeds
+  // the sidebar, the cost and the saved legacy columns.
+  const quickBase = useMemo(() => {
+    const conv = (k: QuickChemKey) =>
+      quickToBase(quickV[k], findQuickUnit(quickUnitOptions[k], quickUnits[k]).factorToBase);
+    return {
+      chlorine_kg: conv('chlorine_kg'),
+      smbs_kg: conv('smbs_kg'),
+      anti_scalant_l: conv('anti_scalant_l'),
+      soda_ash_kg: conv('soda_ash_kg'),
+      free_chlorine_reagent_pcs: +quickV.free_chlorine_reagent_pcs || 0,
+    };
+  }, [quickV, quickUnits, quickUnitOptions]);
+
+  // Small "= 50 kg" hint under a card, shown only when a non-base unit is picked.
+  const quickHint = (k: QuickChemKey, base: 'kg' | 'L'): string | undefined => {
+    const opt = findQuickUnit(quickUnitOptions[k], quickUnits[k]);
+    if (opt.factorToBase === 1 || !(quickBase[k] > 0)) return undefined;
+    return `= ${fmtNum(quickBase[k], 3)} ${base} will be saved`;
+  };
+
   // ── Residual Tests State ───────────────────────────────────────────────────
   const [residualSamples, setResidualSamples] = useState<ResidualTestSample[]>([]);
 
@@ -106,10 +151,10 @@ export function ChemDosingForm() {
   // ── Sidebar live sums ──────────────────────────────────────────────────────
   const { totalMassKg, totalVolumeL, freePcs, cost, unpriced } = useMemo(() => {
     if (entryView === 'quick') {
-      const { cost: quickCost, unpriced: quickUnpriced } = computeDosingLogCost(quickV, prices);
-      const mass = (+quickV.chlorine_kg || 0) + (+quickV.smbs_kg || 0) + (+quickV.soda_ash_kg || 0);
-      const vol = +quickV.anti_scalant_l || 0;
-      const pcs = +quickV.free_chlorine_reagent_pcs || 0;
+      const { cost: quickCost, unpriced: quickUnpriced } = computeDosingLogCost(quickBase, prices);
+      const mass = quickBase.chlorine_kg + quickBase.smbs_kg + quickBase.soda_ash_kg;
+      const vol = quickBase.anti_scalant_l;
+      const pcs = quickBase.free_chlorine_reagent_pcs;
       return {
         totalMassKg: mass,
         totalVolumeL: vol,
@@ -182,7 +227,7 @@ export function ChemDosingForm() {
       cost: totalCost,
       unpriced: Array.from(unpricedSet),
     };
-  }, [entryView, quickV, prices, allProcessItems, catalogReagents, residualSamples, extraConsumables]);
+  }, [entryView, quickBase, prices, allProcessItems, catalogReagents, residualSamples, extraConsumables]);
 
   const plantName = plants?.find((p) => p.id === plantId)?.name ?? '';
 
@@ -229,11 +274,11 @@ export function ChemDosingForm() {
       let parentReagentPcs = freePcs;
 
       if (entryView === 'quick') {
-        parentChlorineKg = +quickV.chlorine_kg || 0;
-        parentSmbsKg = +quickV.smbs_kg || 0;
-        parentAntiScalantL = +quickV.anti_scalant_l || 0;
-        parentSodaAshKg = +quickV.soda_ash_kg || 0;
-        parentReagentPcs = +quickV.free_chlorine_reagent_pcs || 0;
+        parentChlorineKg = quickBase.chlorine_kg;
+        parentSmbsKg = quickBase.smbs_kg;
+        parentAntiScalantL = quickBase.anti_scalant_l;
+        parentSodaAshKg = quickBase.soda_ash_kg;
+        parentReagentPcs = quickBase.free_chlorine_reagent_pcs;
       } else {
         chlorineItems.forEach((it) => {
           parentChlorineKg += it.activeKg ?? it.productKg ?? it.qtyBase ?? 0;
@@ -598,7 +643,7 @@ export function ChemDosingForm() {
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                   {isChemEnabled('Chlorine') && (
                     <ChemCard
-                      name="Chlorine (kg)"
+                      name="Chlorine"
                       icon={
                         <span className="inline-flex items-center justify-center w-6 h-6 text-3xs font-bold font-mono bg-muted rounded text-muted-foreground">
                           Cl₂
@@ -607,12 +652,16 @@ export function ChemDosingForm() {
                       value={quickV.chlorine_kg}
                       onChange={(val) => setQuickV({ ...quickV, chlorine_kg: val })}
                       unit="kg"
+                      unitOptions={quickUnitOptions.chlorine_kg}
+                      unitId={quickUnits.chlorine_kg}
+                      onUnitChange={(id) => setQuickUnits((u) => ({ ...u, chlorine_kg: id }))}
+                      hint={quickHint('chlorine_kg', 'kg')}
                       accent="teal"
                     />
                   )}
                   {isChemEnabled('SMBS') && (
                     <ChemCard
-                      name="SMBS (kg)"
+                      name="SMBS"
                       icon={
                         <span className="inline-flex items-center justify-center w-6 h-6 text-3xs font-bold font-mono bg-muted rounded text-muted-foreground">
                           S₂O₅
@@ -621,12 +670,16 @@ export function ChemDosingForm() {
                       value={quickV.smbs_kg}
                       onChange={(val) => setQuickV({ ...quickV, smbs_kg: val })}
                       unit="kg"
+                      unitOptions={quickUnitOptions.smbs_kg}
+                      unitId={quickUnits.smbs_kg}
+                      onUnitChange={(id) => setQuickUnits((u) => ({ ...u, smbs_kg: id }))}
+                      hint={quickHint('smbs_kg', 'kg')}
                       accent="default"
                     />
                   )}
                   {isChemEnabled('Soda Ash') && (
                     <ChemCard
-                      name="Soda Ash (kg)"
+                      name="Soda Ash"
                       icon={
                         <span className="inline-flex items-center justify-center w-6 h-6 text-3xs font-bold font-mono bg-muted rounded text-muted-foreground">
                           Na₂CO₃
@@ -635,6 +688,10 @@ export function ChemDosingForm() {
                       value={quickV.soda_ash_kg}
                       onChange={(val) => setQuickV({ ...quickV, soda_ash_kg: val })}
                       unit="kg"
+                      unitOptions={quickUnitOptions.soda_ash_kg}
+                      unitId={quickUnits.soda_ash_kg}
+                      onUnitChange={(id) => setQuickUnits((u) => ({ ...u, soda_ash_kg: id }))}
+                      hint={quickHint('soda_ash_kg', 'kg')}
                       accent="default"
                     />
                   )}
@@ -648,7 +705,7 @@ export function ChemDosingForm() {
                 <div className="grid grid-cols-2 gap-2">
                   {isChemEnabled('Anti Scalant') && (
                     <ChemCard
-                      name="Anti Scalant (L)"
+                      name="Anti Scalant"
                       icon={
                         <span className="inline-flex items-center justify-center w-6 h-6 bg-muted rounded text-muted-foreground">
                           <Droplets className="h-3.5 w-3.5" />
@@ -657,6 +714,10 @@ export function ChemDosingForm() {
                       value={quickV.anti_scalant_l}
                       onChange={(val) => setQuickV({ ...quickV, anti_scalant_l: val })}
                       unit="L"
+                      unitOptions={quickUnitOptions.anti_scalant_l}
+                      unitId={quickUnits.anti_scalant_l}
+                      onUnitChange={(id) => setQuickUnits((u) => ({ ...u, anti_scalant_l: id }))}
+                      hint={quickHint('anti_scalant_l', 'L')}
                       accent="olive"
                     />
                   )}
