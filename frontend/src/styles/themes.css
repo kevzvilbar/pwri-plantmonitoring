@@ -5,6 +5,7 @@
     /* ── Surfaces ──────────────────────────────────────────────── */
     --surface-ground:     210 25% 95%;
     --surface-base:       210 40% 97%;
+    --surface-recessed:   210 25% 92%;
     --surface-raised:     0 0% 100%;
     --surface-overlay:    0 0% 100%;
     --surface-dialog:     0 0% 100%;
@@ -21,8 +22,8 @@
     --popover:            0 0% 100%;
     --popover-foreground: 215 45% 11%;
 
-    /* ── Brand teal (buttons, rings, links) ─────────────────────── */
-    --primary:            175 84% 31%;
+    /* ── Brand teal (buttons, rings, links) — calibrated for >=4.5:1 AA contrast ── */
+    --primary:            175 84% 26%;
     --primary-foreground: 0 0% 100%;
     --primary-soft:       175 60% 93%;
     --primary-glow:       175 70% 42%;
@@ -369,6 +370,7 @@
     /* ── 5-Tier Elevation Ladder (Lightness steps over pure shadow) ── */
     --surface-ground:      220 13% 4.5%;  /* #0A0B0D Recessed inputs & sunken wells */
     --surface-base:        225 10% 7.8%;  /* #121316 Level 0: App Canvas (Near-black) */
+    --surface-recessed:    220 13% 4.5%;  /* Level -1: Inset wells & HUD meters */
     --surface-raised:      225 13% 11.8%; /* #1A1C22 Level 1: Cards & elevated feeds */
     --surface-overlay:     222 13% 15.3%; /* #22252C Level 2: Popovers, flyouts, menus */
     --surface-dialog:      222 13% 19.0%; /* #2A2E37 Level 3: Modals, dialogs & alerts */
@@ -644,11 +646,12 @@
 
 /* ── Theme: Aerial Autumn  (#07202E · #008B7B · #D59D3A · #f7f3ec) ──────────── */
 :root[data-theme="aerial-autumn"] {
-  --primary:            174 100% 27%;   /* #008B7B teal */
+  --surface-recessed:   38  20% 90%;
+  --primary:            174 100% 24%;   /* #007a6c deep teal — calibrated >=4.5:1 AA */
   --primary-foreground: 0 0% 100%;
   --primary-soft:       174 60% 91%;
   --primary-glow:       174 80% 38%;
-  --ring:               174 100% 27%;
+  --ring:               174 100% 24%;
 
   --accent:             38  65% 53%;   /* #D59D3A amber */
   --accent-foreground:  206 77% 11%;
@@ -687,6 +690,7 @@
 
 /* ── Theme: Fire & Ocean  (#010313 · #326DA3 · #EF7D02 · #f0f4f8) ───────────── */
 :root[data-theme="fire-ocean"] {
+  --surface-recessed:   210 25% 91%;
   --primary:            210 52% 41%;   /* #326DA3 steel blue */
   --primary-foreground: 0 0% 100%;
   --primary-soft:       210 52% 92%;
@@ -730,6 +734,7 @@
 
 /* ── Theme: Earth & Jade  (#020B0C · #0D382C · #DA9626 · #f4f6f2) ───────────── */
 :root[data-theme="earth-jade"] {
+  --surface-recessed:   96  15% 91%;
   --primary:            160 55% 18%;   /* #0D382C forest green */
   --primary-foreground: 0 0% 100%;
   --primary-soft:       160 30% 92%;
@@ -773,6 +778,7 @@
 
 /* ── Theme: Inferno Sky  (#120E0E · #4571A4 · #FE960D · #f5f2ef) ────────────── */
 :root[data-theme="inferno-sky"] {
+  --surface-recessed:   30  15% 90%;
   --primary:            213 38% 47%;   /* #4571A4 steel blue */
   --primary-foreground: 0 0% 100%;
   --primary-soft:       213 38% 92%;
@@ -816,11 +822,12 @@
 
 /* ── Theme: Midnight Road  (#030816 · #0A97BE · #0BC9F8 · #f0f6f8) ──────────── */
 :root[data-theme="midnight-road"] {
-  --primary:            194 85% 36%;   /* #0A97BE deep cyan */
+  --surface-recessed:   195 20% 89%;
+  --primary:            194 85% 30%;   /* #087d9d deep cyan — calibrated >=4.5:1 AA */
   --primary-foreground: 0 0% 100%;
   --primary-soft:       194 70% 91%;
   --primary-glow:       191 95% 52%;
-  --ring:               194 85% 36%;
+  --ring:               194 85% 30%;
 
   --accent:             191 95% 48%;   /* #0BC9F8 bright cyan */
   --accent-foreground:  226 93% 6%;
@@ -859,6 +866,7 @@
 
 /* ── Theme: Cosmic Spark  (#0A3383 · #047CDF · #9344F4 · #f2f4fb) ───────────── */
 :root[data-theme="cosmic-spark"] {
+  --surface-recessed:   227 25% 91%;
   --primary:            210 96% 45%;   /* #047CDF vivid blue */
   --primary-foreground: 0 0% 100%;
   --primary-soft:       210 70% 92%;
@@ -902,6 +910,7 @@
 
 /* ── Theme: Titanium & Gold  (#0B0F19 · #334155 · #F59E0B · #f8fafc) ─────────── */
 :root[data-theme="titanium-gold"] {
+  --surface-recessed:   215 20% 92%;
   --primary:            215 25% 27%;   /* #334155 slate */
   --primary-foreground: 0 0% 100%;
   --primary-soft:       215 20% 92%;
@@ -945,11 +954,12 @@
 
 /* ── Theme: Nordic Aurora  (#02141A · #059669 · #10B981 · #f0fdf4) ──────────── */
 :root[data-theme="nordic-aurora"] {
-  --primary:            161 94% 30%;   /* #059669 emerald */
+  --surface-recessed:   138 30% 90%;
+  --primary:            161 94% 25%;   /* #047d57 deep emerald — calibrated >=4.5:1 AA */
   --primary-foreground: 0 0% 100%;
   --primary-soft:       160 60% 92%;
   --primary-glow:       160 84% 45%;
-  --ring:               160 84% 39%;
+  --ring:               161 94% 25%;
 
   --accent:             160 84% 39%;   /* #10B981 luminous mint */
   --accent-foreground:  0   0%  100%;
@@ -988,6 +998,7 @@
 
 /* ── Theme: Obsidian Rose  (#09090B · #E11D48 · #9333EA · #fafafa) ──────────── */
 :root[data-theme="obsidian-rose"] {
+  --surface-recessed:   240 5%  93%;
   --primary:            347 77% 50%;   /* #E11D48 metallic rose */
   --primary-foreground: 0 0% 100%;
   --primary-soft:       347 60% 94%;
@@ -1031,6 +1042,7 @@
 
 /* ── Theme: Cyberpunk Amber  (#050505 · #2563EB · #EAB308 · #ffffff) ────────── */
 :root[data-theme="cyberpunk-amber"] {
+  --surface-recessed:   0   0%  93%;
   --primary:            221 83% 53%;   /* #2563EB laser cobalt */
   --primary-foreground: 0 0% 100%;
   --primary-soft:       221 70% 93%;
@@ -1080,6 +1092,7 @@
    ════════════════════════════════════════════════════════════════════════════ */
 
 :root.dark[data-theme="aerial-autumn"] {
+  --surface-recessed:   206 50% 3.5%;
   --primary:            174 75% 42%;
   --primary-foreground: 206 77% 11%;
   --primary-soft:       174 45% 16%;
@@ -1121,6 +1134,7 @@
 }
 
 :root.dark[data-theme="fire-ocean"] {
+  --surface-recessed:   235 50% 3%;
   --primary:            210 70% 55%;
   --primary-foreground: 237 96% 5%;
   --primary-soft:       210 45% 18%;
@@ -1162,6 +1176,7 @@
 }
 
 :root.dark[data-theme="earth-jade"] {
+  --surface-recessed:   180 40% 3%;
   --primary:            160 60% 42%;
   --primary-foreground: 188 90% 4%;
   --primary-soft:       160 40% 16%;
@@ -1203,6 +1218,7 @@
 }
 
 :root.dark[data-theme="inferno-sky"] {
+  --surface-recessed:   10  15% 3.5%;
   --primary:            213 60% 58%;
   --primary-foreground: 10  14% 7%;
   --primary-soft:       213 40% 18%;
@@ -1244,6 +1260,7 @@
 }
 
 :root.dark[data-theme="midnight-road"] {
+  --surface-recessed:   225 50% 3%;
   --primary:            191 90% 52%;
   --primary-foreground: 226 93% 6%;
   --primary-soft:       191 45% 16%;
@@ -1285,6 +1302,7 @@
 }
 
 :root.dark[data-theme="cosmic-spark"] {
+  --surface-recessed:   225 50% 3.5%;
   --primary:            210 90% 60%;
   --primary-foreground: 224 80% 10%;
   --primary-soft:       210 50% 16%;
@@ -1326,6 +1344,7 @@
 }
 
 :root.dark[data-theme="titanium-gold"] {
+  --surface-recessed:   222 35% 3%;
   --primary:            38  92% 54%;
   --primary-foreground: 222 47% 8%;
   --primary-soft:       38  40% 16%;
@@ -1367,6 +1386,7 @@
 }
 
 :root.dark[data-theme="nordic-aurora"] {
+  --surface-recessed:   198 60% 2.8%;
   --primary:            160 70% 48%;
   --primary-foreground: 198 80% 6%;
   --primary-soft:       160 40% 16%;
@@ -1408,6 +1428,7 @@
 }
 
 :root.dark[data-theme="obsidian-rose"] {
+  --surface-recessed:   240 10% 2.5%;
   --primary:            347 85% 62%;
   --primary-foreground: 240 10% 4%;
   --primary-soft:       347 40% 16%;
@@ -1449,6 +1470,7 @@
 }
 
 :root.dark[data-theme="cyberpunk-amber"] {
+  --surface-recessed:   0   0%  1%;
   --primary:            48  96% 53%;
   --primary-foreground: 0   0%  0%;
   --primary-soft:       48  40% 16%;
@@ -1491,6 +1513,7 @@
 
 /* ── Theme: Outdoor High-Contrast ───────────────────────────────────────────── */
 :root[data-theme="outdoor-contrast"] {
+  --surface-recessed:   0 0% 90%;
   --primary:            201 96% 32%;
   --primary-foreground: 0 0% 100%;
   --primary-soft:       201 50% 90%;
@@ -1521,12 +1544,12 @@
 
   --sidebar-background: 0 0% 0%;
   --sidebar-foreground: 0 0% 100%;
-  --sidebar-primary:    201 96% 45%;
+  --sidebar-primary:    201 96% 32%;
   --sidebar-primary-foreground: 0 0% 100%;
   --sidebar-accent:     0 0% 15%;
   --sidebar-accent-foreground: 0 0% 100%;
   --sidebar-border:     0 0% 25%;
-  --sidebar-ring:       201 96% 45%;
+  --sidebar-ring:       201 96% 32%;
 
   --gradient-stat:      linear-gradient(135deg, hsl(0 0% 5%) 0%, hsl(201 80% 20%) 100%);
   --gradient-accent:    linear-gradient(135deg, hsl(201 96% 32%) 0%, hsl(160 84% 30%) 100%);
@@ -1534,6 +1557,7 @@
 }
 
 :root.dark[data-theme="outdoor-contrast"] {
+  --surface-recessed:   0 0% 0%;
   --primary:            201 96% 50%;
   --primary-foreground: 0 0% 0%;
   --primary-soft:       201 50% 18%;

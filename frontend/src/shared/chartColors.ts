@@ -40,23 +40,26 @@ export const C_FILTER_CARTRIDGE = 'hsl(var(--filter-cartridge))';
 export const C_FILTER_BAG       = 'hsl(var(--filter-bag))';
 
 /**
- * Production Cost (Power + Chemical) theme-independent colors.
- * Kept fixed so lines never collapse into the same color under amber/autumn themes.
+ * Production Cost (Power + Chemical) theme-harmonized colors with safety fallbacks.
  */
-export const C_TOTAL_COST = '#0ea5e9'; // Sky Blue 500 — Prod Cost (Power + Chem)
-export const C_POWER_COST = '#f59e0b'; // Amber 500 — Power Cost
-export const C_CHEM_COST  = '#a855f7'; // Purple 500 — Chemical Cost
+export const C_TOTAL_COST = 'hsl(var(--chart-1, 199 98% 48%))'; // Sky — Prod Cost
+export const C_POWER_COST = 'hsl(var(--warn, 38 92% 50%))';      // Amber — Power Cost
+export const C_CHEM_COST  = 'hsl(var(--chart-4, 258 90% 66%))';  // Violet — Chemical Cost
 
 /**
  * Standardized Instrument Panel tooltip style for Recharts
  * Replaces copy-pasted styles across dashboard and plant telemetry charts.
+ * Enhanced with Stitch glassmorphism and high micro-contrast.
  */
 export const INSTRUMENT_TOOLTIP_STYLE: React.CSSProperties = {
-  background: 'hsl(var(--card))',
+  background: 'hsl(var(--card) / 0.94)',
+  backdropFilter: 'blur(12px)',
+  WebkitBackdropFilter: 'blur(12px)',
   border: '1px solid hsl(var(--border) / 0.8)',
-  borderRadius: 12,
+  boxShadow: '0 8px 32px -4px hsl(var(--foreground) / 0.12), inset 0 1px 0 0 hsl(0 0% 100% / 0.15)',
+  borderRadius: 10,
   fontSize: 11,
-  boxShadow: 'var(--shadow-card)',
+  fontWeight: 500,
   color: 'hsl(var(--foreground))',
   padding: '8px 12px',
 };

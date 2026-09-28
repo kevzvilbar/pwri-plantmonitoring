@@ -112,6 +112,7 @@ const THEME_IDS = [
   'nordic-aurora',
   'obsidian-rose',
   'cyberpunk-amber',
+  'outdoor-contrast',
 ];
 
 const PAIRS = [
@@ -123,9 +124,8 @@ const PAIRS = [
   ['hover-state text on hover-state bg', 'sidebar-accent-foreground', 'sidebar-accent'],
 ];
 
-// Full AA text-contrast bar. See header comment for why this isn't the
-// (stricter, correct) 4.5 yet — three themes currently sit just under it.
-const MIN_RATIO = 3.0;
+// Full AA text-contrast bar (4.5:1). Calibrated across all 11 themes.
+const MIN_RATIO = 4.5;
 const AA_NORMAL = 4.5;
 
 const themes = { 'default': root, ...Object.fromEntries(THEME_IDS.map((id) => [id, extractBlock(id)])) };

@@ -51,21 +51,32 @@ const RouteFallback = () => (
   <AppLoading className="h-[60vh] w-full text-sm text-muted-foreground" />
 );
 
-/** Applies data-theme and .dark to <html> whenever the persisted preferences change. */
+/** Applies data-theme and .dark to <html> with fluid view transitions when supported. */
 function ThemeEffect() {
   const colorTheme = useThemeStore((s) => s.colorTheme);
   const darkMode = useThemeStore((s) => s.darkMode);
+
   useEffect(() => {
-    const root = document.documentElement;
-    if (colorTheme && colorTheme !== 'default') {
-      root.setAttribute('data-theme', colorTheme);
+    const applyTheme = () => {
+      const root = document.documentElement;
+      if (colorTheme && colorTheme !== 'default') {
+        root.setAttribute('data-theme', colorTheme);
+      } else {
+        root.removeAttribute('data-theme');
+      }
+      root.classList.toggle('dark', darkMode);
+    };
+
+    const doc = document as Document & { startViewTransition?: (cb: () => void) => void };
+    if (typeof doc.startViewTransition === 'function') {
+      doc.startViewTransition(() => {
+        applyTheme();
+      });
     } else {
-      root.removeAttribute('data-theme');
+      applyTheme();
     }
-  }, [colorTheme]);
-  useEffect(() => {
-    document.documentElement.classList.toggle('dark', darkMode);
-  }, [darkMode]);
+  }, [colorTheme, darkMode]);
+
   return null;
 }
 

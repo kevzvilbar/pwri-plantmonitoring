@@ -788,10 +788,10 @@ export function getStreamType(link: TopoLink, nodes: TopoNode[]): StreamType {
  */
 export const STREAM_COLORS: Record<StreamType, string> = {
   feed:      'hsl(var(--primary))',
-  permeate:  'hsl(142 70% 45%)',   // green
-  reject:    'hsl(var(--warn))',   // orange
-  chemical:  'hsl(291 64% 52%)',   // magenta — dosing / injection lines
-  power:     'hsl(45 95% 55%)',   // yellow/gold
+  permeate:  'hsl(var(--accent))',           // treated / permeate product
+  reject:    'hsl(var(--warn))',             // concentrate / reject line
+  chemical:  'hsl(var(--elevated, 258 90% 66%))', // dosing / chemical injection
+  power:     'hsl(var(--metric-gridpv, 38 92% 50%))', // electrical power feed
   general:   'hsl(var(--muted-foreground))',
 };
 
