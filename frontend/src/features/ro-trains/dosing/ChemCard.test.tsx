@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { ChemCard } from './ChemCard';
 import { buildQuickUnitOptions } from './quickUnits';
+import type { ChemicalCatalogItem } from './useChemCatalog';
 
 const icon = <span>icon</span>;
 
@@ -67,4 +68,47 @@ describe('ChemCard', () => {
     fireEvent.change(screen.getByRole('spinbutton'), { target: { value: '4' } });
     expect(onChange).toHaveBeenCalledWith('4');
   });
+
+  // Radix Select needs a few browser APIs that jsdom lacks.
+  const stubRadix = () => {
+    const proto = window.HTMLElement.prototype as unknown as Record<string, unknown>;
+    proto.hasPointerCapture = proto.hasPointerCapture ?? (() => false);
+    proto.setPointerCapture = proto.setPointerCapture ?? (() => {});
+    proto.releasePointerCapture = proto.releasePointerCapture ?? (() => {});
+    proto.scrollIntoView = proto.scrollIntoView ?? (() => {});
+  };
+
+  const liquidChlorine = {
+    id: 'cl-l', name: 'Chlorine - Liquid', price_key: 'Chlorine - Liquid (L)', legacy_name: 'Chlorine',
+    family: 'chlorine', category: 'process', form: 'liquid', base_unit: 'L', strength_pct: 12,
+    strength_basis: 'w/v', density_kg_per_l: 1.2, reference_basis: 'Cl2', methods: null,
+    sample_volume_ml: null, qty_per_test: null, drops_per_test: null, ml_per_drop: null,
+    process_stage: null, sort_order: 10, is_active: true,
+  } as ChemicalCatalogItem;
+
+  it('splits the list into By weight and By volume when litres are offered, and reports the pick', () => {
+    stubRadix();
+    const onUnitChange = vi.fn();
+    const options = buildQuickUnitOptions('chlorine_kg', [liquidChlorine], [], null);
+    render(
+      <ChemCard
+        name="Chlorine"
+        icon={icon}
+        value=""
+        onChange={() => {}}
+        unit="kg"
+        unitOptions={options}
+        unitId="kg"
+        onUnitChange={onUnitChange}
+      />,
+    );
+    const trigger = screen.getByRole('combobox', { name: 'Chlorine unit' });
+    trigger.focus();
+    fireEvent.keyDown(trigger, { key: 'Enter' });
+    expect(screen.getByText('By weight')).toBeTruthy();
+    expect(screen.getByText('By volume')).toBeTruthy();
+    fireEvent.click(screen.getByRole('option', { name: 'Litres (L)' }));
+    expect(onUnitChange).toHaveBeenCalledWith('x:Litres (L)');
+  });
 });
+

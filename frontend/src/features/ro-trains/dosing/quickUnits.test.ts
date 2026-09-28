@@ -172,3 +172,111 @@ describe('findQuickUnit', () => {
     expect(findQuickUnit(opts, 'lb').factorToBase).toBeCloseTo(0.45359237, 8);
   });
 });
+
+// ── Litres on a kg column, kg on the litre column (through the catalog density) ──
+describe('cross-dimension units (density from the catalog liquid product)', () => {
+  const chlorineLiquid = product({
+    id: 'cl-l', name: 'Chlorine - Liquid', family: 'chlorine', base_unit: 'L',
+    density_kg_per_l: 1.2, sort_order: 10, strength_pct: 12, strength_basis: 'w/v',
+  });
+  const chlorineGranules = product({
+    id: 'cl-g', name: 'Chlorine - Granules', family: 'chlorine', base_unit: 'kg',
+    density_kg_per_l: null, sort_order: 20,
+  });
+  const antiScalantLiquid = product({
+    id: 'as-l', name: 'Anti Scalant - Liquid', family: 'anti_scalant', base_unit: 'L',
+    density_kg_per_l: 1.15, sort_order: 60,
+  });
+
+  it('offers litres, mL and litre containers on the chlorine column, converted to kg of product', () => {
+    const opts = buildQuickUnitOptions('chlorine_kg', [chlorineLiquid, chlorineGranules], [], 'plant-1');
+    const byId = Object.fromEntries(opts.map((o) => [o.id, o]));
+
+    expect(byId['x:Litres (L)'].factorToBase).toBeCloseTo(1.2, 8);
+    expect(byId['x:Millilitres (mL)'].factorToBase).toBeCloseTo(0.0012, 8);
+    expect(byId['x:Carboy (20 L)'].factorToBase).toBeCloseTo(24, 8);
+    expect(byId['x:Drum (200 L)'].factorToBase).toBeCloseTo(240, 8);
+    expect(byId['x:Litres (L)'].group).toBe('Volume');
+    expect(byId['x:Litres (L)'].note).toBe('1.2 kg/L, Chlorine - Liquid');
+    // The column's own units are untouched and still come first.
+    expect(opts[0].id).toBe('kg');
+    expect(byId['kg'].group).toBe('Weight');
+    // No US gallons on a converted column (kept to the metric units plants use).
+    expect(byId['x:US gallons (gal)']).toBeUndefined();
+  });
+
+  it('20 L of 1.20 kg/L liquid chlorine is 24 kg; 500 mL is 0.6 kg', () => {
+    const opts = buildQuickUnitOptions('chlorine_kg', [chlorineLiquid], [], null);
+    const litres = findQuickUnit(opts, 'x:Litres (L)');
+    const ml = findQuickUnit(opts, 'x:Millilitres (mL)');
+    expect(quickToBase('20', litres.factorToBase)).toBe(24);
+    expect(quickToBase('500', ml.factorToBase)).toBe(0.6);
+  });
+
+  it('offers kg, g and lb on the anti scalant (litre) column, converted to litres', () => {
+    const opts = buildQuickUnitOptions('anti_scalant_l', [antiScalantLiquid], [], null);
+    const kg = findQuickUnit(opts, 'x:Kilograms (kg)');
+    expect(kg.group).toBe('Weight');
+    expect(kg.note).toBe('1.15 kg/L, Anti Scalant - Liquid');
+    expect(quickToBase('23', kg.factorToBase)).toBe(20); // 23 kg / 1.15 = 20 L
+    expect(quickToBase('1000', findQuickUnit(opts, 'x:Grams (g)').factorToBase)).toBeCloseTo(0.8696, 4);
+    expect(opts[0].id).toBe('L');
+  });
+
+  it('adds catalog container units of the liquid product, converted through the density', () => {
+    const opts = buildQuickUnitOptions(
+      'chlorine_kg',
+      [chlorineLiquid],
+      [unit({ id: 'j', catalog_id: 'cl-l', unit_label: 'Jerrycan', factor_to_base: 30 })],
+      null,
+    );
+    const jerry = opts.find((o) => o.id === 'x:Jerrycan (30 L)');
+    expect(jerry?.factorToBase).toBeCloseTo(36, 8);
+  });
+
+  it('offers no cross units when there is no liquid product or no density', () => {
+    const idsOf = (cat: ChemicalCatalogItem[]) =>
+      buildQuickUnitOptions('chlorine_kg', cat, [], null).map((o) => o.id);
+    // no catalog at all, granules only, liquid without a density, liquid inactive
+    expect(idsOf([])).not.toContain('x:Litres (L)');
+    expect(idsOf([chlorineGranules])).not.toContain('x:Litres (L)');
+    expect(idsOf([{ ...chlorineLiquid, density_kg_per_l: null }])).not.toContain('x:Litres (L)');
+    expect(idsOf([{ ...chlorineLiquid, density_kg_per_l: 0 }])).not.toContain('x:Litres (L)');
+    expect(idsOf([{ ...chlorineLiquid, is_active: false }])).not.toContain('x:Litres (L)');
+    expect(
+      buildQuickUnitOptions('anti_scalant_l', [{ ...antiScalantLiquid, density_kg_per_l: null }], [], null).map((o) => o.id),
+    ).not.toContain('x:Kilograms (kg)');
+  });
+
+  it('uses the lowest sort_order liquid product when a family has more than one', () => {
+    const second = { ...chlorineLiquid, id: 'cl-l2', name: 'Chlorine - Liquid 15%', density_kg_per_l: 1.25, sort_order: 15 };
+    const opts = buildQuickUnitOptions('chlorine_kg', [second, chlorineLiquid], [], null);
+    expect(findQuickUnit(opts, 'x:Litres (L)').note).toBe('1.2 kg/L, Chlorine - Liquid');
+  });
+
+  it('never mixes densities across families', () => {
+    const opts = buildQuickUnitOptions('smbs_kg', [chlorineLiquid, antiScalantLiquid], [], null);
+    expect(opts.some((o) => o.id.startsWith('x:'))).toBe(false);
+  });
+
+  it('a density of exactly 1 still counts as a converted unit (the hint must not hide it)', () => {
+    const water = product({ id: 'w', name: 'Chlorine - Liquid', family: 'chlorine', base_unit: 'L', density_kg_per_l: 1 });
+    const opts = buildQuickUnitOptions('chlorine_kg', [water], [], null);
+    const l = findQuickUnit(opts, 'x:Litres (L)');
+    expect(l.factorToBase).toBe(1);
+    expect(l.id).not.toBe(opts[0].id);
+  });
+
+  it('every converted option has a positive factor, a group and a note', () => {
+    (['chlorine_kg', 'anti_scalant_l'] as const).forEach((k) => {
+      buildQuickUnitOptions(k, [chlorineLiquid, antiScalantLiquid], [], null)
+        .filter((o) => o.id.startsWith('x:'))
+        .forEach((o) => {
+          expect(o.factorToBase).toBeGreaterThan(0);
+          expect(o.group).toBeDefined();
+          expect(o.note).toBeTruthy();
+        });
+    });
+  });
+});
+

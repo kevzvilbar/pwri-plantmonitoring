@@ -8,9 +8,18 @@
  * before. The operator may TYPE the amount in another unit (g, lb, a bag, a
  * drum, mL, gallons ...). This module turns what was typed into the base unit.
  *
- * Only same-dimension conversions live here (mass to kg, volume to L). Mass to
- * volume needs a density and belongs to the Catalog & Containers view, so it is
- * deliberately not offered in Quick Mode.
+ * Two kinds of unit are offered:
+ *  - Same dimension as the column (kg columns: g, lb, bags, drums; the L column:
+ *    mL, gallons, carboys, drums). These are exact.
+ *  - The other dimension (litres for a kg column, kg for the L column). These
+ *    need a density, taken from the catalog's liquid product for that chemical
+ *    (for example Chlorine - Liquid, 1.20 kg/L). If the catalog has no density
+ *    for the chemical, the cross options are simply not offered; nothing is
+ *    guessed.
+ *
+ * A converted amount is the kg (or L) of PRODUCT, the same meaning the Quick
+ * Mode columns have always had. It is not kg as Cl2 or another active basis;
+ * that lives in Catalog & Containers.
  */
 
 import type { CatalogUnitItem, ChemicalCatalogItem } from './useChemCatalog';
@@ -28,6 +37,10 @@ export interface QuickUnitOption {
   shortLabel: string;
   /** How many base units (kg or L) one of this unit is. */
   factorToBase: number;
+  /** Dropdown section: the column's own dimension first, the converted one second. */
+  group?: 'Weight' | 'Volume';
+  /** Set on converted (cross-dimension) units: which density was used. */
+  note?: string;
 }
 
 /** Which catalog family and base unit each Quick Mode field belongs to. */
@@ -79,11 +92,33 @@ function fmtFactor(n: number): string {
   return Number(n.toFixed(4)).toLocaleString('en-US', { maximumFractionDigits: 4 });
 }
 
+/** Catalog unit rows for a set of products: global first, plant rows override, smallest first. */
+function collectCatalogUnits(
+  productIds: Set<string>,
+  units: CatalogUnitItem[] | undefined,
+  plantId: string | null | undefined,
+): CatalogUnitItem[] {
+  const byProductAndLabel = new Map<string, CatalogUnitItem>();
+  const relevant = (units ?? []).filter(
+    (u) => productIds.has(u.catalog_id) && (u.plant_id === null || u.plant_id === plantId),
+  );
+  const put = (u: CatalogUnitItem) => byProductAndLabel.set(`${u.catalog_id}|${u.unit_label.toLowerCase()}`, u);
+  relevant.filter((u) => u.plant_id === null).forEach(put);
+  relevant.filter((u) => u.plant_id !== null).forEach(put);
+  return Array.from(byProductAndLabel.values()).sort((a, b) => a.factor_to_base - b.factor_to_base);
+}
+
+/** True when a catalog row just repeats the base unit ("kg", "L") and would be a duplicate entry. */
+function repeatsBaseUnit(u: CatalogUnitItem): boolean {
+  return u.factor_to_base === 1 && ['kg', 'l', 'kilogram', 'litre', 'liter'].includes(u.unit_label.toLowerCase());
+}
+
 /**
- * Builds the unit list for one Quick Mode field: plain units first, then the
- * standard containers, then any container units the plant's catalog defines for
- * products in the same family with the same base unit. Plant-specific catalog
- * rows override global rows that share the same product and label.
+ * Builds the unit list for one Quick Mode field: the column's own units first
+ * (plain units, standard containers, then any container units the plant's
+ * catalog defines for the same family and base unit), then, where the catalog
+ * has a density, the other dimension. Plant-specific catalog rows override
+ * global rows that share the same product and label.
  */
 export function buildQuickUnitOptions(
   key: QuickChemKey,
@@ -92,46 +127,72 @@ export function buildQuickUnitOptions(
   plantId: string | null | undefined,
 ): QuickUnitOption[] {
   const { family, baseUnit } = QUICK_CHEMICALS[key];
-  const options: QuickUnitOption[] = [...(baseUnit === 'kg' ? MASS_UNITS : VOLUME_UNITS)];
+  const ownGroup = baseUnit === 'kg' ? 'Weight' : 'Volume';
+  const options: QuickUnitOption[] = (baseUnit === 'kg' ? MASS_UNITS : VOLUME_UNITS).map((o) => ({
+    ...o,
+    group: ownGroup,
+  }));
   const seen = new Set<string>();
 
-  const push = (label: string, shortLabel: string, factor: number) => {
+  const push = (
+    idPrefix: string,
+    group: 'Weight' | 'Volume',
+    label: string,
+    shortLabel: string,
+    factor: number,
+    note?: string,
+  ) => {
     if (!Number.isFinite(factor) || factor <= 0) return;
-    const dedupe = `${label.toLowerCase()}|${factor}`;
+    const dedupe = `${idPrefix}|${label.toLowerCase()}|${factor}`;
     if (seen.has(dedupe)) return;
     seen.add(dedupe);
-    options.push({ id: `c:${label}`, label, shortLabel, factorToBase: factor });
+    options.push({ id: `${idPrefix}${label}`, label, shortLabel, factorToBase: factor, group, ...(note ? { note } : {}) });
   };
 
+  // ── Same dimension as the column ─────────────────────────────────────────
   CONTAINER_PRESETS[baseUnit]
     .filter((p) => !p.family || p.family === family)
-    .forEach((p) => push(p.label, p.label.replace(/\s*\(.*\)$/, ''), p.factor));
+    .forEach((p) => push('c:', ownGroup, p.label, p.label.replace(/\s*\(.*\)$/, ''), p.factor));
 
-  const productIds = new Set(
-    (catalog ?? [])
-      .filter((p) => p.family === family && p.base_unit === baseUnit && p.is_active)
-      .map((p) => p.id),
-  );
+  const activeOfFamily = (catalog ?? []).filter((p) => p.family === family && p.is_active);
 
-  // Global rows first, then plant rows replace them (same product + label).
-  const byProductAndLabel = new Map<string, CatalogUnitItem>();
-  const relevant = (units ?? []).filter(
-    (u) => productIds.has(u.catalog_id) && (u.plant_id === null || u.plant_id === plantId),
-  );
-  relevant
-    .filter((u) => u.plant_id === null)
-    .forEach((u) => byProductAndLabel.set(`${u.catalog_id}|${u.unit_label.toLowerCase()}`, u));
-  relevant
-    .filter((u) => u.plant_id !== null)
-    .forEach((u) => byProductAndLabel.set(`${u.catalog_id}|${u.unit_label.toLowerCase()}`, u));
+  const sameIds = new Set(activeOfFamily.filter((p) => p.base_unit === baseUnit).map((p) => p.id));
+  collectCatalogUnits(sameIds, units, plantId)
+    .filter((u) => !repeatsBaseUnit(u))
+    .forEach((u) =>
+      push('c:', ownGroup, `${u.unit_label} (${fmtFactor(u.factor_to_base)} ${baseUnit})`, u.unit_label, u.factor_to_base),
+    );
 
-  Array.from(byProductAndLabel.values())
-    .sort((a, b) => a.factor_to_base - b.factor_to_base)
-    .forEach((u) => {
-      // The base unit itself (factor 1, label kg / L) is already in the list.
-      if (u.factor_to_base === 1 && ['kg', 'l', 'kilogram', 'litre', 'liter'].includes(u.unit_label.toLowerCase())) return;
-      push(`${u.unit_label} (${fmtFactor(u.factor_to_base)} ${baseUnit})`, u.unit_label, u.factor_to_base);
-    });
+  // ── The other dimension, through the catalog density ─────────────────────
+  // The density comes from the family's liquid product: the lowest sort_order
+  // active product in litres that has a density. None found means no cross
+  // options (for a kg column: no litres; for the L column: no kg).
+  const liquid = activeOfFamily
+    .filter((p) => p.base_unit === 'L' && (p.density_kg_per_l ?? 0) > 0)
+    .sort((a, b) => a.sort_order - b.sort_order)[0];
+
+  if (liquid && liquid.density_kg_per_l) {
+    const density = liquid.density_kg_per_l; // kg per litre of product
+    const note = `${fmtFactor(density)} kg/L, ${liquid.name}`;
+
+    if (baseUnit === 'kg') {
+      // Litre-type units on a kg column: kg = litres x density.
+      VOLUME_UNITS.filter((v) => v.id !== 'gal').forEach((v) =>
+        push('x:', 'Volume', v.label, v.shortLabel, v.factorToBase * density, note),
+      );
+      CONTAINER_PRESETS.L.forEach((p) =>
+        push('x:', 'Volume', p.label, p.label.replace(/\s*\(.*\)$/, ''), p.factor * density, note),
+      );
+      collectCatalogUnits(new Set([liquid.id]), units, plantId)
+        .filter((u) => !repeatsBaseUnit(u))
+        .forEach((u) =>
+          push('x:', 'Volume', `${u.unit_label} (${fmtFactor(u.factor_to_base)} L)`, u.unit_label, u.factor_to_base * density, note),
+        );
+    } else {
+      // Weight units on the litre column: litres = kg / density.
+      MASS_UNITS.forEach((m) => push('x:', 'Weight', m.label, m.shortLabel, m.factorToBase / density, note));
+    }
+  }
 
   return options;
 }

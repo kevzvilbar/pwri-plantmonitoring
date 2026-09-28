@@ -124,10 +124,18 @@ export function ChemDosingForm() {
   }, [quickV, quickUnits, quickUnitOptions]);
 
   // Small "= 50 kg" hint under a card, shown only when a non-base unit is picked.
+  // Converted units (litres on a kg column, kg on the litre column) also say
+  // which density was used. On a kg column the result is kg of PRODUCT, costed
+  // at the per-kg list price like every other Quick Mode amount.
   const quickHint = (k: QuickChemKey, base: 'kg' | 'L'): string | undefined => {
-    const opt = findQuickUnit(quickUnitOptions[k], quickUnits[k]);
-    if (opt.factorToBase === 1 || !(quickBase[k] > 0)) return undefined;
-    return `= ${fmtNum(quickBase[k], 3)} ${base} will be saved`;
+    const opts = quickUnitOptions[k];
+    const opt = findQuickUnit(opts, quickUnits[k]);
+    if (opt.id === opts[0].id || !(quickBase[k] > 0)) return undefined;
+    const saved = `= ${fmtNum(quickBase[k], 3)} ${base} will be saved`;
+    if (!opt.note) return saved;
+    return base === 'kg'
+      ? `${saved} (${opt.note}). Costed at your per-kg price.`
+      : `${saved} (${opt.note}).`;
   };
 
   // ── Residual Tests State ───────────────────────────────────────────────────

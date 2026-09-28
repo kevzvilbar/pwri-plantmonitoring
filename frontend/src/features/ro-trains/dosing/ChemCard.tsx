@@ -1,6 +1,8 @@
 import React from 'react';
 import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+  Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import type { QuickUnitOption } from './quickUnits';
 
@@ -25,6 +27,15 @@ export function ChemCard({
   const hasVal = value !== '' && +value !== 0;
   const pickable = !!unitOptions && unitOptions.length > 1 && !!onUnitChange;
   const selected = pickable ? (unitOptions!.find((o) => o.id === unitId) ?? unitOptions![0]) : undefined;
+  // Sections (Weight / Volume) only when the list really has more than one.
+  const groupNames = pickable
+    ? Array.from(new Set(unitOptions!.map((o) => o.group).filter((g): g is NonNullable<typeof g> => !!g)))
+    : [];
+  const renderUnit = (o: QuickUnitOption) => (
+    <SelectItem key={o.id} value={o.id} className="text-xs">
+      {o.label}
+    </SelectItem>
+  );
   const borders: Record<string, string> = {
     teal:    'border-primary bg-primary-soft/40',
     amber:   'border-warn bg-warn-soft/40',
@@ -55,11 +66,21 @@ export function ChemCard({
               </SelectValue>
             </SelectTrigger>
             <SelectContent>
-              {unitOptions!.map((o) => (
-                <SelectItem key={o.id} value={o.id} className="text-xs">
-                  {o.label}
-                </SelectItem>
-              ))}
+              {groupNames.length > 1 ? (
+                <>
+                  {unitOptions!.filter((o) => !o.group).map(renderUnit)}
+                  {groupNames.map((g) => (
+                    <SelectGroup key={g}>
+                      <SelectLabel className="py-1 pl-2 text-3xs font-semibold uppercase tracking-wider text-muted-foreground">
+                        {g === 'Weight' ? 'By weight' : 'By volume'}
+                      </SelectLabel>
+                      {unitOptions!.filter((o) => o.group === g).map(renderUnit)}
+                    </SelectGroup>
+                  ))}
+                </>
+              ) : (
+                unitOptions!.map(renderUnit)
+              )}
             </SelectContent>
           </Select>
         </div>
