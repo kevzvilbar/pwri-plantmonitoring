@@ -69,7 +69,7 @@ export function useFleetStatus(plantIds: string[]): FleetSnapshot {
     enabled: stableIds.length > 0,
     // 5-min cadence matches the old strip; hero's 60s poll was pure egress.
     staleTime: 5 * 60_000,
-    refetchInterval: 5 * 60_000,
+    refetchInterval: false,
   });
 
   return useMemo(() => {

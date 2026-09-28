@@ -50,7 +50,7 @@ export function usePendingCount() {
     queryKey: queryKeys.corrections.pendingCount(),
     queryFn: fetchPendingCount,
     staleTime: 60_000,
-    refetchInterval: 5 * 60_000,
+    refetchInterval: false,
   });
 }
 
@@ -60,7 +60,7 @@ export function useCorrectionRequestsCount() {
     queryKey: queryKeys.corrections.requestsCount(),
     queryFn: fetchCorrectionRequestsCount,
     staleTime: 60_000,
-    refetchInterval: 5 * 60_000,
+    refetchInterval: false,
   });
 }
 
@@ -69,7 +69,7 @@ export function useInboxCount() {
     queryKey: queryKeys.corrections.inboxCount(),
     queryFn: fetchInboxCount,
     staleTime: 60_000,
-    refetchInterval: 5 * 60_000,
+    refetchInterval: false,
   });
 }
 

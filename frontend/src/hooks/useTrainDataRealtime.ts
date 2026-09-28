@@ -202,7 +202,7 @@ export function useTrainDataRealtime(plantIdOverride?: string | null) {
       const keysToInvalidate = Array.from(pendingKeysRef.current);
       pendingKeysRef.current.clear();
       for (const key of keysToInvalidate) {
-        qc.invalidateQueries({ queryKey: [key] });
+        qc.invalidateQueries({ queryKey: [key], refetchType: 'active' });
       }
     };
 

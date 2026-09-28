@@ -211,7 +211,7 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const interval = setInterval(() => {
       if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
-      queryClient.invalidateQueries({ queryKey: ['staff'] });
+      queryClient.invalidateQueries({ queryKey: ['staff'], refetchType: 'active' });
     }, 600_000);
     return () => clearInterval(interval);
   }, [queryClient]);

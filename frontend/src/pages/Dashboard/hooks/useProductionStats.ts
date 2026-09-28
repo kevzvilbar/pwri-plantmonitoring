@@ -76,7 +76,7 @@ export function useProductionStats({
     },
     enabled: plantIds.length > 0,
     staleTime: 5 * 60_000,
-    refetchInterval: 5 * 60_000,
+    refetchInterval: false,
   });
 
   // EGRESS OPTIMIZATION: Only fire heavy client-side reading queries if the server-side RPC is unavailable
@@ -180,7 +180,7 @@ export function useProductionStats({
     },
     enabled: needsClientFallback && locatorIds.length > 0,
     staleTime: 5 * 60_000,
-    refetchInterval: 5 * 60_000,
+    refetchInterval: false,
   });
 
   const { data: todayWells = [] } = useQuery({
@@ -209,7 +209,7 @@ export function useProductionStats({
     },
     enabled: needsClientFallback && wellIds.length > 0,
     staleTime: 5 * 60_000,
-    refetchInterval: 5 * 60_000,
+    refetchInterval: false,
   });
 
   const { data: todayProductMeters = [] } = useQuery({
@@ -236,7 +236,7 @@ export function useProductionStats({
     },
     enabled: needsClientFallback && plantIds.length > 0,
     staleTime: 5 * 60_000,
-    refetchInterval: 5 * 60_000,
+    refetchInterval: false,
   });
 
   const { data: plantMeterConfigs = [] } = useQuery({
@@ -319,7 +319,7 @@ export function useProductionStats({
     },
     enabled: needsClientFallback && permeateTrainIds.length > 0,
     staleTime: 5 * 60_000,
-    refetchInterval: 5 * 60_000,
+    refetchInterval: false,
   });
 
   const { data: yRoPermeate = [] } = useQuery({
@@ -431,7 +431,7 @@ export function useProductionStats({
     },
     enabled: needsClientFallback && !productMetersHaveData && qualityTrainIds.length > 0,
     staleTime: 5 * 60_000,
-    refetchInterval: 5 * 60_000,
+    refetchInterval: false,
   });
 
   const { data: blendingTodayRows = [] } = useQuery({
@@ -449,7 +449,7 @@ export function useProductionStats({
     },
     enabled: needsClientFallback && plantIds.length > 0,
     staleTime: 5 * 60_000,
-    refetchInterval: 5 * 60_000,
+    refetchInterval: false,
   });
 
   // ── Aggregations (Server-first with client fallback) ─────────────────────

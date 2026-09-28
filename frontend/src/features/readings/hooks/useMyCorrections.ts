@@ -18,6 +18,6 @@ export function useMyCorrections() {
     queryFn: () => fetchMyCorrectionRequests(userId),
     enabled: Boolean(userId),
     staleTime: 60_000,
-    refetchInterval: 5 * 60_000,
+    refetchInterval: false,
   });
 }

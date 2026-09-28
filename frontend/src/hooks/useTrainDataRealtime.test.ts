@@ -86,7 +86,7 @@ describe('useTrainDataRealtime', () => {
     const expectedKeys = TABLE_INVALIDATION_KEYS['ro_train_readings'];
     expect(mockInvalidateQueries).toHaveBeenCalledTimes(expectedKeys.length);
     for (const key of expectedKeys) {
-      expect(mockInvalidateQueries).toHaveBeenCalledWith({ queryKey: [key] });
+      expect(mockInvalidateQueries).toHaveBeenCalledWith({ queryKey: [key], refetchType: 'active' });
     }
   });
 

@@ -37,7 +37,13 @@ export function UsersPanel() {
 
   const { data: staff } = useQuery({
     queryKey: ['admin-users'],
-    queryFn: async () => (await supabase.from('user_profiles').select('*').order('last_name')).data ?? [],
+    queryFn: async () =>
+      (
+        await supabase
+          .from('user_profiles')
+          .select('id, first_name, last_name, middle_name, suffix, username, designation, plant_assignments, status, updated_at, last_seen_at, immediate_head_id, email, confirmed, profile_complete, created_at')
+          .order('last_name')
+      ).data ?? [],
   });
   const { data: roles } = useQuery({
     queryKey: ['admin-user-roles'],

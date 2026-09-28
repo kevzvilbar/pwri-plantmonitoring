@@ -328,7 +328,7 @@ export function useTrainAutoOffline(plantIds: string[]) {
     },
     enabled: plantIds.length > 0,
     staleTime: 5 * 60_000,
-    refetchInterval: 5 * 60_000,
+    refetchInterval: false,
   });
 
   // Auto-mark stale trains Offline (operator must confirm to bring back Running)
