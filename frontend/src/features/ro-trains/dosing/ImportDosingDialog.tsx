@@ -3,6 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { usePlants } from '@/hooks/usePlants';
 import { CsvImportDialog } from '@/components/import';
 import { validateDosingRow } from './validateDosingRow';
+import { computeDosingLogCost } from '@/features/ro-trains';
 
 const DOSING_CSV_SCHEMA =
   'plant_name*, log_datetime (YYYY-MM-DDTHH:mm), chlorine_kg, smbs_kg, anti_scalant_l, ' +

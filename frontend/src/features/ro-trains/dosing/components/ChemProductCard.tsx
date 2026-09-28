@@ -601,7 +601,7 @@ export function ChemProductCard({
                       (≈ {fmtNum(item.activeKg, 2)} kg active)
                     </span>
                   )}
-                  {item.lineCost !== null && item.lineCost > 0 && (
+                  {item.lineCost != null && item.lineCost > 0 && (
                     <span className="ml-1.5 text-emerald-600 dark:text-emerald-400 font-semibold">
                       · ₱{fmtNum(item.lineCost, 2)}
                     </span>

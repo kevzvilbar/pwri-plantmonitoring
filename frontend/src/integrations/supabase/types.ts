@@ -1227,6 +1227,8 @@ export type Database = {
           chemical_name: string
           created_at: string
           effective_date: string
+          entered_price: number | null
+          entered_unit: string | null
           id: string
           unit_price: number
           updated_by: string | null
@@ -1235,6 +1237,8 @@ export type Database = {
           chemical_name: string
           created_at?: string
           effective_date: string
+          entered_price?: number | null
+          entered_unit?: string | null
           id?: string
           unit_price: number
           updated_by?: string | null
@@ -1243,6 +1247,8 @@ export type Database = {
           chemical_name?: string
           created_at?: string
           effective_date?: string
+          entered_price?: number | null
+          entered_unit?: string | null
           id?: string
           unit_price?: number
           updated_by?: string | null
