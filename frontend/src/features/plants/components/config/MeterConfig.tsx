@@ -334,7 +334,7 @@ export function PlantMeterConfigCard({ plant }: { plant: any }) {
                 </ConfigSectionTitle>
               </AccordionTrigger>
               <AccordionContent className="space-y-5">
-                <ChemicalsSection cfg={cfg} update={update} canEdit={canEdit} />
+                <ChemicalsSection cfg={cfg} update={update} canEdit={canEdit} plantId={plant.id} />
                 <CIPChemicalsSection cfg={cfg} update={update} canEdit={canEdit} />
               </AccordionContent>
             </AccordionItem>

@@ -5,11 +5,11 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { DateTimePicker } from '@/components/ui/date-picker';
 import { CorrectionReasonField } from '@/components/CorrectionReasonField';
-import { Loader2, Pencil, Trash2 } from 'lucide-react';
+import { Loader2, Pencil, Trash2, ChevronDown, ChevronUp, Layers, FlaskConical } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { fmtNum } from '@/lib/calculations';
-import { DOSING_KEYS } from '@/features/ro-trains/constants';
+import { DOSING_KEYS, computeDosingLogCost } from '@/features/ro-trains';
 import { canEditEntry } from '@/features/ro-trains/helpers';
 import { useDosingHistoryEdit } from './useDosingHistoryEdit';
 import { useDosingHistoryDelete } from './useDosingHistoryDelete';
@@ -32,14 +32,19 @@ interface DosingHistoryLogRowProps {
 }
 
 export function DosingHistoryLogRow({ row, prices, isManager, activeOperatorId, plantName }: DosingHistoryLogRowProps) {
+  const [expanded, setExpanded] = useState(false);
   const edit = useDosingHistoryEdit(prices);
   const del  = useDosingHistoryDelete();
 
-  const isEditing      = edit.editId === row.id;
+  const isEditing       = edit.editId === row.id;
   const isPendingDelete = del.pendingDeleteId === row.id;
   const { cost: computedRowCost, unpriced } = useMemo(() => computeDosingLogCost(row, prices), [row, prices]);
   const rowCost = row.calculated_cost != null && +row.calculated_cost > 0 ? +row.calculated_cost : computedRowCost;
   const canEdit = canEditEntry(row, isManager, activeOperatorId);
+
+  const childItems: any[] = row.chemical_dosing_items ?? [];
+  const residualSamples: any[] = row.chemical_residual_samples ?? [];
+  const hasDetails = childItems.length > 0 || residualSamples.length > 0;
 
   return (
     <Card key={row.id} className={cn(
@@ -76,6 +81,17 @@ export function DosingHistoryLogRow({ row, prices, isManager, activeOperatorId, 
                 ₱ {fmtNum(rowCost, 2)}
               </span>
             </>
+          )}
+
+          {hasDetails && !isEditing && (
+            <button
+              onClick={() => setExpanded(!expanded)}
+              className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+              title={expanded ? 'Hide details' : 'Show details'}
+              aria-label={expanded ? 'Hide details' : 'Show details'}
+            >
+              {expanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+            </button>
           )}
 
           {canEdit && !isEditing && !isPendingDelete && (
@@ -194,6 +210,66 @@ export function DosingHistoryLogRow({ row, prices, isManager, activeOperatorId, 
           )}
           {DOSING_KEYS.every(({ key }) => !+row[key]) && (
             <span className="text-xs text-muted-foreground italic">No chemicals logged</span>
+          )}
+        </div>
+      )}
+
+      {/* Expanded Breakdown for Granular Child Items & Residual Samples */}
+      {expanded && hasDetails && !isEditing && (
+        <div className="pt-2 border-t border-border/40 space-y-2.5 animate-fade-in text-2xs">
+          {childItems.length > 0 && (
+            <div className="space-y-1">
+              <div className="flex items-center gap-1 font-semibold text-muted-foreground uppercase tracking-wider text-3xs">
+                <Layers className="h-3 w-3" /> Itemized Dosing & Packages
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                {childItems.map((item) => (
+                  <div key={item.id} className="p-1.5 rounded bg-muted/40 border border-border/30 flex justify-between items-center">
+                    <div>
+                      <span className="font-medium text-foreground">{item.chemical_name}</span>
+                      {item.entry_unit && item.entry_unit !== item.unit && (
+                        <span className="text-3xs text-muted-foreground ml-1">
+                          ({item.entry_qty} × {item.entry_unit})
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-right font-mono">
+                      <span className="font-semibold">{fmtNum(item.qty, 2)} {item.unit}</span>
+                      {item.line_cost != null && item.line_cost > 0 && (
+                        <span className="text-emerald-600 dark:text-emerald-400 ml-1.5">
+                          ₱{fmtNum(item.line_cost, 2)}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {residualSamples.length > 0 && (
+            <div className="space-y-1">
+              <div className="flex items-center gap-1 font-semibold text-muted-foreground uppercase tracking-wider text-3xs">
+                <FlaskConical className="h-3 w-3" /> Residual Samples
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                {residualSamples.map((s, idx) => (
+                  <div key={s.id || idx} className="p-1.5 rounded bg-muted/40 border border-border/30 flex justify-between items-center">
+                    <div>
+                      <span className="font-medium text-foreground">
+                        #{s.sample_index || idx + 1}: {s.sampling_point || s.point_role || 'Sample'}
+                      </span>
+                      <span className="text-3xs text-muted-foreground ml-1">
+                        ({s.method || 'test'})
+                      </span>
+                    </div>
+                    <div className="font-mono font-semibold">
+                      {s.residual_ppm != null ? `${fmtNum(s.residual_ppm, 2)} ppm` : '—'}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
           )}
         </div>
       )}
