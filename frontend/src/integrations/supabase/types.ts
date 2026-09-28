@@ -741,13 +741,129 @@ export type Database = {
           },
         ]
       }
+      chemical_catalog: {
+        Row: {
+          id: string
+          name: string
+          price_key: string
+          legacy_name: string | null
+          family: string
+          category: 'process' | 'test_consumable'
+          form: string | null
+          base_unit: 'kg' | 'L' | 'pcs' | 'mL'
+          strength_pct: number | null
+          strength_basis: 'as_product' | 'w/w' | 'w/v' | null
+          density_kg_per_l: number | null
+          reference_basis: string | null
+          methods: string[] | null
+          sample_volume_ml: number | null
+          qty_per_test: number | null
+          drops_per_test: number | null
+          ml_per_drop: number | null
+          process_stage: string | null
+          sort_order: number
+          is_active: boolean
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          name: string
+          price_key: string
+          legacy_name?: string | null
+          family: string
+          category: 'process' | 'test_consumable'
+          form?: string | null
+          base_unit: 'kg' | 'L' | 'pcs' | 'mL'
+          strength_pct?: number | null
+          strength_basis?: 'as_product' | 'w/w' | 'w/v' | null
+          density_kg_per_l?: number | null
+          reference_basis?: string | null
+          methods?: string[] | null
+          sample_volume_ml?: number | null
+          qty_per_test?: number | null
+          drops_per_test?: number | null
+          ml_per_drop?: number | null
+          process_stage?: string | null
+          sort_order?: number
+          is_active?: boolean
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          name?: string
+          price_key?: string
+          legacy_name?: string | null
+          family?: string
+          category?: 'process' | 'test_consumable'
+          form?: string | null
+          base_unit?: 'kg' | 'L' | 'pcs' | 'mL'
+          strength_pct?: number | null
+          strength_basis?: 'as_product' | 'w/w' | 'w/v' | null
+          density_kg_per_l?: number | null
+          reference_basis?: string | null
+          methods?: string[] | null
+          sample_volume_ml?: number | null
+          qty_per_test?: number | null
+          drops_per_test?: number | null
+          ml_per_drop?: number | null
+          process_stage?: string | null
+          sort_order?: number
+          is_active?: boolean
+          created_at?: string
+        }
+        Relationships: []
+      }
+      chemical_catalog_units: {
+        Row: {
+          id: string
+          catalog_id: string
+          plant_id: string | null
+          unit_label: string
+          factor_to_base: number
+          is_default: boolean
+        }
+        Insert: {
+          id?: string
+          catalog_id: string
+          plant_id?: string | null
+          unit_label: string
+          factor_to_base: number
+          is_default?: boolean
+        }
+        Update: {
+          id?: string
+          catalog_id?: string
+          plant_id?: string | null
+          unit_label?: string
+          factor_to_base?: number
+          is_default?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chemical_catalog_units_catalog_id_fkey"
+            columns: ["catalog_id"]
+            isOneToOne: false
+            referencedRelation: "chemical_catalog"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chemical_catalog_units_plant_id_fkey"
+            columns: ["plant_id"]
+            isOneToOne: false
+            referencedRelation: "plants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       chemical_deliveries: {
         Row: {
+          catalog_id: string | null
           chemical_name: string
           created_at: string
           delivery_date: string
           id: string
           plant_id: string
+          qty_base: number | null
           quantity: number
           recorded_by: string | null
           remarks: string | null
@@ -756,11 +872,13 @@ export type Database = {
           unit_cost: number | null
         }
         Insert: {
+          catalog_id?: string | null
           chemical_name: string
           created_at?: string
           delivery_date?: string
           id?: string
           plant_id: string
+          qty_base?: number | null
           quantity: number
           recorded_by?: string | null
           remarks?: string | null
@@ -769,11 +887,13 @@ export type Database = {
           unit_cost?: number | null
         }
         Update: {
+          catalog_id?: string | null
           chemical_name?: string
           created_at?: string
           delivery_date?: string
           id?: string
           plant_id?: string
+          qty_base?: number | null
           quantity?: number
           recorded_by?: string | null
           remarks?: string | null
@@ -783,7 +903,204 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "chemical_deliveries_catalog_id_fkey"
+            columns: ["catalog_id"]
+            isOneToOne: false
+            referencedRelation: "chemical_catalog"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "chemical_deliveries_plant_id_fkey"
+            columns: ["plant_id"]
+            isOneToOne: false
+            referencedRelation: "plants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      chemical_dosing_items: {
+        Row: {
+          id: string
+          dosing_log_id: string
+          plant_id: string
+          catalog_id: string
+          chemical_name: string
+          entry_qty: number | null
+          entry_unit: string | null
+          entry_mode: 'containers' | 'batch' | 'tank_level'
+          day_tank_id: string | null
+          mode_conflict: boolean
+          qty: number
+          qty_extra: number
+          extra_reason: string | null
+          unit: string
+          strength_pct: number | null
+          density_kg_per_l: number | null
+          product_kg: number | null
+          active_kg: number | null
+          unit_price: number | null
+          line_cost: number | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          dosing_log_id: string
+          plant_id: string
+          catalog_id: string
+          chemical_name: string
+          entry_qty?: number | null
+          entry_unit?: string | null
+          entry_mode?: 'containers' | 'batch' | 'tank_level'
+          day_tank_id?: string | null
+          mode_conflict?: boolean
+          qty: number
+          qty_extra?: number
+          extra_reason?: string | null
+          unit: string
+          strength_pct?: number | null
+          density_kg_per_l?: number | null
+          product_kg?: number | null
+          active_kg?: number | null
+          unit_price?: number | null
+          line_cost?: number | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          dosing_log_id?: string
+          plant_id?: string
+          catalog_id?: string
+          chemical_name?: string
+          entry_qty?: number | null
+          entry_unit?: string | null
+          entry_mode?: 'containers' | 'batch' | 'tank_level'
+          day_tank_id?: string | null
+          mode_conflict?: boolean
+          qty?: number
+          qty_extra?: number
+          extra_reason?: string | null
+          unit?: string
+          strength_pct?: number | null
+          density_kg_per_l?: number | null
+          product_kg?: number | null
+          active_kg?: number | null
+          unit_price?: number | null
+          line_cost?: number | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chemical_dosing_items_catalog_id_fkey"
+            columns: ["catalog_id"]
+            isOneToOne: false
+            referencedRelation: "chemical_catalog"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chemical_dosing_items_dosing_log_id_fkey"
+            columns: ["dosing_log_id"]
+            isOneToOne: false
+            referencedRelation: "chemical_dosing_logs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chemical_dosing_items_plant_id_fkey"
+            columns: ["plant_id"]
+            isOneToOne: false
+            referencedRelation: "plants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      plant_day_tanks: {
+        Row: {
+          id: string
+          plant_id: string
+          catalog_id: string
+          name: string
+          capacity_l: number | null
+          neat_per_100l: number
+          is_active: boolean
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          plant_id: string
+          catalog_id: string
+          name: string
+          capacity_l?: number | null
+          neat_per_100l: number
+          is_active?: boolean
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          plant_id?: string
+          catalog_id?: string
+          name?: string
+          capacity_l?: number | null
+          neat_per_100l?: number
+          is_active?: boolean
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "plant_day_tanks_catalog_id_fkey"
+            columns: ["catalog_id"]
+            isOneToOne: false
+            referencedRelation: "chemical_catalog"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "plant_day_tanks_plant_id_fkey"
+            columns: ["plant_id"]
+            isOneToOne: false
+            referencedRelation: "plants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      reagent_pack_events: {
+        Row: {
+          id: string
+          plant_id: string
+          catalog_id: string
+          event_at: string
+          recorded_by: string | null
+          tests_since_prev: number | null
+          rated_tests: number | null
+          yield_pct: number | null
+        }
+        Insert: {
+          id?: string
+          plant_id: string
+          catalog_id: string
+          event_at?: string
+          recorded_by?: string | null
+          tests_since_prev?: number | null
+          rated_tests?: number | null
+          yield_pct?: number | null
+        }
+        Update: {
+          id?: string
+          plant_id?: string
+          catalog_id?: string
+          event_at?: string
+          recorded_by?: string | null
+          tests_since_prev?: number | null
+          rated_tests?: number | null
+          yield_pct?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reagent_pack_events_catalog_id_fkey"
+            columns: ["catalog_id"]
+            isOneToOne: false
+            referencedRelation: "chemical_catalog"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reagent_pack_events_plant_id_fkey"
             columns: ["plant_id"]
             isOneToOne: false
             referencedRelation: "plants"
@@ -798,6 +1115,7 @@ export type Database = {
           chlorine_kg: number
           created_at: string
           free_chlorine_reagent_pcs: number
+          has_items: boolean
           id: string
           log_datetime: string
           plant_id: string
@@ -812,6 +1130,7 @@ export type Database = {
           chlorine_kg?: number
           created_at?: string
           free_chlorine_reagent_pcs?: number
+          has_items?: boolean
           id?: string
           log_datetime?: string
           plant_id: string
@@ -826,6 +1145,7 @@ export type Database = {
           chlorine_kg?: number
           created_at?: string
           free_chlorine_reagent_pcs?: number
+          has_items?: boolean
           id?: string
           log_datetime?: string
           plant_id?: string
@@ -949,28 +1269,49 @@ export type Database = {
           created_at: string
           dosing_log_id: string
           id: string
+          method: 'dpd_free' | 'dpd_total' | 'oto' | 'online' | null
+          parameter: 'free' | 'total' | null
           plant_id: string
+          point_role: string | null
+          reagent_catalog_id: string | null
+          reagent_qty: number | null
           residual_ppm: number | null
           sample_index: number
           sampling_point: string | null
+          tested_at: string
+          tested_by: string | null
         }
         Insert: {
           created_at?: string
           dosing_log_id: string
           id?: string
+          method?: 'dpd_free' | 'dpd_total' | 'oto' | 'online' | null
+          parameter?: 'free' | 'total' | null
           plant_id: string
+          point_role?: string | null
+          reagent_catalog_id?: string | null
+          reagent_qty?: number | null
           residual_ppm?: number | null
           sample_index: number
           sampling_point?: string | null
+          tested_at?: string
+          tested_by?: string | null
         }
         Update: {
           created_at?: string
           dosing_log_id?: string
           id?: string
+          method?: 'dpd_free' | 'dpd_total' | 'oto' | 'online' | null
+          parameter?: 'free' | 'total' | null
           plant_id?: string
+          point_role?: string | null
+          reagent_catalog_id?: string | null
+          reagent_qty?: number | null
           residual_ppm?: number | null
           sample_index?: number
           sampling_point?: string | null
+          tested_at?: string
+          tested_by?: string | null
         }
         Relationships: [
           {

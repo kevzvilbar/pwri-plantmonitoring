@@ -35,10 +35,9 @@ triggers below depend on it.
 
 ## 2. Edge Functions
 
-Three functions, all under `supabase/functions/`:
+Two active functions, all under `supabase/functions/`:
 
 ```
-supabase functions deploy compute-production-costs
 supabase functions deploy notify-train-offline
 supabase functions deploy send-push-notification
 ```

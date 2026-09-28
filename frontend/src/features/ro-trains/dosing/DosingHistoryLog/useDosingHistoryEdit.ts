@@ -52,10 +52,7 @@ export function useDosingHistoryEdit(prices: Record<string, number> | undefined)
     if (!isReasonComplete(editReason, editCustomReason)) { toast.error('Describe the reason for this edit'); return; }
     setSaving(true);
     const num = (k: string) => editV[k] !== '' ? +editV[k] : null;
-    const costCalc = DOSING_KEYS.reduce((s: any, c: any) => {
-      const qty = num(c.key) ?? 0;
-      return s + qty * (prices?.[c.name] ?? 0);
-    }, 0);
+    const { cost: costCalc } = computeDosingLogCost(editV, prices);
     const payload: any = {
       log_datetime:               new Date(editV.log_datetime).toISOString(),
       chlorine_kg:                num('chlorine_kg')               ?? 0,

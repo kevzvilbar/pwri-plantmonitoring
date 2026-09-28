@@ -5,24 +5,27 @@
  * operator log.  Extracted from ROTrains.tsx (§4 item 2 decomposition).
  */
 
-// ─── Chemical Dosing ──────────────────────────────────────────────────────────
-// HCl, SLS, and Caustic Soda are CIP-only chemicals — they are NOT listed here.
-// They are always used during CIP and are entered exclusively in the CIP tab.
-export const KNOWN_CHEMICALS = [
-  { name: 'Chlorine',     defaultUnit: 'kg' },
-  { name: 'SMBS',         defaultUnit: 'kg' },
-  { name: 'Anti Scalant', defaultUnit: 'L'  },
-  { name: 'Soda Ash',     defaultUnit: 'kg' },
-];
+import {
+  PLANT_CHEMICALS,
+  KNOWN_CHEMICALS,
+  CHEM_DOSING_COLUMN,
+  DOSING_KEYS,
+  PROCESS_DOSING_KEYS,
+  REAGENT_DOSING_KEYS,
+  computeDosingLogCost,
+} from '@/shared/chemicals';
+
+export {
+  PLANT_CHEMICALS,
+  KNOWN_CHEMICALS,
+  CHEM_DOSING_COLUMN,
+  DOSING_KEYS,
+  PROCESS_DOSING_KEYS,
+  REAGENT_DOSING_KEYS,
+  computeDosingLogCost,
+};
 
 export const CHEM_UNITS = ['kg', 'g', 'L', 'mL', 'pcs', 'gal', '__custom__'];
-
-export const DOSING_KEYS = [
-  { key: 'chlorine_kg',    name: 'Chlorine',     unit: 'kg' },
-  { key: 'smbs_kg',        name: 'SMBS',         unit: 'kg' },
-  { key: 'anti_scalant_l', name: 'Anti Scalant', unit: 'L'  },
-  { key: 'soda_ash_kg',    name: 'Soda Ash',     unit: 'kg' },
-];
 
 // ─── CIP Chemical constants ────────────────────────────────────────────────────
 // These are the default 3 CIP chemicals; plant config (cip_chemicals) can override.

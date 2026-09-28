@@ -4,6 +4,8 @@
  * Public surface of the ro-trains feature slice.
  */
 export * from './constants';
+export * from './dosing/dosingMath';
+export * from './dosing/useChemCatalog';
 export * from './csv';
 export * from './pretreat-csv';
 export * from './helpers';

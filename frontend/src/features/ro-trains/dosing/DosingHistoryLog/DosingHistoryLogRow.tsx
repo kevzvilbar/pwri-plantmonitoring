@@ -37,10 +37,8 @@ export function DosingHistoryLogRow({ row, prices, isManager, activeOperatorId, 
 
   const isEditing      = edit.editId === row.id;
   const isPendingDelete = del.pendingDeleteId === row.id;
-  const rowCost = useMemo(() =>
-    DOSING_KEYS.reduce((s, c) => s + (+row[c.key] || 0) * (prices?.[c.name] ?? 0), 0),
-    [row, prices],
-  );
+  const { cost: computedRowCost, unpriced } = useMemo(() => computeDosingLogCost(row, prices), [row, prices]);
+  const rowCost = row.calculated_cost != null && +row.calculated_cost > 0 ? +row.calculated_cost : computedRowCost;
   const canEdit = canEditEntry(row, isManager, activeOperatorId);
 
   return (
@@ -68,9 +66,16 @@ export function DosingHistoryLogRow({ row, prices, isManager, activeOperatorId, 
 
         <div className="flex items-center gap-1.5 shrink-0">
           {!isEditing && (
-            <span className="text-xs font-bold font-mono-num text-primary bg-primary-soft border border-primary rounded px-1.5 py-0.5">
-              ₱ {fmtNum(+row.calculated_cost > 0 ? row.calculated_cost : rowCost, 2)}
-            </span>
+            <>
+              {unpriced.length > 0 && !(+row.calculated_cost > 0) && (
+                <span className="text-[10px] text-amber-700 bg-amber-100 dark:text-amber-300 dark:bg-amber-950/60 border border-amber-300 dark:border-amber-700 rounded px-1 py-0.5" title={`Unpriced: ${unpriced.join(', ')}`}>
+                  ⚠️ Unpriced
+                </span>
+              )}
+              <span className="text-xs font-bold font-mono-num text-primary bg-primary-soft border border-primary rounded px-1.5 py-0.5">
+                ₱ {fmtNum(rowCost, 2)}
+              </span>
+            </>
           )}
 
           {canEdit && !isEditing && !isPendingDelete && (

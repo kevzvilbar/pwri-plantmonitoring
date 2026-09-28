@@ -82,11 +82,7 @@ export function ChemDosingForm() {
     },
   });
 
-  const cost = DOSING_KEYS.reduce((s, c) => {
-    const qty = +(v as any)[c.key] || 0;
-    const price = prices?.[c.name] ?? 0;
-    return s + qty * price;
-  }, 0);
+  const { cost, unpriced } = useMemo(() => computeDosingLogCost(v, prices), [v, prices]);
 
   // Sidebar live sums
   const totalMassKg  = (+v.chlorine_kg || 0) + (+v.smbs_kg || 0) + (+v.soda_ash_kg || 0);
@@ -264,7 +260,14 @@ export function ChemDosingForm() {
         <div className="hidden md:block w-48 shrink-0">
           <div className="rounded-xl bg-primary text-primary-foreground p-3 space-y-3 sticky top-2">
             <p className="text-xs font-bold uppercase tracking-wider text-primary-foreground">Dosing Summary</p>
-            <div className="space-y-2.5"><DosingMobileSummary totalMassKg={totalMassKg} totalVolumeL={totalVolumeL} freePcs={freePcs} cost={cost} /></div>
+            <div className="space-y-2.5">
+              <DosingMobileSummary totalMassKg={totalMassKg} totalVolumeL={totalVolumeL} freePcs={freePcs} cost={cost} />
+              {unpriced.length > 0 && (
+                <p className="text-[10px] text-amber-200 bg-amber-950/40 p-1.5 rounded border border-amber-400/30">
+                  ⚠️ No price on file for {unpriced.join(', ')} — cost not counted
+                </p>
+              )}
+            </div>
             <div className="border-t border-primary-foreground/20 pt-2 space-y-2">
               <button onClick={clearAll} className="w-full text-xs text-primary-foreground/70 hover:text-primary-foreground underline underline-offset-2 transition-colors">Clear All</button>
               <Button onClick={submit} className="w-full h-8 text-xs bg-white text-primary hover:bg-primary-soft font-semibold shadow-none border-0">Save Dosing</Button>
@@ -279,6 +282,11 @@ export function ChemDosingForm() {
         <div className="grid grid-cols-2 gap-x-4 gap-y-2">
           <DosingMobileSummary totalMassKg={totalMassKg} totalVolumeL={totalVolumeL} freePcs={freePcs} cost={cost} />
         </div>
+        {unpriced.length > 0 && (
+          <p className="text-[10px] text-amber-200 bg-amber-950/40 p-1.5 rounded border border-amber-400/30">
+            ⚠️ No price on file for {unpriced.join(', ')} — cost not counted
+          </p>
+        )}
         <div className="grid grid-cols-2 gap-2 pt-1">
           <button onClick={clearAll} className="h-9 text-xs text-primary-foreground/70 hover:text-primary-foreground border border-primary-foreground/30 rounded-md transition-colors">Clear All</button>
           <Button onClick={submit} className="h-9 text-xs bg-white text-primary hover:bg-primary-soft font-semibold shadow-none border-0">Save Dosing</Button>

@@ -47,6 +47,22 @@ export function ImportDosingDialog({
         let skipped = 0;
         const errors: string[] = [];
 
+        // Fetch prices once for imported rows
+        const today = new Date().toISOString().slice(0, 10);
+        const { data: priceData } = await supabase
+          .from('chemical_prices')
+          .select('*')
+          .lte('effective_date', today)
+          .order('effective_date', { ascending: false });
+
+        const priceMap: Record<string, number> = {};
+        (priceData ?? []).forEach((p: any) => {
+          const fullName = p.chemical_name as string;
+          if (!(fullName in priceMap)) priceMap[fullName] = p.unit_price;
+          const baseName = fullName.replace(/\s*\([^)]+\)\s*$/, '').trim();
+          if (!(baseName in priceMap)) priceMap[baseName] = p.unit_price;
+        });
+
         for (const r of rows) {
           const plant = plants?.find(
             (p) => p.name.toLowerCase() === r.plant_name?.trim().toLowerCase()
@@ -78,17 +94,27 @@ export function ImportDosingDialog({
           }
 
           const num = (k: string) => (r[k]?.trim() ? +r[k] : 0);
-          const payload: Record<string, any> = {
-            plant_id: pid,
-            log_datetime: dt,
+          const rawValues = {
             chlorine_kg: num('chlorine_kg'),
             smbs_kg: num('smbs_kg'),
             anti_scalant_l: num('anti_scalant_l'),
             soda_ash_kg: num('soda_ash_kg'),
             free_chlorine_reagent_pcs: num('free_chlorine_reagent_pcs'),
+          };
+
+          const { cost } = computeDosingLogCost(rawValues, priceMap);
+
+          const payload: Record<string, any> = {
+            plant_id: pid,
+            log_datetime: dt,
+            chlorine_kg: rawValues.chlorine_kg,
+            smbs_kg: rawValues.smbs_kg,
+            anti_scalant_l: rawValues.anti_scalant_l,
+            soda_ash_kg: rawValues.soda_ash_kg,
+            free_chlorine_reagent_pcs: rawValues.free_chlorine_reagent_pcs,
+            calculated_cost: +cost.toFixed(2),
             recorded_by: userId,
           };
-          if (r.remarks?.trim()) payload.remarks = r.remarks.trim();
 
           if (existingId) {
             const { error } = await supabase

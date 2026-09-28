@@ -70,13 +70,15 @@ SELECT net.http_post(
 ```
 
 ### 3. Edge Functions Deployment
-Deploy the compute-production-costs Edge Function to staging:
+Deploy the active Edge Functions to staging:
 
 ```bash
 # In project root
-supabase functions deploy compute-production-costs \
-  --project-ref <staging-project-ref> \
-  --legacy-bundle
+supabase functions deploy notify-train-offline \
+  --project-ref <staging-project-ref>
+
+supabase functions deploy send-push-notification \
+  --project-ref <staging-project-ref>
 ```
 
 ### 4. Environment Variables
