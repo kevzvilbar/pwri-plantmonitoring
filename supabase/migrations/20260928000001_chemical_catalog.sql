@@ -53,32 +53,39 @@ ALTER TABLE public.chemical_catalog ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.chemical_catalog_units ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.plant_day_tanks ENABLE ROW LEVEL SECURITY;
 
+-- NOTE: role/plant checks reuse the app's existing helpers (is_manager_or_admin,
+-- user_has_plant_access). The original draft compared the app_role enum against
+-- lowercase literals ('admin', 'super_admin') and referenced a non-existent
+-- user_plant_access table, so CREATE POLICY failed and the whole migration rolled back.
+DROP POLICY IF EXISTS "catalog_read_authenticated" ON public.chemical_catalog;
 CREATE POLICY "catalog_read_authenticated" ON public.chemical_catalog
   FOR SELECT TO authenticated USING (true);
 
+DROP POLICY IF EXISTS "catalog_write_manager" ON public.chemical_catalog;
 CREATE POLICY "catalog_write_manager" ON public.chemical_catalog
-  FOR ALL TO authenticated USING (
-    EXISTS (SELECT 1 FROM public.user_roles ur WHERE ur.user_id = auth.uid() AND ur.role IN ('admin', 'manager', 'super_admin'))
-  );
+  FOR ALL TO authenticated
+  USING (public.is_manager_or_admin(auth.uid()))
+  WITH CHECK (public.is_manager_or_admin(auth.uid()));
 
+DROP POLICY IF EXISTS "catalog_units_read_authenticated" ON public.chemical_catalog_units;
 CREATE POLICY "catalog_units_read_authenticated" ON public.chemical_catalog_units
   FOR SELECT TO authenticated USING (true);
 
+DROP POLICY IF EXISTS "catalog_units_write_manager" ON public.chemical_catalog_units;
 CREATE POLICY "catalog_units_write_manager" ON public.chemical_catalog_units
-  FOR ALL TO authenticated USING (
-    EXISTS (SELECT 1 FROM public.user_roles ur WHERE ur.user_id = auth.uid() AND ur.role IN ('admin', 'manager', 'super_admin'))
-  );
+  FOR ALL TO authenticated
+  USING (public.is_manager_or_admin(auth.uid()))
+  WITH CHECK (public.is_manager_or_admin(auth.uid()));
 
+DROP POLICY IF EXISTS "day_tanks_read_plant_access" ON public.plant_day_tanks;
 CREATE POLICY "day_tanks_read_plant_access" ON public.plant_day_tanks
-  FOR SELECT TO authenticated USING (
-    EXISTS (SELECT 1 FROM public.user_plant_access upa WHERE upa.user_id = auth.uid() AND upa.plant_id = plant_day_tanks.plant_id)
-    OR EXISTS (SELECT 1 FROM public.user_roles ur WHERE ur.user_id = auth.uid() AND ur.role IN ('admin', 'super_admin'))
-  );
+  FOR SELECT TO authenticated USING (public.user_has_plant_access(plant_id));
 
+DROP POLICY IF EXISTS "day_tanks_write_manager" ON public.plant_day_tanks;
 CREATE POLICY "day_tanks_write_manager" ON public.plant_day_tanks
-  FOR ALL TO authenticated USING (
-    EXISTS (SELECT 1 FROM public.user_roles ur WHERE ur.user_id = auth.uid() AND ur.role IN ('admin', 'manager', 'super_admin'))
-  );
+  FOR ALL TO authenticated
+  USING (public.is_manager_or_admin(auth.uid()) AND public.user_has_plant_access(plant_id))
+  WITH CHECK (public.is_manager_or_admin(auth.uid()) AND public.user_has_plant_access(plant_id));
 
 -- Seed initial standard chemical catalog
 INSERT INTO public.chemical_catalog (name, price_key, legacy_name, family, category, form, base_unit, strength_pct, strength_basis, density_kg_per_l, reference_basis, sort_order)

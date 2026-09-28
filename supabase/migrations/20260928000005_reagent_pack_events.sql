@@ -14,14 +14,10 @@ CREATE TABLE IF NOT EXISTS public.reagent_pack_events (
 
 ALTER TABLE public.reagent_pack_events ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "reagent_pack_events_read_plant_access" ON public.reagent_pack_events
-  FOR SELECT TO authenticated USING (
-    EXISTS (SELECT 1 FROM public.user_plant_access upa WHERE upa.user_id = auth.uid() AND upa.plant_id = reagent_pack_events.plant_id)
-    OR EXISTS (SELECT 1 FROM public.user_roles ur WHERE ur.user_id = auth.uid() AND ur.role IN ('admin', 'super_admin'))
-  );
-
-CREATE POLICY "reagent_pack_events_write_plant_access" ON public.reagent_pack_events
-  FOR ALL TO authenticated USING (
-    EXISTS (SELECT 1 FROM public.user_plant_access upa WHERE upa.user_id = auth.uid() AND upa.plant_id = reagent_pack_events.plant_id)
-    OR EXISTS (SELECT 1 FROM public.user_roles ur WHERE ur.user_id = auth.uid() AND ur.role IN ('admin', 'super_admin'))
-  );
+DROP POLICY IF EXISTS "reagent_pack_events_read_plant_access" ON public.reagent_pack_events;
+DROP POLICY IF EXISTS "reagent_pack_events_write_plant_access" ON public.reagent_pack_events;
+DROP POLICY IF EXISTS "reagent_pack_events_plant_access" ON public.reagent_pack_events;
+CREATE POLICY "reagent_pack_events_plant_access" ON public.reagent_pack_events
+  FOR ALL TO authenticated
+  USING (public.user_has_plant_access(plant_id))
+  WITH CHECK (public.user_has_plant_access(plant_id));

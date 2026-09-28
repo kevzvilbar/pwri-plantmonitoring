@@ -6,7 +6,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { canEditEntry } from '@/features/ro-trains/helpers';
 import { diffFields } from '@/features/ro-trains/helpers';
 import { logReadingEdit } from '@/features/ro-trains/helpers';
-import { DOSING_KEYS, computeDosingLogCost } from '@/features/ro-trains';
+import { DOSING_KEYS } from '@/features/ro-trains/constants';
 import { resolveReason, isReasonComplete } from '@/lib/correctionReasons';
 import { friendlyError } from '@/lib/supabaseErrors';
 import { format } from 'date-fns';

@@ -5,12 +5,14 @@ ALTER TABLE public.chemical_prices
   ADD COLUMN IF NOT EXISTS entered_unit text,
   ADD COLUMN IF NOT EXISTS entered_price numeric;
 
+-- NOTE: these RPCs are SECURITY INVOKER on purpose. As DEFINER (with default anon/authenticated
+-- EXECUTE grants and no access check) any caller could read any plant's stock/usage/cost.
 -- Function: lookup unit price for a catalog item on a given Manila date
 CREATE OR REPLACE FUNCTION public.fn_chem_unit_price(p_catalog_id uuid, p_date date)
 RETURNS numeric
 LANGUAGE plpgsql
 STABLE
-SECURITY DEFINER
+SECURITY INVOKER
 SET search_path = public, pg_temp
 AS $$
 DECLARE
@@ -49,7 +51,7 @@ RETURNS TABLE (
 )
 LANGUAGE plpgsql
 STABLE
-SECURITY DEFINER
+SECURITY INVOKER
 SET search_path = public, pg_temp
 AS $$
 BEGIN
@@ -120,7 +122,7 @@ RETURNS TABLE (
 )
 LANGUAGE plpgsql
 STABLE
-SECURITY DEFINER
+SECURITY INVOKER
 SET search_path = public, pg_temp
 AS $$
 BEGIN
@@ -163,7 +165,7 @@ RETURNS TABLE (
 )
 LANGUAGE plpgsql
 STABLE
-SECURITY DEFINER
+SECURITY INVOKER
 SET search_path = public, pg_temp
 AS $$
 DECLARE
@@ -208,3 +210,12 @@ BEGIN
   LEFT JOIN delivery_cost d ON d.cat_id = u.cat_id;
 END;
 $$;
+
+REVOKE ALL ON FUNCTION public.fn_chem_unit_price(uuid, date) FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.fn_chem_stock(uuid) FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.fn_chem_daily_usage(uuid, date, date) FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.fn_chem_monthly_variance(uuid, date) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.fn_chem_unit_price(uuid, date) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.fn_chem_stock(uuid) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.fn_chem_daily_usage(uuid, date, date) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.fn_chem_monthly_variance(uuid, date) TO authenticated;

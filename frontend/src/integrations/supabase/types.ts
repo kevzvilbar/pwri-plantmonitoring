@@ -927,6 +927,7 @@ export type Database = {
           chemical_name: string
           entry_qty: number | null
           entry_unit: string | null
+          factor_to_base: number | null
           entry_mode: 'containers' | 'batch' | 'tank_level'
           day_tank_id: string | null
           mode_conflict: boolean
@@ -950,6 +951,7 @@ export type Database = {
           chemical_name: string
           entry_qty?: number | null
           entry_unit?: string | null
+          factor_to_base?: number | null
           entry_mode?: 'containers' | 'batch' | 'tank_level'
           day_tank_id?: string | null
           mode_conflict?: boolean
@@ -973,6 +975,7 @@ export type Database = {
           chemical_name?: string
           entry_qty?: number | null
           entry_unit?: string | null
+          factor_to_base?: number | null
           entry_mode?: 'containers' | 'batch' | 'tank_level'
           day_tank_id?: string | null
           mode_conflict?: boolean

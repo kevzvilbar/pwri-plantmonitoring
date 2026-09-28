@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS public.chemical_dosing_items (
   chemical_name text NOT NULL,
   entry_qty numeric CHECK (entry_qty >= 0),
   entry_unit text,
+  factor_to_base numeric DEFAULT 1 CHECK (factor_to_base IS NULL OR factor_to_base > 0),
   entry_mode text NOT NULL DEFAULT 'containers' CHECK (entry_mode IN ('containers', 'batch', 'tank_level')),
   day_tank_id uuid REFERENCES public.plant_day_tanks(id),
   mode_conflict boolean NOT NULL DEFAULT false,
@@ -33,17 +34,13 @@ CREATE INDEX IF NOT EXISTS idx_chemical_dosing_items_log ON public.chemical_dosi
 
 ALTER TABLE public.chemical_dosing_items ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "dosing_items_read_plant_access" ON public.chemical_dosing_items
-  FOR SELECT TO authenticated USING (
-    EXISTS (SELECT 1 FROM public.user_plant_access upa WHERE upa.user_id = auth.uid() AND upa.plant_id = chemical_dosing_items.plant_id)
-    OR EXISTS (SELECT 1 FROM public.user_roles ur WHERE ur.user_id = auth.uid() AND ur.role IN ('admin', 'super_admin'))
-  );
-
-CREATE POLICY "dosing_items_write_plant_access" ON public.chemical_dosing_items
-  FOR ALL TO authenticated USING (
-    EXISTS (SELECT 1 FROM public.user_plant_access upa WHERE upa.user_id = auth.uid() AND upa.plant_id = chemical_dosing_items.plant_id)
-    OR EXISTS (SELECT 1 FROM public.user_roles ur WHERE ur.user_id = auth.uid() AND ur.role IN ('admin', 'super_admin'))
-  );
+DROP POLICY IF EXISTS "dosing_items_read_plant_access" ON public.chemical_dosing_items;
+DROP POLICY IF EXISTS "dosing_items_write_plant_access" ON public.chemical_dosing_items;
+DROP POLICY IF EXISTS "dosing_items_plant_access" ON public.chemical_dosing_items;
+CREATE POLICY "dosing_items_plant_access" ON public.chemical_dosing_items
+  FOR ALL TO authenticated
+  USING (public.user_has_plant_access(plant_id))
+  WITH CHECK (public.user_has_plant_access(plant_id));
 
 -- Function to roll up items to parent chemical_dosing_logs
 CREATE OR REPLACE FUNCTION public.fn_rollup_chemical_dosing_items()
@@ -75,7 +72,7 @@ BEGIN
   FOREACH v_log_id IN ARRAY v_log_ids LOOP
     UPDATE public.chemical_dosing_logs l
     SET
-      has_items = true,
+      has_items = EXISTS (SELECT 1 FROM public.chemical_dosing_items WHERE dosing_log_id = v_log_id),
       calculated_cost = COALESCE((
         SELECT sum(line_cost) FROM public.chemical_dosing_items WHERE dosing_log_id = v_log_id
       ), 0),
