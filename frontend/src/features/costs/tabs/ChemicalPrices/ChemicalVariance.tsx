@@ -29,7 +29,7 @@ export function ChemicalVariance() {
 
   // Generate last 12 months for selector
   const monthOptions = useMemo(() => {
-    const list = [];
+    const list: Array<{ value: string; label: string }> = [];
     for (let i = 0; i < 12; i++) {
       const d = subMonths(new Date(), i);
       list.push({
@@ -100,8 +100,8 @@ export function ChemicalVariance() {
 
   // Summary rollups
   const totalStandard = varianceRows?.reduce((s, r) => s + (+r.standard_cost || 0), 0) ?? 0;
-  const totalActual = varianceRows?.reduce((s, r) => s + (+r.actual_cost || 0), 0) ?? 0;
-  const netVariance = varianceRows?.reduce((s, r) => s + (+r.price_variance || 0), 0) ?? 0;
+  const totalActual = varianceRows?.reduce((s, r) => s + (r.actual_cost != null ? +r.actual_cost : 0), 0) ?? 0;
+  const netVariance = varianceRows?.reduce((s, r) => s + (r.price_variance != null ? +r.price_variance : 0), 0) ?? 0;
 
   return (
     <div className="space-y-4 text-xs">
