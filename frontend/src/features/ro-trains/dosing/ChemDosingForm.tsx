@@ -770,7 +770,7 @@ export function ChemDosingForm() {
                 cost={cost}
               />
               {unpriced.length > 0 && (
-                <p className="text-[10px] text-amber-200 bg-amber-950/40 p-1.5 rounded border border-amber-400/30">
+                <p className="text-2xs text-amber-200 bg-amber-950/40 p-1.5 rounded border border-amber-400/30">
                   ⚠️ No price on file for {unpriced.join(', ')} — cost not counted
                 </p>
               )}
@@ -808,7 +808,7 @@ export function ChemDosingForm() {
           />
         </div>
         {unpriced.length > 0 && (
-          <p className="text-[10px] text-amber-200 bg-amber-950/40 p-1.5 rounded border border-amber-400/30">
+          <p className="text-2xs text-amber-200 bg-amber-950/40 p-1.5 rounded border border-amber-400/30">
             ⚠️ No price on file for {unpriced.join(', ')} — cost not counted
           </p>
         )}

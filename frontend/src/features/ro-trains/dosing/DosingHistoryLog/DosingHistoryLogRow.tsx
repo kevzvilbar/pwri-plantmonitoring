@@ -73,7 +73,7 @@ export function DosingHistoryLogRow({ row, prices, isManager, activeOperatorId, 
           {!isEditing && (
             <>
               {unpriced.length > 0 && !(+row.calculated_cost > 0) && (
-                <span className="text-[10px] text-amber-700 bg-amber-100 dark:text-amber-300 dark:bg-amber-950/60 border border-amber-300 dark:border-amber-700 rounded px-1 py-0.5" title={`Unpriced: ${unpriced.join(', ')}`}>
+                <span className="text-2xs text-amber-700 bg-amber-100 dark:text-amber-300 dark:bg-amber-950/60 border border-amber-300 dark:border-amber-700 rounded px-1 py-0.5" title={`Unpriced: ${unpriced.join(', ')}`}>
                   ⚠️ Unpriced
                 </span>
               )}

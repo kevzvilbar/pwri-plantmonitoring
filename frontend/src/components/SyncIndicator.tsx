@@ -122,7 +122,7 @@ export function SyncIndicator({
             {pendingOutboxCount > 0 && !isSyncing && (
               <span
                 aria-label={`${pendingOutboxCount} offline changes pending sync`}
-                className="absolute -top-1 -right-1 bg-amber-500 text-zinc-950 text-[10px] font-bold rounded-full h-4 min-w-[16px] px-1 flex items-center justify-center shadow pointer-events-none"
+                className="absolute -top-1 -right-1 bg-amber-500 text-zinc-950 text-2xs font-bold rounded-full h-4 min-w-[16px] px-1 flex items-center justify-center shadow pointer-events-none"
               >
                 {pendingOutboxCount > 99 ? '99+' : pendingOutboxCount}
               </span>
@@ -133,7 +133,7 @@ export function SyncIndicator({
       <PopoverContent side="bottom" align="end" className="w-56 p-3 text-xs">
         <p className={cn('font-medium', isError ? 'text-warn' : 'text-foreground')}>{label}</p>
         {pendingOutboxCount > 0 && (
-          <p className="text-[11px] text-muted-foreground mt-1">
+          <p className="text-2xs text-muted-foreground mt-1">
             {pendingOutboxCount} offline modification{pendingOutboxCount === 1 ? '' : 's'} will automatically upload when network returns.
           </p>
         )}
