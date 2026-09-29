@@ -27,11 +27,33 @@ export const calc = {
   recovery: (permFlow: number, feedFlow: number) =>
     feedFlow ? +((permFlow / feedFlow) * 100).toFixed(1) : null,
 
-  rejection: (permTDS: number, rejectTDS: number) =>
-    rejectTDS ? +((1 - permTDS / rejectTDS) * 100).toFixed(1) : null,
+  /**
+   * RO Membrane Salt Rejection (%)
+   * Standard formula: ((feedTDS - permTDS) / feedTDS) * 100
+   * Clamped to [0, 100], returns null if feedTDS <= 0 or either input is non-finite.
+   * Stored at 2 decimal places for database/reporting precision.
+   */
+  rejection: (permTDS: number | null | undefined, feedTDS: number | null | undefined) => {
+    if (!Number.isFinite(permTDS as number) || !Number.isFinite(feedTDS as number) || (feedTDS as number) <= 0) {
+      return null;
+    }
+    const val = (1 - (permTDS as number) / (feedTDS as number)) * 100;
+    return Math.max(0, Math.min(100, +val.toFixed(2)));
+  },
 
-  saltPassage: (permTDS: number, rejectTDS: number) =>
-    rejectTDS ? +((permTDS / rejectTDS) * 100).toFixed(1) : null,
+  /**
+   * RO Membrane Salt Passage (%)
+   * Standard formula: (permTDS / feedTDS) * 100
+   * Clamped to [0, 100], returns null if feedTDS <= 0 or either input is non-finite.
+   * Stored at 2 decimal places for database/reporting precision.
+   */
+  saltPassage: (permTDS: number | null | undefined, feedTDS: number | null | undefined) => {
+    if (!Number.isFinite(permTDS as number) || !Number.isFinite(feedTDS as number) || (feedTDS as number) <= 0) {
+      return null;
+    }
+    const val = ((permTDS as number) / (feedTDS as number)) * 100;
+    return Math.max(0, Math.min(100, +val.toFixed(2)));
+  },
 
   rejectFlow: (feedFlow: number, permFlow: number) =>
     Number.isFinite(feedFlow) && Number.isFinite(permFlow) ? +(feedFlow - permFlow).toFixed(2) : null,

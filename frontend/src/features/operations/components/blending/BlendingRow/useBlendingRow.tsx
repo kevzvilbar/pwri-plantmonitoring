@@ -61,7 +61,12 @@ export function useBlendingRow(props: BlendingRowProps) {
   }, [prevRawReading, dbLatestRaw, volume]);
 
   useEffect(() => {
-    if (dbLatestRaw && (!prevRawReading || dbLatestRaw.date > prevRawReading.date)) {
+    if (
+      dbLatestRaw &&
+      (!prevRawReading ||
+        dbLatestRaw.date > prevRawReading.date ||
+        (dbLatestRaw.date === prevRawReading.date && dbLatestRaw.reading !== prevRawReading.reading))
+    ) {
       setPrevRawReading(dbLatestRaw);
       persistRaw(well.id, dbLatestRaw.reading, dbLatestRaw.date);
     }

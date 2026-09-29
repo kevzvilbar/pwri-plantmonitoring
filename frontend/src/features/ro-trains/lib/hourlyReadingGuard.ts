@@ -43,7 +43,8 @@ export interface HourBucket {
 export function getHourBucket(localDt: string): HourBucket {
   const hourStart = new Date(`${localDt.slice(0, 13)}:00`);
   const hourEnd = new Date(hourStart.getTime() + 60 * 60 * 1000);
-  const h = hourStart.getHours();
+  const parsedHour = parseInt(localDt.slice(11, 13), 10);
+  const h = isNaN(parsedHour) ? hourStart.getHours() : parsedHour;
   return {
     startISO: hourStart.toISOString(),
     endISO: hourEnd.toISOString(),

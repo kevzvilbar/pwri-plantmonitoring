@@ -14,8 +14,36 @@ import type { AnomalyTier, AnomalyDirection, RateUnit } from './flowRateGuards';
 // this banner is used, and only needs tuning in one place.
 export const MIN_ANOMALY_REMARK_LENGTH = 5;
 
-export function isAnomalyRemarkValid(remark: string): boolean {
-  return remark.trim().length >= MIN_ANOMALY_REMARK_LENGTH;
+export type AnomalyReasonCode =
+  | 'mechanical_glitch'
+  | 'power_transient'
+  | 'flushing_blowdown'
+  | 'line_leak'
+  | 'meter_recalibration'
+  | 'meter_replaced'
+  | 'operational_adjustment'
+  | 'other';
+
+export interface AnomalyReasonOption {
+  code: AnomalyReasonCode;
+  label: string;
+  description: string;
+}
+
+export const ANOMALY_REASON_OPTIONS: AnomalyReasonOption[] = [
+  { code: 'mechanical_glitch', label: 'Mechanical Glitch', description: 'Sticking impellers, valve rattle, mechanical vibration' },
+  { code: 'power_transient', label: 'Power Transient / Surge', description: 'Brownout, generator switchover, voltage dip' },
+  { code: 'flushing_blowdown', label: 'Flushing / Line Blowdown', description: 'Scheduled line flush, pre-treatment filter backwash' },
+  { code: 'line_leak', label: 'Pipe / Line Leak', description: 'Physical pipe burst, flange seepage, bypass open' },
+  { code: 'meter_recalibration', label: 'Meter Recalibration / Zeroing', description: 'Sensor zero calibration or sensor cleaning' },
+  { code: 'meter_replaced', label: 'Meter Replaced', description: 'Physical replacement or register swap' },
+  { code: 'operational_adjustment', label: 'Operational Throttling', description: 'Intentional rate adjustment, valve throttling' },
+  { code: 'other', label: 'Other (Specify in text)', description: 'Custom operational event' },
+];
+
+export function isAnomalyRemarkValid(remark: string, reasonCode?: AnomalyReasonCode | null): boolean {
+  if (reasonCode && reasonCode !== 'other') return true;
+  return (remark ?? '').trim().length >= MIN_ANOMALY_REMARK_LENGTH;
 }
 
 export type AnomalyRemarkTable =
@@ -39,6 +67,7 @@ export async function submitAnomalyRemark(entry: {
   avg_flow_rate: number | null;
   rate_unit: RateUnit;
   remark_text: string;
+  reason_code?: AnomalyReasonCode | null;
 }) {
   try {
     const { data: { user } } = await supabase.auth.getUser();
@@ -54,7 +83,8 @@ export async function submitAnomalyRemark(entry: {
       avg_flow_rate: entry.avg_flow_rate,
       rate_unit:     entry.rate_unit,
       remark_text:   entry.remark_text.trim(),
+      reason_code:   entry.reason_code ?? null,
       logged_by:     user?.id ?? null,
     }]);
-  } catch { /* silently ignore if table missing — migration not yet run */ }
+  } catch { /* silently ignore if table missing or column not yet added */ }
 }

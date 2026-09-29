@@ -23,6 +23,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { DateTimePicker } from '@/components/ui/date-picker';
+import { calc } from '@/lib/calculations';
 import { CorrectionReasonField } from '@/components/CorrectionReasonField';
 import { resolveReason, isReasonComplete } from '@/lib/correctionReasons';
 import { supabase } from '@/integrations/supabase/client';
@@ -228,10 +229,8 @@ export function EditRoReadingDialog({ row, trainId, onClose, onSaved }: Props) {
       ? +Math.min(100, Math.max(0, (effPermFlow / effFeedFlow) * 100)).toFixed(1) : null;
 
     const feedTds = num('feed_tds'), permTds = num('permeate_tds');
-    payload.rejection_pct = feedTds != null && feedTds > 0 && permTds != null
-      ? +(((feedTds - permTds) / feedTds) * 100).toFixed(2) : null;
-    payload.salt_passage_pct = feedTds != null && feedTds > 0 && permTds != null
-      ? +((permTds / feedTds) * 100).toFixed(2) : null;
+    payload.rejection_pct = calc.rejection(permTds, feedTds);
+    payload.salt_passage_pct = calc.saltPassage(permTds, feedTds);
 
     const { error } = await supabase
       .from('ro_train_readings')

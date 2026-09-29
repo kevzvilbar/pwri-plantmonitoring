@@ -13,7 +13,7 @@ import {
   Wrench,
 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
-import { fmtNum, RECOVERY_BAND } from '@/lib/calculations';
+import { calc, fmtNum, RECOVERY_BAND } from '@/lib/calculations';
 import { cn } from '@/lib/utils';
 import { TelemetryGauge, deriveTrainStatus } from './helpers';
 import type { TrainHourlyGap } from '@/hooks/useTrainHourlyGaps';
@@ -103,10 +103,7 @@ export function TrainCard({
       : null);
 
   const saltRejectionValue =
-    last?.rejection_pct ??
-    (last?.feed_tds != null && last?.permeate_tds != null && last.feed_tds > 0
-      ? Math.max(0, +((1 - last.permeate_tds / last.feed_tds) * 100).toFixed(1))
-      : null);
+    last?.rejection_pct ?? calc.rejection(last?.permeate_tds, last?.feed_tds);
 
   const isOnline = status === 'Running';
   const recWarn =

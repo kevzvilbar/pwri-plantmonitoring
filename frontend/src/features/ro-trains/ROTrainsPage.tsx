@@ -10,6 +10,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { type Database } from '@/integrations/supabase/types';
 import { deriveTrainStatus, ROTrainHero } from './index';
 import { loadThresholds } from '@/features/compliance';
+import { calc } from '@/lib/calculations';
 
 import { CIPLog } from './cip/CIPLog';
 import { ChemicalDosing } from './dosing/ChemicalDosing';
@@ -120,13 +121,7 @@ export default function ROTrains() {
     : null;
 
   const rejReadings = activeReadings
-    .map((r: any) => {
-      if (r.rejection_pct != null) return r.rejection_pct;
-      if (r.feed_tds != null && r.permeate_tds != null && r.feed_tds > 0) {
-        return (1 - r.permeate_tds / r.feed_tds) * 100;
-      }
-      return null;
-    })
+    .map((r: any) => r.rejection_pct ?? calc.rejection(r.permeate_tds, r.feed_tds))
     .filter((v: any) => v != null);
   const avgRejection = rejReadings.length
     ? rejReadings.reduce((s: number, v: number) => s + v, 0) / rejReadings.length

@@ -34,9 +34,9 @@ describe('latestRaw', () => {
     expect(latestRaw(null, null)).toBeNull();
   });
 
-  it('prefers either value when dates are equal (same-day resave)', () => {
+  it('prefers the DB reading when dates are equal (remote correction/update later the same day)', () => {
     const cached = { reading: 100, date: '2026-08-26' };
-    const dbLatest = { reading: 100, date: '2026-08-26' };
-    expect(latestRaw(cached, dbLatest)).toEqual(cached);
+    const dbLatest = { reading: 150, date: '2026-08-26' };
+    expect(latestRaw(cached, dbLatest)).toEqual(dbLatest);
   });
 });

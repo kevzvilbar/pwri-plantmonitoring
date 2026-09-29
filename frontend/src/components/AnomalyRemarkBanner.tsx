@@ -1,10 +1,22 @@
 import { AlertCircle, ShieldAlert } from 'lucide-react';
 import { Textarea } from '@/components/ui/textarea';
 import { Signal } from '@/components/ui/Signal';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import type { DeviationResult, RateUnit } from '@/lib/flowRateGuards';
 import { formatDeviationMessage } from '@/lib/flowRateGuards';
-import { MIN_ANOMALY_REMARK_LENGTH, isAnomalyRemarkValid } from '@/lib/anomalyRemarks';
+import {
+  MIN_ANOMALY_REMARK_LENGTH,
+  ANOMALY_REASON_OPTIONS,
+  type AnomalyReasonCode,
+  isAnomalyRemarkValid,
+} from '@/lib/anomalyRemarks';
 
 export function AnomalyRemarkBanner({
   result,
@@ -13,6 +25,8 @@ export function AnomalyRemarkBanner({
   windowDays,
   remark,
   onRemarkChange,
+  reasonCode,
+  onReasonCodeChange,
   escalates = true,
 }: {
   result: DeviationResult;
@@ -21,6 +35,8 @@ export function AnomalyRemarkBanner({
   windowDays: number;
   remark: string;
   onRemarkChange: (value: string) => void;
+  reasonCode?: AnomalyReasonCode | null;
+  onReasonCodeChange?: (value: AnomalyReasonCode) => void;
   /** False for tables with no supervisor pending_review pipeline (blending, power) — see formatDeviationMessage. */
   escalates?: boolean;
 }) {
@@ -28,6 +44,7 @@ export function AnomalyRemarkBanner({
 
   const message = formatDeviationMessage(label, result, unit, windowDays, escalates);
   const isCritical = result.tier === 'critical';
+  const isValid = isAnomalyRemarkValid(remark, reasonCode);
 
   return (
     <Signal
@@ -42,11 +59,36 @@ export function AnomalyRemarkBanner({
          prefers-reduced-motion instead of erasing it. */
       className={cn('animate-alert-flash reduce-motion-keep', isCritical && 'animate-alert-flash-critical')}
     >
-      <div className="space-y-1.5 pl-6 pt-1">
+      <div className="space-y-2 pl-6 pt-1">
+        {onReasonCodeChange && (
+          <div className="w-full">
+            <Select
+              value={reasonCode ?? ''}
+              onValueChange={(val) => onReasonCodeChange(val as AnomalyReasonCode)}
+            >
+              <SelectTrigger className="h-8 text-xs bg-card/60 border-border/70">
+                <SelectValue placeholder="Select standard reason (optional)" />
+              </SelectTrigger>
+              <SelectContent>
+                {ANOMALY_REASON_OPTIONS.map((opt) => (
+                  <SelectItem key={opt.code} value={opt.code} className="text-xs">
+                    <span className="font-semibold">{opt.label}</span>
+                    <span className="text-3xs text-muted-foreground ml-1.5">({opt.description})</span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+
         <Textarea
           value={remark}
           onChange={(e) => onRemarkChange(e.target.value)}
-          placeholder="Why is this reading outside the normal range? e.g. unusually high demand, pump just serviced, meter fault…"
+          placeholder={
+            reasonCode && reasonCode !== 'other'
+              ? 'Additional context or operator notes (optional)...'
+              : 'Why is this reading outside the normal range? e.g. unusually high demand, pump just serviced, meter fault…'
+          }
           maxLength={500}
           rows={2}
           className={cn(
@@ -55,11 +97,11 @@ export function AnomalyRemarkBanner({
           )}
           data-testid="anomaly-remark-textarea"
         />
-        {!isAnomalyRemarkValid(remark) && (
+        {!isValid && (
           <p className={cn('text-2xs font-mono-num font-medium', isCritical ? 'text-destructive/90' : 'text-amber-500')}>
             {remark.trim()
               ? `Say a bit more — at least ${MIN_ANOMALY_REMARK_LENGTH} characters needed.`
-              : 'A remark is required before this reading can be saved.'}
+              : 'Select a standard reason or provide an explanation before saving.'}
           </p>
         )}
       </div>

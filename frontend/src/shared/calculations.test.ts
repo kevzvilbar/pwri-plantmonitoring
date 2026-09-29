@@ -1,4 +1,4 @@
-﻿import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { calc, nrwColor } from './calculations';
 
 describe('calc.nrw', () => {
@@ -49,5 +49,35 @@ describe('nrwColor', () => {
 
   it('returns accent for null', () => {
     expect(nrwColor(null)).toBe('accent');
+  });
+});
+
+describe('calc.rejection & calc.saltPassage', () => {
+  it('correctly calculates membrane rejection and passage from feed and permeate TDS', () => {
+    // feed: 1000 ppm, perm: 20 ppm -> rejection: 98.00%, passage: 2.00%
+    expect(calc.rejection(20, 1000)).toBe(98.0);
+    expect(calc.saltPassage(20, 1000)).toBe(2.0);
+  });
+
+  it('handles feed TDS <= 0 or invalid/null inputs gracefully', () => {
+    expect(calc.rejection(20, 0)).toBeNull();
+    expect(calc.rejection(20, -50)).toBeNull();
+    expect(calc.rejection(null, 1000)).toBeNull();
+    expect(calc.rejection(20, null)).toBeNull();
+    expect(calc.rejection(NaN, 1000)).toBeNull();
+
+    expect(calc.saltPassage(20, 0)).toBeNull();
+    expect(calc.saltPassage(null, 1000)).toBeNull();
+  });
+
+  it('clamps rejection to [0, 100] when permeate exceeds feed', () => {
+    // If permeate is unexpectedly higher than feed (sensor error/spike), clamp to 0
+    expect(calc.rejection(1200, 1000)).toBe(0);
+    expect(calc.saltPassage(1200, 1000)).toBe(100);
+  });
+
+  it('handles zero permeate TDS (100% rejection, 0% passage)', () => {
+    expect(calc.rejection(0, 1000)).toBe(100.0);
+    expect(calc.saltPassage(0, 1000)).toBe(0);
   });
 });

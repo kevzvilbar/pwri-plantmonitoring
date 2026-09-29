@@ -4,6 +4,7 @@ import { createContext, useContext, useEffect, useRef, useState, ReactNode } fro
 import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 import { usePlantStore } from '@/store/plantStore';
+import { clearAssetSnapshots } from '@/lib/assetSnapshotCache';
 
 export type Role = 'Operator' | 'Technician' | 'Manager' | 'Admin' | 'Data Analyst';
 
@@ -99,6 +100,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Load the selected operator's profile whenever activeOperatorId changes
   useEffect(() => {
+    void clearAssetSnapshots();
     if (!activeOperatorId) { setOperatorProfile(null); return; }
     supabase.from('user_profiles').select(USER_PROFILE_FIELDS).eq('id', activeOperatorId).maybeSingle().then(({ data }) => {
       if (!data) { setActiveOperatorIdRef.current(null); setOperatorProfile(null); return; }
@@ -182,6 +184,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // P5-2: do not leave this person's plant selected for the next one on a
     // shared device.
     usePlantStore.getState().setSelectedPlantId(null);
+    void clearAssetSnapshots();
     await supabase.auth.signOut();
   };
 

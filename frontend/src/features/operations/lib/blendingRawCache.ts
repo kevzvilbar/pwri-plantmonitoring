@@ -23,9 +23,10 @@ export interface RawReading {
 }
 
 /**
- * Returns whichever of the two readings is more recent by date. Falls back
- * to whichever one is present if only one is. ISO YYYY-MM-DD strings compare
- * correctly with a plain string comparison.
+ * Returns whichever of the two readings is more recent by date.
+ * When dates are equal, DB reading (b) takes precedence over local cache (a)
+ * so remote updates/corrections are immediately respected.
+ * Falls back to whichever one is present if only one is.
  */
 export function latestRaw(
   a: RawReading | null | undefined,
@@ -33,5 +34,5 @@ export function latestRaw(
 ): RawReading | null {
   if (!a) return b ?? null;
   if (!b) return a;
-  return b.date > a.date ? b : a;
+  return b.date >= a.date ? b : a;
 }

@@ -109,45 +109,20 @@ export function ShiftHandoverModal() {
     try {
       const plantAssignments = profile?.plant_assignments ?? (selectedPlantId ? [selectedPlantId] : []);
       
-      const query = supabase
+      let query = supabase
         .from('user_profiles')
-        .select('*')
+        .select('id, first_name, last_name, username, email, designation, role, plant_assignments, status')
         .eq('status', 'Active')
         .in('designation', ['Operator', 'Technician'])
         .order('first_name');
 
       if (plantAssignments.length > 0) {
-        const results = await Promise.all(
-          plantAssignments.map((pid) =>
-            supabase
-              .from('user_profiles')
-              .select('*')
-              .eq('status', 'Active')
-              .in('designation', ['Operator', 'Technician'])
-              .contains('plant_assignments', [pid])
-              .order('first_name'),
-          ),
-        );
-
-        const seen = new Set<string>();
-        const merged: Profile[] = [];
-        for (const { data } of results) {
-          for (const row of data ?? []) {
-            if (!seen.has(row.id)) {
-              seen.add(row.id);
-              merged.push(row as Profile);
-            }
-          }
-        }
-        if (merged.length > 0) {
-          setPeerOperators(merged.sort((a, b) => (a.first_name ?? '').localeCompare(b.first_name ?? '')));
-          return;
-        }
+        query = query.overlaps('plant_assignments', plantAssignments);
       }
 
-      // Fallback: fetch all active operators/technicians
-      const { data } = await query;
-      setPeerOperators((data as Profile[]) ?? []);
+      const { data, error } = await query;
+      if (error) throw error;
+      setPeerOperators((data as unknown as Profile[]) ?? []);
     } catch (err) {
       console.error('[ShiftHandover] Failed to load peer operators:', err);
     } finally {

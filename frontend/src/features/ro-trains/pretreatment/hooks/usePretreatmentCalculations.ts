@@ -178,10 +178,8 @@ export function usePretreatmentCalculations(
       ? +Math.min(100, Math.max(0, (effPermFlow / effFeedFlow) * 100)).toFixed(1) : null;
     const feedTds = num(roValues.feed_tds);
     const permTds = num(roValues.permeate_tds);
-    const rejection = feedTds != null && feedTds > 0 && permTds != null
-      ? +(((feedTds - permTds) / feedTds) * 100).toFixed(2) : null;
-    const saltPassage = feedTds != null && feedTds > 0 && permTds != null
-      ? +((permTds / feedTds) * 100).toFixed(2) : null;
+    const rejection = calc.rejection(permTds, feedTds);
+    const saltPassage = calc.saltPassage(permTds, feedTds);
     const rejectFlow = effRejFlow;
 
     const phWarn = !!(num(roValues.permeate_ph) && (num(roValues.permeate_ph) < 6.5 || num(roValues.permeate_ph) > 8.5));
