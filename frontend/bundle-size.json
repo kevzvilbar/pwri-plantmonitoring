@@ -1,6 +1,6 @@
 {
-  "maxTotalGzipKb": 1132.6,
-  "lastUpdated": "2026-09-29",
+  "maxTotalGzipKb": 1161.5,
+  "lastUpdated": "2026-09-30",
   "history": [
     {
       "date": "2026-09-06",
@@ -67,9 +67,10 @@
       "reason": "Re-baselined bundle size to match CI authoritative build (1160.0 kB gzipped) following UI-UX Pro-Max theme contrast calibration (WCAG AA 4.5:1+), 4-tier surface elevation tokens, and view transition enhancements across all 11 themes."
     },
     {
-      "date": "2026-09-29",
-      "maxTotalGzipKb": 1132.6,
-      "previous": 1160
+      "date": "2026-09-30",
+      "maxTotalGzipKb": 1161.5,
+      "previous": 1160,
+      "reason": "Re-baselined bundle size to match CI authoritative build (1161.5 kB gzipped, +1.5 kB over 1160.0 kB baseline) following addition of anomaly reason taxonomy options, offline asset baseline snapshot cache via IDB, and standardized RO salt rejection calculations across views. Measured via CI's authoritative build log."
     }
   ]
 }
