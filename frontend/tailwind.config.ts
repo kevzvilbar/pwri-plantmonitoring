@@ -39,6 +39,10 @@ export default {
       colors: {
         border: "hsl(var(--border))",
         hairline: "var(--border-hairline)",
+        divider: {
+          DEFAULT: "hsl(var(--border))",
+          strong: "hsl(var(--divider-strong, var(--border)))",
+        },
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",
         background: "hsl(var(--background))",
@@ -46,6 +50,7 @@ export default {
         surface: {
           ground: "hsl(var(--surface-ground))",
           base: "hsl(var(--surface-base))",
+          recessed: "hsl(var(--surface-recessed))",
           raised: "hsl(var(--surface-raised))",
           overlay: "hsl(var(--surface-overlay))",
           dialog: "hsl(var(--surface-dialog))",
@@ -66,6 +71,15 @@ export default {
         muted: {
           DEFAULT: "hsl(var(--muted))",
           foreground: "hsl(var(--muted-foreground))",
+        },
+        hover: {
+          DEFAULT: "hsl(var(--hover, var(--muted)))",
+          foreground: "hsl(var(--hover-foreground, var(--foreground)))",
+        },
+        ok: {
+          DEFAULT: "hsl(var(--ok, var(--accent)))",
+          foreground: "hsl(var(--ok-foreground, var(--accent-foreground)))",
+          soft: "hsl(var(--ok-soft, var(--accent-soft)))",
         },
         accent: {
           DEFAULT: "hsl(var(--accent))",

@@ -71,6 +71,23 @@ export function WellRowInputs({
   pressureReading, onPressureReadingChange, savingPressure, onSavePressure,
   showAnomalyBanner, anomalyRemarkRequired,
 }: WellRowInputsProps) {
+  const isSaveDisabled = Boolean(
+    saving ||
+    !meterChanged ||
+    atLimit ||
+    (showAnomalyBanner && anomalyRemarkRequired) ||
+    (editingId && !isReasonComplete(editReason, editCustomReason))
+  );
+
+  const disabledReason = React.useMemo(() => {
+    if (saving) return 'Saving in progress...';
+    if (atLimit) return 'Daily limit reached';
+    if (showAnomalyBanner && anomalyRemarkRequired) return 'Anomaly remark required';
+    if (editingId && !isReasonComplete(editReason, editCustomReason)) return 'Select reason to proceed';
+    if (!meterChanged) return 'Change reading to save';
+    return null;
+  }, [saving, atLimit, showAnomalyBanner, anomalyRemarkRequired, editingId, editReason, editCustomReason, meterChanged]);
+
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 divide-y sm:divide-y-0 sm:divide-x divide-border/50">
       <div className="px-3.5 py-3 space-y-2.5">
@@ -100,16 +117,21 @@ export function WellRowInputs({
               )}
             </div>
             <Button
-              onClick={onSave} disabled={Boolean(saving || !meterChanged || atLimit || (showAnomalyBanner && anomalyRemarkRequired) || (editingId && !isReasonComplete(editReason, editCustomReason)))}
+              onClick={onSave} disabled={isSaveDisabled}
               className={cn(
                 'w-full h-11 text-sm font-bold shadow-sm rounded-xl transition-all',
                 meterChanged
                   ? 'bg-primary hover:bg-primary/90 active:bg-primary text-primary-foreground'
                   : 'bg-muted text-muted-foreground/60 border border-border/40 hover:bg-muted cursor-not-allowed',
               )}
-              title="Save water meter reading">
+              title={disabledReason || 'Save water meter reading'}>
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : editingId ? 'Update Meter' : 'Save Water Meter'}
             </Button>
+            {disabledReason && (
+              <p className="text-3xs text-muted-foreground/70 text-center font-medium">
+                {disabledReason}
+              </p>
+            )}
           </div>
         ) : (
           <div className="flex items-center gap-2">
@@ -122,7 +144,7 @@ export function WellRowInputs({
               data-testid={`well-meter-input-${well.id}`}
             />
             <Button
-              onClick={onSave} disabled={Boolean(saving || !meterChanged || atLimit || (showAnomalyBanner && anomalyRemarkRequired) || (editingId && !isReasonComplete(editReason, editCustomReason)))}
+              onClick={onSave} disabled={isSaveDisabled}
               size="sm"
               className={cn(
                 'h-8 px-3.5 shrink-0 text-xs font-semibold shadow-sm transition-all',
@@ -130,7 +152,7 @@ export function WellRowInputs({
                   ? 'bg-primary hover:bg-primary/90 active:bg-primary text-primary-foreground'
                   : 'bg-muted text-muted-foreground/60 border border-border/40 hover:bg-muted cursor-not-allowed',
               )}
-              title="Save water meter reading">
+              title={disabledReason || 'Save water meter reading'}>
               {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : editingId ? 'Update' : 'Save'}
             </Button>
           </div>

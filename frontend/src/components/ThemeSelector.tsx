@@ -1,4 +1,4 @@
-import { Palette, Check, Moon, Sun } from 'lucide-react';
+import { Palette, Check, Moon, Sun, SunMedium } from 'lucide-react';
 import { useThemeStore } from '@/store/themeStore';
 import { COLOR_THEMES } from '@/lib/themes';
 import { Button } from '@/components/ui/button';
@@ -24,6 +24,8 @@ export function ThemeSelector({
   const setColorTheme = useThemeStore((s) => s.setColorTheme);
   const darkMode = useThemeStore((s) => s.darkMode);
   const setDarkMode = useThemeStore((s) => s.setDarkMode);
+  const sunlightMode = useThemeStore((s) => s.sunlightMode);
+  const toggleSunlightMode = useThemeStore((s) => s.toggleSunlightMode);
 
   const currentThemeObj = COLOR_THEMES.find(t => t.id === colorTheme) || COLOR_THEMES[0];
 
@@ -102,6 +104,34 @@ export function ThemeSelector({
             <span>Dark Mode</span>
           </button>
         </div>
+
+        {/* One-tap Sunlight Mode Quick Toggle */}
+        <button
+          type="button"
+          onClick={toggleSunlightMode}
+          className={cn(
+            'w-full py-2 px-3 rounded-xl border text-xs font-semibold flex items-center justify-between transition-all',
+            sunlightMode
+              ? 'bg-amber-500/15 border-amber-500/60 text-foreground'
+              : 'bg-muted/40 hover:bg-muted border-border/50 text-muted-foreground hover:text-foreground'
+          )}
+        >
+          <div className="flex items-center gap-2">
+            <SunMedium className={cn("h-4 w-4", sunlightMode ? "text-amber-500" : "text-muted-foreground")} />
+            <div className="text-left">
+              <p className="text-xs font-bold leading-tight">Sunlight Mode</p>
+              <p className="text-3xs text-muted-foreground leading-tight">Ultra-high contrast for outdoor glare</p>
+            </div>
+          </div>
+          <span className={cn(
+            'text-3xs font-bold px-2 py-0.5 rounded-full border',
+            sunlightMode
+              ? 'bg-amber-500 text-white border-amber-600'
+              : 'bg-background text-muted-foreground border-border'
+          )}>
+            {sunlightMode ? 'Active' : 'Off'}
+          </span>
+        </button>
 
         {/* Color Palette Grid */}
         <div className="space-y-1.5">

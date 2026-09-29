@@ -31,4 +31,21 @@ describe('useThemeStore', () => {
     useThemeStore.getState().setDarkMode(false);
     expect(useThemeStore.getState().darkMode).toBe(false);
   });
+
+  it('should toggle sunlight mode correctly and restore previous theme', () => {
+    useThemeStore.getState().setColorTheme('nordic-aurora');
+    useThemeStore.getState().setDarkMode(true);
+
+    // Toggle on
+    useThemeStore.getState().toggleSunlightMode();
+    expect(useThemeStore.getState().sunlightMode).toBe(true);
+    expect(useThemeStore.getState().colorTheme).toBe('outdoor-contrast');
+    expect(useThemeStore.getState().darkMode).toBe(false);
+
+    // Toggle off - restores nordic-aurora and dark mode
+    useThemeStore.getState().toggleSunlightMode();
+    expect(useThemeStore.getState().sunlightMode).toBe(false);
+    expect(useThemeStore.getState().colorTheme).toBe('nordic-aurora');
+    expect(useThemeStore.getState().darkMode).toBe(true);
+  });
 });

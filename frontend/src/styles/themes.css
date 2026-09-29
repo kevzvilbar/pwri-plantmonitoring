@@ -28,16 +28,22 @@
     --primary-soft:       175 60% 93%;
     --primary-glow:       175 70% 42%;
 
-    /* ── Secondary / muted ─────────────────────────────────────── */
+    /* ── Secondary / muted / hover ─────────────────────────────── */
     --secondary:           210 30% 94%;
     --secondary-foreground:215 55% 18%;
     --muted:               210 25% 95%;
     --muted-foreground:    215 12% 44%;
+    --hover:               210 25% 92%;
+    --hover-foreground:    215 45% 11%;
+    --divider-strong:      215 20% 75%;
 
-    /* ── Semantic: Emerald (success / good readings) ────────────── */
+    /* ── Semantic: Emerald (success / good readings / ok) ───────── */
     --accent:              158 64% 40%;
     --accent-foreground:   0 0% 100%;
     --accent-soft:         158 50% 92%;
+    --ok:                  158 64% 40%;
+    --ok-foreground:       0 0% 100%;
+    --ok-soft:             158 50% 92%;
 
     /* ── Semantic: Cyan (active highlights) ─────────────────────── */
     --highlight:           189 96% 43%;
@@ -403,9 +409,15 @@
     --secondary:           222 13% 15.3%;
     --secondary-foreground:220 15% 91%;
     --muted:               220 12% 11%;
+    --hover:               222 13% 15.3%;
+    --hover-foreground:    220 15% 91%;
+    --divider-strong:      225 12% 26%;
     --accent:              158 60% 48%;   /* Run Lamp Emerald */
     --accent-foreground:   220 15% 91%;
     --accent-soft:         158 35% 15%;
+    --ok:                  158 60% 48%;
+    --ok-foreground:       220 15% 91%;
+    --ok-soft:             158 35% 15%;
 
     --highlight:           189 80% 50%;   /* Signal Cyan */
     --highlight-foreground:220 15% 91%;
