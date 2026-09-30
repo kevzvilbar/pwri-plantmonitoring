@@ -52,7 +52,7 @@ $$;
 
 GRANT EXECUTE ON FUNCTION public.my_plant_ids() TO authenticated, service_role;
 
-CREATE OR REPLACE FUNCTION public.user_has_plant_access(_plant_id uuid, _user_id uuid DEFAULT auth.uid())
+CREATE OR REPLACE FUNCTION public.user_has_plant_access(_plant_id uuid, _user_id uuid)
 RETURNS boolean
 LANGUAGE sql
 STABLE
@@ -73,7 +73,18 @@ AS $$
   );
 $$;
 
+CREATE OR REPLACE FUNCTION public.user_has_plant_access(_plant_id uuid)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+  SELECT public.user_has_plant_access(_plant_id, auth.uid());
+$$;
+
 GRANT EXECUTE ON FUNCTION public.user_has_plant_access(uuid, uuid) TO authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.user_has_plant_access(uuid) TO authenticated, service_role;
 
 -- Grant EXECUTE on role checker helpers to authenticated for RLS policy evaluation
 GRANT EXECUTE ON FUNCTION public.is_admin(uuid) TO authenticated, service_role;
@@ -140,6 +151,9 @@ CREATE TRIGGER on_auth_user_created
   EXECUTE FUNCTION public.handle_new_user();
 
 -- ── 4. DB-03: Onboarding, profile guarding, and approvals ───────────────────
+ 
+DROP FUNCTION IF EXISTS public.complete_onboarding(text, text, text, text, text, text, uuid[]);
+DROP FUNCTION IF EXISTS public.complete_onboarding(text, text, uuid[], text, text, text, text, uuid);
 
 CREATE OR REPLACE FUNCTION public.complete_onboarding(
   _full_name text,
@@ -231,7 +245,10 @@ CREATE TRIGGER trg_guard_user_profile_changes
   FOR EACH ROW
   EXECUTE FUNCTION public.trg_guard_user_profile_modifications();
 
-CREATE OR REPLACE FUNCTION public.approve_user(target_user_id uuid, _approve boolean DEFAULT true)
+DROP FUNCTION IF EXISTS public.approve_user(uuid, boolean);
+DROP FUNCTION IF EXISTS public.approve_user(uuid);
+
+CREATE OR REPLACE FUNCTION public.approve_user(_user_id uuid, _approve boolean DEFAULT true)
 RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -245,15 +262,15 @@ BEGIN
   IF _approve THEN
     UPDATE public.user_profiles
     SET status = 'Active', confirmed = true
-    WHERE id = target_user_id;
+    WHERE id = _user_id;
   ELSE
     UPDATE public.user_profiles
     SET status = 'Suspended', confirmed = false
-    WHERE id = target_user_id;
+    WHERE id = _user_id;
   END IF;
 
   IF NOT FOUND THEN
-    RAISE EXCEPTION 'User profile not found for uid %', target_user_id;
+    RAISE EXCEPTION 'User profile not found for uid %', _user_id;
   END IF;
 END;
 $$;
@@ -262,7 +279,9 @@ GRANT EXECUTE ON FUNCTION public.approve_user(uuid, boolean) TO authenticated, s
 
 -- ── 5. DB-12: Suspend / Reactivate RPCs ──────────────────────────────────────
 
-CREATE OR REPLACE FUNCTION public.admin_suspend_user(target_user_id uuid)
+DROP FUNCTION IF EXISTS public.admin_suspend_user(uuid);
+
+CREATE OR REPLACE FUNCTION public.admin_suspend_user(_user_id uuid)
 RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -275,11 +294,11 @@ BEGIN
 
   UPDATE public.user_profiles
   SET status = 'Suspended'
-  WHERE id = target_user_id;
+  WHERE id = _user_id;
 
   BEGIN
-    DELETE FROM auth.sessions WHERE user_id = target_user_id;
-    DELETE FROM auth.refresh_tokens WHERE user_id = target_user_id::text;
+    DELETE FROM auth.sessions WHERE user_id = _user_id;
+    DELETE FROM auth.refresh_tokens WHERE user_id = _user_id::text;
   EXCEPTION WHEN OTHERS THEN
     -- Ignore auth table permissions if not available
   END;
@@ -288,7 +307,9 @@ $$;
 
 GRANT EXECUTE ON FUNCTION public.admin_suspend_user(uuid) TO authenticated, service_role;
 
-CREATE OR REPLACE FUNCTION public.admin_reactivate_user(target_user_id uuid)
+DROP FUNCTION IF EXISTS public.admin_reactivate_user(uuid);
+
+CREATE OR REPLACE FUNCTION public.admin_reactivate_user(_user_id uuid)
 RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -301,7 +322,7 @@ BEGIN
 
   UPDATE public.user_profiles
   SET status = 'Active', confirmed = true
-  WHERE id = target_user_id;
+  WHERE id = _user_id;
 END;
 $$;
 
@@ -309,8 +330,10 @@ GRANT EXECUTE ON FUNCTION public.admin_reactivate_user(uuid) TO authenticated, s
 
 -- ── 6. DB-11: Password Reset Hardening ───────────────────────────────────────
 
+DROP FUNCTION IF EXISTS public.admin_set_user_password(uuid, text);
+
 CREATE OR REPLACE FUNCTION public.admin_set_user_password(
-  _target_user_id uuid,
+  _user_id uuid,
   _new_password text
 )
 RETURNS void
@@ -331,15 +354,15 @@ BEGIN
   SET
     encrypted_password = extensions.crypt(_new_password, extensions.gen_salt('bf', 10)),
     updated_at = now()
-  WHERE id = _target_user_id;
+  WHERE id = _user_id;
 
   IF NOT FOUND THEN
-    RAISE EXCEPTION 'Auth user not found for uid %', _target_user_id;
+    RAISE EXCEPTION 'Auth user not found for uid %', _user_id;
   END IF;
 
   BEGIN
-    DELETE FROM auth.sessions WHERE user_id = _target_user_id;
-    DELETE FROM auth.refresh_tokens WHERE user_id = _target_user_id::text;
+    DELETE FROM auth.sessions WHERE user_id = _user_id;
+    DELETE FROM auth.refresh_tokens WHERE user_id = _user_id::text;
   EXCEPTION WHEN OTHERS THEN
   END;
 END;

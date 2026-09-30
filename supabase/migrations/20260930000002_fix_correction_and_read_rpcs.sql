@@ -410,6 +410,8 @@ $$;
 
 GRANT EXECUTE ON FUNCTION public.get_dashboard_aggregates(uuid[], timestamptz, timestamptz, timestamptz, timestamptz, date) TO authenticated, service_role;
 
+DROP FUNCTION IF EXISTS public.get_train_last_readings(uuid[]);
+
 CREATE OR REPLACE FUNCTION public.get_train_last_readings(train_ids uuid[])
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -474,6 +476,8 @@ $$;
 
 GRANT EXECUTE ON FUNCTION public.get_train_last_readings(uuid[]) TO authenticated, service_role;
 
+DROP FUNCTION IF EXISTS public.latest_power_readings_before(uuid[], timestamptz);
+
 CREATE OR REPLACE FUNCTION public.latest_power_readings_before(
   plant_ids uuid[],
   target_dt timestamptz
@@ -528,8 +532,8 @@ GRANT EXECUTE ON FUNCTION public.latest_power_readings_before(uuid[], timestampt
 REVOKE ALL ON FUNCTION public.get_offline_alert_recipients(uuid) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.get_offline_alert_recipients(uuid) TO service_role;
 
-REVOKE ALL ON FUNCTION public.get_push_alert_recipient_ids(uuid, text) FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.get_push_alert_recipient_ids(uuid, text) TO service_role;
+REVOKE ALL ON FUNCTION public.get_push_alert_recipient_ids(uuid) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.get_push_alert_recipient_ids(uuid) TO service_role;
 
 -- ── 3. DB-07: Hardened Mirror Setter ────────────────────────────────────────
 
