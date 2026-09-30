@@ -1125,6 +1125,7 @@
   --popover:            206 38% 11%;
   --popover-foreground: 174 20% 92%;
   --muted:              206 30% 13%;
+  --muted-foreground:   174 15% 65%;
   --border:             206 25% 16%;
 
   --topbar:             206 60% 7%;
@@ -1167,6 +1168,7 @@
   --popover:            235 38% 11%;
   --popover-foreground: 210 25% 92%;
   --muted:              235 30% 13%;
+  --muted-foreground:   210 20% 65%;
   --border:             235 25% 16%;
 
   --topbar:             237 80% 5%;
@@ -1209,6 +1211,7 @@
   --popover:            180 28% 11%;
   --popover-foreground: 100 20% 92%;
   --muted:              180 20% 13%;
+  --muted-foreground:   100 15% 65%;
   --border:             180 20% 15%;
 
   --topbar:             188 70% 5%;
@@ -1251,6 +1254,7 @@
   --popover:            10  15% 12%;
   --popover-foreground: 30  20% 92%;
   --muted:              10  12% 14%;
+  --muted-foreground:   30  15% 65%;
   --border:             10  12% 18%;
 
   --topbar:             10  14% 7%;
@@ -1293,6 +1297,7 @@
   --popover:            225 38% 11%;
   --popover-foreground: 194 25% 92%;
   --muted:              225 25% 13%;
+  --muted-foreground:   194 20% 65%;
   --border:             225 25% 16%;
 
   --topbar:             226 80% 5.5%;
@@ -1335,6 +1340,7 @@
   --popover:            225 38% 12%;
   --popover-foreground: 220 25% 92%;
   --muted:              225 25% 14%;
+  --muted-foreground:   220 20% 68%;
   --border:             225 25% 17%;
 
   --topbar:             224 60% 14%;
@@ -1377,6 +1383,7 @@
   --popover:            222 28% 11.5%;
   --popover-foreground: 210 15% 92%;
   --muted:              222 20% 13%;
+  --muted-foreground:   210 15% 65%;
   --border:             222 20% 16%;
 
   --topbar:             222 40% 6.5%;
@@ -1419,6 +1426,7 @@
   --popover:            198 40% 11%;
   --popover-foreground: 160 15% 92%;
   --muted:              198 30% 13%;
+  --muted-foreground:   160 15% 65%;
   --border:             198 25% 16%;
 
   --topbar:             198 70% 5.5%;
@@ -1461,6 +1469,7 @@
   --popover:            240 10% 10.5%;
   --popover-foreground: 340 15% 92%;
   --muted:              240 8%  13%;
+  --muted-foreground:   340 15% 65%;
   --border:             240 8%  16%;
 
   --topbar:             240 10% 5%;
@@ -1503,6 +1512,7 @@
   --popover:            0   0%  9%;
   --popover-foreground: 0   0%  92%;
   --muted:              0   0%  12%;
+  --muted-foreground:   45  15% 65%;
   --border:             0   0%  15%;
 
   --topbar:             0   0%  3.5%;

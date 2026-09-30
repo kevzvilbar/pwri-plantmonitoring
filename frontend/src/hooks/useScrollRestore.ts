@@ -21,6 +21,10 @@ export function useScrollRestore() {
           requestAnimationFrame(() => {
             window.scrollTo({ top: Number(saved), behavior: 'instant' });
           });
+        } else {
+          requestAnimationFrame(() => {
+            window.scrollTo({ top: 0, behavior: 'instant' });
+          });
         }
       } catch { /* ignore */ }
     }

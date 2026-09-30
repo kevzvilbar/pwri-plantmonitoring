@@ -6,6 +6,7 @@ import { AppSidebar } from './AppSidebar';
 import { OfflineBanner } from './OfflineBanner';
 import { SidebarProvider } from '@/components/ui/sidebar';
 import { useScrollRestore } from '@/hooks/useScrollRestore';
+import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { useBackgroundSync } from '@/hooks/useBackgroundSync';
 import { useTrainDataRealtime } from '@/hooks/useTrainDataRealtime';
 import { usePullToRefresh } from '@/hooks/usePullToRefresh';
@@ -94,6 +95,7 @@ function PageAnimationWrapper({ children }: { children: React.ReactNode }) {
 
 export function AppShell() {
   useScrollRestore();
+  useDocumentTitle();
   const { pathname } = useLocation();
   const queryClient = useQueryClient();
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -109,6 +111,14 @@ export function AppShell() {
 
   return (
     <SidebarProvider>
+      {/* Skip to main content link for screen readers and keyboard navigation */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:px-4 focus:py-2 focus:bg-primary focus:text-primary-foreground focus:rounded-md focus:shadow-md focus:outline-none focus:ring-2 focus:ring-ring"
+      >
+        Skip to main content
+      </a>
+
       {/* Pull to refresh indicator for mobile gestures */}
       <PullToRefreshIndicator {...pullState} />
 
@@ -143,7 +153,7 @@ export function AppShell() {
             changes without unmounting the subtree, preserving all in-memory
             state (filters, form inputs, tab selections) across navigations.
           */}
-          <main className="flex-1 flex flex-col min-w-0">
+          <main id="main-content" tabIndex={-1} className="flex-1 flex flex-col min-w-0 outline-none">
             <PageAnimationWrapper>
               {/*
                 Per-route ErrorBoundary: keeps the shell (sidebar, topbar,

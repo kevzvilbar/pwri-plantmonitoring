@@ -20,6 +20,8 @@ const EDGE_LIGHT: Record<LampTone, string> = {
   info:      'edge-light-sky',
   live:      'edge-light-cyan',
   highlight: 'edge-light-cyan',
+  solar:     'edge-light-amber',
+  grid:      'edge-light-slate',
   muted:     'edge-light-slate',
 };
 

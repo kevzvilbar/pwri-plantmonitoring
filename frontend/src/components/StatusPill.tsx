@@ -23,12 +23,14 @@ function toLampTone(tone?: string): LampTone {
     case 'success':
     case 'accent':
       return 'good';
+    case 'solar':
+      return 'solar';
+    case 'grid':
+      return 'grid';
     case 'primary':
     case 'info':
-    case 'grid':
       return 'info';
     case 'warn':
-    case 'solar':
       return 'warn';
     case 'danger':
       return 'danger';

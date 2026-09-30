@@ -1,6 +1,6 @@
 import { cn } from '@/lib/utils';
 
-export type LampTone = 'good' | 'warn' | 'danger' | 'info' | 'live' | 'muted' | 'accent' | 'highlight';
+export type LampTone = 'good' | 'warn' | 'danger' | 'info' | 'live' | 'muted' | 'accent' | 'highlight' | 'solar' | 'grid';
 export type LampShape = 'circle' | 'triangle' | 'octagon' | 'square' | 'auto';
 
 // Map tone onto semantic CSS custom properties so any theme change propagates automatically
@@ -12,6 +12,8 @@ const LAMP_VAR: Record<LampTone, string> = {
   info:      'var(--info)',
   live:      'var(--highlight)',   // Signal Cyan — actively updating / real-time
   highlight: 'var(--highlight)',
+  solar:     'var(--kpi-solar)',
+  grid:      'var(--kpi-grid)',
   muted:     'var(--muted-foreground)',
 };
 
@@ -26,7 +28,7 @@ export interface LampProps {
 export function Lamp({
   tone = 'muted',
   pulse = false,
-  size = 7,
+  size = 8,
   shape = 'auto',
   className,
 }: LampProps) {

@@ -46,7 +46,7 @@ export function OdometerRollerInput({
     isMobile, inputRef, keyboardInputRef, focused, setFocused, selStart, setSelStart,
     keyboardMode, setKeyboardMode, touchStartY, wholeDisplay, decDisplay, theme,
     cellW, cellH, fontSize, activeCellIdx, updateSel, handleDigitTap, handleTouchStart,
-    handleTouchEnd, handleClick, rawWhole, rawDec, wholeLen, rawWholeLen,
+    handleTouchEnd, handleClick, handleKeyDown, rawWhole, rawDec, wholeLen, rawWholeLen,
   } = roller;
 
   const renderCell = (
@@ -83,15 +83,21 @@ export function OdometerRollerInput({
       return (
         <div
           key={key}
-          role="button"
+          role="spinbutton"
+          tabIndex={disabled ? -1 : 0}
+          aria-valuenow={parseInt(d, 10) || 0}
+          aria-valuemin={0}
+          aria-valuemax={9}
           aria-label={`Digit ${d}, swipe up or tap top to increase, swipe down or tap bottom to decrease`}
           onTouchStart={handleTouchStart}
           onTouchEnd={(e) => handleTouchEnd(e, pos)}
           onClick={(e)   => handleClick(e, pos)}
+          onKeyDown={(e) => handleKeyDown(e, pos)}
           className={[
             cellW, cellH,
             'relative rounded-[8px] flex flex-col items-center justify-between select-none touch-manipulation overflow-hidden',
             'border-2 font-mono font-black transition-all duration-75',
+            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
             cellBorder, cellColor, glowClass, zoneBg,
             disabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer active:scale-95',
           ].join(' ')}

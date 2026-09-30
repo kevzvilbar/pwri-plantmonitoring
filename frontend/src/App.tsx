@@ -78,8 +78,6 @@ function ThemeEffect() {
   return null;
 }
 
-import { queryClient } from "@/lib/queryClient";
-
 const persistOptions = {
   persister: queryPersister,
   maxAge: CACHE_MAX_AGE,
@@ -101,7 +99,10 @@ const App = () => (
     <ThemeEffect />
     <TooltipProvider>
       <Sonner position="top-center" />
-      <BrowserRouter basename={import.meta.env.BASE_URL}>
+      <BrowserRouter
+        basename={import.meta.env.BASE_URL}
+        future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+      >
         <AuthProvider>
           <PresenceProvider>
             <ErrorBoundary>

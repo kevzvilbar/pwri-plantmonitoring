@@ -8,6 +8,12 @@ export default {
   theme: {
     container: { center: true, padding: "1rem", screens: { "2xl": "1400px" } },
     extend: {
+      screens: {
+        xs: '480px',
+      },
+      spacing: {
+        '8.5': '2.125rem',
+      },
       // Compact type scale for dense data tables/badges (RO train readings,
       // meter config grids, KPI badges) — text-xs (12px) is too large for a
       // lot of that chrome. These two tokens cover it.

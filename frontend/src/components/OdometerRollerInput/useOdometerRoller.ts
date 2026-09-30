@@ -22,6 +22,7 @@ export function useOdometerRoller({
   const [selStart, setSelStart] = useState<number | null>(null);
   const [keyboardMode, setKeyboardMode] = useState(false);
   const touchStartY = useRef<number | null>(null);
+  const touchStartScrollY = useRef<number>(0);
 
   const dotIdx      = value.indexOf('.');
   const rawWhole    = dotIdx >= 0 ? value.slice(0, dotIdx) : value;
@@ -62,20 +63,29 @@ export function useOdometerRoller({
 
   const handleTouchStart = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
     touchStartY.current = e.touches[0].clientY;
+    touchStartScrollY.current = typeof window !== 'undefined' ? window.scrollY : 0;
   }, []);
 
   const handleTouchEnd = useCallback((
     e: React.TouchEvent<HTMLDivElement>,
     pos: number,
   ) => {
-    e.preventDefault();
-    e.stopPropagation();
     const endY   = e.changedTouches[0].clientY;
     const startY = touchStartY.current ?? endY;
-    const delta  = startY - endY;
+    const currentScrollY = typeof window !== 'undefined' ? window.scrollY : 0;
+    const scrollDiff = Math.abs(currentScrollY - touchStartScrollY.current);
     touchStartY.current = null;
 
-    const SWIPE_THRESHOLD = 8;
+    // Prevent accidental digit changes when the user is simply scrolling the page
+    if (scrollDiff > 6) {
+      return;
+    }
+
+    e.preventDefault();
+    e.stopPropagation();
+    const delta  = startY - endY;
+
+    const SWIPE_THRESHOLD = 24;
     if (Math.abs(delta) >= SWIPE_THRESHOLD) {
       handleDigitTap(pos, delta > 0 ? 1 : -1);
     } else {
@@ -96,6 +106,19 @@ export function useOdometerRoller({
     handleDigitTap(pos, relY < rect.height / 2 ? 1 : -1);
   }, [handleDigitTap]);
 
+  const handleKeyDown = useCallback((
+    e: React.KeyboardEvent<HTMLDivElement>,
+    pos: number,
+  ) => {
+    if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      handleDigitTap(pos, 1);
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      handleDigitTap(pos, -1);
+    }
+  }, [handleDigitTap]);
+
   const activeCellIdx = useMemo(() => {
     if (!focused || selStart === null || isMobile) return null;
     const paddingLen    = Math.max(0, wholeLen - rawWholeLen);
@@ -112,6 +135,6 @@ export function useOdometerRoller({
     isMobile, inputRef, keyboardInputRef, focused, setFocused, selStart, setSelStart,
     keyboardMode, setKeyboardMode, touchStartY, wholeDisplay, decDisplay, theme,
     cellW, cellH, fontSize, activeCellIdx, updateSel, handleDigitTap, handleTouchStart,
-    handleTouchEnd, handleClick, rawWhole, rawDec, wholeLen, rawWholeLen,
+    handleTouchEnd, handleClick, handleKeyDown, rawWhole, rawDec, wholeLen, rawWholeLen,
   };
 }
