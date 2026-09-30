@@ -1,1 +1,13 @@
 project_id = "sosfbfxovtleuvahxvpm"
+
+[auth]
+enabled = true
+enable_signup = true
+minimum_password_length = 12
+enable_confirmations = false
+
+[functions.notify-train-offline]
+verify_jwt = false
+
+[functions.send-push-notification]
+verify_jwt = false

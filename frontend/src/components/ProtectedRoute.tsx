@@ -50,13 +50,10 @@ export function ProtectedRoute({ children }: { children: ReactNode }) {
   if (!profile?.profile_complete && loc.pathname !== '/onboarding') {
     return <Navigate to="/onboarding" replace />;
   }
-  // Iteration 9: gate every protected route on Admin approval.
-  // `confirmed` is undefined for projects that haven't run the
-  // 20260428_admin_approval_flow.sql migration yet — treat as approved
-  // in that case so the UI stays usable until the flag rolls out.
+  // Gate every protected route on Admin approval (fails closed).
   if (
     profile?.profile_complete &&
-    profile.confirmed === false &&
+    profile.confirmed !== true &&
     loc.pathname !== '/pending-approval'
   ) {
     return <Navigate to="/pending-approval" replace />;

@@ -5,6 +5,7 @@ import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 import { usePlantStore } from '@/store/plantStore';
 import { clearAssetSnapshots } from '@/lib/assetSnapshotCache';
+import { queryClient } from '@/lib/queryClient';
 
 export type Role = 'Operator' | 'Technician' | 'Manager' | 'Admin' | 'Data Analyst';
 
@@ -185,6 +186,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // shared device.
     usePlantStore.getState().setSelectedPlantId(null);
     void clearAssetSnapshots();
+    queryClient.clear();
+    try {
+      for (let i = localStorage.length - 1; i >= 0; i--) {
+        const key = localStorage.key(i);
+        if (key && (key.startsWith('draft_') || key.startsWith('edit-ro-reading-') || key.startsWith('form-draft-'))) {
+          localStorage.removeItem(key);
+        }
+      }
+    } catch { /* ignore storage errors */ }
     await supabase.auth.signOut();
   };
 

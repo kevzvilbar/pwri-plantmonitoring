@@ -9,6 +9,10 @@ import { supabase } from '@/integrations/supabase/client';
 
 /** Fetch all plants for sign-up plant assignment */
 export async function fetchPlantsForSignup(): Promise<Array<{ id: string; name: string; address?: string }>> {
+  const { data: rpcData, error: rpcError } = await (supabase.rpc as unknown as (fn: string) => Promise<{ data: unknown; error: unknown }>)('get_plants_for_signup');
+  if (!rpcError && Array.isArray(rpcData)) {
+    return rpcData as Array<{ id: string; name: string; address?: string }>;
+  }
   const { data, error } = await supabase
     .from('plants')
     .select('id, name, address')
@@ -25,6 +29,19 @@ export async function fetchOperatorPeers(plantId: string): Promise<Array<{
   last_name: string | null;
   plant_assignments: string[];
 }>> {
+  const { data: rpcData, error: rpcError } = await (supabase.rpc as unknown as (fn: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: unknown }>)(
+    'get_operator_peers',
+    { p_plant_id: plantId },
+  );
+  if (!rpcError && Array.isArray(rpcData)) {
+    return rpcData as Array<{
+      id: string;
+      username: string;
+      first_name: string | null;
+      last_name: string | null;
+      plant_assignments: string[];
+    }>;
+  }
   const { data, error } = await supabase
     .from('user_profiles')
     .select('id, username, first_name, last_name, plant_assignments')
