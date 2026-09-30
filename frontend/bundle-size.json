@@ -1,5 +1,5 @@
 {
-  "maxTotalGzipKb": 1161.5,
+  "maxTotalGzipKb": 1133,
   "lastUpdated": "2026-09-30",
   "history": [
     {
@@ -71,6 +71,11 @@
       "maxTotalGzipKb": 1161.5,
       "previous": 1160,
       "reason": "Re-baselined bundle size to match CI authoritative build (1161.5 kB gzipped, +1.5 kB over 1160.0 kB baseline) following addition of anomaly reason taxonomy options, offline asset baseline snapshot cache via IDB, and standardized RO salt rejection calculations across views. Measured via CI's authoritative build log."
+    },
+    {
+      "date": "2026-09-30",
+      "maxTotalGzipKb": 1133,
+      "previous": 1161.5
     }
   ]
 }
