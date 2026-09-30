@@ -157,14 +157,14 @@ DROP POLICY IF EXISTS "entity_status_audit_log_insert" ON public.entity_status_a
 
 CREATE POLICY "entity_status_audit_log_insert" ON public.entity_status_audit_log
 FOR INSERT TO authenticated
-WITH CHECK (actor_user_id = auth.uid());
+WITH CHECK (user_id = auth.uid());
 
 DROP POLICY IF EXISTS "Authenticated users can insert product meter audit log" ON public.product_meter_audit_log;
 DROP POLICY IF EXISTS "product_meter_audit_log_insert" ON public.product_meter_audit_log;
 
 CREATE POLICY "product_meter_audit_log_insert" ON public.product_meter_audit_log
 FOR INSERT TO authenticated
-WITH CHECK (actor_user_id = auth.uid() AND public.user_has_plant_access(plant_id));
+WITH CHECK (user_id = auth.uid() AND public.user_has_plant_access(plant_id));
 
 DROP POLICY IF EXISTS "reading_edit_audit_log_insert" ON public.reading_edit_audit_log;
 
