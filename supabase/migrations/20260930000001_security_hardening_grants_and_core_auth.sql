@@ -52,6 +52,9 @@ $$;
 
 GRANT EXECUTE ON FUNCTION public.my_plant_ids() TO authenticated, service_role;
 
+-- NOTE: only assigned plants or Admin. Manager / Data Analyst cross-plant access
+-- is SELECT-only and granted by dedicated *_select_bypass policies; letting this
+-- helper return true for them would also open INSERT/UPDATE/DELETE on every plant.
 CREATE OR REPLACE FUNCTION public.user_has_plant_access(_plant_id uuid, _user_id uuid)
 RETURNS boolean
 LANGUAGE sql
@@ -67,8 +70,6 @@ AS $$
       AND (
         _plant_id = ANY(plant_assignments)
         OR public.is_admin(_user_id)
-        OR public.has_role(_user_id, 'Manager')
-        OR public.has_role(_user_id, 'Data Analyst')
       )
   );
 $$;
@@ -102,22 +103,15 @@ SET search_path = public, auth, pg_temp
 AS $$
 DECLARE
   v_username text;
-  v_full_name text;
 BEGIN
   v_username := COALESCE(
     NEW.raw_user_meta_data->>'username',
-    split_part(NEW.email, '@', 1)
-  );
-  v_full_name := COALESCE(
-    NEW.raw_user_meta_data->>'full_name',
-    NEW.raw_user_meta_data->>'name',
     split_part(NEW.email, '@', 1)
   );
 
   INSERT INTO public.user_profiles (
     id,
     username,
-    full_name,
     email,
     status,
     profile_complete,
@@ -126,7 +120,6 @@ BEGIN
   ) VALUES (
     NEW.id,
     v_username,
-    v_full_name,
     NEW.email,
     'Pending',
     false,
@@ -152,18 +145,21 @@ CREATE TRIGGER on_auth_user_created
 
 -- ── 4. DB-03: Onboarding, profile guarding, and approvals ───────────────────
  
-DROP FUNCTION IF EXISTS public.complete_onboarding(text, text, text, text, text, text, uuid[]);
 DROP FUNCTION IF EXISTS public.complete_onboarding(text, text, uuid[], text, text, text, text, uuid);
 
+-- Signature must match what the app calls (frontend/src/data/mutations/auth.ts,
+-- integrations/supabase/types.ts) and the baseline: 7 text/uuid[] args, no
+-- _full_name (user_profiles has no full_name column).
+-- Hardening: does NOT set status/confirmed — only an Admin can activate/approve
+-- (enforced by trg_guard_user_profile_modifications below).
 CREATE OR REPLACE FUNCTION public.complete_onboarding(
-  _full_name text,
+  _username text,
+  _first_name text,
+  _middle_name text,
+  _last_name text,
+  _suffix text,
   _designation text,
-  _plant_assignments uuid[],
-  _first_name text DEFAULT NULL,
-  _middle_name text DEFAULT NULL,
-  _last_name text DEFAULT NULL,
-  _suffix text DEFAULT NULL,
-  _immediate_head_id uuid DEFAULT NULL
+  _plant_assignments uuid[]
 )
 RETURNS void
 LANGUAGE plpgsql
@@ -172,31 +168,40 @@ SET search_path = public, pg_temp
 AS $$
 DECLARE
   v_uid uuid := auth.uid();
+  v_complete boolean;
 BEGIN
   IF v_uid IS NULL THEN
     RAISE EXCEPTION 'Not authenticated';
   END IF;
+  IF _plant_assignments IS NULL OR array_length(_plant_assignments, 1) IS NULL THEN
+    RAISE EXCEPTION 'At least one plant assignment is required';
+  END IF;
+
+  SELECT profile_complete INTO v_complete FROM public.user_profiles WHERE id = v_uid;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'User profile not found for uid %', v_uid;
+  END IF;
+  IF v_complete THEN
+    RAISE EXCEPTION 'Profile already complete; ask an Admin to change plant assignments';
+  END IF;
 
   UPDATE public.user_profiles
   SET
-    full_name = _full_name,
+    username = _username,
     first_name = _first_name,
     middle_name = _middle_name,
     last_name = _last_name,
     suffix = _suffix,
     designation = _designation,
-    immediate_head_id = _immediate_head_id,
-    plant_assignments = COALESCE(_plant_assignments, '{}'::uuid[]),
-    profile_complete = true
+    plant_assignments = _plant_assignments,
+    profile_complete = true,
+    updated_at = now()
   WHERE id = v_uid;
-
-  IF NOT FOUND THEN
-    RAISE EXCEPTION 'User profile not found for uid %', v_uid;
-  END IF;
 END;
 $$;
 
-GRANT EXECUTE ON FUNCTION public.complete_onboarding(text, text, uuid[], text, text, text, text, uuid) TO authenticated, service_role;
+REVOKE ALL ON FUNCTION public.complete_onboarding(text, text, text, text, text, text, uuid[]) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.complete_onboarding(text, text, text, text, text, text, uuid[]) TO authenticated, service_role;
 
 CREATE OR REPLACE FUNCTION public.trg_guard_user_profile_modifications()
 RETURNS trigger
@@ -205,8 +210,15 @@ SECURITY DEFINER
 SET search_path = public, pg_temp
 AS $$
 BEGIN
-  -- Service role bypass
-  IF current_setting('request.jwt.claim.role', true) = 'service_role' THEN
+  -- Trusted-caller bypass:
+  --   * service_role via the API (auth.role() reads both the legacy
+  --     request.jwt.claim.role GUC and the request.jwt.claims JSON that
+  --     current PostgREST sets), and
+  --   * direct DB sessions with no API role switch (migrations, psql, CI seed,
+  --     pgTAP fixtures). PostgREST always does SET ROLE anon/authenticated/
+  --     service_role, so current_setting('role') is 'none' only outside the API.
+  IF COALESCE(auth.role(), current_setting('request.jwt.claim.role', true)) = 'service_role'
+     OR current_setting('role', true) IN ('none', 'service_role', 'postgres', 'supabase_admin') THEN
     RETURN NEW;
   END IF;
 

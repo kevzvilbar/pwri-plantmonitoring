@@ -24,11 +24,15 @@ CREATE TEMP TABLE _sec_fixture (
   admin_id uuid,
   operator_id uuid,
   pending_id uuid,
-  corr_req_id uuid
+  corr_req_id uuid,
+  locator_id uuid,
+  reading_id uuid
 );
 
 INSERT INTO _sec_fixture
 SELECT
+  gen_random_uuid(),
+  gen_random_uuid(),
   gen_random_uuid(),
   gen_random_uuid(),
   gen_random_uuid(),
@@ -53,7 +57,13 @@ BEGIN
   -- Admin profile
   INSERT INTO public.user_profiles (id, username, email, designation, plant_assignments, status, profile_complete, confirmed)
   VALUES (f.admin_id, 'admin_user', 'admin@example.com', 'Admin', ARRAY[f.plant_a], 'Active', true, true)
-  ON CONFLICT (id) DO UPDATE SET status = 'Active', confirmed = true;
+  ON CONFLICT (id) DO UPDATE SET
+    username = EXCLUDED.username,
+    designation = EXCLUDED.designation,
+    plant_assignments = EXCLUDED.plant_assignments,
+    status = EXCLUDED.status,
+    profile_complete = EXCLUDED.profile_complete,
+    confirmed = EXCLUDED.confirmed;
 
   DELETE FROM public.user_roles WHERE user_id = f.admin_id;
   INSERT INTO public.user_roles (user_id, role) VALUES (f.admin_id, 'Admin');
@@ -61,7 +71,13 @@ BEGIN
   -- Operator profile
   INSERT INTO public.user_profiles (id, username, email, designation, plant_assignments, status, profile_complete, confirmed)
   VALUES (f.operator_id, 'op_user', 'operator@example.com', 'Operator', ARRAY[f.plant_a], 'Active', true, true)
-  ON CONFLICT (id) DO UPDATE SET status = 'Active', confirmed = true;
+  ON CONFLICT (id) DO UPDATE SET
+    username = EXCLUDED.username,
+    designation = EXCLUDED.designation,
+    plant_assignments = EXCLUDED.plant_assignments,
+    status = EXCLUDED.status,
+    profile_complete = EXCLUDED.profile_complete,
+    confirmed = EXCLUDED.confirmed;
 
   DELETE FROM public.user_roles WHERE user_id = f.operator_id;
   INSERT INTO public.user_roles (user_id, role) VALUES (f.operator_id, 'Operator');
@@ -69,14 +85,27 @@ BEGIN
   -- Pending user profile (unconfirmed)
   INSERT INTO public.user_profiles (id, username, email, designation, plant_assignments, status, profile_complete, confirmed)
   VALUES (f.pending_id, 'pending_user', 'pending@example.com', 'Operator', ARRAY[f.plant_a], 'Pending', true, false)
-  ON CONFLICT (id) DO UPDATE SET status = 'Pending', confirmed = false;
+  ON CONFLICT (id) DO UPDATE SET
+    username = EXCLUDED.username,
+    designation = EXCLUDED.designation,
+    plant_assignments = EXCLUDED.plant_assignments,
+    status = EXCLUDED.status,
+    profile_complete = EXCLUDED.profile_complete,
+    confirmed = EXCLUDED.confirmed;
 
   DELETE FROM public.user_roles WHERE user_id = f.pending_id;
   INSERT INTO public.user_roles (user_id, role) VALUES (f.pending_id, 'Operator');
 
+  -- Locator + reading that the correction request targets
+  INSERT INTO public.locators (id, plant_id, name, status, default_input_mode)
+  VALUES (f.locator_id, f.plant_a, 'sec-test-locator', 'Active', 'raw');
+
+  INSERT INTO public.locator_readings (id, locator_id, plant_id, reading_datetime, current_reading, previous_reading, daily_volume, recorded_by)
+  VALUES (f.reading_id, f.locator_id, f.plant_a, now() - interval '1 day', 5000, 4900, 100, f.operator_id);
+
   -- Correction request
-  INSERT INTO public.correction_requests (id, plant_id, source_table, source_id, proposed_value, reason, status, submitted_by)
-  VALUES (f.corr_req_id, f.plant_a, 'locator_readings', gen_random_uuid(), 100, 'Test request', 'pending', f.operator_id);
+  INSERT INTO public.correction_requests (id, plant_id, source_table, source_id, original_value, proposed_value, reason, status, submitted_by)
+  VALUES (f.corr_req_id, f.plant_a, 'locator_readings', f.reading_id, 5000, 5050, 'Test request', 'pending', f.operator_id);
 END $$;
 
 GRANT SELECT ON _sec_fixture TO anon, authenticated;
@@ -85,10 +114,11 @@ GRANT SELECT ON _sec_fixture TO anon, authenticated;
 SET LOCAL role anon;
 SELECT set_config('request.jwt.claims', '{"role": "anon"}', true);
 
-SELECT is(
-  (SELECT count(*) FROM public.user_profiles),
-  0::bigint,
-  'anon role cannot select any rows from user_profiles'
+SELECT throws_ok(
+  'SELECT count(*) FROM public.user_profiles',
+  '42501',
+  NULL,
+  'anon role has no SELECT privilege on user_profiles'
 );
 
 RESET role;
@@ -127,14 +157,19 @@ SELECT throws_ok(
 );
 
 -- 6. Test Operator cannot modify profile status/confirmation
-SELECT throws_ok(
-  format('UPDATE public.user_profiles SET status = ''Active'', confirmed = true WHERE id = %L::uuid', (SELECT pending_id FROM _sec_fixture)),
-  'Only administrators can change user status',
-  'Non-admin cannot update user status or confirmed via direct update'
-);
+--    (RLS leaves non-admins with no UPDATE policy on user_profiles, so this
+--    affects 0 rows; trg_guard_user_profile_changes is the second line of defence.)
+UPDATE public.user_profiles SET status = 'Active', confirmed = true
+WHERE id = (SELECT pending_id FROM _sec_fixture);
 
 RESET role;
 SELECT set_config('request.jwt.claims', NULL, true);
+
+SELECT is(
+  (SELECT status::text || '/' || confirmed::text FROM public.user_profiles WHERE id = (SELECT pending_id FROM _sec_fixture)),
+  'Pending/false',
+  'Non-admin cannot change user status or confirmed via direct update'
+);
 
 -- 7. Test Admin CAN approve correction request
 SET LOCAL role authenticated;

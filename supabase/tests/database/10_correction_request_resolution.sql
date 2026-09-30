@@ -68,12 +68,26 @@ BEGIN
   -- so the auth.users row must exist first -- see 01/03/05/08/09 for the same pattern.
   INSERT INTO auth.users (id) VALUES (f.reviewer_id), (f.operator_id);
 
-  INSERT INTO public.user_profiles (id, first_name, last_name, status, plant_assignments)
-  VALUES (f.reviewer_id, 'Admin', 'User', 'Active'::profile_status, ARRAY[f.plant_id]);
+  INSERT INTO public.user_profiles (id, first_name, last_name, status, confirmed, plant_assignments)
+  VALUES (f.reviewer_id, 'Admin', 'User', 'Active'::profile_status, true, ARRAY[f.plant_id])
+  ON CONFLICT (id) DO UPDATE SET
+    first_name = EXCLUDED.first_name,
+    last_name = EXCLUDED.last_name,
+    status = EXCLUDED.status,
+    confirmed = EXCLUDED.confirmed,
+    plant_assignments = EXCLUDED.plant_assignments;
+  DELETE FROM public.user_roles WHERE user_id = f.reviewer_id;  -- handle_new_user() adds a default Operator role
   INSERT INTO public.user_roles (user_id, role) VALUES (f.reviewer_id, 'Admin');
 
-  INSERT INTO public.user_profiles (id, first_name, last_name, status, plant_assignments)
-  VALUES (f.operator_id, 'Op', 'User', 'Active'::profile_status, ARRAY[f.plant_id]);
+  INSERT INTO public.user_profiles (id, first_name, last_name, status, confirmed, plant_assignments)
+  VALUES (f.operator_id, 'Op', 'User', 'Active'::profile_status, true, ARRAY[f.plant_id])
+  ON CONFLICT (id) DO UPDATE SET
+    first_name = EXCLUDED.first_name,
+    last_name = EXCLUDED.last_name,
+    status = EXCLUDED.status,
+    confirmed = EXCLUDED.confirmed,
+    plant_assignments = EXCLUDED.plant_assignments;
+  DELETE FROM public.user_roles WHERE user_id = f.operator_id;  -- handle_new_user() adds a default Operator role
   INSERT INTO public.user_roles (user_id, role) VALUES (f.operator_id, 'Operator');
 
   -- Create 2 chronological well readings:

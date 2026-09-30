@@ -8,6 +8,11 @@
 SET search_path = public, extensions, auth;
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
+-- trg_guard_user_profile_changes forces status='Pending'/confirmed=false for
+-- non-admin callers and blocks status changes. The seed is trusted setup code,
+-- so present as service_role (the trigger's documented bypass) for this session.
+SELECT set_config('request.jwt.claim.role', 'service_role', false);
+
 -- Create test plants and entities
 DO $$
 DECLARE
@@ -116,13 +121,27 @@ BEGIN
   FROM _e2e_test_users t;
 
   -- 8. Create user_profiles
+  -- auth.users inserts above fire handle_new_user(), which already created a
+  -- 'Pending' profile + default 'Operator' role for each user, so upsert here.
   INSERT INTO public.user_profiles (id, email, first_name, last_name, plant_assignments, status, profile_complete, confirmed)
   VALUES
     (v_operator_id, 'e2e-operator@test.local', 'E2E', 'Operator', ARRAY[v_plant_id], 'Active', true, true),
     (v_manager_id, 'e2e-manager@test.local', 'E2E', 'Manager', ARRAY[v_plant_id], 'Active', true, true),
-    (v_admin_id, 'e2e-admin@test.local', 'E2E', 'Admin', ARRAY[v_plant_id], 'Active', true, true);
+    (v_admin_id, 'e2e-admin@test.local', 'E2E', 'Admin', ARRAY[v_plant_id], 'Active', true, true)
+  ON CONFLICT (id) DO UPDATE SET
+    email = EXCLUDED.email,
+    first_name = EXCLUDED.first_name,
+    last_name = EXCLUDED.last_name,
+    plant_assignments = EXCLUDED.plant_assignments,
+    status = EXCLUDED.status,
+    profile_complete = EXCLUDED.profile_complete,
+    confirmed = EXCLUDED.confirmed;
 
-  -- 9. Assign roles
+  -- 9. Assign roles (drop the trigger's default Operator role first so
+  --    Manager/Admin users don't also carry Operator)
+  DELETE FROM public.user_roles
+  WHERE user_id IN (v_operator_id, v_manager_id, v_admin_id);
+
   INSERT INTO public.user_roles (user_id, role)
   VALUES
     (v_operator_id, 'Operator'),

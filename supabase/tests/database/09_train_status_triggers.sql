@@ -53,6 +53,7 @@ BEGIN
 
   -- 3. Create Manager User & Profile (assigned to plant)
   INSERT INTO auth.users (id, email) VALUES (f.manager_id, 'manager.alpha@example.com');
+  DELETE FROM public.user_roles WHERE user_id = f.manager_id;  -- handle_new_user() adds a default Operator role
   INSERT INTO public.user_roles (user_id, role) VALUES (f.manager_id, 'Manager');
   INSERT INTO public.user_profiles (id, first_name, last_name, status, plant_assignments)
   VALUES (f.manager_id, 'Manny', 'Manager', 'Active'::profile_status, ARRAY[f.plant_id])
@@ -64,6 +65,7 @@ BEGIN
 
   -- 4. Create Operator User & Profile (assigned to plant)
   INSERT INTO auth.users (id, email) VALUES (f.operator_id, 'operator.alpha@example.com');
+  DELETE FROM public.user_roles WHERE user_id = f.operator_id;  -- handle_new_user() adds a default Operator role
   INSERT INTO public.user_roles (user_id, role) VALUES (f.operator_id, 'Operator');
   INSERT INTO public.user_profiles (id, first_name, last_name, status, plant_assignments)
   VALUES (f.operator_id, 'Otto', 'Operator', 'Active'::profile_status, ARRAY[f.plant_id])
