@@ -1,7 +1,8 @@
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ROTrainIcon } from '@/components/icons/water-icons';
-import { Search, Plus, Upload } from 'lucide-react';
+import { Search, Plus, Upload, ArrowUpRight } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 
 interface FleetHeaderProps {
@@ -42,6 +43,12 @@ export function FleetHeader({
           </div>
         </div>
         <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+          <Button size="sm" variant="outline" className="h-8 px-2.5 text-xs gap-1 text-muted-foreground hover:text-foreground" asChild>
+            <Link to="/ro-trains" title="Open RO Trains operational monitoring">
+              <ArrowUpRight className="h-3.5 w-3.5" />
+              <span>RO Operations</span>
+            </Link>
+          </Button>
           {isManager && (
             <Button size="sm" className="h-8 px-3 text-xs gap-1.5 font-bold shadow-2xs" onClick={onAddTrain}>
               <Plus className="h-3.5 w-3.5" /><span>Add Train</span>
