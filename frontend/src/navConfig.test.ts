@@ -9,45 +9,49 @@ const canFor = (role: Role): Can => (moduleKey, action = 'view') => hasPermissio
 const shape = (role: Role) =>
   buildNavConfig(canFor(role)).map((g) => [g.label, g.items.map((i) => i.label)] as const);
 
-// P5-6 added My Corrections: anyone can raise a correction request, so anyone can follow one up.
-const DAILY_LOGS = ['Daily Readings', 'RO Trains', 'PM Schedule', 'Incidents', 'My Corrections'];
-const REVIEW = ['Data Analysis & Review', 'Data Corrections', 'Manager Scorecard'];
+const DAILY_LOGS = ['Daily Readings', 'RO Trains', 'PM Schedule', 'Incidents'];
+// My Corrections is visible to every role (anyone can raise a correction request, so anyone can
+// follow one up) and sits beside Data Corrections, the queue it feeds. Operators get a one-item group.
+const OPERATOR_CORRECTIONS = ['My Corrections'];
+const REVIEW = ['Data Corrections', 'My Corrections', 'Data Analysis & Review', 'Manager Scorecard'];
 
 const EXPECTED: Record<Role, ReadonlyArray<readonly [string, string[]]>> = {
   Operator: [
-    ['Overview', ['Dashboard', 'Alerts']],
+    ['Monitor', ['Dashboard', 'Alerts']],
     ['Daily Logs', DAILY_LOGS],
     ['Assets', ['Plants', 'Hydraulics']],
+    ['Review & Corrections', OPERATOR_CORRECTIONS],
     ['Team & Admin', ['Employees']],
   ],
   Technician: [
-    ['Overview', ['Dashboard', 'Alerts', 'Compliance']],
+    ['Monitor', ['Dashboard', 'Alerts', 'Compliance']],
     ['Daily Logs', DAILY_LOGS],
     ['Assets', ['Plants', 'Hydraulics', 'Network Topology']],
+    ['Review & Corrections', OPERATOR_CORRECTIONS],
     ['Reports & Data', ['Costs & Tariffs']],
     ['Team & Admin', ['Employees']],
   ],
   Manager: [
-    ['Overview', ['Dashboard', 'Alerts', 'Compliance']],
+    ['Monitor', ['Dashboard', 'Alerts', 'Compliance']],
     ['Daily Logs', DAILY_LOGS],
     ['Assets', ['Plants', 'Hydraulics', 'Network Topology']],
-    ['Review', REVIEW],
+    ['Review & Corrections', REVIEW],
     ['Reports & Data', ['Costs & Tariffs', 'Data Exports', 'Smart Import']],
     ['Team & Admin', ['Employees', 'Admin Console']],
   ],
   'Data Analyst': [
-    ['Overview', ['Dashboard', 'Alerts', 'Compliance']],
+    ['Monitor', ['Dashboard', 'Alerts', 'Compliance']],
     ['Daily Logs', DAILY_LOGS],
     ['Assets', ['Plants', 'Hydraulics', 'Network Topology']],
-    ['Review', REVIEW],
+    ['Review & Corrections', REVIEW],
     ['Reports & Data', ['Costs & Tariffs', 'Data Exports', 'Smart Import']],
     ['Team & Admin', ['Employees']],
   ],
   Admin: [
-    ['Overview', ['Dashboard', 'Alerts', 'Compliance']],
+    ['Monitor', ['Dashboard', 'Alerts', 'Compliance']],
     ['Daily Logs', DAILY_LOGS],
     ['Assets', ['Plants', 'Hydraulics', 'Network Topology']],
-    ['Review', REVIEW],
+    ['Review & Corrections', REVIEW],
     ['Reports & Data', ['Costs & Tariffs', 'Data Exports', 'Smart Import']],
     ['Team & Admin', ['Employees', 'Admin Console']],
   ],

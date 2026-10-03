@@ -83,9 +83,10 @@ describe('useNavGroups — custom-role overrides reach the nav', () => {
       { module_key: 'data_analysis_review', action: 'view', allowed: false },
       { module_key: 'data_corrections', action: 'view', allowed: false },
       { module_key: 'manager_scorecard', action: 'view', allowed: false },
+      { module_key: 'my_corrections', action: 'view', allowed: false },
     ]);
     const groups = renderHook(() => useNavGroups()).result.current.map((g) => g.label);
-    expect(groups).not.toContain('Review');
+    expect(groups).not.toContain('Review & Corrections');
   });
 
   it('shows an item the override grants (base Operator, Costs on)', () => {

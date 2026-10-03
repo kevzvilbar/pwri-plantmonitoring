@@ -53,10 +53,12 @@ export interface NavGroup {
 const ADMIN_CONSOLE_LABEL = 'Admin Console';
 
 // Group order and membership follow the target navigation in
-// docs/NAV-IA-REMEDIATION-PLAN.md (Appendix A).
+// docs/NAV-IA-REMEDIATION-PLAN.md (Appendix A), as amended by
+// docs/IA-NAV-USERFLOW-CRITIQUE-AND-PLAN.md section 8a (Monitor, and
+// Review & Corrections with My Corrections).
 const NAV_GROUPS: readonly NavGroup[] = [
   {
-    label: 'Overview',
+    label: 'Monitor',
     items: [
       { id: 'dashboard', modules: ['dashboard'], label: MODULE_LABELS.dashboard, route: '/', icon: LayoutDashboard, end: true, priority: 3 },
       { id: 'alerts', modules: ['alerts'], label: MODULE_LABELS.alerts, route: '/alerts', icon: Bell, priority: 4, badge: 'alerts' },
@@ -70,8 +72,6 @@ const NAV_GROUPS: readonly NavGroup[] = [
       { id: 'ro-trains', modules: ['ro_trains'], label: MODULE_LABELS.ro_trains, route: '/ro-trains', icon: ROTrainIcon, priority: 2 },
       { id: 'pm-schedule', modules: ['pm_schedule'], label: MODULE_LABELS.pm_schedule, route: '/maintenance', icon: Wrench },
       { id: 'incidents', modules: ['incidents'], label: MODULE_LABELS.incidents, route: '/incidents', icon: AlertTriangle },
-      // Same icon as the "Fix" button that creates a request.
-      { id: 'my-corrections', modules: ['my_corrections'], label: MODULE_LABELS.my_corrections, route: '/my-corrections', icon: SquarePen },
     ],
   },
   {
@@ -83,10 +83,14 @@ const NAV_GROUPS: readonly NavGroup[] = [
     ],
   },
   {
-    label: 'Review',
+    label: 'Review & Corrections',
     items: [
-      { id: 'data-analysis', modules: ['data_analysis_review'], label: MODULE_LABELS.data_analysis_review, route: '/data-analysis', icon: FlaskConical },
       { id: 'data-corrections', modules: ['data_corrections'], label: MODULE_LABELS.data_corrections, route: '/data-corrections', icon: ClipboardCheck },
+      // Same icon as the "Fix" button that creates a request. Sits beside Data
+      // Corrections, the Manager-side queue it feeds. Visible to every role, so
+      // an Operator's Review & Corrections group holds only this item.
+      { id: 'my-corrections', modules: ['my_corrections'], label: MODULE_LABELS.my_corrections, route: '/my-corrections', icon: SquarePen },
+      { id: 'data-analysis', modules: ['data_analysis_review'], label: MODULE_LABELS.data_analysis_review, route: '/data-analysis', icon: FlaskConical },
       { id: 'manager-scorecard', modules: ['manager_scorecard'], label: MODULE_LABELS.manager_scorecard, route: '/manager-scorecard', icon: Award },
     ],
   },

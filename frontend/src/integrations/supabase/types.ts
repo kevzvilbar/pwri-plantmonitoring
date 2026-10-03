@@ -2885,6 +2885,36 @@ export type Database = {
         }
         Relationships: []
       }
+      nav_page_views: {
+        Row: {
+          device: string
+          id: number
+          occurred_at: string
+          role: string | null
+          route: string
+          session_id: string
+          tab: string | null
+        }
+        Insert: {
+          device: string
+          id?: never
+          occurred_at?: string
+          role?: string | null
+          route: string
+          session_id: string
+          tab?: string | null
+        }
+        Update: {
+          device?: string
+          id?: never
+          occurred_at?: string
+          role?: string | null
+          route?: string
+          session_id?: string
+          tab?: string | null
+        }
+        Relationships: []
+      }
       notifications: {
         Row: {
           alert_type: string

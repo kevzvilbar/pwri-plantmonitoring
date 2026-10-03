@@ -7,6 +7,7 @@ import { OfflineBanner } from './OfflineBanner';
 import { SidebarProvider } from '@/components/ui/sidebar';
 import { useScrollRestore } from '@/hooks/useScrollRestore';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+import { usePageViewTracking } from '@/hooks/usePageViewTracking';
 import { useBackgroundSync } from '@/hooks/useBackgroundSync';
 import { useTrainDataRealtime } from '@/hooks/useTrainDataRealtime';
 import { usePullToRefresh } from '@/hooks/usePullToRefresh';
@@ -96,6 +97,7 @@ function PageAnimationWrapper({ children }: { children: React.ReactNode }) {
 export function AppShell() {
   useScrollRestore();
   useDocumentTitle();
+  usePageViewTracking();
   const { pathname } = useLocation();
   const queryClient = useQueryClient();
   const [paletteOpen, setPaletteOpen] = useState(false);

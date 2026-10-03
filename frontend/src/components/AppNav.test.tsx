@@ -46,7 +46,7 @@ describe('AppSidebar', () => {
   it('renders the shared groups in order, with no "Other" and no Profile', () => {
     mockRoles = ['Manager'];
     renderSidebar();
-    const labels = ['Overview', 'Daily Logs', 'Assets', 'Review', 'Reports & Data', 'Team & Admin'];
+    const labels = ['Monitor', 'Daily Logs', 'Assets', 'Review & Corrections', 'Reports & Data', 'Team & Admin'];
     const positions = labels.map((l) => screen.getByText(l));
     // DOM order == expected order
     positions.slice(1).forEach((el, i) => {

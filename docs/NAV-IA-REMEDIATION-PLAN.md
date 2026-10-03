@@ -281,7 +281,7 @@ The current suite (75 files, 688 tests) has no coverage of `ProtectedRoute`, `Ap
 
 ## Appendix A: target navigation
 
-Group order: Overview → Daily Logs → Assets → Review → Reports & Data → Team & Admin. Group names reuse your existing labels where they exist (Overview, Assets, Daily Logs, Review). "Other" and "Admin" are replaced.
+Group order: Monitor → Daily Logs → Assets → Review & Corrections → Reports & Data → Team & Admin. (Amended 2026-10-03: `Overview` is now `Monitor`, `Review` is now `Review & Corrections`, and My Corrections moved from Daily Logs into it; see `IA-NAV-USERFLOW-CRITIQUE-AND-PLAN.md` section 8a. The tables below still use the old names.) Group names reuse your existing labels where they exist (Overview, Assets, Daily Logs, Review). "Other" and "Admin" are replaced.
 
 | Group | Items (module key) | Visible to |
 |---|---|---|
