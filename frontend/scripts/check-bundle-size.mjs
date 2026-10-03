@@ -10,6 +10,12 @@
  * creep from dependency additions was exactly how the app got heavy the
  * first time; nobody was looking at a number, because there wasn't one.
  *
+ * IMPORTANT: measure with the same env CI uses, or the number will not match.
+ * The `index` entry chunk is ~29 kB gzipped larger when the VITE_ vars are
+ * present (CI sets placeholders), so a bare local build looks "smaller" than CI:
+ *   VITE_SUPABASE_URL=https://placeholder.supabase.co \
+ *   VITE_SUPABASE_PUBLISHABLE_KEY=placeholder-anon-key npm run build
+ *
  * Usage:
  *   node scripts/check-bundle-size.mjs            # check (CI mode, after build)
  *   node scripts/check-bundle-size.mjs --update   # re-baseline deliberately

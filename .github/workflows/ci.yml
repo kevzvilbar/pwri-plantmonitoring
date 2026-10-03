@@ -363,7 +363,10 @@ jobs:
 
       - name: Run npm audit
         working-directory: frontend
-        run: npm audit --audit-level=high
-        # Use --audit-level=high to fail only on high/critical.
-        # Moderate/low are reported but don't fail CI (too noisy for
-        # this codebase's dependency tree). Adjust if policy changes.
+        run: npm audit --omit=dev --audit-level=high
+        # Blocks on high/critical in PRODUCTION dependencies only (what ships
+        # to operators' browsers). Same policy as .github/workflows/audit.yml,
+        # which also reports the full tree incl. devDependencies as
+        # report-only. Build-tooling advisories with no upstream fix (e.g.
+        # `braces` via tailwindcss) must not block operator-facing fixes.
+        # Moderate/low are reported but don't fail CI.
