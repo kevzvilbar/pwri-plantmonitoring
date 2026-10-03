@@ -197,3 +197,21 @@ Success criteria after Phase 1–2: a cold Operations load shows ≤ 40 non-OPTI
 | P5 daily guard + `VITE_LOW_QUOTA_MODE` | Done (5f455c87): daily workflow, flag covers background sync, presence, telemetry | `log-quota-guard.yml` |
 
 Remaining catalog call sites not yet converted (each selects different columns or embeds, so they need individual review): `useTrendEntityMeta` (multiplier maps), `useDataSummaryQueries`, `DataCompletenessRadarCard` (count HEADs), `useProductionStats`, `MeterConfig`, `AssignLocatorsDialog`, `useTrainAutoOffline` (status-sensitive, deliberately left on its own query).
+
+### 8.1 Follow-up: outage and stale-tab fixes (2026-10-04)
+
+Live logs for 06:00–06:54 PHT on 2026-10-04 showed two things the plan did not cover:
+
+1. **Database restart storm.** 675 HTTP 503s between 06:25 and 06:35 PHT (plus 521/522/525), 850 PGRST002 errors, and single browsers at 340–410 requests/minute (about double the previous worst burst) because every failed query was retried immediately and realtime/background refetches stacked on top.
+2. **Stale tabs.** Four GitHub Pages sessions were still sending pre-fix request shapes (`ro_trains?select=*,plants!inner(*)`, the old hourly-gaps and reading-gaps selects) at 07:05 PHT, with zero requests in the new shape. `registerType: "autoUpdate"` plus no registration call means an open tab keeps its bundle until closed.
+
+| Phase | Change | Where |
+|---|---|---|
+| P6 | Retry only real outages (max 2, exponential backoff with jitter); never retry wrong queries (400/42703/403/404); one shared "server unavailable" toast instead of one per query | `lib/apiHealth.ts`, `lib/queryClient.ts` |
+| P6 | Client circuit breaker: after 8 failures in 20 s, REST reads are answered locally with a synthetic 503 (no network, no log row) for 30 s, doubling per failed probe up to 5 min; single-flight probe to close it; writes, auth, storage and realtime are never blocked | `lib/supabaseFetch.ts`, `integrations/supabase/client.ts` (`global.fetch`) |
+| P6 | Background sync sweep skipped while the breaker is open | `hooks/useBackgroundSync.ts` |
+| P7 | `registerType: "prompt"`; update applied automatically only when the tab has had no input for 10 min and nothing is mid-save, otherwise a persistent "Update now" toast; version re-check every 30 min while visible and on return to foreground | `lib/pwaUpdate.ts`, `main.tsx`, `vite.config.ts` |
+
+Caveats: `integrations/supabase/client.ts` is marked auto-generated, so regeneration would drop the `global.fetch` option and silently disable the breaker (retry policy and PWA updates would still work). Realtime channels are not gated by the breaker; they reconnect on their own backoff.
+
+Verify after deploy: (a) after an operator reopens the app, the `plants%21inner` request shape disappears for that client; (b) during any future 503 window, requests per client per minute stay far below the 340–410 seen on 2026-10-04.

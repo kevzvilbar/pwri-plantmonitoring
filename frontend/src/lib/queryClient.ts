@@ -4,11 +4,15 @@ import { friendlyError } from "@/lib/supabaseErrors";
 import { reportError } from "@/lib/monitoring";
 import { globalStampActivity } from "@/hooks/usePresence";
 import { registerOfflineMutationDefaults } from "@/lib/offlineMutations";
+import { isTransientBackendError, queryRetry, queryRetryDelay } from "@/lib/apiHealth";
 
 export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      retry: 1,
+      // Outage-aware (lib/apiHealth.ts): no retries for wrong queries (400/42703…),
+      // max 2 backed-off retries for 5xx/network failures, none while the breaker is open.
+      retry: queryRetry,
+      retryDelay: queryRetryDelay,
       refetchOnWindowFocus: false,   // handled by useBackgroundSync visibilitychange listener
       refetchOnReconnect: true,      // re-sync immediately when network comes back
       // 300 s (5 min) staleTime: data is considered fresh for 5 min, ensuring
@@ -29,6 +33,11 @@ export const queryClient = new QueryClient({
       // Queries with meta.silent = true silently fail (backend unavailable in static deploy)
       if (query.meta?.silent) return;
       const key = Array.isArray(query.queryKey) ? String(query.queryKey[0]) : 'query';
+      if (isTransientBackendError(error)) {
+        // One shared toast for the whole outage instead of one per failing query.
+        toast.error('Server temporarily unavailable — retrying automatically.', { id: 'backend-degraded' });
+        return;
+      }
       toast.error(`Load failed (${key}): ${msg}`);
       reportError(error, { where: 'react-query', kind: 'query', key });
     },

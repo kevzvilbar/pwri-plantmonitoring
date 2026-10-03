@@ -20,10 +20,12 @@ export default defineConfig(({ mode }) => ({
   plugins: [
     react(),
     VitePWA({
-      // "autoUpdate" refreshes the cached app shell in the background on
-      // each visit — it does not force-reload a tab that's already open,
-      // so an operator mid-form won't get yanked out from under themselves.
-      registerType: "autoUpdate",
+      // "prompt": a new service worker waits until src/main.tsx activates it via
+      // lib/pwaUpdate.ts — automatically once the tab has been idle ≥10 min with
+      // nothing mid-save, or when the operator taps "Update now". (With
+      // "autoUpdate" and no registration call, tabs kept the old bundle until
+      // closed — field devices ran pre-fix code for hours after a deploy.)
+      registerType: "prompt",
       includeAssets: ["favicon.ico", "robots.txt"],
       manifest: {
         name: "PWRI Plant Monitoring",

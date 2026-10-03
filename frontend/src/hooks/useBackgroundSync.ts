@@ -26,6 +26,7 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useSyncStore } from '@/store/syncStore';
+import { isBreakerOpen } from '@/lib/apiHealth';
 
 const SYNC_INTERVAL_MS  = 900_000; // 15 minutes (aligned with 5m staleTime and realtime invalidation to eliminate polling storms)
 const RETRY_DELAY_MS    = 10_000;  // 10 seconds between retries
@@ -100,6 +101,12 @@ export function useBackgroundSync() {
     }
     if (Date.now() - lastActiveRef.current > IDLE_TIMEOUT_MS) {
       return true; // Paused due to inactivity
+    }
+    // OUTAGE GUARD (lib/apiHealth.ts): while the circuit breaker is open every read is
+    // short-circuited anyway; skipping the sweep avoids a burst of instant failures and
+    // the 10 s retry loop below. Normal sync resumes on the next interval after recovery.
+    if (isBreakerOpen()) {
+      return true; // Deliberately skipped — not a failure
     }
 
     setStatus('syncing');

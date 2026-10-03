@@ -4,6 +4,10 @@ import { supabaseConfigError } from "@/integrations/supabase/client";
 import { reportError } from "@/lib/monitoring";
 import "./lib/sentry";
 import "./index.css";
+import { registerSW } from "virtual:pwa-register";
+import { queryClient } from "@/lib/queryClient";
+import { toast } from "@/components/ui/sonner";
+import { createPwaUpdateController } from "@/lib/pwaUpdate";
 
 // ── Chunk-load failure handler ────────────────────────────────────────────────
 // When GitHub Pages deploys a new build, Vite generates new chunk filenames
@@ -45,6 +49,31 @@ window.addEventListener('unhandledrejection', (event: PromiseRejectionEvent) => 
 window.addEventListener('load', () => {
   sessionStorage.removeItem(CHUNK_RELOAD_FLAG);
 });
+
+// ── PWA updates (FREE-PLAN-BUDGET-PLAN Phase 7) ────────────────────────────────
+// registerType is "prompt": a new service worker waits until activated here, so a
+// tab is only reloaded when it has been idle and nothing is mid-save — or when
+// the operator clicks the toast. See lib/pwaUpdate.ts.
+if (typeof window !== "undefined" && "serviceWorker" in navigator) {
+  const updateSW = registerSW({
+    onNeedRefresh: () => controller.onNeedRefresh(),
+    onRegisteredSW: (url, reg) => controller.onRegisteredSW(url, reg),
+  });
+  const controller = createPwaUpdateController({
+    applyUpdate: () => updateSW(true),
+    pendingMutations: () =>
+      queryClient
+        .getMutationCache()
+        .findAll({ predicate: (m) => m.state.isPaused || m.state.status === "pending" }).length,
+    promptUser: (onAccept) => {
+      toast("A new version of PWRI Monitor is ready.", {
+        id: "pwa-update",
+        duration: Infinity,
+        action: { label: "Update now", onClick: onAccept },
+      });
+    },
+  });
+}
 
 // ── App bootstrap ─────────────────────────────────────────────────────────────
 const rootEl = document.getElementById("root");

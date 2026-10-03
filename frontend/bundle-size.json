@@ -1,5 +1,5 @@
 {
-  "maxTotalGzipKb": 1170.4,
+  "maxTotalGzipKb": 1174.7,
   "lastUpdated": "2026-10-03",
   "history": [
     {
@@ -118,6 +118,12 @@
       "maxTotalGzipKb": 1170.4,
       "previous": 1138.6,
       "reason": "Re-baselined bundle size to CI build with placeholder Supabase env vars (1170.4 kB gzipped, 121 assets) following Tab Registry integration and Free-Plan Budget Plan optimizations."
+    },
+    {
+      "date": "2026-10-04",
+      "maxTotalGzipKb": 1174.7,
+      "previous": 1170.4,
+      "reason": "Re-baselined for the free-plan quota patch (FREE-PLAN-BUDGET-PLAN.md phases 1, 6, 7): +4.3 kB gzipped, measured with CI's placeholder VITE_SUPABASE_* env vars. It is app code, not a new dependency: workbox-window pulled in by virtual:pwa-register for idle-safe PWA updates, plus lib/apiHealth.ts (outage circuit breaker + retry policy), lib/supabaseFetch.ts and lib/pwaUpdate.ts, all in the shared index entry chunk."
     }
   ]
 }
