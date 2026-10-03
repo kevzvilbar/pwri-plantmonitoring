@@ -407,9 +407,9 @@ export function ChemDosingForm() {
         });
 
         if (itemRows.length > 0) {
-          const { error: itemsErr } = await (supabase
-            .from('chemical_dosing_items' as any) as any)
-            .insert(itemRows);
+          const { error: itemsErr } = await supabase
+            .from('chemical_dosing_items')
+            .insert(itemRows as any);
           if (itemsErr) console.warn('Child items insert note:', itemsErr);
         }
       }
