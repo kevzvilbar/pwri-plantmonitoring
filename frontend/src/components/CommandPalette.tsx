@@ -18,15 +18,16 @@ import { useWells } from '@/features/wells/hooks/useWells';
 import { useLocators } from '@/hooks/useLocators';
 import { assetPath, readingsPath } from '@/shared/assetLinks';
 import { useCan } from '@/hooks/usePermission';
-import { Building2, Droplets, MapPin, Gauge } from 'lucide-react';
+import { searchTabs } from '@/shared/tabRegistry';
+import { Building2, Droplets, MapPin, Gauge, Layers } from 'lucide-react';
 
 /**
  * Command palette — P5-10 of docs/NAV-IA-REMEDIATION-PLAN.md (stretch).
- * Jump to a page, a plant, or a well/locator. Uses components/ui/command.tsx
+ * Jump to a page, a plant, a tab/section, or a well/locator. Uses components/ui/command.tsx
  * (cmdk), previously only used by DesignationCombobox.
  * Pages come from useNavGroups() (custom-role overrides applied), plants from
- * useVisiblePlants() (D5), wells/locators from the cached list hooks scoped
- * to the visible plants. No new queries, no new permissions logic.
+ * useVisiblePlants() (D5), tabs from searchTabs() (IA3-2), wells/locators from
+ * the cached list hooks scoped to the visible plants. No new queries, no new permissions logic.
  * Asset rows offer both P5-7 directions: the page/card in Plants (assetPath)
  * and the row in Daily Readings (readingsPath). Product meters are out of
  * scope: no cached plant-scoped product-meter list hook exists to read them
@@ -53,6 +54,10 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [groups, q],
   );
+  const tabHits = useMemo(
+    () => searchTabs(q, (m) => can(m)),
+    [q, can],
+  );
   const plantHits = useMemo(
     () => (plants ?? []).filter((p) => matches(p.name ?? '')),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -62,7 +67,7 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
   const canReadings = can('operations');
   return (
     <CommandDialog open={open} onOpenChange={onOpenChange}>
-      <CommandInput placeholder="Jump to a page, plant, or well…" value={query} onValueChange={setQuery} />
+      <CommandInput placeholder="Jump to a page, tab, plant, or well…" value={query} onValueChange={setQuery} />
       <CommandList>
         <CommandEmpty>No matches.</CommandEmpty>
         {pages.length > 0 && (
@@ -75,6 +80,24 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
               </CommandItem>
             ))}
           </CommandGroup>
+        )}
+        {tabHits.length > 0 && (
+          <>
+            <CommandSeparator />
+            <CommandGroup heading="Tabs & Sections">
+              {tabHits.map((tab) => (
+                <CommandItem
+                  key={`${tab.route}-${tab.id}`}
+                  value={`${tab.pageName} ${tab.label} ${tab.id} ${(tab.keywords ?? []).join(' ')}`}
+                  onSelect={() => go(`${tab.route}?tab=${tab.id}`)}
+                >
+                  <Layers className="mr-2 h-4 w-4 shrink-0 opacity-60" />
+                  <span className="min-w-0 flex-1 truncate">{tab.label}</span>
+                  <span className="ml-2 shrink-0 text-xs text-muted-foreground">{tab.pageName}</span>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </>
         )}
         {plantHits.length > 0 && canPlants && (
           <>

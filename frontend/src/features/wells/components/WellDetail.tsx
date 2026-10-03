@@ -337,6 +337,7 @@ export function WellDetail({ wellId, plantId, onBack }: { wellId: string; /** Th
         dailyTds={dailyTds}
         dailyTdsDate={latestTdsReading?.reading_datetime}
         isManager={isManager}
+        plantId={plantId ?? well?.plant_id}
         onOpenHistory={() => setHistoryOpen(true)}
         onEditSurvey={(rec) => {
           setEditingPmsRecord(rec);

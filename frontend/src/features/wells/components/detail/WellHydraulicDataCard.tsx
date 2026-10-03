@@ -33,6 +33,7 @@ export function WellHydraulicDataCard({
   dailyTds,
   dailyTdsDate,
   isManager,
+  plantId,
   onOpenHistory,
   onEditSurvey,
   onLogNewSurvey,
@@ -51,6 +52,7 @@ export function WellHydraulicDataCard({
   dailyTds?: number | null;
   dailyTdsDate?: string | null;
   isManager: boolean;
+  plantId?: string | null;
   onOpenHistory: () => void;
   onEditSurvey: (record: PmsSurveyRecord) => void;
   onLogNewSurvey: () => void;
@@ -89,6 +91,16 @@ export function WellHydraulicDataCard({
           {statusBadge}
         </div>
         <div className="flex items-center gap-1.5">
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 px-2 text-xs gap-1 text-muted-foreground hover:text-foreground"
+            asChild
+          >
+            <a href={plantId ? `/hydraulics?plant=${plantId}` : '/hydraulics'} title="View full plant hydraulics fleet">
+              <Waves className="h-3.5 w-3.5" /> Fleet View
+            </a>
+          </Button>
           {pms && pms.length > 0 && (
             <Button
               size="sm"

@@ -1,26 +1,28 @@
 import { useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
+import { getTabDocumentTitle } from '@/shared/tabRegistry';
 
 const ROUTE_TITLES: Record<string, string> = {
   '/': 'Dashboard',
-  '/plants': 'Plants & Wells',
-  '/operations': 'Daily Logs',
+  '/plants': 'Plants',
+  '/operations': 'Daily Readings',
   '/ro-trains': 'RO Trains',
-  '/topology': 'Plant Network Topology',
-  '/data-analysis': 'Data Analysis',
-  '/costs': 'Costs & Finance',
-  '/maintenance': 'Preventive Maintenance',
+  '/hydraulics': 'Hydraulics',
+  '/topology': 'Network Topology',
+  '/data-analysis': 'Data Analysis & Review',
+  '/costs': 'Costs & Tariffs',
+  '/maintenance': 'PM Schedule',
   '/incidents': 'Incidents',
-  '/employees': 'Employees & Teams',
+  '/employees': 'Employees',
   '/data-corrections': 'Data Corrections',
   '/manager-scorecard': 'Manager Scorecard',
   '/import': 'Smart Import',
   '/exports': 'Data Exports',
-  '/compliance': 'Compliance & Reports',
+  '/compliance': 'Compliance',
   '/alerts': 'Alerts',
   '/admin': 'Admin Console',
-  '/profile': 'User Profile',
-  '/help': 'Help & Documentation',
+  '/profile': 'Profile',
+  '/help': 'Help & Manual',
   '/my-corrections': 'My Corrections',
   '/auth': 'Sign In',
   '/onboarding': 'Onboarding',
@@ -30,11 +32,23 @@ const ROUTE_TITLES: Record<string, string> = {
 const APP_NAME = 'PWRI Plant Monitoring';
 
 export function useDocumentTitle() {
-  const { pathname } = useLocation();
+  const { pathname, search } = useLocation();
 
   useEffect(() => {
+    const sp = new URLSearchParams(search);
+    const tab = sp.get('tab');
+
+    if (tab) {
+      const tabTitle = getTabDocumentTitle(pathname, tab);
+      if (tabTitle) {
+        document.title = tabTitle;
+        return;
+      }
+    }
+
     // Check exact match or prefix match
-    const title = ROUTE_TITLES[pathname] ||
+    const title =
+      ROUTE_TITLES[pathname] ||
       Object.entries(ROUTE_TITLES).find(([route]) => route !== '/' && pathname.startsWith(route))?.[1] ||
       '';
 
@@ -43,5 +57,5 @@ export function useDocumentTitle() {
     } else {
       document.title = APP_NAME;
     }
-  }, [pathname]);
+  }, [pathname, search]);
 }
