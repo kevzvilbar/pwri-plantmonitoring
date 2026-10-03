@@ -1,5 +1,5 @@
 {
-  "maxTotalGzipKb": 1173.6,
+  "maxTotalGzipKb": 1136.7,
   "lastUpdated": "2026-10-03",
   "history": [
     {
@@ -92,6 +92,11 @@
       "maxTotalGzipKb": 1173.6,
       "previous": 1144.2,
       "reason": "Re-baselined to CI's authoritative number (1173.6 kB gzipped, 123 assets). The previous 1144.2 baseline came from a local build run WITHOUT the VITE_SUPABASE_URL / VITE_SUPABASE_PUBLISHABLE_KEY placeholders that ci.yml sets for 'Production build'. Reproduced both numbers on the same commit (322e72e): without the env vars 1144.2 kB, with them 1173.6 kB, and the CI-run chunk hashes match byte for byte (index-C5tCDsoa.js). All 7 other top chunks are identical in both builds; the entire +29.4 kB is in the shared `index` entry chunk (83.1 -> 112.6 kB gz), i.e. it is an environment difference, not growth from the hydraulics feature (its page is lazy-loaded). To reproduce CI locally: VITE_SUPABASE_URL=https://placeholder.supabase.co VITE_SUPABASE_PUBLISHABLE_KEY=placeholder-anon-key npm run build && node scripts/check-bundle-size.mjs"
+    },
+    {
+      "date": "2026-10-03",
+      "maxTotalGzipKb": 1136.7,
+      "previous": 1173.6
     }
   ]
 }

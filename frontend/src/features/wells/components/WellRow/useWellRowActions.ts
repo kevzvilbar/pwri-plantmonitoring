@@ -91,16 +91,27 @@ export function useWellRowActions({
 
   const savePowerMutation = useMutation({
     mutationKey: ['save-well-power', well.id],
-    mutationFn: async ({ val, lastTodayId, customDtIso }: { val: number; lastTodayId: string | null; customDtIso: string }) => {
+    mutationFn: async ({ val, lastTodayId, customDtIso, wellId, plantId: overridePlantId, previousMeter: overridePrevMeter, userId: overrideUserId }: {
+      val: number;
+      lastTodayId: string | null;
+      customDtIso: string;
+      wellId?: string;
+      plantId?: string;
+      previousMeter?: number | null;
+      userId?: string | null;
+    }) => {
       if (lastTodayId) {
         const { error } = await supabase.from('well_readings')
           .update({ power_meter_reading: val }).eq('id', lastTodayId);
         if (error) throw error;
       } else {
         const { error } = await supabase.from('well_readings').insert({
-          well_id: well.id, plant_id: plantId,
-          current_reading: previousMeter ?? 0, previous_reading: previousMeter,
-          power_meter_reading: val, recorded_by: userId,
+          well_id: wellId ?? well.id,
+          plant_id: overridePlantId ?? plantId,
+          current_reading: (overridePrevMeter !== undefined ? overridePrevMeter : previousMeter) ?? 0,
+          previous_reading: overridePrevMeter !== undefined ? overridePrevMeter : previousMeter,
+          power_meter_reading: val,
+          recorded_by: overrideUserId !== undefined ? overrideUserId : userId,
           reading_datetime: customDtIso,
         } as any);
         if (error) throw error;
@@ -110,15 +121,26 @@ export function useWellRowActions({
 
   const saveTdsMutation = useMutation({
     mutationKey: ['save-well-tds', well.id],
-    mutationFn: async ({ val, lastTodayId, customDtIso }: { val: number; lastTodayId: string | null; customDtIso: string }) => {
+    mutationFn: async ({ val, lastTodayId, customDtIso, wellId, plantId: overridePlantId, previousMeter: overridePrevMeter, userId: overrideUserId }: {
+      val: number;
+      lastTodayId: string | null;
+      customDtIso: string;
+      wellId?: string;
+      plantId?: string;
+      previousMeter?: number | null;
+      userId?: string | null;
+    }) => {
       if (lastTodayId) {
         const { error } = await (supabase.from('well_readings') as any).update({ tds_ppm: val }).eq('id', lastTodayId);
         if (error) throw error;
       } else {
         const { error } = await (supabase.from('well_readings') as any).insert({
-          well_id: well.id, plant_id: plantId,
-          current_reading: previousMeter ?? 0, previous_reading: previousMeter,
-          tds_ppm: val, recorded_by: userId,
+          well_id: wellId ?? well.id,
+          plant_id: overridePlantId ?? plantId,
+          current_reading: (overridePrevMeter !== undefined ? overridePrevMeter : previousMeter) ?? 0,
+          previous_reading: overridePrevMeter !== undefined ? overridePrevMeter : previousMeter,
+          tds_ppm: val,
+          recorded_by: overrideUserId !== undefined ? overrideUserId : userId,
           reading_datetime: customDtIso,
         });
         if (error) throw error;
@@ -128,15 +150,26 @@ export function useWellRowActions({
 
   const saveNtuMutation = useMutation({
     mutationKey: ['save-well-ntu', well.id],
-    mutationFn: async ({ val, lastTodayId, customDtIso }: { val: number; lastTodayId: string | null; customDtIso: string }) => {
+    mutationFn: async ({ val, lastTodayId, customDtIso, wellId, plantId: overridePlantId, previousMeter: overridePrevMeter, userId: overrideUserId }: {
+      val: number;
+      lastTodayId: string | null;
+      customDtIso: string;
+      wellId?: string;
+      plantId?: string;
+      previousMeter?: number | null;
+      userId?: string | null;
+    }) => {
       if (lastTodayId) {
         const { error } = await (supabase.from('well_readings') as any).update({ turbidity_ntu: val }).eq('id', lastTodayId);
         if (error) throw error;
       } else {
         const { error } = await (supabase.from('well_readings') as any).insert({
-          well_id: well.id, plant_id: plantId,
-          current_reading: previousMeter ?? 0, previous_reading: previousMeter,
-          turbidity_ntu: val, recorded_by: userId,
+          well_id: wellId ?? well.id,
+          plant_id: overridePlantId ?? plantId,
+          current_reading: (overridePrevMeter !== undefined ? overridePrevMeter : previousMeter) ?? 0,
+          previous_reading: overridePrevMeter !== undefined ? overridePrevMeter : previousMeter,
+          turbidity_ntu: val,
+          recorded_by: overrideUserId !== undefined ? overrideUserId : userId,
           reading_datetime: customDtIso,
         });
         if (error) throw error;
@@ -146,15 +179,26 @@ export function useWellRowActions({
 
   const savePressureMutation = useMutation({
     mutationKey: ['save-well-pressure', well.id],
-    mutationFn: async ({ val, lastTodayId, customDtIso }: { val: number; lastTodayId: string | null; customDtIso: string }) => {
+    mutationFn: async ({ val, lastTodayId, customDtIso, wellId, plantId: overridePlantId, previousMeter: overridePrevMeter, userId: overrideUserId }: {
+      val: number;
+      lastTodayId: string | null;
+      customDtIso: string;
+      wellId?: string;
+      plantId?: string;
+      previousMeter?: number | null;
+      userId?: string | null;
+    }) => {
       if (lastTodayId) {
         const { error } = await (supabase.from('well_readings') as any).update({ pressure_psi: val }).eq('id', lastTodayId);
         if (error) throw error;
       } else {
         const { error } = await (supabase.from('well_readings') as any).insert({
-          well_id: well.id, plant_id: plantId,
-          current_reading: previousMeter ?? 0, previous_reading: previousMeter,
-          pressure_psi: val, recorded_by: userId,
+          well_id: wellId ?? well.id,
+          plant_id: overridePlantId ?? plantId,
+          current_reading: (overridePrevMeter !== undefined ? overridePrevMeter : previousMeter) ?? 0,
+          previous_reading: overridePrevMeter !== undefined ? overridePrevMeter : previousMeter,
+          pressure_psi: val,
+          recorded_by: overrideUserId !== undefined ? overrideUserId : userId,
           reading_datetime: customDtIso,
         });
         if (error) throw error;
@@ -164,7 +208,14 @@ export function useWellRowActions({
 
   const saveSharedPowerMutation = useMutation({
     mutationKey: ['save-well-shared-power', well.id],
-    mutationFn: async ({ val, primaryWellId, prevPower, customDtIso }: { val: number; primaryWellId: string; prevPower: number | null; customDtIso: string }) => {
+    mutationFn: async ({ val, primaryWellId, prevPower, customDtIso, plantId: overridePlantId, userId: overrideUserId }: {
+      val: number;
+      primaryWellId: string;
+      prevPower: number | null;
+      customDtIso: string;
+      plantId?: string;
+      userId?: string | null;
+    }) => {
       const startOfDay = new Date(); startOfDay.setHours(0, 0, 0, 0);
       const { data: todayRecs, error: fetchErr } = await supabase
         .from('well_readings').select('id')
@@ -178,9 +229,11 @@ export function useWellRowActions({
         if (error) throw error;
       } else {
         const { error } = await supabase.from('well_readings').insert({
-          well_id: primaryWellId, plant_id: plantId,
+          well_id: primaryWellId,
+          plant_id: overridePlantId ?? plantId,
           current_reading: prevPower ?? 0,
-          power_meter_reading: val, recorded_by: userId,
+          power_meter_reading: val,
+          recorded_by: overrideUserId !== undefined ? overrideUserId : userId,
           reading_datetime: customDtIso,
         } as any);
         if (error) throw error;
@@ -481,6 +534,10 @@ export function useWellRowActions({
         val,
         lastTodayId: lastToday?.id ?? null,
         customDtIso: new Date(customDt).toISOString(),
+        wellId: well.id,
+        plantId,
+        previousMeter,
+        userId,
       });
       toast.success(`${well.name}: power saved`);
       setPowerReading(''); onSaved();
@@ -489,7 +546,7 @@ export function useWellRowActions({
     } finally {
       setSavingPower(false);
     }
-  }, [powerReading, well.name, lastToday, customDt, onSaved, savePowerMutation]);
+  }, [powerReading, well.name, well.id, plantId, previousMeter, userId, lastToday, customDt, onSaved, savePowerMutation]);
 
   const saveTds = useCallback(async () => {
     if (!tdsReading) { toast.error(`${well.name}: enter a TDS value`); return; }
@@ -500,6 +557,10 @@ export function useWellRowActions({
         val,
         lastTodayId: lastToday?.id ?? null,
         customDtIso: new Date(customDt).toISOString(),
+        wellId: well.id,
+        plantId,
+        previousMeter,
+        userId,
       });
       toast.success(`${well.name}: TDS saved`);
       setTdsReading(''); onSaved();
@@ -507,7 +568,7 @@ export function useWellRowActions({
       toast.error(friendlyError(e));
       console.error('saveTds error:', e);
     } finally { setSavingTds(false); }
-  }, [tdsReading, well.name, lastToday, customDt, onSaved, saveTdsMutation]);
+  }, [tdsReading, well.name, well.id, plantId, previousMeter, userId, lastToday, customDt, onSaved, saveTdsMutation]);
 
   const saveNtu = useCallback(async () => {
     if (!ntuReading) { toast.error(`${well.name}: enter a turbidity value`); return; }
@@ -518,6 +579,10 @@ export function useWellRowActions({
         val,
         lastTodayId: lastToday?.id ?? null,
         customDtIso: new Date(customDt).toISOString(),
+        wellId: well.id,
+        plantId,
+        previousMeter,
+        userId,
       });
       toast.success(`${well.name}: NTU saved`);
       setNtuReading(''); onSaved();
@@ -525,7 +590,7 @@ export function useWellRowActions({
       toast.error(friendlyError(e));
       console.error('saveNtu error:', e);
     } finally { setSavingNtu(false); }
-  }, [ntuReading, well.name, lastToday, customDt, onSaved, saveNtuMutation]);
+  }, [ntuReading, well.name, well.id, plantId, previousMeter, userId, lastToday, customDt, onSaved, saveNtuMutation]);
 
   const savePressure = useCallback(async () => {
     if (!pressureReading) { toast.error(`${well.name}: enter a pressure value`); return; }
@@ -536,6 +601,10 @@ export function useWellRowActions({
         val,
         lastTodayId: lastToday?.id ?? null,
         customDtIso: new Date(customDt).toISOString(),
+        wellId: well.id,
+        plantId,
+        previousMeter,
+        userId,
       });
       toast.success(`${well.name}: pressure saved`);
       setPressureReading(''); onSaved();
@@ -543,7 +612,7 @@ export function useWellRowActions({
       toast.error(`Pressure save failed: ${friendlyError(e)}`);
       console.error('savePressure error:', e);
     } finally { setSavingPressure(false); }
-  }, [pressureReading, well.name, lastToday, customDt, onSaved, savePressureMutation]);
+  }, [pressureReading, well.name, well.id, plantId, previousMeter, userId, lastToday, customDt, onSaved, savePressureMutation]);
 
   const saveSharedPower = useCallback(async () => {
     if (!sharedPower || !sharedPowerReading) { toast.error(`${sharedPower?.groupName ?? 'Group'}: enter a power meter reading`); return; }
@@ -555,6 +624,8 @@ export function useWellRowActions({
         primaryWellId: sharedPower.primaryWellId,
         prevPower: sharedPower.previousPower ?? null,
         customDtIso: new Date(customDt).toISOString(),
+        plantId,
+        userId,
       });
       toast.success(`${sharedPower.groupName}: power meter saved`);
       setSharedPowerReading(''); onSaved();
@@ -563,7 +634,7 @@ export function useWellRowActions({
     } finally {
       setSavingSharedPower(false);
     }
-  }, [sharedPower, sharedPowerReading, customDt, onSaved, saveSharedPowerMutation]);
+  }, [sharedPower, sharedPowerReading, plantId, userId, customDt, onSaved, saveSharedPowerMutation]);
 
   const saveGapReason = useCallback(async (category: string, detail: string) => {
     setGapSaving(true);

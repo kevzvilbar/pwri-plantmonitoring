@@ -8,6 +8,7 @@ test_result.md
 validate_*.txt
 val-*.log
 *.log
+*.patch
 
 # Supabase CLI local state
 supabase/.temp/

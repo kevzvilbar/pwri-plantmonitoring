@@ -31,6 +31,7 @@ import { friendlyError } from '@/lib/supabaseErrors';
 import { usePermission } from '@/hooks/usePermission';
 import { usePlants } from '@/hooks/usePlants';
 import { useAppStore } from '@/store/appStore';
+import { downloadCSV } from '@/shared/csv';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -223,40 +224,33 @@ export default function CompliancePage() {
   );
 
   const exportComplianceCsv = () => {
-    const headers = [
-      'Facility Name', 'Compliance Score %', 'Rating Tier', 'Total Violations',
-      'Critical (High)', 'Medium Violations', 'Low Violations',
-      'NRW %', 'Permeate TDS (ppm)', 'Permeate pH', 'Product Turbidity (NTU)',
-      'Differential Pressure (psi)', 'Recovery %', 'Downtime (hrs/day)', 'Chemical Supply Alert', 'Audit Date',
-    ];
-
     const rowsData = fleetSummaries.map((p) => {
       const highCount = p.violations.filter((v) => v.severity === 'high').length;
       const medCount = p.violations.filter((v) => v.severity === 'medium').length;
       const lowCount = p.violations.filter((v) => v.severity === 'low').length;
       const chemLow = p.violations.filter((v) => v.code === 'CHEM_LOW').map((v) => `${v.metric} (${v.value}d)`).join('; ') || 'Normal';
       const turbVal = p.metrics.product_turbidity ?? p.metrics.raw_turbidity;
-      return [
-        `"${p.plantName}"`, `"${p.score}%"`, `"${scoreLabel(p.score)}"`, `"${p.violations.length}"`,
-        `"${highCount}"`, `"${medCount}"`, `"${lowCount}"`,
-        `"${p.metrics.nrw_pct !== undefined ? p.metrics.nrw_pct.toFixed(1) + '%' : '—'}"`,
-        `"${p.metrics.permeate_tds !== undefined ? p.metrics.permeate_tds.toFixed(1) : '—'}"`,
-        `"${p.metrics.permeate_ph !== undefined ? p.metrics.permeate_ph.toFixed(2) : '—'}"`,
-        `"${turbVal !== undefined ? turbVal.toFixed(2) : '—'}"`,
-        `"${p.metrics.dp_psi !== undefined ? p.metrics.dp_psi.toFixed(1) : '—'}"`,
-        `"${p.metrics.recovery_pct !== undefined ? p.metrics.recovery_pct.toFixed(1) + '%' : '—'}"`,
-        `"${p.metrics.downtime_hrs !== undefined ? p.metrics.downtime_hrs.toFixed(1) : '—'}"`,
-        `"${chemLow}"`, `"${new Date().toISOString().slice(0, 10)}"`,
-      ];
+      return {
+        'Facility Name': p.plantName,
+        'Compliance Score %': `${p.score}%`,
+        'Rating Tier': scoreLabel(p.score),
+        'Total Violations': p.violations.length,
+        'Critical (High)': highCount,
+        'Medium Violations': medCount,
+        'Low Violations': lowCount,
+        'NRW %': p.metrics.nrw_pct !== undefined ? `${p.metrics.nrw_pct.toFixed(1)}%` : '—',
+        'Permeate TDS (ppm)': p.metrics.permeate_tds !== undefined ? p.metrics.permeate_tds.toFixed(1) : '—',
+        'Permeate pH': p.metrics.permeate_ph !== undefined ? p.metrics.permeate_ph.toFixed(2) : '—',
+        'Product Turbidity (NTU)': turbVal !== undefined ? turbVal.toFixed(2) : '—',
+        'Differential Pressure (psi)': p.metrics.dp_psi !== undefined ? p.metrics.dp_psi.toFixed(1) : '—',
+        'Recovery %': p.metrics.recovery_pct !== undefined ? `${p.metrics.recovery_pct.toFixed(1)}%` : '—',
+        'Downtime (hrs/day)': p.metrics.downtime_hrs !== undefined ? p.metrics.downtime_hrs.toFixed(1) : '—',
+        'Chemical Supply Alert': chemLow,
+        'Audit Date': new Date().toISOString().slice(0, 10),
+      };
     });
 
-    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rowsData.map((r) => r.join(','))].join('\n');
-    const link = document.createElement('a');
-    link.setAttribute('href', encodeURI(csvContent));
-    link.setAttribute('download', `compliance_audit_matrix_${days}d_${new Date().toISOString().slice(0, 10)}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    downloadCSV(`compliance_audit_matrix_${days}d_${new Date().toISOString().slice(0, 10)}.csv`, rowsData);
     toast.success('Compliance audit matrix exported successfully.');
   };
 

@@ -3,6 +3,7 @@ import { toast } from "@/components/ui/sonner";
 import { friendlyError } from "@/lib/supabaseErrors";
 import { reportError } from "@/lib/monitoring";
 import { globalStampActivity } from "@/hooks/usePresence";
+import { registerOfflineMutationDefaults } from "@/lib/offlineMutations";
 
 export const queryClient = new QueryClient({
   defaultOptions: {
@@ -45,3 +46,6 @@ export const queryClient = new QueryClient({
     },
   }),
 });
+
+registerOfflineMutationDefaults(queryClient);
+

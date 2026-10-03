@@ -116,6 +116,13 @@ export default defineConfig(({ mode }) => ({
           if (!pkg) return;
           if (pkg === "@supabase" || pkg.startsWith("@supabase/")) return "vendor-supabase";
           if (pkg === "date-fns") return "vendor-date-fns";
+          if (
+            pkg === "recharts" ||
+            pkg?.startsWith("d3-") ||
+            pkg === "victory-vendor"
+          ) {
+            return "vendor-charts";
+          }
           // React and Radix are one bucket, not two. Radix is built entirely
           // on top of React (every @radix-ui/react-* package imports
           // React.forwardRef/createContext/etc. at module top level) and
