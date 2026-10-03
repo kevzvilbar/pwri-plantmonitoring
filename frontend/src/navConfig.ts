@@ -14,7 +14,7 @@ import type { ComponentType } from 'react';
 import {
   LayoutDashboard, Bell, ShieldCheck, Droplet, Wrench, AlertTriangle,
   Building2, GitBranch, FlaskConical, ClipboardCheck, Award,
-  Download, Upload, Users, ShieldAlert, SquarePen, Gauge,
+  Download, Upload, Users, ShieldAlert, SquarePen, Waves,
 } from 'lucide-react';
 import { ROTrainIcon, PesoSignIcon } from '@/components/icons/water-icons';
 import { MODULE_LABELS, type Action, type ModuleKey } from '@/lib/permissions';
@@ -78,7 +78,7 @@ const NAV_GROUPS: readonly NavGroup[] = [
     label: 'Assets',
     items: [
       { id: 'plants', modules: ['plants'], label: MODULE_LABELS.plants, route: '/plants', icon: Building2 },
-      { id: 'hydraulics', modules: ['hydraulics'], label: MODULE_LABELS.hydraulics, route: '/hydraulics', icon: Gauge },
+      { id: 'hydraulics', modules: ['hydraulics'], label: MODULE_LABELS.hydraulics, route: '/hydraulics', icon: Waves },
       { id: 'topology', modules: ['network_topology'], label: MODULE_LABELS.network_topology, route: '/topology', icon: GitBranch },
     ],
   },

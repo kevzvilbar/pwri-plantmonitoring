@@ -3,6 +3,7 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import {
   Gauge,
+  Waves,
   History,
   Pencil,
   Plus,
@@ -83,7 +84,7 @@ export function WellHydraulicDataCard({
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <div className="flex items-center gap-2">
           <span className="text-sm font-semibold flex items-center gap-1.5">
-            <Gauge className="h-4 w-4 text-info" /> Hydraulic Data
+            <Waves className="h-4 w-4 text-info" /> Hydraulic Data
           </span>
           {statusBadge}
         </div>

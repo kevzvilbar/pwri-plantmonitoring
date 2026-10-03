@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { Gauge, Pencil, Trash2 } from 'lucide-react';
+import { Waves, Pencil, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { friendlyError } from '@/lib/supabaseErrors';
 import { format } from 'date-fns';
@@ -199,7 +199,7 @@ export function HydraulicHistoryDialog({
       <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Gauge className="h-5 w-5 text-info" />
+            <Waves className="h-5 w-5 text-info" />
             Hydraulic Survey History — {well.name}
             <span className="text-xs font-normal text-muted-foreground ml-1">
               ({records.length} record{records.length === 1 ? '' : 's'})

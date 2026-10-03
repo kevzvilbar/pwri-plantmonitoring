@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
   Gauge,
+  Waves,
   Layers,
   Activity,
   AlertTriangle,
@@ -112,7 +113,7 @@ export function HydraulicQuickLookDrawer({
           <div className="flex items-center justify-between gap-2 flex-wrap pr-6">
             <div className="flex items-center gap-2">
               <div className="p-2 rounded-lg bg-info/10 text-info">
-                <Gauge className="h-5 w-5" />
+                <Waves className="h-5 w-5" />
               </div>
               <div>
                 <SheetTitle className="text-lg font-bold text-foreground flex items-center gap-2">

@@ -10,8 +10,8 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const root = resolve(__dirname, '../../..');
-const hook = readFileSync(resolve(root, 'features/hydraulics/hooks/useHydraulicsFleet.ts'), 'utf8');
-const types = readFileSync(resolve(root, 'integrations/supabase/types.ts'), 'utf8');
+const hook = readFileSync(resolve(root, 'features/hydraulics/hooks/useHydraulicsFleet.ts'), 'utf8').replace(/\r\n/g, '\n');
+const types = readFileSync(resolve(root, 'integrations/supabase/types.ts'), 'utf8').replace(/\r\n/g, '\n');
 
 function rowColumns(table: string): string[] {
   const start = types.indexOf(`      ${table}: {\n        Row: {`);

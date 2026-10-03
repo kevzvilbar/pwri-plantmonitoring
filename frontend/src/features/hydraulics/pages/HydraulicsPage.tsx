@@ -9,7 +9,7 @@ import { type WellHydraulicSummary, type HydraulicStatus, type PmsSurveyRecord }
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import {
-  Gauge,
+  Waves,
   RefreshCw,
   Clock,
   AlertTriangle,
@@ -104,7 +104,7 @@ export function HydraulicsPage() {
         <div className="space-y-1">
           <div className="flex items-center gap-2">
             <div className="p-2 rounded-lg bg-info/10 text-info">
-              <Gauge className="h-5 w-5" />
+              <Waves className="h-5 w-5" />
             </div>
             <h1 className="text-xl font-bold tracking-tight text-foreground">
               Well Fleet Hydraulics
