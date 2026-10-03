@@ -38,9 +38,9 @@ export function OfflineBanner() {
         <span>
           <strong className="font-semibold text-warn">Offline Mode:</strong>{' '}
           {pendingCount > 0 ? (
-            <>{pendingCount} offline update{pendingCount === 1 ? '' : 's'} queued to sync on reconnect. Supported readings are queued offline; other entry types require a connection.</>
+            <>{pendingCount} offline update{pendingCount === 1 ? '' : 's'} queued in outbox. (Locators, Wells & RO Train Logs queue offline; Product, Power & Incidents require network connection.)</>
           ) : (
-            <>You are currently offline. Reference and configuration data are served from offline cache. Supported readings are queued offline to sync on reconnect; other entry types require a connection.</>
+            <>You are currently offline. (Locators, Wells & RO Train Logs queue offline; Product, Power & Incidents require network connection.)</>
           )}
         </span>
       </InstrumentBanner>

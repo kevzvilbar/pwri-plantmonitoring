@@ -21,7 +21,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
-import { usePendingOutboxCount } from '@/lib/offlineOutbox';
+import { usePendingOutboxCount, usePendingOutboxItems } from '@/lib/offlineOutbox';
 
 export interface SyncIndicatorProps {
   trigger?: React.ReactNode;
@@ -37,6 +37,7 @@ export function SyncIndicator({
   const { status, lastSynced, error, setStatus, setLastSynced, setError } = useSyncStore();
   const qc = useQueryClient();
   const pendingOutboxCount = usePendingOutboxCount();
+  const outboxItems = usePendingOutboxItems();
 
   const lastToastedErr = useRef<string | null>(null);
 
@@ -131,11 +132,31 @@ export function SyncIndicator({
         )}
       </PopoverTrigger>
       <PopoverContent side="bottom" align="end" className="w-56 p-3 text-xs">
-        <p className={cn('font-medium', isError ? 'text-warn' : 'text-foreground')}>{label}</p>
         {pendingOutboxCount > 0 && (
-          <p className="text-2xs text-muted-foreground mt-1">
-            {pendingOutboxCount} offline modification{pendingOutboxCount === 1 ? '' : 's'} will automatically upload when network returns.
-          </p>
+          <div className="mt-2 space-y-1.5 border-t border-border/60 pt-2">
+            <p className="text-2xs font-semibold text-foreground flex items-center justify-between">
+              <span>Queued Outbox</span>
+              <span className="text-amber-500 font-mono">{pendingOutboxCount}</span>
+            </p>
+            <div className="max-h-36 overflow-y-auto space-y-1 pr-0.5">
+              {outboxItems.map((item) => (
+                <div
+                  key={item.mutationId}
+                  className="p-1.5 rounded bg-muted/60 text-2xs space-y-0.5 border border-border/40"
+                >
+                  <div className="font-medium text-foreground truncate" title={item.mutationKey}>
+                    {item.mutationKey}
+                  </div>
+                  <div className="text-3xs text-muted-foreground flex items-center justify-between">
+                    <span>{item.isPaused ? 'Paused (offline)' : item.status}</span>
+                    {item.submittedAt && (
+                      <span>{new Date(item.submittedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         )}
         <Button
           size="sm"
