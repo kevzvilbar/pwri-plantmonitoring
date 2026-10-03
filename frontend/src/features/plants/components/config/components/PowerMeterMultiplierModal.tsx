@@ -162,10 +162,12 @@ export function PowerMeterMultiplierModal({
         created_at: new Date().toISOString(),
       };
 
-      let { data: insertedChange, error: changeErr } = await (supabase.from('power_meter_changes' as any) as any)
+      let insertedChange: { id?: string } | null = null;
+      const { data: initialData, error: changeErr } = await (supabase.from('power_meter_changes' as any) as any)
         .insert(changePayload)
         .select('id')
         .single();
+      insertedChange = initialData;
 
       if (changeErr) {
         // Fallback without power_kind if column doesn't exist on live table

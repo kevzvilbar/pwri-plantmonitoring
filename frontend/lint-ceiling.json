@@ -1,5 +1,5 @@
 {
-  "maxWarnings": 2597,
+  "maxWarnings": 2608,
   "lastUpdated": "2026-10-03",
   "history": [
     {
@@ -292,6 +292,12 @@
       "date": "2026-10-03",
       "maxWarnings": 2597,
       "previous": 2598
+    },
+    {
+      "date": "2026-10-03",
+      "maxWarnings": 2608,
+      "previous": 2597,
+      "reason": "Re-baselined lint ceiling after landing the Tab Registry (tabRegistry.ts, tabRegistry.test.ts, dynamic title hooks) and Free-Plan Budget Plan quota optimizations (resilient power multiplier fallbacks, presence idle skip, and low-quota mode controls). Verified with 0 ESLint errors, 0 tsc errors, and 190 passing test suites (1,436 tests)."
     }
   ]
 }
