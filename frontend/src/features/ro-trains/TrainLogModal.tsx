@@ -14,10 +14,6 @@ import {
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
-import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
-  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { friendlyError } from '@/lib/supabaseErrors';
@@ -25,19 +21,9 @@ import { isOfflineReadingRow } from '@/lib/hourlyReadingGuard';
 import { planStrayReadingShift, type StrayReadingRef, type StrayReadingShift } from '@/lib/trainStatusTimeline';
 import { CORRECTION_REASONS, isReasonComplete, resolveReason } from '@/lib/correctionReasons';
 import { canEditEntry, logReadingEdit, recalculateTrainDeltas } from './helpers';
-import { ReplaceTrainMeterDialog } from './ReplaceTrainMeterDialog';
-import { MeterReplacementDetailDialog } from '@/components/readingHistory/MeterReplacementDetailDialog';
 import { useMeterReplacementDetail } from '@/components/readingHistory/useMeterReplacementDetail';
-import { replacementToInitial } from '@/components/readingHistory/replacementEdit';
 import type { ReplacementDetailHost } from '@/components/readingHistory/replacementTypes';
-import { EditRoReadingDialog } from './EditRoReadingDialog';
-import { EditPretreatReadingDialog } from './EditPretreatReadingDialog';
-import { ImportROReadingsDialog } from './ImportROReadingsDialog';
-import { ImportPretreatReadingsDialog } from './ImportPretreatReadingsDialog';
-import { ReasonDialog } from '@/components/ReasonDialog';
-import { CorrectionRequestDialog } from '@/components/CorrectionRequestDialog';
 import type { CorrectionTarget } from '@/components/CorrectionRequestDialog';
-import { cn } from '@/lib/utils';
 import { useTrainLogActions } from './hooks/useTrainLogActions';
 import { useReportTrainRunning } from '@/hooks/useTrainUptimeExemption';
 import { UPTIME_EXEMPTION_SUBREASONS } from '@/lib/trainUptimeExemption';
@@ -46,6 +32,7 @@ import { TrainLogHeader } from './components/TrainLogHeader';
 import { TrainLogFilters } from './components/TrainLogFilters';
 import { RoLogTable } from './components/RoLogTable';
 import { PreTreatLogTable } from './components/PreTreatLogTable';
+import { TrainLogSubDialogs } from './components/TrainLogSubDialogs';
 
 /** Reason options for the "Report Running — failed to encode" attestation dialog. */
 const UPTIME_REPORT_CATEGORIES = UPTIME_EXEMPTION_SUBREASONS;
@@ -585,167 +572,50 @@ export function TrainLogModal({ trainId, trainLabel, plantId, onClose, initialTa
         </DialogContent>
       </Dialog>
 
-      {showImportRO && (
-        <ImportROReadingsDialog
-          plantId={plantId}
-          userId={activeOperator?.id ?? null}
-          trainId={trainId}
-          trainLabel={trainLabel}
-          onClose={() => setShowImportRO(false)}
-          onImported={() => {
-            setShowImportRO(false);
-            qc.invalidateQueries({ queryKey });
-            qc.invalidateQueries({ queryKey: ['ro-overview'] });
-          }}
-        />
-      )}
-      {showImportPretreat && (
-        <ImportPretreatReadingsDialog
-          plantId={plantId}
-          userId={activeOperator?.id ?? null}
-          trainId={trainId}
-          trainLabel={trainLabel}
-          onClose={() => setShowImportPretreat(false)}
-          onImported={() => {
-            setShowImportPretreat(false);
-            qc.invalidateQueries({ queryKey: preQueryKey });
-            qc.invalidateQueries({ queryKey: ['ro-overview'] });
-          }}
-        />
-      )}
-      {editingRoRow && (
-        <EditRoReadingDialog
-          row={editingRoRow} trainId={trainId}
-          onClose={() => setEditingRoRow(null)}
-          onSaved={() => { setEditingRoRow(null); qc.invalidateQueries({ queryKey }); qc.invalidateQueries({ queryKey: ['ro-overview'] }); }}
-        />
-      )}
-      {editingPretreatRow && (
-        <EditPretreatReadingDialog
-          row={editingPretreatRow} trainId={trainId}
-          onClose={() => setEditingPretreatRow(null)}
-          onSaved={() => { setEditingPretreatRow(null); qc.invalidateQueries({ queryKey: preQueryKey }); qc.invalidateQueries({ queryKey: ['ro-overview'] }); }}
-        />
-      )}
-      {correctionTarget && (
-        <CorrectionRequestDialog
-          target={correctionTarget}
-          onClose={() => setCorrectionTarget(null)}
-          onSubmitted={() => { setCorrectionTarget(null); qc.invalidateQueries({ queryKey }); qc.invalidateQueries({ queryKey: preQueryKey }); }}
-        />
-      )}
-      {replaceReadingId && (
-        <ReplaceTrainMeterDialog
-          trainId={trainId}
-          plantId={plantId}
-          readingId={replaceReadingId}
-          onSuccess={() => {
-            qc.invalidateQueries({ queryKey });
-            qc.invalidateQueries({ queryKey: ['ro-overview'] });
-            qc.invalidateQueries({ queryKey: ['meter-replacement-detail'] });
-          }}
-          onClose={() => setReplaceReadingId(null)}
-        />
-      )}
-      <MeterReplacementDetailDialog
-        host={detailHost} records={detailRecords} isLoading={detailLoading}
-        onClose={() => setDetailRow(null)}
-        onEdit={(rec) => {
-          if (!rec) { setDetailRow(null); setReplaceReadingId(detailRow?.id ?? null); return; }
-          setReplacementInitial(replacementToInitial(rec));
-        }}
+      <TrainLogSubDialogs
+        plantId={plantId}
+        trainId={trainId}
+        trainLabel={trainLabel}
+        activeOperator={activeOperator}
+        queryKey={queryKey}
+        preQueryKey={preQueryKey}
+        showImportRO={showImportRO}
+        setShowImportRO={setShowImportRO}
+        showImportPretreat={showImportPretreat}
+        setShowImportPretreat={setShowImportPretreat}
+        editingRoRow={editingRoRow}
+        setEditingRoRow={setEditingRoRow}
+        editingPretreatRow={editingPretreatRow}
+        setEditingPretreatRow={setEditingPretreatRow}
+        correctionTarget={correctionTarget}
+        setCorrectionTarget={setCorrectionTarget}
+        replaceReadingId={replaceReadingId}
+        setReplaceReadingId={setReplaceReadingId}
+        detailHost={detailHost}
+        detailRecords={detailRecords}
+        detailLoading={detailLoading}
+        detailRow={detailRow}
+        setDetailRow={setDetailRow}
+        replacementInitial={replacementInitial}
+        setReplacementInitial={setReplacementInitial}
+        gapDialogTarget={gapDialogTarget}
+        setGapDialogTarget={setGapDialogTarget}
+        gapDialogBusy={gapDialogBusy}
+        submitGapReason={actions.submitGapReason}
+        uptimeReportTarget={uptimeReportTarget}
+        setUptimeReportTarget={setUptimeReportTarget}
+        reportingBanner={reportingBanner}
+        submitUptimeReport={submitUptimeReport}
+        uptimeReportCategories={UPTIME_REPORT_CATEGORIES}
+        timingFixTarget={timingFixTarget}
+        setTimingFixTarget={setTimingFixTarget}
+        fixingTimings={fixingTimings}
+        submitTimingFix={submitTimingFix}
+        timingFixCategories={TIMING_FIX_CATEGORIES}
+        pendingDelete={pendingDelete}
+        setPendingDelete={setPendingDelete}
+        doDeleteReading={actions.doDeleteReading}
       />
-      {replacementInitial && (
-        <ReplaceTrainMeterDialog
-          trainId={trainId}
-          plantId={plantId}
-          readingId={detailRow?.id ?? undefined}
-          initial={replacementInitial}
-          onSuccess={() => {
-            setReplacementInitial(null);
-            setDetailRow(null);
-            qc.invalidateQueries({ queryKey });
-            qc.invalidateQueries({ queryKey: ['ro-overview'] });
-            qc.invalidateQueries({ queryKey: ['meter-replacement-detail'] });
-          }}
-          onClose={() => setReplacementInitial(null)}
-        />
-      )}
-      {gapDialogTarget && (
-        <ReasonDialog
-          open={!!gapDialogTarget}
-          onOpenChange={(o) => { if (!o) setGapDialogTarget(null); }}
-          title={`${gapDialogTarget.gap.missedHours} hr${gapDialogTarget.gap.missedHours === 1 ? '' : 's'} missing`}
-          description={
-            `No ${gapDialogTarget.sourceTable === 'ro_train_readings' ? 'RO Train' : 'Pre-Treatment'} reading was logged `
-            + `from ${format(new Date(gapDialogTarget.gap.gapStartAt), 'MMM d, HH:mm')} to `
-            + `${format(new Date(new Date(gapDialogTarget.gap.gapEndAt).getTime() - 1), 'HH:mm')} while the train was Running. `
-            + `Why was this hour missed?`
-          }
-          confirmLabel="Log reason"
-          busy={gapDialogBusy}
-          onConfirm={actions.submitGapReason}
-        />
-      )}
-      {uptimeReportTarget && (
-        <ReasonDialog
-          open={!!uptimeReportTarget}
-          onOpenChange={(o) => { if (!o && !reportingBanner) setUptimeReportTarget(null); }}
-          title="Report Running — readings not encoded"
-          description={
-            `Attest that Train ${trainLabel} was actually running the whole time and the auto-offline flag `
-            + `(started ${format(new Date(uptimeReportTarget.startAt), 'MMM d, HH:mm')}) is a false positive `
-            + `because readings weren't encoded. `
-            + (uptimeReportTarget.endAt === null
-              ? 'This removes the flag and puts the train back to Running. '
-              : "This corrects the closed period in the record without changing the train's current status. ")
-            + `The attestation is logged with your name.`
-          }
-          confirmLabel="File attestation"
-          busy={reportingBanner}
-          categories={UPTIME_REPORT_CATEGORIES}
-          onConfirm={submitUptimeReport}
-        />
-      )}
-      {timingFixTarget && (
-        <ReasonDialog
-          open={!!timingFixTarget}
-          onOpenChange={(o) => { if (!o && !fixingTimings) setTimingFixTarget(null); }}
-          title="Move readings out of the Offline window?"
-          description={
-            `${timingFixTarget.plan.length} reading${timingFixTarget.plan.length === 1 ? '' : 's'} will move `
-            + timingFixTarget.plan
-              .map((s) => `${format(new Date(s.from), 'MMM d, HH:mm')} → ${format(new Date(s.to), 'HH:mm')}`)
-              .join(' · ')
-            + `. Meter deltas are recalculated and the move is audit-logged with your reason. `
-            + `The confirmed status log is not changed.`
-          }
-          confirmLabel="Move readings"
-          busy={fixingTimings}
-          categories={TIMING_FIX_CATEGORIES}
-          onConfirm={submitTimingFix}
-        />
-      )}
-      <AlertDialog open={!!pendingDelete} onOpenChange={(o) => !o && setPendingDelete(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete this reading?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will permanently remove the {pendingDelete?.type === 'ro' ? 'RO train' : 'pre-treatment'} reading.
-              This action cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={actions.doDeleteReading}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </>
   );
 }
