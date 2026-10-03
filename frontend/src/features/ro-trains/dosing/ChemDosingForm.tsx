@@ -32,6 +32,8 @@ import { ChemProductCard, ChemProductCardItem } from './components/ChemProductCa
 import { ResidualTestsCard, ResidualTestSample } from './components/ResidualTestsCard';
 import { ConsumablesCard } from './components/ConsumablesCard';
 import { ChemCard } from './ChemCard';
+import { QuickDosingGrid } from './components/QuickDosingGrid';
+import { DosingSummarySidebar } from './components/DosingSummarySidebar';
 
 export function ChemDosingForm() {
   const qc = useQueryClient();
@@ -643,190 +645,31 @@ export function ChemDosingForm() {
             </div>
           ) : (
             /* ── QUICK ENTRY MODE ───────────────────────────────────────── */
-            <div className="space-y-3">
-              <div className="space-y-1.5">
-                <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground px-0.5">
-                  Mass-Based Dosing Group
-                </p>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                  {isChemEnabled('Chlorine') && (
-                    <ChemCard
-                      name="Chlorine"
-                      icon={
-                        <span className="inline-flex items-center justify-center w-6 h-6 text-3xs font-bold font-mono bg-muted rounded text-muted-foreground">
-                          Cl₂
-                        </span>
-                      }
-                      value={quickV.chlorine_kg}
-                      onChange={(val) => setQuickV({ ...quickV, chlorine_kg: val })}
-                      unit="kg"
-                      unitOptions={quickUnitOptions.chlorine_kg}
-                      unitId={quickUnits.chlorine_kg}
-                      onUnitChange={(id) => setQuickUnits((u) => ({ ...u, chlorine_kg: id }))}
-                      hint={quickHint('chlorine_kg', 'kg')}
-                      accent="teal"
-                    />
-                  )}
-                  {isChemEnabled('SMBS') && (
-                    <ChemCard
-                      name="SMBS"
-                      icon={
-                        <span className="inline-flex items-center justify-center w-6 h-6 text-3xs font-bold font-mono bg-muted rounded text-muted-foreground">
-                          S₂O₅
-                        </span>
-                      }
-                      value={quickV.smbs_kg}
-                      onChange={(val) => setQuickV({ ...quickV, smbs_kg: val })}
-                      unit="kg"
-                      unitOptions={quickUnitOptions.smbs_kg}
-                      unitId={quickUnits.smbs_kg}
-                      onUnitChange={(id) => setQuickUnits((u) => ({ ...u, smbs_kg: id }))}
-                      hint={quickHint('smbs_kg', 'kg')}
-                      accent="default"
-                    />
-                  )}
-                  {isChemEnabled('Soda Ash') && (
-                    <ChemCard
-                      name="Soda Ash"
-                      icon={
-                        <span className="inline-flex items-center justify-center w-6 h-6 text-3xs font-bold font-mono bg-muted rounded text-muted-foreground">
-                          Na₂CO₃
-                        </span>
-                      }
-                      value={quickV.soda_ash_kg}
-                      onChange={(val) => setQuickV({ ...quickV, soda_ash_kg: val })}
-                      unit="kg"
-                      unitOptions={quickUnitOptions.soda_ash_kg}
-                      unitId={quickUnits.soda_ash_kg}
-                      onUnitChange={(id) => setQuickUnits((u) => ({ ...u, soda_ash_kg: id }))}
-                      hint={quickHint('soda_ash_kg', 'kg')}
-                      accent="default"
-                    />
-                  )}
-                </div>
-              </div>
-
-              <div className="space-y-1.5">
-                <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground px-0.5">
-                  Volume-Based & Ancillary
-                </p>
-                <div className="grid grid-cols-2 gap-2">
-                  {isChemEnabled('Anti Scalant') && (
-                    <ChemCard
-                      name="Anti Scalant"
-                      icon={
-                        <span className="inline-flex items-center justify-center w-6 h-6 bg-muted rounded text-muted-foreground">
-                          <Droplets className="h-3.5 w-3.5" />
-                        </span>
-                      }
-                      value={quickV.anti_scalant_l}
-                      onChange={(val) => setQuickV({ ...quickV, anti_scalant_l: val })}
-                      unit="L"
-                      unitOptions={quickUnitOptions.anti_scalant_l}
-                      unitId={quickUnits.anti_scalant_l}
-                      onUnitChange={(id) => setQuickUnits((u) => ({ ...u, anti_scalant_l: id }))}
-                      hint={quickHint('anti_scalant_l', 'L')}
-                      accent="olive"
-                    />
-                  )}
-                  <ChemCard
-                    name="Free Cl Reagent (pcs)"
-                    icon={
-                      <span className="inline-flex items-center justify-center w-6 h-6 bg-muted rounded text-muted-foreground">
-                        <FlaskConical className="h-3.5 w-3.5" />
-                      </span>
-                    }
-                    value={quickV.free_chlorine_reagent_pcs}
-                    onChange={(val) =>
-                      setQuickV({ ...quickV, free_chlorine_reagent_pcs: val })
-                    }
-                    unit="pcs"
-                    accent="default"
-                    inputProps={{ min: '0', max: '20' }}
-                  />
-                </div>
-              </div>
-
-              {/* Residual samples */}
-              <ResidualTestsCard
-                samples={residualSamples}
-                onChange={setResidualSamples}
-              />
-            </div>
+            <QuickDosingGrid
+              isChemEnabled={isChemEnabled}
+              quickV={quickV}
+              setQuickV={setQuickV}
+              quickUnits={quickUnits}
+              setQuickUnits={setQuickUnits}
+              quickUnitOptions={quickUnitOptions}
+              quickHint={quickHint}
+              residualSamples={residualSamples}
+              setResidualSamples={setResidualSamples}
+            />
           )}
         </div>
 
-        {/* ── Right Sidebar — sticky on desktop ────────────────────────── */}
-        <div className="hidden md:block w-48 shrink-0">
-          <div className="rounded-xl bg-primary text-primary-foreground p-3 space-y-3 sticky top-2">
-            <p className="text-xs font-bold uppercase tracking-wider text-primary-foreground">
-              Dosing Summary
-            </p>
-            <div className="space-y-2.5">
-              <DosingMobileSummary
-                totalMassKg={totalMassKg}
-                totalVolumeL={totalVolumeL}
-                freePcs={freePcs}
-                cost={cost}
-              />
-              {unpriced.length > 0 && (
-                <p className="text-2xs text-amber-200 bg-amber-950/40 p-1.5 rounded border border-amber-400/30">
-                  ⚠️ No price on file for {unpriced.join(', ')} — cost not counted
-                </p>
-              )}
-            </div>
-            <div className="border-t border-primary-foreground/20 pt-2 space-y-2">
-              <button
-                onClick={clearAll}
-                className="w-full text-xs text-primary-foreground/70 hover:text-primary-foreground underline underline-offset-2 transition-colors"
-              >
-                Clear All
-              </button>
-              <Button
-                onClick={submit}
-                disabled={isSubmitting}
-                className="w-full h-8 text-xs bg-white text-primary hover:bg-primary-soft font-semibold shadow-none border-0"
-              >
-                {isSubmitting ? 'Saving...' : 'Save Dosing'}
-              </Button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* ── Mobile summary bar ────────────────────────────────────────── */}
-      <div className="md:hidden rounded-xl bg-primary text-primary-foreground p-3 space-y-2.5">
-        <p className="text-xs font-bold uppercase tracking-wider text-primary-foreground">
-          Dosing Summary <span className="text-primary-foreground/60 font-normal">(Live)</span>
-        </p>
-        <div className="grid grid-cols-2 gap-x-4 gap-y-2">
-          <DosingMobileSummary
-            totalMassKg={totalMassKg}
-            totalVolumeL={totalVolumeL}
-            freePcs={freePcs}
-            cost={cost}
-          />
-        </div>
-        {unpriced.length > 0 && (
-          <p className="text-2xs text-amber-200 bg-amber-950/40 p-1.5 rounded border border-amber-400/30">
-            ⚠️ No price on file for {unpriced.join(', ')} — cost not counted
-          </p>
-        )}
-        <div className="grid grid-cols-2 gap-2 pt-1">
-          <button
-            onClick={clearAll}
-            className="h-9 text-xs text-primary-foreground/70 hover:text-primary-foreground border border-primary-foreground/30 rounded-md transition-colors"
-          >
-            Clear All
-          </button>
-          <Button
-            onClick={submit}
-            disabled={isSubmitting}
-            className="h-9 text-xs bg-white text-primary hover:bg-primary-soft font-semibold shadow-none border-0"
-          >
-            {isSubmitting ? 'Saving...' : 'Save Dosing'}
-          </Button>
-        </div>
+        {/* ── Summary sidebar / mobile drawer ────────────────────────── */}
+        <DosingSummarySidebar
+          totalMassKg={totalMassKg}
+          totalVolumeL={totalVolumeL}
+          freePcs={freePcs}
+          cost={cost}
+          unpriced={unpriced}
+          isSubmitting={isSubmitting}
+          onClearAll={clearAll}
+          onSubmit={submit}
+        />
       </div>
     </div>
   );
