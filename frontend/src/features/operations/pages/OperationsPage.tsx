@@ -26,6 +26,7 @@ const OPERATIONS_TABS = ['locator', 'well', 'product', 'blending', 'power'] as c
 const OPERATIONS_TAB_ALIASES = { locators: 'locator', wells: 'well', production: 'product', bypass: 'blending' } as const;
 
 import { getCurrentShift } from '@/lib/shifts';
+import { ShiftRoundProgress } from '../components/ShiftRoundProgress';
 
 export default function Operations() {
   const navigate = useNavigate();
@@ -41,7 +42,16 @@ export default function Operations() {
   // the first plant's numbers above forms that show nothing.
   const { plantId: activePlantId } = useActivePlant();
 
-  const shiftInfo = useMemo(() => getCurrentShift(), []);
+  const [shiftInfo, setShiftInfo] = React.useState(() => getCurrentShift());
+  React.useEffect(() => {
+    const timer = setInterval(() => {
+      setShiftInfo((prev) => {
+        const next = getCurrentShift();
+        return prev?.code === next?.code ? prev : next;
+      });
+    }, 30_000);
+    return () => clearInterval(timer);
+  }, []);
 
   // ── Asset count queries for active plant ──────────────────────────────────
   const { data: locatorCount = 0 } = useQuery({
@@ -194,6 +204,13 @@ export default function Operations() {
 
       </div>
       )}
+
+      {/* ── Operator Shift Round Walk-List Progress ── */}
+      <ShiftRoundProgress
+        plantId={activePlantId}
+        activeTab={tab}
+        onSelectTab={handleTabChange}
+      />
 
       {/* ── Tab Navigation Bar ── */}
       <div
