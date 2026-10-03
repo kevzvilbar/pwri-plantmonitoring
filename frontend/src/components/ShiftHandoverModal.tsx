@@ -111,7 +111,7 @@ export function ShiftHandoverModal() {
       
       let query = supabase
         .from('user_profiles')
-        .select('id, first_name, last_name, username, email, designation, role, plant_assignments, status')
+        .select('id, first_name, last_name, username, email, designation, plant_assignments, status')
         .eq('status', 'Active')
         .in('designation', ['Operator', 'Technician'])
         .order('first_name');

@@ -145,30 +145,41 @@ export function PowerMeterMultiplierModal({
       await savePowerConfig(updatedPowerCfg);
 
       // 2. Insert audit record into power_meter_changes
-      const { data: insertedChange, error: changeErr } = await (supabase.from('power_meter_changes' as any) as any)
-        .insert({
-          plant_id: plantId,
-          meter_index: target.meterIndex,
-          power_kind: target.powerKind,
-          event_type: eventType,
-          change_date: datePart,
-          old_multiplier: target.meter_multiplier ?? 1,
-          old_multiplier_enabled: target.multiplier_enabled ?? true,
-          new_multiplier: multNum,
-          new_multiplier_enabled: newMultiplierEnabled,
-          old_meter_final_reading: oldReading !== '' ? Number(oldReading) : null,
-          new_meter_initial_reading: newReading !== '' ? Number(newReading) : null,
-          notes: notes.trim() || null,
-          changed_by: user?.id || null,
-          created_at: new Date().toISOString(),
-        })
+      const changePayload = {
+        plant_id: plantId,
+        meter_index: target.meterIndex,
+        power_kind: target.powerKind,
+        event_type: eventType,
+        change_date: datePart,
+        old_multiplier: target.meter_multiplier ?? 1,
+        old_multiplier_enabled: target.multiplier_enabled ?? true,
+        new_multiplier: multNum,
+        new_multiplier_enabled: newMultiplierEnabled,
+        old_meter_final_reading: oldReading !== '' ? Number(oldReading) : null,
+        new_meter_initial_reading: newReading !== '' ? Number(newReading) : null,
+        notes: notes.trim() || null,
+        changed_by: user?.id || null,
+        created_at: new Date().toISOString(),
+      };
+
+      let { data: insertedChange, error: changeErr } = await (supabase.from('power_meter_changes' as any) as any)
+        .insert(changePayload)
         .select('id')
         .single();
 
       if (changeErr) {
-        toast.error(friendlyError(changeErr));
-        setSubmitting(false);
-        return;
+        // Fallback without power_kind if column doesn't exist on live table
+        const { power_kind, ...fallbackPayload } = changePayload;
+        const { data: fbData, error: fbErr } = await (supabase.from('power_meter_changes' as any) as any)
+          .insert(fallbackPayload)
+          .select('id')
+          .single();
+        if (fbErr) {
+          toast.error(friendlyError(changeErr));
+          setSubmitting(false);
+          return;
+        }
+        insertedChange = fbData;
       }
 
       // 3. If physical replacement, log rollover reading to reset delta

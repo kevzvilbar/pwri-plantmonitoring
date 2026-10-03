@@ -125,7 +125,16 @@ export function usePlantPowerConfig(plantId: string | null | undefined) {
           .eq('plant_id', plantId)
           .maybeSingle();
 
-        if (!error && data) {
+        if (error) {
+          // Graceful fallback if solar_meter_multipliers column is not present in live DB
+          const { data: fallbackData } = await (supabase.from('plant_power_config' as any) as any)
+            .select('solar_meter_count, solar_meter_names, grid_meter_count, grid_meter_names, grid_meter_multipliers, grid_meter_multipliers_enabled')
+            .eq('plant_id', plantId)
+            .maybeSingle();
+          if (fallbackData) {
+            dbCfg = normalizePowerConfig(fallbackData);
+          }
+        } else if (data) {
           dbCfg = normalizePowerConfig(data);
         }
       } catch {
@@ -187,7 +196,15 @@ export function usePlantPowerConfig(plantId: string | null | undefined) {
       const { error } = await (supabase.from('plant_power_config' as any) as any).upsert(payload, {
         onConflict: 'plant_id',
       });
-      return !error;
+      if (error) {
+        // Fallback upsert without solar multiplier fields if migration hasn't run on DB
+        const { solar_meter_multipliers, solar_meter_multipliers_enabled, ...fallbackPayload } = payload;
+        const { error: fbErr } = await (supabase.from('plant_power_config' as any) as any).upsert(fallbackPayload, {
+          onConflict: 'plant_id',
+        });
+        return !fbErr;
+      }
+      return true;
     },
     [plantId]
   );

@@ -53,7 +53,7 @@ export function useWells(plantId?: string | string[]) {
       if (error) throw error;
       return (data ?? []) as unknown as Well[];
     },
-    staleTime: 10 * 60_000,
+    staleTime: 30 * 60_000,
   });
 }
 

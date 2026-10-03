@@ -69,7 +69,7 @@ export function deviceClass(): 'mobile' | 'desktop' {
 }
 
 export function isTrackingEnabled(): boolean {
-  if (import.meta.env.VITE_NAV_TELEMETRY === 'off') return false;
+  if (import.meta.env.VITE_NAV_TELEMETRY === 'off' || import.meta.env.VITE_LOW_QUOTA_MODE === '1' || import.meta.env.VITE_LOW_QUOTA_MODE === 'true') return false;
   try {
     const dnt = navigator.doNotTrack ?? (window as { doNotTrack?: string }).doNotTrack;
     if (dnt === '1' || dnt === 'yes') return false;

@@ -177,6 +177,10 @@ export function useBackgroundSync() {
   }, [clearRetryTimeout, runSync, scheduleRetry]);
 
   useEffect(() => {
+    if (import.meta.env.VITE_LOW_QUOTA_MODE === '1' || import.meta.env.VITE_LOW_QUOTA_MODE === 'true') {
+      return;
+    }
+
     isMountedRef.current = true;
 
     // Recurring sync every SYNC_INTERVAL_MS

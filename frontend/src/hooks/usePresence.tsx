@@ -181,21 +181,49 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
     };
   }, [patchCacheAndPing]);
 
+  // Track user interaction timestamp to avoid idle heartbeats
+  const lastUserActivityRef = useRef<number>(Date.now());
+
+  useEffect(() => {
+    const recordActivity = () => {
+      lastUserActivityRef.current = Date.now();
+    };
+    window.addEventListener('mousemove', recordActivity, { passive: true });
+    window.addEventListener('keydown', recordActivity, { passive: true });
+    window.addEventListener('touchstart', recordActivity, { passive: true });
+    window.addEventListener('scroll', recordActivity, { passive: true });
+
+    return () => {
+      window.removeEventListener('mousemove', recordActivity);
+      window.removeEventListener('keydown', recordActivity);
+      window.removeEventListener('touchstart', recordActivity);
+      window.removeEventListener('scroll', recordActivity);
+    };
+  }, []);
+
   // ---------------------------------------------------------------------------
-  // Periodic heartbeat (300 s / 5 min) + tab-focus heartbeat + shift-change stamp
+  // Periodic heartbeat (600 s / 10 min) + tab-focus heartbeat + shift-change stamp
   // ---------------------------------------------------------------------------
   useEffect(() => {
     if (!currentUserId) return;
+    const isLowQuota = import.meta.env.VITE_LOW_QUOTA_MODE === '1' || import.meta.env.VITE_LOW_QUOTA_MODE === 'true';
 
     stamp(); // immediate on mount / login / operator switch
 
+    if (isLowQuota) return; // In low quota mode, skip periodic background heartbeats
+
     const interval = setInterval(() => {
       if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+      // Skip heartbeat if user has been inactive for > 10 min
+      if (Date.now() - lastUserActivityRef.current > 600_000) return;
       stamp();
-    }, 300_000);
+    }, 600_000);
 
     const handleVisibility = () => {
-      if (document.visibilityState === 'visible') stamp();
+      if (document.visibilityState === 'visible') {
+        lastUserActivityRef.current = Date.now();
+        stamp();
+      }
     };
     document.addEventListener('visibilitychange', handleVisibility);
 
@@ -223,18 +251,18 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
     (userId?: string | null): boolean => {
       if (!userId) return false;
 
-      // 1. In-memory live ping check (< 15 mins)
+      // 1. In-memory live ping check (< 20 mins)
       const lastPing = livePingsRef.current.get(userId);
-      if (lastPing && (Date.now() - lastPing) / 60_000 < 15) {
+      if (lastPing && (Date.now() - lastPing) / 60_000 < 20) {
         return true;
       }
 
-      // 2. Database query cache check (< 15 mins)
+      // 2. Database query cache check (< 20 mins)
       const staff = queryClient.getQueryData<any[]>(['staff']) ?? [];
       const member = staff.find((s) => s.id === userId);
       if (member?.last_seen_at) {
         const diffMin = (Date.now() - new Date(member.last_seen_at).getTime()) / 60_000;
-        if (diffMin < 15) return true;
+        if (diffMin < 20) return true;
       }
 
       return false;

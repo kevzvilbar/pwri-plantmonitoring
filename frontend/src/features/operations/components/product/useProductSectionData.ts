@@ -97,7 +97,7 @@ export function useProductSectionData({
 
   const meterIds = useMemo(() => (meters ?? []).map((m: any) => m.id as string), [meters]);
 
-  const PRODUCT_LATEST_FIELDS = 'id, plant_id, meter_id, reading_datetime, current_reading, recorded_by, remarks, is_estimated, norm_status' as const;
+  const PRODUCT_LATEST_FIELDS = 'id, plant_id, meter_id, reading_datetime, current_reading, recorded_by, is_estimated, norm_status' as const;
 
   const { data: latestReadings } = useQuery({
     queryKey: ['product-readings-latest-v2', plantId, meterIds],

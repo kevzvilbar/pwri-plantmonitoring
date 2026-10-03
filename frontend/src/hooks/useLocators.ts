@@ -59,7 +59,7 @@ export function useLocators(plantId?: string | string[]) {
       if (error) throw error;
       return (data ?? []) as unknown as Locator[];
     },
-    staleTime: 10 * 60_000,
+    staleTime: 30 * 60_000,
   });
 }
 

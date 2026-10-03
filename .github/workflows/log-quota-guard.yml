@@ -1,13 +1,13 @@
 name: Log Quota and Traffic Regression Guard
 
-# Weekly automated audit (LOG-QUOTA-REMEDIATION-PLAN.md & EGRESS-REDUCTION-PLAN.md Phase 6)
+# Daily automated audit (FREE-PLAN-BUDGET-PLAN.md Phase 5)
 # Queries Supabase Edge Logs over a 1-hour window to ensure no REST endpoint
 # has regressed into unthrottled periodic polling loops.
-# Runs every Monday at 02:00 UTC (10:00 PHT).
+# Runs daily at 02:00 UTC (10:00 PHT).
 
 on:
   schedule:
-    - cron: '0 2 * * 1'
+    - cron: '0 2 * * *'
   workflow_dispatch:
     inputs:
       hourly_threshold:

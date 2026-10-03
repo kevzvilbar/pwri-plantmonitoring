@@ -93,7 +93,15 @@ export function MeterMultiplierSection({ plantId, canEdit }: MeterMultiplierSect
           .select('id, plant_id, meter_index, power_kind, event_type, change_date, old_multiplier, old_multiplier_enabled, new_multiplier, new_multiplier_enabled, old_meter_final_reading, new_meter_initial_reading, notes, created_at, changed_by')
           .eq('plant_id', plantId)
           .order('change_date', { ascending: false });
-        if (fbErr) return [];
+        if (fbErr) {
+          // Additional fallback if power_kind column doesn't exist at all in the table
+          const { data: noPowerKindFb, error: noPkErr } = await (supabase.from('power_meter_changes' as any) as any)
+            .select('id, plant_id, meter_index, event_type, change_date, old_multiplier, old_multiplier_enabled, new_multiplier, new_multiplier_enabled, old_meter_final_reading, new_meter_initial_reading, notes, created_at, changed_by')
+            .eq('plant_id', plantId)
+            .order('change_date', { ascending: false });
+          if (noPkErr) return [];
+          return ((noPowerKindFb ?? []) as any[]).map((r) => ({ ...r, power_kind: 'grid' })) as PowerMeterChangeRow[];
+        }
         return (fallback ?? []) as PowerMeterChangeRow[];
       }
       return (data ?? []) as PowerMeterChangeRow[];
