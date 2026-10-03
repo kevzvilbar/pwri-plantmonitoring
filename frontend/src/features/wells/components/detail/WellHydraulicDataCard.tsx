@@ -1,11 +1,26 @@
 import type { ReactNode } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Gauge, History, Pencil, Plus, AlertTriangle, AlertCircle, Clock, Layers, Activity } from 'lucide-react';
+import {
+  Gauge,
+  History,
+  Pencil,
+  Plus,
+  AlertTriangle,
+  AlertCircle,
+  Clock,
+  Layers,
+  Activity,
+  ArrowUpRight,
+  ArrowDownRight,
+  Minus,
+} from 'lucide-react';
+import { computeSurveyDelta, type SurveyDelta, type PmsSurveyRecord } from '@/features/wells/lib/hydraulics';
 
 export function WellHydraulicDataCard({
   pms,
   latest,
+  previous,
   statusBadge,
   missingCoreFields,
   isSurveyDue,
@@ -13,27 +28,56 @@ export function WellHydraulicDataCard({
   drillingDepth,
   drawdown,
   operatingPressure,
+  operatingPressureDate,
   dailyTds,
+  dailyTdsDate,
   isManager,
   onOpenHistory,
   onEditSurvey,
   onLogNewSurvey,
 }: {
-  pms: any[] | undefined;
-  latest: any;
+  pms?: PmsSurveyRecord[] | null;
+  latest?: PmsSurveyRecord | null;
+  previous?: PmsSurveyRecord | null;
   statusBadge: ReactNode;
-  missingCoreFields: { label: string; value: any }[];
+  missingCoreFields: { key?: string; label: string; value?: unknown }[];
   isSurveyDue: boolean;
   daysSinceSurvey: number | null;
   drillingDepth?: number | string | null;
   drawdown: number | null;
   operatingPressure?: number | null;
+  operatingPressureDate?: string | null;
   dailyTds?: number | null;
+  dailyTdsDate?: string | null;
   isManager: boolean;
   onOpenHistory: () => void;
-  onEditSurvey: (record: any) => void;
+  onEditSurvey: (record: PmsSurveyRecord) => void;
   onLogNewSurvey: () => void;
 }) {
+  const delta: SurveyDelta = computeSurveyDelta(latest, previous);
+
+  const renderDelta = (val: number | null, unit = '') => {
+    if (val == null) return null;
+    if (val === 0) {
+      return (
+        <span className="inline-flex items-center text-3xs text-muted-foreground ml-1">
+          <Minus className="h-2.5 w-2.5 mr-0.5" /> 0{unit}
+        </span>
+      );
+    }
+    const isPositive = val > 0;
+    return (
+      <span
+        className={`inline-flex items-center text-3xs font-medium ml-1 ${
+          isPositive ? 'text-amber-500' : 'text-emerald-500'
+        }`}
+      >
+        {isPositive ? <ArrowUpRight className="h-2.5 w-2.5 mr-0.5" /> : <ArrowDownRight className="h-2.5 w-2.5 mr-0.5" />}
+        {isPositive ? `+${val}` : `${val}`}{unit}
+      </span>
+    );
+  };
+
   return (
     <Card className="p-3 space-y-3">
       <div className="flex items-center justify-between gap-2 flex-wrap">
@@ -127,12 +171,31 @@ export function WellHydraulicDataCard({
         </div>
       ) : null}
 
+      {/* Previous Survey Delta Highlight (if previous survey exists) */}
+      {previous && latest && (
+        <div className="flex items-center justify-between p-2 rounded-md bg-muted/40 border border-border/60 text-2xs text-muted-foreground flex-wrap gap-2">
+          <span className="font-medium text-foreground">
+            Trend vs previous survey ({previous.date_gathered}):
+          </span>
+          <div className="flex items-center gap-3">
+            <span>SWL: {latest.static_water_level_m ?? '—'}m {renderDelta(delta.swlDelta, 'm')}</span>
+            <span>PWL: {latest.pumping_water_level_m ?? '—'}m {renderDelta(delta.pwlDelta, 'm')}</span>
+            <span>Drawdown: {drawdown != null ? `${drawdown}m` : '—'} {renderDelta(delta.drawdownDelta, 'm')}</span>
+          </div>
+        </div>
+      )}
+
       {/* 3 Metric Clusters */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         {/* Cluster 1: Borehole & Levels */}
         <div className="rounded-lg border border-border/70 bg-muted/20 p-3 space-y-2.5">
-          <div className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
-            <Layers className="h-3.5 w-3.5 text-info" /> Borehole & Water Levels
+          <div className="flex items-center justify-between text-xs font-semibold text-foreground">
+            <span className="flex items-center gap-1.5">
+              <Layers className="h-3.5 w-3.5 text-info" /> Borehole & Water Levels
+            </span>
+            <span className="text-3xs text-muted-foreground uppercase tracking-wider font-normal">
+              {latest?.date_gathered ? `Survey · ${latest.date_gathered}` : 'Survey'}
+            </span>
           </div>
           <div className="grid grid-cols-2 gap-2 text-xs">
             <div>
@@ -141,19 +204,26 @@ export function WellHydraulicDataCard({
             </div>
             <div>
               <div className="text-2xs uppercase tracking-wide text-muted-foreground font-medium">Static Level (SWL)</div>
-              <div className="font-mono-num font-medium">{latest?.static_water_level_m != null ? `${latest.static_water_level_m} m` : '—'}</div>
+              <div className="font-mono-num font-medium">
+                {latest?.static_water_level_m != null ? `${latest.static_water_level_m} m` : '—'}
+                {renderDelta(delta.swlDelta, 'm')}
+              </div>
             </div>
             <div>
               <div className="text-2xs uppercase tracking-wide text-muted-foreground font-medium">Pumping Level (PWL)</div>
-              <div className="font-mono-num font-medium">{latest?.pumping_water_level_m != null ? `${latest.pumping_water_level_m} m` : '—'}</div>
+              <div className="font-mono-num font-medium">
+                {latest?.pumping_water_level_m != null ? `${latest.pumping_water_level_m} m` : '—'}
+                {renderDelta(delta.pwlDelta, 'm')}
+              </div>
             </div>
             <div className="rounded bg-info/10 p-1.5 -m-0.5 border border-info/20">
               <div className="text-2xs uppercase tracking-wide text-info font-medium flex items-center justify-between">
                 <span>Drawdown</span>
                 <span className="text-3xs lowercase font-normal opacity-80">(PWL − SWL)</span>
               </div>
-              <div className="font-mono-num font-bold text-info text-sm">
-                {drawdown != null ? `${drawdown} m` : '—'}
+              <div className="font-mono-num font-bold text-info text-sm flex items-baseline justify-between">
+                <span>{drawdown != null ? `${drawdown} m` : '—'}</span>
+                {renderDelta(delta.drawdownDelta, 'm')}
               </div>
             </div>
           </div>
@@ -178,7 +248,9 @@ export function WellHydraulicDataCard({
               <div className="font-mono-num font-medium flex items-baseline gap-1.5">
                 <span>{operatingPressure != null ? `${operatingPressure} psi` : '—'}</span>
                 {operatingPressure != null && (
-                  <span className="text-2xs text-muted-foreground font-normal">(from recent reading)</span>
+                  <span className="text-2xs text-muted-foreground font-normal">
+                    ({operatingPressureDate ? `Live · ${operatingPressureDate.slice(0, 10)}` : 'Live Telemetry'})
+                  </span>
                 )}
               </div>
             </div>
@@ -193,11 +265,17 @@ export function WellHydraulicDataCard({
           <div className="grid grid-cols-2 gap-2 text-xs">
             <div>
               <div className="text-2xs uppercase tracking-wide text-muted-foreground font-medium">TDS (PMS Survey)</div>
-              <div className="font-mono-num font-medium">{latest?.tds_ppm != null ? `${latest.tds_ppm} ppm` : '—'}</div>
+              <div className="font-mono-num font-medium">
+                {latest?.tds_ppm != null ? `${latest.tds_ppm} ppm` : '—'}
+                {renderDelta(delta.tdsDelta, 'ppm')}
+              </div>
             </div>
             <div>
               <div className="text-2xs uppercase tracking-wide text-muted-foreground font-medium">TDS (Daily Sensor)</div>
-              <div className="font-mono-num font-medium">{dailyTds != null ? `${dailyTds} ppm` : '—'}</div>
+              <div className="font-mono-num font-medium flex items-baseline gap-1">
+                <span>{dailyTds != null ? `${dailyTds} ppm` : '—'}</span>
+                {dailyTdsDate && <span className="text-3xs text-muted-foreground">({dailyTdsDate.slice(0, 10)})</span>}
+              </div>
             </div>
             <div className="col-span-2">
               <div className="text-2xs uppercase tracking-wide text-muted-foreground font-medium">Turbidity</div>

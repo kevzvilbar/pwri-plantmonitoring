@@ -1,6 +1,6 @@
 {
-  "maxWarnings": 2602,
-  "lastUpdated": "2026-09-28",
+  "maxWarnings": 2598,
+  "lastUpdated": "2026-10-03",
   "history": [
     {
       "date": "2026-09-26",
@@ -282,6 +282,11 @@
       "maxWarnings": 2602,
       "previous": 2508,
       "reason": "Re-baselined lint ceiling after integrating Chemical Dosing catalog and itemized containers (ChemProductCard, ResidualTestsCard, ConsumablesCard), Unit Economics OPEX efficiency components, mobile layouts, and expanded test harness mock suites. Concurrently resolved 5 compact font scale violations (migrated to text-2xs). Full local test suite (181 suites / 1,386 tests) and tsc --noEmit pass with zero errors."
+    },
+    {
+      "date": "2026-10-03",
+      "maxWarnings": 2598,
+      "previous": 2602
     }
   ]
 }

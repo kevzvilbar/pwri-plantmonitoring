@@ -43,6 +43,14 @@ import { resolveWellView } from '../lib/wellRoutes';
 import { CanLink } from '@/components/CanLink';
 import { readingsPath } from '@/shared/assetLinks';
 import { WellHeroCard } from './detail/WellHeroCard';
+import {
+  computeDrawdown,
+  getMissingCoreFields,
+  getSurveyAgeDays,
+  isSurveyDue as checkIsSurveyDue,
+  getHydraulicStatus,
+  getHydraulicStatusMeta,
+} from '../lib/hydraulics';
 import { WellReplacementHistoryCard } from './detail/WellReplacementHistoryCard';
 import { WellHydraulicDataCard } from './detail/WellHydraulicDataCard';
 
@@ -131,64 +139,51 @@ export function WellDetail({ wellId, plantId, onBack }: { wellId: string; /** Th
   }
 
   const latest = pms?.[0];
+  const previous = pms?.[1];
   const drillingDepth = (latest as any)?.drilling_depth_m ?? (well as any).drilling_depth_m;
   const swl = latest?.static_water_level_m;
   const pwl = latest?.pumping_water_level_m;
-  const drawdown = pwl != null && swl != null ? +(pwl - swl).toFixed(2) : null;
+  const drawdown = computeDrawdown(pwl, swl);
 
-  const coreFields = [
-    { label: 'Drilling Depth', value: drillingDepth },
-    { label: 'SWL', value: latest?.static_water_level_m },
-    { label: 'PWL', value: latest?.pumping_water_level_m },
-    { label: 'Pump Setting', value: latest?.pump_setting },
-    { label: 'Motor HP', value: latest?.motor_hp },
-    { label: 'TDS (PMS)', value: latest?.tds_ppm },
-    { label: 'Turbidity', value: latest?.turbidity_ntu },
-  ];
-  const missingCoreFields = coreFields.filter(f => f.value == null || f.value === '');
-
-  let daysSinceSurvey: number | null = null;
-  if (latest?.date_gathered) {
-    const d = new Date(latest.date_gathered);
-    if (!isNaN(d.getTime())) {
-      daysSinceSurvey = differenceInDays(new Date(), d);
-    }
-  }
-  const isSurveyDue = daysSinceSurvey != null && daysSinceSurvey > 90;
+  const missingCoreFields = getMissingCoreFields(latest, drillingDepth);
+  const daysSinceSurvey = getSurveyAgeDays(latest?.date_gathered);
+  const isSurveyDue = checkIsSurveyDue(latest?.date_gathered);
+  const hydraulicStatus = getHydraulicStatus(latest, drillingDepth);
+  const statusMeta = getHydraulicStatusMeta(hydraulicStatus, daysSinceSurvey, missingCoreFields.length);
 
   let statusBadge: React.ReactNode = null;
-  if (!latest) {
+  if (hydraulicStatus === 'no_survey') {
     statusBadge = (
-      <Badge variant="outline" className="text-destructive bg-destructive/10 border-destructive/20 gap-1 text-2xs">
-        <AlertTriangle className="h-3 w-3" /> No Survey Logged
+      <Badge variant="outline" className={`gap-1 text-2xs ${statusMeta.badgeClass}`}>
+        <AlertTriangle className="h-3 w-3" /> {statusMeta.label}
       </Badge>
     );
-  } else if (missingCoreFields.length > 0) {
+  } else if (hydraulicStatus === 'incomplete') {
     statusBadge = (
       <Badge
         variant="outline"
-        className="text-amber-600 dark:text-amber-400 bg-amber-500/10 border-amber-500/25 gap-1 text-2xs"
+        className={`gap-1 text-2xs ${statusMeta.badgeClass}`}
         title={`Missing: ${missingCoreFields.map(f => f.label).join(', ')}`}
       >
-        <AlertCircle className="h-3 w-3" /> Incomplete ({missingCoreFields.length} missing)
+        <AlertCircle className="h-3 w-3" /> {statusMeta.label}
       </Badge>
     );
-  } else if (isSurveyDue) {
+  } else if (hydraulicStatus === 'overdue') {
     statusBadge = (
       <Badge
         variant="outline"
-        className="text-amber-600 dark:text-amber-400 bg-amber-500/10 border-amber-500/25 gap-1 text-2xs"
+        className={`gap-1 text-2xs ${statusMeta.badgeClass}`}
       >
-        <Clock className="h-3 w-3" /> Survey Due ({daysSinceSurvey}d ago)
+        <Clock className="h-3 w-3" /> {statusMeta.label}
       </Badge>
     );
   } else {
     statusBadge = (
       <Badge
         variant="outline"
-        className="text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border-emerald-500/25 gap-1 text-2xs"
+        className={`gap-1 text-2xs ${statusMeta.badgeClass}`}
       >
-        <CheckCircle2 className="h-3 w-3" /> Up to Date
+        <CheckCircle2 className="h-3 w-3" /> {statusMeta.label}
       </Badge>
     );
   }
@@ -330,6 +325,7 @@ export function WellDetail({ wellId, plantId, onBack }: { wellId: string; /** Th
       <WellHydraulicDataCard
         pms={pms}
         latest={latest}
+        previous={previous}
         statusBadge={statusBadge}
         missingCoreFields={missingCoreFields}
         isSurveyDue={isSurveyDue}
@@ -337,7 +333,9 @@ export function WellDetail({ wellId, plantId, onBack }: { wellId: string; /** Th
         drillingDepth={drillingDepth}
         drawdown={drawdown}
         operatingPressure={operatingPressure}
+        operatingPressureDate={latestPressureReading?.reading_datetime}
         dailyTds={dailyTds}
+        dailyTdsDate={latestTdsReading?.reading_datetime}
         isManager={isManager}
         onOpenHistory={() => setHistoryOpen(true)}
         onEditSurvey={(rec) => {

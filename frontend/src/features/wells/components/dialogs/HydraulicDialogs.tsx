@@ -9,6 +9,7 @@ import { Gauge, Pencil, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { friendlyError } from '@/lib/supabaseErrors';
 import { format } from 'date-fns';
+import { computeDrawdown } from '@/features/wells/lib/hydraulics';
 
 export function EditHydraulicDialog({
   well,
@@ -37,19 +38,51 @@ export function EditHydraulicDialog({
     remarks: record?.remarks ?? '',
   });
 
+  const liveDrawdown = computeDrawdown(form.pumping_water_level_m, form.static_water_level_m);
+
   const submit = async () => {
+    if (!form.date_gathered) {
+      toast.error('Date gathered is required');
+      return;
+    }
+
     const num = (v: any) => v === '' || v == null ? null : +v;
+
+    const numSwl = num(form.static_water_level_m);
+    const numPwl = num(form.pumping_water_level_m);
+    const numDepth = num(form.drilling_depth_m);
+    const numHp = num(form.motor_hp);
+    const numTds = num(form.tds_ppm);
+    const numTurb = num(form.turbidity_ntu);
+
+    // Negative measurement validation
+    if (
+      (numSwl != null && numSwl < 0) ||
+      (numPwl != null && numPwl < 0) ||
+      (numDepth != null && numDepth < 0) ||
+      (numHp != null && numHp < 0) ||
+      (numTds != null && numTds < 0) ||
+      (numTurb != null && numTurb < 0)
+    ) {
+      toast.error('Measurements cannot be negative');
+      return;
+    }
+
+    if (numSwl != null && numPwl != null && numSwl > numPwl) {
+      toast.warning('Static level (SWL) is deeper than Pumping level (PWL). Please verify measurement accuracy.');
+    }
+
     const payload: any = {
       well_id: well.id,
       plant_id: well.plant_id,
       record_type: record?.record_type ?? 'PMS',
       date_gathered: form.date_gathered,
-      static_water_level_m: num(form.static_water_level_m),
-      pumping_water_level_m: num(form.pumping_water_level_m),
+      static_water_level_m: numSwl,
+      pumping_water_level_m: numPwl,
       pump_setting: form.pump_setting || null,
-      motor_hp: num(form.motor_hp),
-      tds_ppm: num(form.tds_ppm),
-      turbidity_ntu: num(form.turbidity_ntu),
+      motor_hp: numHp,
+      tds_ppm: numTds,
+      turbidity_ntu: numTurb,
       remarks: form.remarks || null,
     };
 
@@ -71,7 +104,7 @@ export function EditHydraulicDialog({
 
     // Keep wells.drilling_depth_m in sync
     if (form.drilling_depth_m !== '') {
-      await supabase.from('wells').update({ drilling_depth_m: num(form.drilling_depth_m) }).eq('id', well.id);
+      await supabase.from('wells').update({ drilling_depth_m: numDepth }).eq('id', well.id);
     }
 
     onClose();
@@ -95,7 +128,7 @@ export function EditHydraulicDialog({
           <div className="grid grid-cols-2 gap-2">
             <div>
               <Label htmlFor="welldialogs-drilling-depth-m">Drilling depth (m)</Label>
-              <Input type="number" step="any" value={form.drilling_depth_m} onChange={e => set('drilling_depth_m', e.target.value)} id="welldialogs-drilling-depth-m"/>
+              <Input type="number" step="any" min="0" value={form.drilling_depth_m} onChange={e => set('drilling_depth_m', e.target.value)} id="welldialogs-drilling-depth-m"/>
             </div>
             <div>
               <Label htmlFor="welldialogs-pump-setting">Pump setting</Label>
@@ -103,23 +136,29 @@ export function EditHydraulicDialog({
             </div>
             <div>
               <Label htmlFor="welldialogs-swl-m">SWL (m)</Label>
-              <Input type="number" step="any" value={form.static_water_level_m} onChange={e => set('static_water_level_m', e.target.value)} id="welldialogs-swl-m"/>
+              <Input type="number" step="any" min="0" value={form.static_water_level_m} onChange={e => set('static_water_level_m', e.target.value)} id="welldialogs-swl-m"/>
             </div>
             <div>
               <Label htmlFor="welldialogs-pwl-m">PWL (m)</Label>
-              <Input type="number" step="any" value={form.pumping_water_level_m} onChange={e => set('pumping_water_level_m', e.target.value)} id="welldialogs-pwl-m"/>
+              <Input type="number" step="any" min="0" value={form.pumping_water_level_m} onChange={e => set('pumping_water_level_m', e.target.value)} id="welldialogs-pwl-m"/>
             </div>
+            {liveDrawdown != null && (
+              <div className="col-span-2 p-2 rounded bg-info/10 border border-info/20 text-xs flex items-center justify-between">
+                <span className="text-info font-medium">Calculated Drawdown (PWL − SWL):</span>
+                <span className="font-mono-num font-bold text-info">{liveDrawdown} m</span>
+              </div>
+            )}
             <div>
               <Label htmlFor="welldialogs-motor-hp">Motor HP</Label>
-              <Input type="number" step="any" value={form.motor_hp} onChange={e => set('motor_hp', e.target.value)} id="welldialogs-motor-hp"/>
+              <Input type="number" step="any" min="0" value={form.motor_hp} onChange={e => set('motor_hp', e.target.value)} id="welldialogs-motor-hp"/>
             </div>
             <div>
               <Label htmlFor="welldialogs-tds-ppm">TDS (ppm)</Label>
-              <Input type="number" step="any" value={form.tds_ppm} onChange={e => set('tds_ppm', e.target.value)} id="welldialogs-tds-ppm"/>
+              <Input type="number" step="any" min="0" value={form.tds_ppm} onChange={e => set('tds_ppm', e.target.value)} id="welldialogs-tds-ppm"/>
             </div>
             <div className="col-span-2">
               <Label htmlFor="welldialogs-turbidity-ntu">Turbidity (NTU)</Label>
-              <Input type="number" step="any" value={form.turbidity_ntu} onChange={e => set('turbidity_ntu', e.target.value)} id="welldialogs-turbidity-ntu"/>
+              <Input type="number" step="any" min="0" value={form.turbidity_ntu} onChange={e => set('turbidity_ntu', e.target.value)} id="welldialogs-turbidity-ntu"/>
             </div>
             <div className="col-span-2">
               <Label htmlFor="welldialogs-remarks">Remarks</Label>

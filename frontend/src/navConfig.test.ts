@@ -17,20 +17,20 @@ const EXPECTED: Record<Role, ReadonlyArray<readonly [string, string[]]>> = {
   Operator: [
     ['Overview', ['Dashboard', 'Alerts']],
     ['Daily Logs', DAILY_LOGS],
-    ['Assets', ['Plants']],
+    ['Assets', ['Plants', 'Hydraulics']],
     ['Team & Admin', ['Employees']],
   ],
   Technician: [
     ['Overview', ['Dashboard', 'Alerts', 'Compliance']],
     ['Daily Logs', DAILY_LOGS],
-    ['Assets', ['Plants', 'Network Topology']],
+    ['Assets', ['Plants', 'Hydraulics', 'Network Topology']],
     ['Reports & Data', ['Costs & Tariffs']],
     ['Team & Admin', ['Employees']],
   ],
   Manager: [
     ['Overview', ['Dashboard', 'Alerts', 'Compliance']],
     ['Daily Logs', DAILY_LOGS],
-    ['Assets', ['Plants', 'Network Topology']],
+    ['Assets', ['Plants', 'Hydraulics', 'Network Topology']],
     ['Review', REVIEW],
     ['Reports & Data', ['Costs & Tariffs', 'Data Exports', 'Smart Import']],
     ['Team & Admin', ['Employees', 'Admin Console']],
@@ -38,7 +38,7 @@ const EXPECTED: Record<Role, ReadonlyArray<readonly [string, string[]]>> = {
   'Data Analyst': [
     ['Overview', ['Dashboard', 'Alerts', 'Compliance']],
     ['Daily Logs', DAILY_LOGS],
-    ['Assets', ['Plants', 'Network Topology']],
+    ['Assets', ['Plants', 'Hydraulics', 'Network Topology']],
     ['Review', REVIEW],
     ['Reports & Data', ['Costs & Tariffs', 'Data Exports', 'Smart Import']],
     ['Team & Admin', ['Employees']],
@@ -46,7 +46,7 @@ const EXPECTED: Record<Role, ReadonlyArray<readonly [string, string[]]>> = {
   Admin: [
     ['Overview', ['Dashboard', 'Alerts', 'Compliance']],
     ['Daily Logs', DAILY_LOGS],
-    ['Assets', ['Plants', 'Network Topology']],
+    ['Assets', ['Plants', 'Hydraulics', 'Network Topology']],
     ['Review', REVIEW],
     ['Reports & Data', ['Costs & Tariffs', 'Data Exports', 'Smart Import']],
     ['Team & Admin', ['Employees', 'Admin Console']],
@@ -62,9 +62,9 @@ describe('buildNavConfig — exact output per role', () => {
     });
   }
 
-  it('item counts match the plan (9 / 12 / 18 / 17 / 18)', () => {
+  it('item counts match the plan (10 / 13 / 19 / 18 / 19)', () => {
     const count = (r: Role) => buildNavConfig(canFor(r)).reduce((n, g) => n + g.items.length, 0);
-    expect(ROLES.map(count)).toEqual([9, 12, 18, 17, 18]);
+    expect(ROLES.map(count)).toEqual([10, 13, 19, 18, 19]);
   });
 
   it('never has a group called Other, and Profile is not a nav item', () => {

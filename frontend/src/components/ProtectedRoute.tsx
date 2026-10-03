@@ -13,6 +13,7 @@ import { toast } from 'sonner';
 export const OPERATOR_ALLOWED_PATHS = [
   '/',
   '/plants',
+  '/hydraulics',
   '/operations',
   '/ro-trains',
   '/maintenance',

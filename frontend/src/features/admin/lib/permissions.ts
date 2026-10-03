@@ -21,6 +21,7 @@ export type ModuleKey =
   | 'ai_assistant'
   | 'compliance'
   | 'plants'
+  | 'hydraulics'
   | 'operations'
   | 'ro_trains'
   | 'network_topology'
@@ -43,7 +44,7 @@ export type ModuleKey =
 // Display order + labels for the roles editor and any other UI that needs
 // to render "every module" (mirrors Appendix A's row order).
 export const MODULE_ORDER: readonly ModuleKey[] = [
-  'dashboard', 'alerts', 'ai_assistant', 'compliance', 'plants', 'operations', 'ro_trains',
+  'dashboard', 'alerts', 'ai_assistant', 'compliance', 'plants', 'hydraulics', 'operations', 'ro_trains',
   'network_topology', 'pm_schedule', 'incidents', 'my_corrections', 'manager_scorecard', 'costs', 'employees',
   'data_exports', 'smart_import', 'data_analysis_review', 'data_corrections',
   'admin_users', 'admin_plants', 'admin_audit', 'admin_migrations', 'profile',
@@ -55,6 +56,7 @@ export const MODULE_LABELS: Record<ModuleKey, string> = {
   ai_assistant: 'AI Assistant',
   compliance: 'Compliance',
   plants: 'Plants',
+  hydraulics: 'Hydraulics',
   operations: 'Daily Readings',  // Renamed from 'Operations' — page holds Wells, Locators, Product, Blending, Power
   ro_trains: 'RO Trains',
   network_topology: 'Network Topology',
@@ -91,6 +93,7 @@ export const PERMISSION_MATRIX: Record<ModuleKey, ModulePermissions> = {
   // because the DB would reject a Manager's write regardless of what the UI shows.
   compliance: { view: ELEVATED, edit: ['Data Analyst', 'Admin'] },
   plants: { view: ALL, edit: MANAGE },
+  hydraulics: { view: ALL },
   operations: { view: ALL },
   ro_trains: { view: ALL },
   // edit was dropped by 69bf66a9 ("Roles Panel") while building the custom

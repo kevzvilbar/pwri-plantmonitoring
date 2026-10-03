@@ -24,6 +24,7 @@ const Onboarding = lazy(() => import("./pages/Onboarding"));
 const PendingApproval = lazy(() => import("./pages/PendingApproval"));
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const Plants = lazy(() => import("./pages/Plants"));
+const Hydraulics = lazy(() => import("./pages/Hydraulics"));
 const Operations = lazy(() => import("./pages/Operations"));
 const ROTrains = lazy(() => import("./pages/ROTrains"));
 const Costs = lazy(() => import("./pages/Costs"));
@@ -124,6 +125,7 @@ const App = () => (
                   <Route path="/plants/:id" element={<Plants />} />
                   {/* P5-3: a well's detail page is a child route of its plant */}
                   <Route path="/plants/:id/wells/:wellId" element={<Plants />} />
+                  <Route path="/hydraulics" element={<Hydraulics />} />
                   <Route path="/operations" element={<Operations />} />
                   <Route path="/ro-trains" element={<ROTrains />} />
                   {/* ── NEW ── */}
