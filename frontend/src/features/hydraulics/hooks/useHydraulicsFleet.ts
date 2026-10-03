@@ -38,8 +38,7 @@ export function useHydraulicsFleet(options: UseHydraulicsFleetOptions = {}) {
           meter_size,
           plants (
             id,
-            name,
-            code
+            name
           )
         `)
         .order('name', { ascending: true });
