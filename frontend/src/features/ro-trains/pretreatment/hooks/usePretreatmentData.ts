@@ -42,14 +42,22 @@ export function usePretreatmentData(
     queryKey: ['trains', plantId],
     enabled: !!plantId,
     queryFn: async () => {
+      // FREE-PLAN-BUDGET-PLAN Phase 1/5: was `select('*, plants!inner(*)')`, which
+      // re-sent the entire plants row with every train on every refetch (largest
+      // single ro_trains payload in the live logs). Nothing reads `train.plants`
+      // (verified by grep), and the plant itself comes from usePlants().
       const { data, error } = await supabase
         .from('ro_trains' as any)
-        .select('*, plants!inner(*)')
+        .select('*')
         .eq('plant_id', plantId)
         .order('name');
       if (error) throw error;
       return data as any[];
     },
+    // Status-sensitive (the log form reads Running/Offline), so keep it short —
+    // but long enough that opening/closing the form does not refetch each time.
+    // Mutations that change a train already invalidate ['trains'].
+    staleTime: 2 * 60_000,
   });
   const train = trains?.find((t: any) => t.id === trainId) ?? null;
   const siblingTrains = trains?.filter((t: any) => t.id !== trainId) ?? [];

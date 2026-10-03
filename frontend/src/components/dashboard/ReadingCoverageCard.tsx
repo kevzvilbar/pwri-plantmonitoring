@@ -7,6 +7,9 @@ import { Button } from '@/components/ui/button';
 import { ClipboardCheck } from 'lucide-react';
 import { format, startOfDay } from 'date-fns';
 import { cn } from '@/lib/utils';
+import { useWells } from '@/features/wells/hooks/useWells';
+import { useLocators } from '@/hooks/useLocators';
+import { useROTrains } from '@/hooks/useROTrains';
 
 interface CoverageRow {
   label:    string;
@@ -77,38 +80,17 @@ export function ReadingCoverageCard({ plantIds }: Props) {
   );
 
   // ── Entity totals ──────────────────────────────────────────────────────────
-  const { data: wellTotal = 0 } = useQuery({
-    queryKey: ['coverage-wells-total', plantIds],
-    queryFn: async () => {
-      let q = supabase.from('wells').select('id', { count: 'exact', head: true }).eq('status', 'Active');
-      if (plantIds.length) q = q.in('plant_id', plantIds);
-      const { count } = await q;
-      return count ?? 0;
-    },
-    staleTime: 5 * 60_000,
-  });
-
-  const { data: locatorTotal = 0 } = useQuery({
-    queryKey: ['coverage-locators-total', plantIds],
-    queryFn: async () => {
-      let q = supabase.from('locators').select('id', { count: 'exact', head: true }).eq('status', 'Active');
-      if (plantIds.length) q = q.in('plant_id', plantIds);
-      const { count } = await q;
-      return count ?? 0;
-    },
-    staleTime: 5 * 60_000,
-  });
-
-  const { data: trainTotal = 0 } = useQuery({
-    queryKey: ['coverage-trains-total', plantIds],
-    queryFn: async () => {
-      let q = supabase.from('ro_trains').select('id', { count: 'exact', head: true });
-      if (plantIds.length) q = q.in('plant_id', plantIds);
-      const { count } = await q;
-      return count ?? 0;
-    },
-    staleTime: 5 * 60_000,
-  });
+  // Phase 1 (FREE-PLAN-BUDGET-PLAN): totals derive from the shared catalog cache
+  // (['wells'|'locators'|'ro_trains', ids]) rather than three HEAD-count requests.
+  // An empty plantIds means "all plants the caller can see" for this card, which is
+  // the same unscoped read the old queries performed.
+  const scopeIds = plantIds.length ? plantIds : null;
+  const { data: wellList } = useWells(scopeIds ?? undefined);
+  const { data: locatorList } = useLocators(scopeIds ?? undefined);
+  const { data: trainList } = useROTrains(scopeIds ?? undefined);
+  const wellTotal = (wellList ?? []).filter((w) => w.status === 'Active').length;
+  const locatorTotal = (locatorList ?? []).filter((l) => l.status === 'Active').length;
+  const trainTotal = trainList?.length ?? 0;
 
   // ── Today's readings count ─────────────────────────────────────────────────
   const { data: wellDone = 0 } = useQuery({

@@ -1,5 +1,6 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { ensureROTrains } from '@/lib/referenceData';
 import { detectHourlyGaps, type FlaggedGap } from '@/lib/hourlyGapDetection';
 import { buildStatusTimeline, type TrainStatusRow } from '@/lib/trainStatusTimeline';
 
@@ -33,15 +34,12 @@ export interface TrainHourlyGap {
 
 const LOOKBACK_HOURS = 48;
 
-async function fetchTrainHourlyGaps(plantIds: string[]): Promise<TrainHourlyGap[]> {
+async function fetchTrainHourlyGaps(qc: QueryClient, plantIds: string[]): Promise<TrainHourlyGap[]> {
   if (!plantIds.length) return [];
 
-  const { data: trains, error: trainsErr } = await supabase
-    .from('ro_trains')
-    .select('id,train_number,plant_id')
-    .in('plant_id', plantIds);
-  if (trainsErr) throw trainsErr;
-  if (!trains?.length) return [];
+  // Phase 1 (FREE-PLAN-BUDGET-PLAN): shared ['ro_trains', ids] cache, not a private request.
+  const trains = await ensureROTrains(qc, plantIds);
+  if (!trains.length) return [];
 
   const trainIds = trains.map((t) => t.id);
   const now = new Date();
@@ -99,9 +97,10 @@ async function fetchTrainHourlyGaps(plantIds: string[]): Promise<TrainHourlyGap[
 }
 
 export function useTrainHourlyGaps(plantIds: string[]) {
+  const qc = useQueryClient();
   const { data } = useQuery({
     queryKey: ['train-hourly-gaps', plantIds],
-    queryFn: () => fetchTrainHourlyGaps(plantIds),
+    queryFn: () => fetchTrainHourlyGaps(qc, plantIds),
     enabled: plantIds.length > 0,
     // FIX (egress): staleTime matched to refetchInterval — was relying on the
     // 30s global default, so the app-wide background-sync sweep force-refetched

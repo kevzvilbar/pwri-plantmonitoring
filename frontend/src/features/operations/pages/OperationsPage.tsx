@@ -3,6 +3,8 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useActivePlant } from '@/hooks/useActivePlant';
+import { useLocators } from '@/hooks/useLocators';
+import { useWells } from '@/features/wells/hooks/useWells';
 import { Button } from '@/components/ui/button';
 import {
   MapPin, Droplet, Zap, Upload, Download, ClipboardCheck,
@@ -54,33 +56,13 @@ export default function Operations() {
   }, []);
 
   // ── Asset count queries for active plant ──────────────────────────────────
-  const { data: locatorCount = 0 } = useQuery({
-    queryKey: ['operations-locator-count', activePlantId],
-    queryFn: async () => {
-      if (!activePlantId) return 0;
-      const { count } = await supabase
-        .from('locators')
-        .select('id', { count: 'exact', head: true })
-        .eq('plant_id', activePlantId);
-      return count ?? 0;
-    },
-    enabled: Boolean(activePlantId),
-    staleTime: 60_000,
-  });
-
-  const { data: wellCount = 0 } = useQuery({
-    queryKey: ['operations-well-count', activePlantId],
-    queryFn: async () => {
-      if (!activePlantId) return 0;
-      const { count } = await supabase
-        .from('wells')
-        .select('id', { count: 'exact', head: true })
-        .eq('plant_id', activePlantId);
-      return count ?? 0;
-    },
-    enabled: Boolean(activePlantId),
-    staleTime: 60_000,
-  });
+  // Phase 1 (FREE-PLAN-BUDGET-PLAN): counts come from the shared catalog cache
+  // (same entries the Wells/Locators sections already load) — two fewer HEAD
+  // requests + preflights per plant switch.
+  const { data: locatorList } = useLocators(activePlantId ? [activePlantId] : []);
+  const { data: wellList } = useWells(activePlantId ? [activePlantId] : []);
+  const locatorCount = locatorList?.length ?? 0;
+  const wellCount = wellList?.length ?? 0;
 
   const { data: productMeterCount = 0 } = useQuery({
     queryKey: ['operations-pm-count', activePlantId],

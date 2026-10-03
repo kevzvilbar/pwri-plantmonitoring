@@ -1,7 +1,8 @@
 import { useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { subDays } from 'date-fns';
+import { ensureROTrains } from '@/lib/referenceData';
 import { computeROAverageFlowRate, type ROMeterKind } from '@/lib/roReadingGuards';
 
 export interface UseQualityStatsParams {
@@ -18,16 +19,14 @@ export function useQualityStats({
   plants,
   todayWells = [],
 }: UseQualityStatsParams) {
+  const qc = useQueryClient();
   const { data: _qualityTrainMeta } = useQuery({
     queryKey: ['dash-quality-train-meta', plantIds],
     queryFn: async () => {
       if (!plantIds.length) return { ids: [] as string[], metaMap: {} as Record<string, { plant_id: string; train_number: number | null; train_name: string | null; well_id: string | null; unit_type: string | null }> };
-      const { data, error } = await supabase
-        .from('ro_trains')
-        .select('id, plant_id, train_number, name, well_id, unit_type')
-        .in('plant_id', plantIds);
-      if (error) throw error;
-      const rows = data ?? [];
+      // Phase 1 (FREE-PLAN-BUDGET-PLAN): read the canonical ['ro_trains', ids] cache
+      // entry instead of issuing a dedicated column-subset request.
+      const rows = await ensureROTrains(qc, plantIds);
       const metaMap: Record<string, { plant_id: string; train_number: number | null; train_name: string | null; well_id: string | null; unit_type: string | null }> = {};
       rows.forEach((t) => {
         metaMap[t.id] = {

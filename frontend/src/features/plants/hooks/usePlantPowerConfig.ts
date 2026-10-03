@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { isColumnKnownMissing, noteMissingColumn } from '@/lib/schemaCapabilities';
 
 export interface PlantPowerConfig {
   grid_meter_count: number;
@@ -86,6 +87,8 @@ export function normalizePowerConfig(raw: any): PlantPowerConfig {
   };
 }
 
+const SOLAR_COL_KEY = 'plant_power_config.solar_meter_multipliers';
+
 export function usePlantPowerConfig(plantId: string | null | undefined) {
   const qc = useQueryClient();
 
@@ -118,12 +121,17 @@ export function usePlantPowerConfig(plantId: string | null | undefined) {
       // 2. Query Supabase DB
       let dbCfg: PlantPowerConfig | null = null;
       try {
-        const { data, error } = await (supabase.from('plant_power_config' as any) as any)
-          .select(
-            'solar_meter_count, solar_meter_names, solar_meter_multipliers, solar_meter_multipliers_enabled, grid_meter_count, grid_meter_names, grid_meter_multipliers, grid_meter_multipliers_enabled'
-          )
-          .eq('plant_id', plantId)
-          .maybeSingle();
+        // FREE-PLAN-BUDGET-PLAN Phase 0: skip the full select once 42703 has been seen.
+        const skipSolar = isColumnKnownMissing(SOLAR_COL_KEY);
+        const { data, error } = skipSolar
+          ? { data: null, error: { code: '42703', message: 'solar_meter_multipliers known missing' } }
+          : await (supabase.from('plant_power_config' as any) as any)
+              .select(
+                'solar_meter_count, solar_meter_names, solar_meter_multipliers, solar_meter_multipliers_enabled, grid_meter_count, grid_meter_names, grid_meter_multipliers, grid_meter_multipliers_enabled'
+              )
+              .eq('plant_id', plantId)
+              .maybeSingle();
+        if (error) noteMissingColumn(SOLAR_COL_KEY, error);
 
         if (error) {
           // Graceful fallback if solar_meter_multipliers column is not present in live DB
@@ -193,9 +201,18 @@ export function usePlantPowerConfig(plantId: string | null | undefined) {
         updated_at: new Date().toISOString(),
       };
 
+      // Known-missing column: send the legacy payload directly (no failing first attempt).
+      if (isColumnKnownMissing(SOLAR_COL_KEY)) {
+        const { solar_meter_multipliers, solar_meter_multipliers_enabled, ...legacyPayload } = payload;
+        const { error: legacyErr } = await (supabase.from('plant_power_config' as any) as any).upsert(legacyPayload, {
+          onConflict: 'plant_id',
+        });
+        return !legacyErr;
+      }
       const { error } = await (supabase.from('plant_power_config' as any) as any).upsert(payload, {
         onConflict: 'plant_id',
       });
+      if (error) noteMissingColumn(SOLAR_COL_KEY, error);
       if (error) {
         // Fallback upsert without solar multiplier fields if migration hasn't run on DB
         const { solar_meter_multipliers, solar_meter_multipliers_enabled, ...fallbackPayload } = payload;

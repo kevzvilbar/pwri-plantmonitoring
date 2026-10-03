@@ -25,6 +25,7 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Gauge, Zap, ArrowUpRight } from 'lucide-react';
 
 import { usePlantPowerConfig } from '@/features/plants/hooks/usePlantPowerConfig';
+import { isColumnKnownMissing, noteMissingColumn } from '@/lib/schemaCapabilities';
 
 interface MeterMultiplierSectionProps {
   plantId: string;
@@ -84,27 +85,42 @@ export function MeterMultiplierSection({ plantId, canEdit }: MeterMultiplierSect
   const { data: powerMeterChanges = [], isLoading: powerChangesLoading } = useQuery<PowerMeterChangeRow[]>({
     queryKey: ['power-meter-changes', plantId],
     queryFn: async () => {
-      const { data, error } = await (supabase.from('power_meter_changes' as any) as any)
-        .select('id, plant_id, meter_index, power_kind, event_type, change_date, old_multiplier, old_multiplier_enabled, new_multiplier, new_multiplier_enabled, old_meter_final_reading, new_meter_initial_reading, notes, created_at, changed_by, user_profiles:changed_by (first_name, last_name, email)')
-        .eq('plant_id', plantId)
-        .order('change_date', { ascending: false });
-      if (error) {
-        const { data: fallback, error: fbErr } = await (supabase.from('power_meter_changes' as any) as any)
-          .select('id, plant_id, meter_index, power_kind, event_type, change_date, old_multiplier, old_multiplier_enabled, new_multiplier, new_multiplier_enabled, old_meter_final_reading, new_meter_initial_reading, notes, created_at, changed_by')
+      const PK = 'power_meter_changes.power_kind';
+      const BASE_COLS = 'id, plant_id, meter_index, event_type, change_date, old_multiplier, old_multiplier_enabled, new_multiplier, new_multiplier_enabled, old_meter_final_reading, new_meter_initial_reading, notes, created_at, changed_by';
+
+      // Legacy shape: live table without `power_kind` (multiplier migrations not
+      // applied yet). Every row is a grid meter in that schema.
+      const legacyQuery = async (): Promise<PowerMeterChangeRow[]> => {
+        const { data, error } = await (supabase.from('power_meter_changes' as any) as any)
+          .select(BASE_COLS)
           .eq('plant_id', plantId)
           .order('change_date', { ascending: false });
-        if (fbErr) {
-          // Additional fallback if power_kind column doesn't exist at all in the table
-          const { data: noPowerKindFb, error: noPkErr } = await (supabase.from('power_meter_changes' as any) as any)
-            .select('id, plant_id, meter_index, event_type, change_date, old_multiplier, old_multiplier_enabled, new_multiplier, new_multiplier_enabled, old_meter_final_reading, new_meter_initial_reading, notes, created_at, changed_by')
-            .eq('plant_id', plantId)
-            .order('change_date', { ascending: false });
-          if (noPkErr) return [];
-          return ((noPowerKindFb ?? []) as any[]).map((r) => ({ ...r, power_kind: 'grid' })) as PowerMeterChangeRow[];
-        }
-        return (fallback ?? []) as PowerMeterChangeRow[];
-      }
-      return (data ?? []) as PowerMeterChangeRow[];
+        if (error) return [];
+        return ((data ?? []) as any[]).map((r) => ({ ...r, power_kind: 'grid' })) as PowerMeterChangeRow[];
+      };
+
+      // FREE-PLAN-BUDGET-PLAN Phase 0: once we have seen 42703 for power_kind, go
+      // straight to the legacy query instead of re-sending two failing requests.
+      if (isColumnKnownMissing(PK)) return legacyQuery();
+
+      const { data, error } = await (supabase.from('power_meter_changes' as any) as any)
+        .select(`${BASE_COLS.replace('meter_index, ', 'meter_index, power_kind, ')}, user_profiles:changed_by (first_name, last_name, email)`)
+        .eq('plant_id', plantId)
+        .order('change_date', { ascending: false });
+      if (!error) return (data ?? []) as PowerMeterChangeRow[];
+
+      // power_kind missing → remember it and use the legacy shape (the old middle
+      // fallback re-selected power_kind and could only fail the same way).
+      if (noteMissingColumn(PK, error)) return legacyQuery();
+
+      // Some other failure (most likely the user_profiles embed): retry without it.
+      const { data: fallback, error: fbErr } = await (supabase.from('power_meter_changes' as any) as any)
+        .select(BASE_COLS.replace('meter_index, ', 'meter_index, power_kind, '))
+        .eq('plant_id', plantId)
+        .order('change_date', { ascending: false });
+      if (!fbErr) return (fallback ?? []) as PowerMeterChangeRow[];
+      noteMissingColumn(PK, fbErr);
+      return legacyQuery();
     },
     enabled: !!plantId,
   });

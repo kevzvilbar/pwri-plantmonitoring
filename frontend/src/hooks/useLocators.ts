@@ -38,32 +38,39 @@ export interface Locator {
   updated_at: string;
 }
 
+const LOCATOR_COLUMNS =
+  'id, name, plant_id, address, location_desc, gps_lat, gps_lng, meter_brand, meter_size, meter_serial, meter_installed_date, status, is_locked, meter_multiplier, multiplier_enabled, created_at, updated_at';
+
+/** Canonical locators fetcher — see fetchWells() for the rationale. */
+export async function fetchLocators(ids: string[] | null): Promise<Locator[]> {
+  // Explicit column list (matches Locator interface) — avoids select=* egress overhead.
+  // If you add a field to the Locator interface, add it here too.
+  let q = supabase.from('locators').select(LOCATOR_COLUMNS).order('name');
+  if (ids?.length) q = (q as any).in('plant_id', ids);
+  const { data, error } = await q;
+  if (error) throw error;
+  return (data ?? []) as unknown as Locator[];
+}
+
+const EMPTY_LOCATORS: Locator[] = [];
+
 export function useLocators(plantId?: string | string[]) {
   const ids = plantId
     ? Array.isArray(plantId) ? plantId : [plantId]
     : null;
+  // `[]` means "zero plants selected" — resolve to [] without a request instead of
+  // falling through to an unscoped fetch of every locator (same rule as useROTrains).
+  const isEmptySelection = ids !== null && ids.length === 0;
 
   return useQuery({
     queryKey: ['locators', ids ?? 'all'],
-    queryFn: async () => {
-      // Explicit column list (matches Locator interface) — avoids select=* egress overhead.
-      // If you add a field to the Locator interface, add it here too.
-      let q = supabase
-        .from('locators')
-        .select(
-          'id, name, plant_id, address, location_desc, gps_lat, gps_lng, meter_brand, meter_size, meter_serial, meter_installed_date, status, is_locked, meter_multiplier, multiplier_enabled, created_at, updated_at',
-        )
-        .order('name');
-      if (ids?.length) q = (q as any).in('plant_id', ids);
-      const { data, error } = await q;
-      if (error) throw error;
-      return (data ?? []) as unknown as Locator[];
-    },
+    queryFn: () => fetchLocators(ids),
+    enabled: !isEmptySelection,
+    initialData: isEmptySelection ? EMPTY_LOCATORS : undefined,
     staleTime: 30 * 60_000,
   });
 }
 
-/** Filter to a single plant */
 export function useLocatorsForPlant(plantId: string | undefined) {
   return useLocators(plantId ? [plantId] : undefined);
 }

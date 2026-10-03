@@ -1,8 +1,9 @@
 import React from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { CheckCircle2, Circle, ListChecks } from 'lucide-react';
 import { getCurrentShift } from '@/lib/shifts';
+import { ensureLocators, ensureWells } from '@/lib/referenceData';
 import { cn } from '@/lib/utils';
 
 export type OperationTabKey = 'locator' | 'well' | 'product' | 'blending' | 'power';
@@ -18,6 +19,7 @@ export function ShiftRoundProgress({
   activeTab,
   onSelectTab,
 }: ShiftRoundProgressProps) {
+  const qc = useQueryClient();
   const shiftInfo = getCurrentShift();
   const todayDate = new Date();
   todayDate.setHours(0, 0, 0, 0);
@@ -29,12 +31,10 @@ export function ShiftRoundProgress({
     queryKey: ['shift-round-locator-stats', plantId, todayDateStr],
     queryFn: async () => {
       if (!plantId) return { total: 0, completed: 0 };
-      const { data: locators } = await supabase
-        .from('locators')
-        .select('id')
-        .eq('plant_id', plantId);
+      // Phase 1 (FREE-PLAN-BUDGET-PLAN): total from the shared catalog cache.
+      const locators = await ensureLocators(qc, [plantId]);
 
-      const total = locators?.length ?? 0;
+      const total = locators.length;
       if (total === 0) return { total: 0, completed: 0 };
 
       const { data: readings } = await supabase
@@ -55,12 +55,9 @@ export function ShiftRoundProgress({
     queryKey: ['shift-round-well-stats', plantId, todayDateStr],
     queryFn: async () => {
       if (!plantId) return { total: 0, completed: 0 };
-      const { data: wells } = await supabase
-        .from('wells')
-        .select('id')
-        .eq('plant_id', plantId);
+      const wells = await ensureWells(qc, [plantId]);
 
-      const total = wells?.length ?? 0;
+      const total = wells.length;
       if (total === 0) return { total: 0, completed: 0 };
 
       const { data: readings } = await supabase

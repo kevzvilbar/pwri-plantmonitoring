@@ -32,27 +32,39 @@ export interface Well {
   updated_at: string;
 }
 
+const WELL_COLUMNS =
+  'id, name, plant_id, diameter, drilling_depth_m, gps_lat, gps_lng, has_power_meter, meter_brand, meter_size, meter_serial, meter_installed_date, size, status, meter_multiplier, multiplier_enabled, created_at, updated_at';
+
+/**
+ * Canonical wells fetcher. Shared by useWells() and by `ensureWells()` in
+ * lib/referenceData.ts so every caller hits ONE react-query cache entry
+ * (`['wells', ids ?? 'all']`) instead of issuing its own `from('wells')` call.
+ */
+export async function fetchWells(ids: string[] | null): Promise<Well[]> {
+  // Explicit column list (matches Well interface) — avoids select=* egress overhead.
+  // If you add a field to the Well interface, add it here too.
+  let q = supabase.from('wells').select(WELL_COLUMNS).order('name');
+  if (ids?.length) q = (q as any).in('plant_id', ids);
+  const { data, error } = await q;
+  if (error) throw error;
+  return (data ?? []) as unknown as Well[];
+}
+
+const EMPTY_WELLS: Well[] = [];
+
 export function useWells(plantId?: string | string[]) {
   const ids = plantId
     ? Array.isArray(plantId) ? plantId : [plantId]
     : null;
+  // `[]` means "zero plants selected" — resolve to [] without a request instead of
+  // falling through to an unscoped fetch of every well (same rule as useROTrains).
+  const isEmptySelection = ids !== null && ids.length === 0;
 
   return useQuery({
     queryKey: ['wells', ids ?? 'all'],
-    queryFn: async () => {
-      // Explicit column list (matches Well interface) — avoids select=* egress overhead.
-      // If you add a field to the Well interface, add it here too.
-      let q = supabase
-        .from('wells')
-        .select(
-          'id, name, plant_id, diameter, drilling_depth_m, gps_lat, gps_lng, has_power_meter, meter_brand, meter_size, meter_serial, meter_installed_date, size, status, meter_multiplier, multiplier_enabled, created_at, updated_at',
-        )
-        .order('name');
-      if (ids?.length) q = (q as any).in('plant_id', ids);
-      const { data, error } = await q;
-      if (error) throw error;
-      return (data ?? []) as unknown as Well[];
-    },
+    queryFn: () => fetchWells(ids),
+    enabled: !isEmptySelection,
+    initialData: isEmptySelection ? EMPTY_WELLS : undefined,
     staleTime: 30 * 60_000,
   });
 }

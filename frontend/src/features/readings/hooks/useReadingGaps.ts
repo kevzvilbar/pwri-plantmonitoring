@@ -1,6 +1,7 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { STALE_READING_HOURS } from '@/lib/format';
+import { ensureLocators, ensureWells } from '@/lib/referenceData';
 
 /**
  * Detects Active wells/locators with no reading in > STALE_READING_HOURS
@@ -45,10 +46,6 @@ export function gapDescription(g: Pick<ReadingGap, 'last_reading_at' | 'hours_ga
 
 type EntityKind = 'well' | 'locator';
 
-const TABLE: Record<EntityKind, 'wells' | 'locators'> = {
-  well: 'wells',
-  locator: 'locators',
-};
 const LATEST_VIEW: Record<EntityKind, 'well_readings_latest' | 'locator_readings_latest'> = {
   well: 'well_readings_latest',
   locator: 'locator_readings_latest',
@@ -58,19 +55,21 @@ const ID_COL: Record<EntityKind, 'well_id' | 'locator_id'> = {
   locator: 'locator_id',
 };
 
-async function fetchReadingGaps(kind: EntityKind, plantIds: string[]): Promise<ReadingGap[]> {
+async function fetchReadingGaps(qc: QueryClient, kind: EntityKind, plantIds: string[]): Promise<ReadingGap[]> {
   if (!plantIds.length) return [];
 
   // Only Active (commissioned) entities can go "stale" in a way anyone
   // should be alerted about — a decommissioned well/locator is expected to
   // have gone quiet, and isn't shown in the reading-entry form anyway.
-  const { data: entities, error: entitiesErr } = await supabase
-    .from(TABLE[kind])
-    .select('id,name,plant_id')
-    .eq('status', 'Active')
-    .in('plant_id', plantIds);
-  if (entitiesErr) throw entitiesErr;
-  if (!entities?.length) return [];
+  //
+  // Phase 1 (FREE-PLAN-BUDGET-PLAN): the entity list comes from the shared
+  // ['wells'|'locators', ids] cache (filtered to Active here) instead of a private
+  // request — the live logs showed this exact URL fetched 7x/hour.
+  const all = kind === 'well'
+    ? await ensureWells(qc, plantIds)
+    : await ensureLocators(qc, plantIds);
+  const entities = all.filter((e) => e.status === 'Active');
+  if (!entities.length) return [];
 
   const idCol = ID_COL[kind];
   const { data: latest, error: latestErr } = await (supabase.from(LATEST_VIEW[kind] as any) as any)
@@ -95,9 +94,10 @@ async function fetchReadingGaps(kind: EntityKind, plantIds: string[]): Promise<R
 }
 
 export function useReadingGaps(plantIds: string[]) {
+  const qc = useQueryClient();
   const { data: wellGaps } = useQuery({
     queryKey: ['well-reading-gaps', plantIds],
-    queryFn: () => fetchReadingGaps('well', plantIds),
+    queryFn: () => fetchReadingGaps(qc, 'well', plantIds),
     enabled: plantIds.length > 0,
     // FIX (egress): covered by realtime cache invalidation
     staleTime: 5 * 60_000,
@@ -106,7 +106,7 @@ export function useReadingGaps(plantIds: string[]) {
 
   const { data: locatorGaps } = useQuery({
     queryKey: ['locator-reading-gaps', plantIds],
-    queryFn: () => fetchReadingGaps('locator', plantIds),
+    queryFn: () => fetchReadingGaps(qc, 'locator', plantIds),
     enabled: plantIds.length > 0,
     // FIX (egress): covered by realtime cache invalidation
     staleTime: 5 * 60_000,
