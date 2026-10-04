@@ -69,7 +69,7 @@ export function DatePicker({
           id={id}
           type="button"
           disabled={disabled}
-          role="combobox"
+          aria-haspopup="dialog"
           aria-expanded={open}
           aria-label={placeholder}
           className={cn(

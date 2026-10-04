@@ -44,7 +44,12 @@ if (dsn) {
     integrations: (() => {
       try {
         if (typeof Sentry.replayIntegration === 'function') {
-          return [Sentry.replayIntegration()];
+          return [
+            Sentry.replayIntegration({
+              maskAllText: true,
+              blockAllMedia: true,
+            }),
+          ];
         }
       } catch {
         // ignore

@@ -31,7 +31,7 @@ describe('DateRangePicker', () => {
   it('renders presets properly and allows selecting one', () => {
     const handleChange = vi.fn();
     render(<DateRangePicker from="" to="" onChange={handleChange} presets />);
-    const trigger = screen.getByRole('combobox');
+    const trigger = screen.getByRole('button', { name: /select date range/i });
     fireEvent.click(trigger);
 
     const todayBtn = screen.getByRole('button', { name: 'Today' });
@@ -49,7 +49,7 @@ describe('DateTimePicker', () => {
   it('does not emit onChange when time is adjusted if no date has been picked yet', () => {
     const handleChange = vi.fn();
     render(<DateTimePicker value="" onChange={handleChange} />);
-    const trigger = screen.getByRole('combobox');
+    const trigger = screen.getByRole('button', { name: /select date & time/i });
     fireEvent.click(trigger);
 
     // Click 15-minute interval button before date is selected

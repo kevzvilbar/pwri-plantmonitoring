@@ -1,6 +1,9 @@
+import { useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { ChevronLeft } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
+import { ChevronLeft, ShieldCheck } from 'lucide-react';
 import type { OperatorEntry } from './types';
 
 interface ConfirmationStepProps {
@@ -23,6 +26,8 @@ export function ConfirmationStep({
   isOperator, email, designation, operatorCount, operators,
   plantId, plantIds, completedIndices, plants, busy, single, onSubmit, onBack,
 }: ConfirmationStepProps) {
+  const [acknowledged, setAcknowledged] = useState(false);
+
   const label = busy
     ? 'Creating…'
     : isOperator && completedIndices.size > 0
@@ -72,10 +77,32 @@ export function ConfirmationStep({
           </>
         )}
       </div>
+
+      {/* RA 10173 DPA & Terms Acknowledgement */}
+      <div className="p-3 rounded-lg border bg-muted/30 flex items-start gap-2.5">
+        <Checkbox
+          id="legal-ack"
+          checked={acknowledged}
+          onCheckedChange={(checked) => setAcknowledged(Boolean(checked))}
+          className="mt-0.5"
+        />
+        <Label htmlFor="legal-ack" className="text-xs text-muted-foreground leading-relaxed cursor-pointer font-normal">
+          I have read and agree to the{' '}
+          <a href="./terms" target="_blank" rel="noopener noreferrer" className="text-primary font-medium underline underline-offset-2">
+            Terms of Use
+          </a>{' '}
+          and acknowledge the{' '}
+          <a href="./privacy" target="_blank" rel="noopener noreferrer" className="text-primary font-medium underline underline-offset-2">
+            Privacy Notice
+          </a>{' '}
+          (RA 10173).
+        </Label>
+      </div>
+
       <p className="text-xs text-muted-foreground text-center">
         Account{isOperator && operatorCount > 1 ? 's' : ''} will be placed in the approval queue until an Admin activates {isOperator && operatorCount > 1 ? 'them' : 'it'}.
       </p>
-      <Button onClick={onSubmit} disabled={busy} className="w-full">
+      <Button onClick={onSubmit} disabled={busy || !acknowledged} className="w-full">
         {label}
       </Button>
       <Button variant="ghost" size="sm" className="w-full" onClick={onBack}>

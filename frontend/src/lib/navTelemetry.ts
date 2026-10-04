@@ -22,6 +22,7 @@ export const ROUTE_PATTERNS = [
   '/maintenance', '/incidents', '/employees', '/data-corrections',
   '/manager-scorecard', '/scorecard', '/import', '/exports', '/compliance',
   '/alerts', '/admin', '/profile', '/help', '/my-corrections', '/chemicals',
+  '/privacy', '/terms',
 ] as const;
 
 const ROLE_PRIORITY = ['Admin', 'Manager', 'Data Analyst', 'Technician', 'Operator'] as const;
@@ -71,6 +72,7 @@ export function deviceClass(): 'mobile' | 'desktop' {
 export function isTrackingEnabled(): boolean {
   if (import.meta.env.VITE_NAV_TELEMETRY === 'off' || import.meta.env.VITE_LOW_QUOTA_MODE === '1' || import.meta.env.VITE_LOW_QUOTA_MODE === 'true') return false;
   try {
+    if (localStorage.getItem('pwri_tracking_opt_out') === 'true') return false;
     const dnt = navigator.doNotTrack ?? (window as { doNotTrack?: string }).doNotTrack;
     if (dnt === '1' || dnt === 'yes') return false;
   } catch { /* ignore */ }

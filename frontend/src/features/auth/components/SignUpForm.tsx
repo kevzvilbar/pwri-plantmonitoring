@@ -170,6 +170,15 @@ export function SignUpForm({
         });
         if (rpErr) throw new Error(rpErr.message);
 
+        // Record RA 10173 notice acknowledgement timestamp
+        await supabase
+          .from('user_profiles')
+          .update({
+            notice_version: '2026-10',
+            notice_acknowledged_at: new Date().toISOString(),
+          })
+          .eq('username', op.username);
+
         await supabase.auth.signOut();
       };
 

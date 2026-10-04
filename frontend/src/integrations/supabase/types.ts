@@ -5433,6 +5433,8 @@ export type Database = {
           last_name: string | null
           last_seen_at: string | null
           middle_name: string | null
+          notice_acknowledged_at: string | null
+          notice_version: string | null
           plant_assignments: string[]
           profile_complete: boolean
           status: Database["public"]["Enums"]["profile_status"]
@@ -5451,6 +5453,8 @@ export type Database = {
           last_name?: string | null
           last_seen_at?: string | null
           middle_name?: string | null
+          notice_acknowledged_at?: string | null
+          notice_version?: string | null
           plant_assignments?: string[]
           profile_complete?: boolean
           status?: Database["public"]["Enums"]["profile_status"]
@@ -5469,6 +5473,8 @@ export type Database = {
           last_name?: string | null
           last_seen_at?: string | null
           middle_name?: string | null
+          notice_acknowledged_at?: string | null
+          notice_version?: string | null
           plant_assignments?: string[]
           profile_complete?: boolean
           status?: Database["public"]["Enums"]["profile_status"]

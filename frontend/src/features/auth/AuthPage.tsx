@@ -96,6 +96,15 @@ export default function Auth() {
               </Tabs>
             )}
           </div>
+          <div className="mt-4 flex items-center justify-center gap-3 text-xs text-topbar-muted">
+            <a href="./terms" className="hover:text-topbar-foreground underline underline-offset-2 transition-colors">
+              Terms of Use
+            </a>
+            <span>&bull;</span>
+            <a href="./privacy" className="hover:text-topbar-foreground underline underline-offset-2 transition-colors">
+              Privacy Notice
+            </a>
+          </div>
         </div>
       </div>
     </div>

@@ -11,7 +11,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { Trash2, MoreVertical, Loader2, ShieldAlert } from 'lucide-react';
+import { Trash2, MoreVertical, Loader2, ShieldAlert, UserX } from 'lucide-react';
 import { KIND_COPY, type DeleteMenuProps, type DependencySnapshot } from './types';
 import { useDeleteEntity } from './useDeleteEntity';
 
@@ -61,6 +61,7 @@ export function DeleteEntityMenu({
     openSoft, setOpenSoft,
     openHard, setOpenHard,
     openForce, setOpenForce,
+    openAnon, setOpenAnon,
     forceAck, setForceAck,
     busy,
     reason, setReason,
@@ -69,6 +70,7 @@ export function DeleteEntityMenu({
     resetAndClose,
     doSoft,
     doHard,
+    doAnonymize,
     openHardWithDeps,
     promptForce,
   } = useDeleteEntity({ kind, id, label, canSoftDelete, canHardDelete, invalidateKeys, onDeleted, compact, trigger });
@@ -102,6 +104,15 @@ export function DeleteEntityMenu({
               {copy.softVerb} ({copy.softName})
             </DropdownMenuItem>
           )}
+          {kind === 'user' && (
+            <DropdownMenuItem
+              onClick={() => setOpenAnon(true)}
+              data-testid={`anonymize-user-${id}`}
+            >
+              <UserX className="h-4 w-4 mr-2 text-muted-foreground" />
+              Anonymize profile (RA 10173)
+            </DropdownMenuItem>
+          )}
           {canHardDelete && (
             <DropdownMenuItem
               onClick={openHardWithDeps}
@@ -114,6 +125,31 @@ export function DeleteEntityMenu({
           )}
         </DropdownMenuContent>
       </DropdownMenu>
+
+      {/* Anonymize Confirmation Dialog (RA 10173) */}
+      <AlertDialog open={openAnon} onOpenChange={(o) => (o ? setOpenAnon(true) : resetAndClose())}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Anonymize user profile?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will pseudonymize the personal data for <strong>{label}</strong> to <em>Former Employee</em>, clear their email and push device subscriptions, and mark the account Suspended.
+              <br /><br />
+              All historical readings and audit trails will remain intact for plant compliance.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={busy}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={doAnonymize}
+              disabled={busy}
+              className="bg-primary text-primary-foreground hover:bg-primary/90"
+            >
+              {busy && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
+              Anonymize Profile
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog open={openSoft} onOpenChange={(o) => (o ? setOpenSoft(true) : resetAndClose())}>
         <AlertDialogContent>

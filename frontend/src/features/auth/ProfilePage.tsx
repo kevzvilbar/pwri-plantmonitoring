@@ -23,6 +23,7 @@ import {
   CheckCircle2, Shield, Key, Building, ChevronRight, Activity, Database
 } from 'lucide-react';
 import { ProfileEmailChange } from './components/ProfileEmailChange';
+import { ProfilePrivacyCard } from './components/ProfilePrivacyCard';
 import { PushNotificationCard } from '@/features/notifications';
 import { useMyCustomRole } from '@/hooks/useCustomRoles';
 
@@ -351,6 +352,11 @@ export default function Profile() {
           {/* Web & Mobile Push Notifications Card */}
           {!isOverride && (
             <PushNotificationCard />
+          )}
+
+          {/* Privacy & Data Protection Card (RA 10173) */}
+          {!isOverride && (
+            <ProfilePrivacyCard />
           )}
 
           {/* Role & Access Matrix */}

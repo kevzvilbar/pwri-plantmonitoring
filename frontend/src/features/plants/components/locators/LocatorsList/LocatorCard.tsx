@@ -108,23 +108,28 @@ export function LocatorCard({
                   {fresh.label}
                 </StatusPill>
                 {isManager ? (
-                  <label
-                    className={`inline-flex items-center gap-1.5 text-2xs font-medium px-2 py-0.5 rounded-full border cursor-pointer transition-colors ${
-                      l.is_locked
-                        ? 'text-danger bg-danger-soft border-danger/40'
-                        : 'text-muted-foreground bg-muted/40 border-border/60 hover:bg-muted'
-                    }`}
+                  <span
                     onClick={(e) => e.stopPropagation()}
+                    onKeyDown={(e) => e.stopPropagation()}
+                    role="presentation"
                   >
-                    <Checkbox
-                      checked={!!l.is_locked}
-                      onCheckedChange={(checked) => onLockChange(l, checked === true)}
-                      className="h-3 w-3"
-                      data-testid={`locator-lock-checkbox-${l.id}`}
-                    />
-                    <ShieldAlert className="h-2.5 w-2.5 shrink-0" />
-                    <span>{l.is_locked ? 'Locked' : 'Unlocked'}</span>
-                  </label>
+                    <label
+                      className={`inline-flex items-center gap-1.5 text-2xs font-medium px-2 py-0.5 rounded-full border cursor-pointer transition-colors ${
+                        l.is_locked
+                          ? 'text-danger bg-danger-soft border-danger/40'
+                          : 'text-muted-foreground bg-muted/40 border-border/60 hover:bg-muted'
+                      }`}
+                    >
+                      <Checkbox
+                        checked={!!l.is_locked}
+                        onCheckedChange={(checked) => onLockChange(l, checked === true)}
+                        className="h-3 w-3"
+                        data-testid={`locator-lock-checkbox-${l.id}`}
+                      />
+                      <ShieldAlert className="h-2.5 w-2.5 shrink-0" />
+                      <span>{l.is_locked ? 'Locked' : 'Unlocked'}</span>
+                    </label>
+                  </span>
                 ) : (
                   l.is_locked && (
                     <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-2xs font-medium bg-danger-soft text-danger border border-danger/40">

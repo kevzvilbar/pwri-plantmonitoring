@@ -45,10 +45,14 @@ export default tseslint.config(
       // first screen every user hits) is fixed as of this commit; the
       // remaining count below is pre-existing debt in other forms, tracked
       // the same way as no-explicit-any: a shrinking budget, not a license
-      // to add more. Scoped to this one rule rather than jsx-a11y's full
-      // recommended config, which would add several unreviewed rules and
-      // an unknown warning count in the same PR as an unrelated fix.
+      // Scoped to jsx-a11y recommended rules for WCAG 2.1 AA tracking
       "jsx-a11y/label-has-associated-control": "warn",
+      "jsx-a11y/click-events-have-key-events": "warn",
+      "jsx-a11y/no-static-element-interactions": "warn",
+      "jsx-a11y/no-noninteractive-element-interactions": "warn",
+      "jsx-a11y/role-has-required-aria-props": "warn",
+      "jsx-a11y/heading-has-content": "warn",
+      "jsx-a11y/anchor-has-content": "warn",
     },
   },
 );

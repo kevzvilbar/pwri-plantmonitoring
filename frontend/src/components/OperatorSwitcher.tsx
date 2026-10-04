@@ -340,13 +340,20 @@ export function OperatorSwitcher() {
         )}
 
         {/* Actions */}
-        <DropdownMenuItem onClick={() => navigate('/profile')} className="gap-2 text-xs py-1.5">
+        <DropdownMenuItem onClick={() => navigate('/profile')} className="gap-2 text-xs py-1.5 cursor-pointer">
           <UserCog className="h-3.5 w-3.5" /> My profile
         </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => navigate('/help')} className="gap-2 text-xs py-1.5">
+        <DropdownMenuItem onClick={() => navigate('/help')} className="gap-2 text-xs py-1.5 cursor-pointer">
           <BookOpen className="h-3.5 w-3.5" /> Help &amp; Manual
         </DropdownMenuItem>
-        <DropdownMenuItem onClick={signOut} className="text-danger gap-2 text-xs py-1.5">
+        <DropdownMenuItem onClick={() => navigate('/privacy')} className="gap-2 text-xs py-1.5 cursor-pointer">
+          <ShieldCheck className="h-3.5 w-3.5" /> Privacy Notice (RA 10173)
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => navigate('/terms')} className="gap-2 text-xs py-1.5 cursor-pointer">
+          <BookOpen className="h-3.5 w-3.5" /> Terms of Use
+        </DropdownMenuItem>
+        <DropdownMenuSeparator className="my-0" />
+        <DropdownMenuItem onClick={signOut} className="text-danger gap-2 text-xs py-1.5 cursor-pointer">
           <LogOut className="h-3.5 w-3.5" /> Sign out
         </DropdownMenuItem>
 

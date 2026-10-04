@@ -38,6 +38,8 @@ const Admin = lazy(() => import("./pages/Admin"));
 const Profile = lazy(() => import("./pages/Profile"));
 const Help = lazy(() => import("./pages/Help"));
 const MyCorrections = lazy(() => import("./pages/MyCorrections"));
+const Privacy = lazy(() => import("./pages/Privacy"));
+const Terms = lazy(() => import("./pages/Terms"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 const PlantTopology = lazy(() => import("./pages/PlantTopology"));
 const DataAnalysis  = lazy(() => import("./pages/DataAnalysis"));
@@ -110,6 +112,8 @@ const App = () => (
               <Suspense fallback={<RouteFallback />}>
               <Routes>
                 <Route path="/auth" element={<Auth />} />
+                <Route path="/privacy" element={<Privacy />} />
+                <Route path="/terms" element={<Terms />} />
                 <Route path="/onboarding" element={<Onboarding />} />
                 <Route
                   path="/pending-approval"
