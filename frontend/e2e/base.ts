@@ -56,11 +56,11 @@ export async function signIn(page: Page, email = E2E_EMAIL, password = E2E_PASSW
 
 const config: PlaywrightTestConfig = {
   testDir: './e2e',
-  timeout: 60_000,
-  expect: { timeout: 20_000 },
+  timeout: 30_000,
+  expect: { timeout: 10_000 },
   fullyParallel: false,
   workers: process.env.CI ? 1 : undefined,
-  retries: process.env.CI ? 2 : 0,
+  retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI
     ? [['list'], ['html', { open: 'never' }]]
     : [['list']],
