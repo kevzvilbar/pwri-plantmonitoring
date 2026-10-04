@@ -51,7 +51,7 @@ authoritative and this doc is what should be updated.
   public table (`supabase/tests/database/06_rls_enabled_on_all_tables.sql`).
 - **New functions**: set `search_path` (include `pg_temp` for SECURITY
   DEFINER), `REVOKE EXECUTE FROM PUBLIC` unless genuinely intended.
-- **New triggers**: read `docs/TRIGGER-DEPENDENCY-GRAPH.md` first; add to
+- **New triggers**: read `docs/TRIGGER_DEPENDENCY_GRAPH.md` first; add to
   the doc's inventory in the same PR; prefer consolidating into existing
   chain functions over adding a new trigger to a reading-chain table; avoid
   re-entrant cascades (no intra-chain UPDATE that re-fires the same trigger)
@@ -100,7 +100,7 @@ All three are "lock in the number, and any change is a reviewed decision":
 - [ ] New logic has a test; new data-layer fn has a mock test.
 - [ ] New table: RLS on, deny-all first.
 - [ ] New function: search_path + REVOKE PUBLIC.
-- [ ] New trigger: added to `TRIGGER-DEPENDENCY-GRAPH.md`, no unbounded
+- [ ] New trigger: added to `TRIGGER_DEPENDENCY_GRAPH.md`, no unbounded
       re-entry.
 - [ ] Lint/strict/bundle ceilings moved only with `--update` + reason.
 - [ ] `tsc --noEmit`, vitest, build, Playwright (if touched), pgTAP all green.

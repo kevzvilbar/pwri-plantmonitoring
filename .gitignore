@@ -6,9 +6,14 @@ tsc*.txt
 tmp_final_check.txt
 test_result.md
 validate_*.txt
+validate_run.txt
+validate_summary.txt
 val-*.log
 *.log
 *.patch
+.gitconfig
+.kilo/
+attached_assets/
 
 # Supabase CLI local state
 supabase/.temp/

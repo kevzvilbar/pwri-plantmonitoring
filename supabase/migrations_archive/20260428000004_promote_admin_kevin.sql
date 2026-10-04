@@ -5,7 +5,7 @@
 --   1. Run 20260428_admin_audit_enhancements.sql first.
 --   2. Kevin must have already signed up at /auth using:
 --        Email:    kevzvilbar@gmail.com
---        Password: BPWI2025!
+--        Password: <configured-admin-password>
 -- This script does NOT create an auth.users row — Supabase only allows
 -- that via the dashboard or the service-role key. Once the auth row
 -- exists, this script attaches a complete `user_profiles` record and

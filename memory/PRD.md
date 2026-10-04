@@ -168,39 +168,25 @@ _Last updated: 2026-07-21 (iteration 11 — stack correction: MongoDB removed, S
   null/zero.
 
 ### 4.8 Compliance & scheduling
-- [x] `/api/compliance/thresholds` GET/PUT with 10 defaults.
-- [x] `/api/compliance/evaluate?summarize=`.
-- [x] `/api/cron/compliance-evaluate` + `/api/cron/pm-forecast-sweep`.
+- [x] Compliance thresholds & evaluation executed via Supabase database functions (`public.get_compliance_thresholds()`, `public.evaluate_compliance_snapshot()`).
+- [x] Scheduled jobs managed via PostgreSQL `pg_cron` routines and trigger cascades.
 
 ### 4.9 Error handling
 - [x] Error boundary + toast on global query/mutation errors.
-- [x] **Iteration 6: backend pod env fix** — `postgrest`,
-  `supabase-auth`, `realtime`, `storage3`, `gotrue` were missing
-  from the fork pod and broke `/api/*`. Reinstalled; full
-  pytest suite back to **59/59 passing**.
+- [x] Structured error classification (`shared/supabaseErrors.ts`) and offline queue retry handling.
 
-## 5. Endpoints
-| Endpoint | Method |
-|---|---|
-| `/api/import/seed-from-url` | POST |
-| `/api/import/parse-wellmeter` | POST |
-| `/api/downtime/events` | GET |
-| `/api/alerts/feed` | GET |
-| `/api/blending/wells`, `/toggle`, `/audit` | GET / POST / POST |
-| `/api/ai/chat`, `/chat-tools`, `/anomalies`, `/pm-forecast` | POST |
-| `/api/compliance/thresholds`, `/evaluate` | GET/PUT, GET |
-| `/api/cron/compliance-evaluate`, `/cron/pm-forecast-sweep` | POST |
-| `/api/admin/users/{id}/dependencies`, `/plants/{id}/dependencies` | GET |
-| `/api/admin/users/{id}/soft-delete`, `/plants/{id}/soft-delete` | POST |
-| `/api/admin/users/{id}`, `/plants/{id}` (`?force=true&reason=...`) | DELETE |
-| `/api/admin/audit-log` (`?kind=user|plant|well&limit=N`) | GET |
-| `/api/admin/plants/cleanup` (Admin) | POST |
+## 5. Endpoints & API Architecture
 
-> Wells delete in iteration 6 is performed client-side via the
-> Supabase JS client (RLS-gated, cascade FK-handled). A backend
-> `/api/admin/wells/{id}` DELETE route is **NOT** added — well
-> deletes flow directly to Supabase and audit rows are inserted
-> client-side. This keeps the change surface area small.
+> **Architecture Transition Note (2026-08-03):** The legacy FastAPI application server was fully retired in favor of a **100% Supabase architecture** (React SPA + Supabase PostgREST + Database Functions + 3 Edge Functions). The legacy Python backend code is archived at `docs/archive/backend-retired-2026-08-03/`.
+
+### Current Production Architecture:
+- **Direct Database Access:** Authenticated PostgREST queries over HTTPS with PostgreSQL Row-Level Security (RLS).
+- **Edge Functions (`supabase/functions/`):**
+  - `admin-update-user-email`: Administrative email synchronization with `auth.admin`.
+  - `notify-train-offline`: Automated email notification triggered on train status change.
+  - `send-push-notification`: Web Push delivery to subscribed client devices.
+- **Database Functions & RPCs:** High-throughput aggregations, cascade integrity, compliance calculations, and water balance reconciliation.
+- **Client Services:** High-precision regression corrections (`DataAnalysis.tsx`), CSV parsers, and client-side offline queuing via IndexedDB.
 
 ### Architecture decision — 2026-07-21: Python regression service retired (§4 item 1)
 
@@ -288,7 +274,7 @@ exact failure mode §4 item 1 was flagging.
      (iter 7 — `login_attempts` table + extends `deletion_audit_log.kind`
      to accept `'well'`).
   4. **After Kevin signs up at `/auth`** with kevzvilbar@gmail.com /
-     BPWI2025!, run
+     <configured-admin-password>, run
      `/app/supabase/migrations/20260428_promote_admin_kevin.sql`
      to attach his profile + Admin role.
 - Hard-delete of a user removes `user_profiles` + `user_roles` only —

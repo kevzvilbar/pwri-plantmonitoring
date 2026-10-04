@@ -67,5 +67,5 @@ Because the system manages user identity records, shift duty timestamps, equipme
 ---
 
 ## 4. Operational Runbooks
-- **Data Retention Policy:** [`supabase/runbooks/DATA-RETENTION-SCHEDULE.md`](file:///c:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/supabase/runbooks/DATA-RETENTION-SCHEDULE.md)
-- **Data Breach Response Protocol:** [`supabase/runbooks/DATA-BREACH-RESPONSE-PLAN.md`](file:///c:/Users/vilba/.antigravity/pwri-plantmonitoring-main/pwri-plantmonitoring/supabase/runbooks/DATA-BREACH-RESPONSE-PLAN.md)
+- **Data Retention Policy:** [`supabase/runbooks/DATA-RETENTION-SCHEDULE.md`](../supabase/runbooks/DATA-RETENTION-SCHEDULE.md)
+- **Data Breach Response Protocol:** [`supabase/runbooks/DATA-BREACH-RESPONSE-PLAN.md`](../supabase/runbooks/DATA-BREACH-RESPONSE-PLAN.md)

@@ -35,14 +35,19 @@ triggers below depend on it.
 
 ## 2. Edge Functions
 
-Two active functions, all under `supabase/functions/`:
+Three active functions, all under `supabase/functions/`:
 
-```
+```bash
+supabase functions deploy admin-update-user-email
 supabase functions deploy notify-train-offline
 supabase functions deploy send-push-notification
 ```
 
-Deploy with the CLI (it bundles `_shared/webpush.ts`); pasting into the
+- `admin-update-user-email`: Privileged administrative email update service for operator account maintenance. Verifies caller JWT and Admin role before invoking `auth.admin.updateUserById`.
+- `notify-train-offline`: Trigger-driven automated email alerts via Resend when RO trains transition to offline status.
+- `send-push-notification`: Trigger-driven Web Push notification delivery using VAPID keys to subscribed operator devices.
+
+Deploy with the Supabase CLI (it bundles `_shared/webpush.ts`); pasting into the
 dashboard editor will not work for functions with shared imports.
 
 
