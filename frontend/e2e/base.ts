@@ -15,12 +15,22 @@ export async function signIn(page: Page, email = E2E_EMAIL, password = E2E_PASSW
   await page.goto('/auth');
   await page.fill('#signin-email', email);
   await page.fill('#signin-password', password);
-  // Must target the form's submit button. `button:has-text("Sign in")` also
-  // matches the already-selected "Sign in" TabsTrigger (role=tab) that sits
-  // above the form, and page.click() takes the FIRST match -- so it clicked the
-  // tab, never submitted, and waitForURL below timed out in every spec.
+  // Target the form submit button
   await page.click('button[type="submit"]:has-text("Sign in")');
-  await page.waitForURL((url) => !/\/auth\/?$/.test(url.pathname), { timeout: 15_000 });
+
+  // If multiple operators exist at the assigned plant, select the first operator
+  const pickOperator = page.locator('button:has-text("@")').first();
+  try {
+    await Promise.race([
+      page.waitForURL((url) => !/\/auth\/?$/.test(url.pathname), { timeout: 15_000 }),
+      pickOperator.waitFor({ state: 'visible', timeout: 5_000 }).then(async () => {
+        await pickOperator.click();
+        await page.waitForURL((url) => !/\/auth\/?$/.test(url.pathname), { timeout: 15_000 });
+      }),
+    ]);
+  } catch {
+    await page.waitForURL((url) => !/\/auth\/?$/.test(url.pathname), { timeout: 15_000 });
+  }
 }
 
 const config: PlaywrightTestConfig = {

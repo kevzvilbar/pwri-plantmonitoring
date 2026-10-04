@@ -1,5 +1,5 @@
 {
-  "maxTotalGzipKb": 1155.6,
+  "maxTotalGzipKb": 1187.1,
   "lastUpdated": "2026-10-04",
   "history": [
     {
@@ -144,8 +144,9 @@
     },
     {
       "date": "2026-10-04",
-      "maxTotalGzipKb": 1155.6,
-      "previous": 1152.9
+      "maxTotalGzipKb": 1187.1,
+      "previous": 1152.9,
+      "reason": "Re-baselined for expanded and revised in-app manual chapters (Part I-VIII with worked math formulas, diagrams, and workflow strips), user pseudonymization (RA 10173), and ProfilePrivacyCard personal data export. Measured in CI production build."
     }
   ]
 }
