@@ -29,7 +29,7 @@ jobs:
     # The baseline migration (20260911044610_baseline_schema.sql) must exist
     # in supabase/migrations/ before any other migration jobs run.
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Verify baseline migration exists and is non-empty
         run: |
@@ -65,10 +65,10 @@ jobs:
     needs: baseline-check
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up Node (from .nvmrc)
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version-file: '.nvmrc'
           cache: npm
@@ -198,9 +198,9 @@ jobs:
     # database; deeper authenticated flows are future work against the
     # staging project (docs/STAGING.md).
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version-file: '.nvmrc'
           cache: npm
@@ -225,7 +225,7 @@ jobs:
 
       - name: Upload Playwright report
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-report
           path: frontend/playwright-report/
@@ -246,15 +246,15 @@ jobs:
     # the full E2E suite. Catches form submission, validation, and data
     # integrity bugs that unit tests cannot.
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version-file: '.nvmrc'
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
-      - uses: supabase/setup-cli@v1
+      - uses: supabase/setup-cli@v3
         with:
           # Pinned, not `latest`: with `latest` the action first calls
           # api.github.com/.../releases/latest, and a transient API failure or
@@ -315,7 +315,7 @@ jobs:
 
       - name: Upload Playwright report
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-report-authenticated
           path: |
@@ -341,9 +341,9 @@ jobs:
     # Every test file creates its own plants/users/rows and ends in
     # ROLLBACK, so nothing here depends on (or pollutes) seed data.
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: supabase/setup-cli@v1
+      - uses: supabase/setup-cli@v3
         with:
           # Pinned, not `latest`: with `latest` the action first calls
           # api.github.com/.../releases/latest, and a transient API failure or
@@ -371,9 +371,9 @@ jobs:
     # Runs after install so it uses the exact lockfile. Non-blocking for
     # moderate/low (warns only) — high/critical fails the build.
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version-file: '.nvmrc'
           cache: npm
