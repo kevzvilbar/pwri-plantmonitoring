@@ -5,6 +5,7 @@ import { format, subDays, differenceInHours } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
 import { usePermission } from '@/hooks/usePermission';
 import { toast } from 'sonner';
+import { downloadCSVMatrix } from '@/shared/csv';
 import { cn } from '@/lib/utils';
 import {
   type AppraisalTier,
@@ -320,27 +321,20 @@ export function useScorecardData() {
     ];
 
     const rowsData = managerRollup.map((m) => [
-      `"${m.name}"`,
-      `"${m.plants.join(', ')}"`,
-      `"${m.totalReadings}"`,
-      `"${m.avgCompleteness ? m.avgCompleteness.toFixed(1) + '%' : 'N/A'}"`,
-      `"${m.openExceptions}"`,
-      `"${m.pendingCorrections}"`,
-      `"${m.approvedCorrections}"`,
-      `"${m.rejectedCorrections}"`,
-      `"${m.oversightScore}%"`,
-      `"${m.tier.tier}"`,
-      `"${days} Days"`,
+      m.name,
+      m.plants.join(', '),
+      m.totalReadings,
+      m.avgCompleteness ? m.avgCompleteness.toFixed(1) + '%' : 'N/A',
+      m.openExceptions,
+      m.pendingCorrections,
+      m.approvedCorrections,
+      m.rejectedCorrections,
+      `${m.oversightScore}%`,
+      m.tier.tier,
+      `${days} Days`,
     ]);
 
-    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rowsData.map((r) => r.join(','))].join('\n');
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement('a');
-    link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `manager_oversight_scorecard_${days}d_${format(new Date(), 'yyyy-MM-dd')}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    downloadCSVMatrix(`manager_oversight_scorecard_${days}d_${format(new Date(), 'yyyy-MM-dd')}.csv`, headers, rowsData);
     toast.success('Manager Scorecard exported successfully.');
   };
 

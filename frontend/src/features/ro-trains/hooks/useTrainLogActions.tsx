@@ -9,6 +9,7 @@
 import { useMemo, useEffect, type Ref } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
+import { downloadCSVMatrix } from '@/shared/csv';
 import { friendlyError } from '@/lib/supabaseErrors';
 import { supabase } from '@/integrations/supabase/client';
 import { canEditEntry, recalculateTrainDeltas, logReadingEdit } from '../helpers';
@@ -140,12 +141,8 @@ export function useTrainLogActions(options: TrainLogActionsOptions): TrainLogAct
       r.reject_meter ?? (r._inferred_rej_delta != null ? 'Inferred' : ''),
       r._computed_rej_delta ?? r.reject_meter_delta ?? (r._inferred_rej_delta != null ? `~${r._inferred_rej_delta}` : ''),
       r.remarks ?? '',
-    ].map((v: any) => `"${String(v).replace(/"/g, '""')}"`).join(','));
-    const blob = new Blob([[headers.join(','), ...rows2].join('\n')], { type: 'text/csv' });
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement('a');
-    a.href = url; a.download = `${trainLabel.replace(/\s+/g, '_')}_log.csv`; a.click();
-    URL.revokeObjectURL(url);
+    ]);
+    downloadCSVMatrix(`${trainLabel.replace(/\s+/g, '_')}_log.csv`, headers, rows2);
     toast.success('Log exported');
   };
 

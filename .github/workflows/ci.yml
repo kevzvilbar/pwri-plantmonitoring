@@ -85,6 +85,9 @@ jobs:
         # is reported as one clear message instead of a wall of confusing
         # "column does not exist on <72 other tables>" downstream errors.
 
+      - name: Security audit (CSP, CWE-1236, Edge Function guards, RLS migrations)
+        run: node scripts/security-audit.mjs
+
       - name: Type-check (tsc --noEmit)
         working-directory: frontend
         run: npx tsc --noEmit -p tsconfig.app.json

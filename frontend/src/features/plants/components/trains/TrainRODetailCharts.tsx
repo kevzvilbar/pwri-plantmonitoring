@@ -11,6 +11,7 @@ import { TrendingUp, Download, AlertTriangle, Maximize2, CalendarIcon } from 'lu
 import { Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, ComposedChart, Scatter } from 'recharts';
 import { fmtNum } from '@/lib/calculations';
 import { toast } from 'sonner';
+import { downloadCSVMatrix } from '@/shared/csv';
 import { format, parseISO, subDays } from 'date-fns';
 
 // ─── TrainRODetailCharts ──────────────────────────────────────────────────────
@@ -407,15 +408,9 @@ export function TrainRODetailCharts({ trainId, trainLabel }: { trainId: string; 
   const exportCSV = () => {
     if (!rows.length) { toast.error('No data'); return; }
     const cols = ['date','feed_flow','permeate_flow','reject_flow','feed_pressure_psi','permeate_tds','recovery_pct','permeate_volume'];
-    const header = [...cols, 'flagged'];
-    const lines = rows.map(r => [...cols.map(c => r[c] ?? ''), r.flagged ? 'yes' : 'no'].join(','));
-    const blob = new Blob([[header.join(','), ...lines].join('\n')], { type: 'text/csv' });
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement('a');
-    a.href     = url;
-    a.download = `${trainLabel.replace(/\s+/g, '_')}_ro_performance.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+    const headers = [...cols, 'flagged'];
+    const dataRows = rows.map((r) => [...cols.map((c) => r[c] ?? ''), r.flagged ? 'yes' : 'no']);
+    downloadCSVMatrix(`${trainLabel.replace(/\s+/g, '_')}_ro_performance.csv`, headers, dataRows);
     toast.success('CSV exported');
   };
 

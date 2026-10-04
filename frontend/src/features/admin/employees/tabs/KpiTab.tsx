@@ -1,5 +1,6 @@
 import { useCallback } from 'react';
 import { toast } from 'sonner';
+import { downloadCSVMatrix } from '@/shared/csv';
 import { FileDown, RefreshCw, Building2, User, Info } from 'lucide-react';
 import { LayoutGrid, List, ChevronLeft, ChevronRight, Award, Layers } from 'lucide-react';
 import { Card } from '@/components/ui/card';
@@ -50,7 +51,7 @@ function exportAppraisalCsv(
     'Wells %', 'Locator %', 'RO Train %', 'Prod Meter %', 'Solar %', 'Grid %', 'Chemicals %',
     'Overall KPI Score %', 'Appraisal Rating Tier', 'Period Range',
   ];
-  const rows: string[][] = [];
+  const rows: (string | number)[][] = [];
 
   plantsWithOps.forEach((plant) => {
     const plantOps = operators.filter((op) => op.plant_assignments?.includes(plant.id));
@@ -68,30 +69,23 @@ function exportAppraisalCsv(
       });
 
       rows.push([
-        `"${op.first_name} ${op.last_name}"`.trim(),
-        `"${op.username ?? ''}"`,
-        `"${plant.name}"`,
-        ...catScores.map((s) => `"${s}"`),
-        `"${overall.totalValid > 0 ? `${overall.scorePct}%` : 'N/A'}"`,
-        `"${overall.totalValid > 0 ? overall.tier.tier : 'N/A'}"`,
-        `"${range === 'today' ? 'Today' : `${range} Days`}"`,
+        `${op.first_name || ''} ${op.last_name || ''}`.trim(),
+        op.username ?? '',
+        plant.name,
+        ...catScores,
+        overall.totalValid > 0 ? `${overall.scorePct}%` : 'N/A',
+        overall.totalValid > 0 ? overall.tier.tier : 'N/A',
+        range === 'today' ? 'Today' : `${range} Days`,
       ]);
     });
   });
 
   rows.push([]);
   rows.push([
-    '"# Note: Pair-duty attribution fix applied from 2026-09-26; historical scores before this date may undercount operators who shared data-entry duties."',
+    '# Note: Pair-duty attribution fix applied from 2026-09-26; historical scores before this date may undercount operators who shared data-entry duties.',
   ]);
 
-  const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
-  const encodedUri = encodeURI(csvContent);
-  const link = document.createElement('a');
-  link.setAttribute('href', encodedUri);
-  link.setAttribute('download', `operator_annual_appraisal_kpi_${range}_${todayStr}.csv`);
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
+  downloadCSVMatrix(`operator_annual_appraisal_kpi_${range}_${todayStr}.csv`, headers, rows);
   toast.success('Annual appraisal KPI report exported successfully.');
 }
 

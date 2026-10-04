@@ -5,6 +5,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { deltaCache } from '@/lib/deltaCache';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
+import { downloadCSVMatrix } from '@/shared/csv';
 import { recalculateTrainDeltas } from '@/features/ro-trains/helpers';
 
 export const PAGE_SIZE = 20;
@@ -197,7 +198,7 @@ export function useOperatorLog(trainId: string, trainLabel: string, plantId: str
       'Recovery (%)','Perm Meter Curr','Perm Meter Prev','Perm Delta (m³)',
       'Remarks',
     ];
-    const csvRows = logs.map((r: any) => [
+    const dataRows = logs.map((r: any) => [
       r.reading_datetime ? format(new Date(r.reading_datetime), 'yyyy-MM-dd HH:mm') : '',
       r._operatorName ?? 'Unknown',
       r.is_meter_replacement ? 'YES' : '',
@@ -208,12 +209,8 @@ export function useOperatorLog(trainId: string, trainLabel: string, plantId: str
       r.recovery_pct ?? '',
       r.permeate_meter ?? '', r.permeate_meter_prev ?? '', r.permeate_meter_delta ?? '',
       r.remarks ?? '',
-    ].map((v: any) => `"${String(v).replace(/"/g, '""')}"`).join(','));
-    const blob = new Blob([[headers.join(','), ...csvRows].join('\n')], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href = url;
-    a.download = `${trainLabel.replace(/\s+/g, '_')}_operator_log.csv`;
-    a.click(); URL.revokeObjectURL(url);
+    ]);
+    downloadCSVMatrix(`${trainLabel.replace(/\s+/g, '_')}_operator_log.csv`, headers, dataRows);
     toast.success('Log exported');
   };
 

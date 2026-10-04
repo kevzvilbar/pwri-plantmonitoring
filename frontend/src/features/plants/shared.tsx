@@ -7,6 +7,7 @@ import { useState, useEffect, useCallback, useMemo, useRef, type ReactNode } fro
 // When is_meter_replacement is toggled we call deltaCache.invalidate(trainId)
 // to force a Tier-2 raw recompute on the next render.
 import { deltaCache } from '@/lib/deltaCache';
+import { downloadCSVMatrix } from '@/shared/csv';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -487,11 +488,7 @@ export function parseCsv(text: string): Record<string, string>[] {
 }
 
 export function downloadTemplate(filename: string, headers: string[]) {
-  const blob = new Blob([headers.join(',') + '\n'], { type: 'text/csv' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = filename;
-  a.click();
+  downloadCSVMatrix(filename, headers, []);
 }
 
 export function CsvPreviewTable({ rows, headers }: { rows: Record<string, string>[]; headers: string[] }) {

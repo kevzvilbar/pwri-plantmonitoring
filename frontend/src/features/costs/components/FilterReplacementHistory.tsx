@@ -1,5 +1,4 @@
 // src/components/costs/FilterReplacementHistory.tsx
-import { useMemo } from "react";
 import {
   Table,
   TableBody,
@@ -12,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Download, Trash2 } from "lucide-react";
 import { FilterReplacement, deleteFilterReplacement } from "@/lib/filterReplacements";
+import { downloadCSVMatrix } from "@/shared/csv";
 import { toast } from "@/components/ui/sonner";
 
 interface Props {
@@ -21,24 +21,19 @@ interface Props {
 }
 
 export function FilterReplacementHistory({ rows, canDelete, onChanged }: Props) {
-  const csvHref = useMemo(() => {
-    const header = "date,housing_type,quantity,unit_price,total_cost,supplier,remarks\n";
-    const body = rows
-      .map((r) =>
-        [
-          r.replacement_date,
-          r.filter_housing_type,
-          r.quantity_replaced,
-          r.unit_price,
-          r.total_cost,
-          r.supplier ?? "",
-          (r.remarks ?? "").replace(/,/g, ";"),
-        ].join(",")
-      )
-      .join("\n");
-    const blob = new Blob([header + body], { type: "text/csv" });
-    return URL.createObjectURL(blob);
-  }, [rows]);
+  const handleExportCsv = () => {
+    const headers = ["date", "housing_type", "quantity", "unit_price", "total_cost", "supplier", "remarks"];
+    const dataRows = rows.map((r) => [
+      r.replacement_date,
+      r.filter_housing_type,
+      r.quantity_replaced,
+      r.unit_price,
+      r.total_cost,
+      r.supplier ?? "",
+      r.remarks ?? "",
+    ]);
+    downloadCSVMatrix("filter_replacements.csv", headers, dataRows);
+  };
 
   const handleDelete = async (id: string) => {
     if (
@@ -59,16 +54,13 @@ export function FilterReplacementHistory({ rows, canDelete, onChanged }: Props) 
     }
   };
 
-
   return (
     <div className="space-y-2">
       <div className="flex justify-end">
-        <a href={csvHref} download="filter_replacements.csv">
-          <Button variant="outline" size="sm">
-            <Download className="mr-2 h-4 w-4" />
-            Export CSV
-          </Button>
-        </a>
+        <Button variant="outline" size="sm" onClick={handleExportCsv}>
+          <Download className="mr-2 h-4 w-4" />
+          Export CSV
+        </Button>
       </div>
 
       <Table data-testid="filter-replacement-history">

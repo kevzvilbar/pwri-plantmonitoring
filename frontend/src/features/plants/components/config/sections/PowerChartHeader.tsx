@@ -1,7 +1,6 @@
-import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Download, TrendingUp } from 'lucide-react';
-import { fmtNum } from '@/lib/calculations';
+import { downloadCSVMatrix } from '@/shared/csv';
 import { toast } from 'sonner';
 
 type Range = '30' | '90' | '180' | 'all';
@@ -25,14 +24,9 @@ export function PowerChartHeader({
 }: PowerChartHeaderProps) {
   const exportCSV = () => {
     if (!rows.length) { toast.error('No data to export'); return; }
-    const blob = new Blob(
-      [['date,solar_kwh,grid_kwh,total_kwh', ...rows.map(r => `${r.date},${r.solar},${r.grid},${+(r.solar + r.grid).toFixed(2)}`)].join('\n')],
-      { type: 'text/csv' },
-    );
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href = url;
-    a.download = `power_energy_mix_${plantId}.csv`; a.click();
-    URL.revokeObjectURL(url);
+    const headers = ['date', 'solar_kwh', 'grid_kwh', 'total_kwh'];
+    const dataRows = rows.map((r) => [r.date, r.solar, r.grid, +(r.solar + r.grid).toFixed(2)]);
+    downloadCSVMatrix(`power_energy_mix_${plantId}.csv`, headers, dataRows);
     toast.success('CSV exported');
   };
 

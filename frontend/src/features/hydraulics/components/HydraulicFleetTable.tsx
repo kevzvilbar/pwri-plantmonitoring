@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { downloadCSVMatrix } from '@/shared/csv';
 import {
   Table,
   TableBody,
@@ -146,33 +147,25 @@ export function HydraulicFleetTable({
     ];
 
     const rows = sortedSummaries.map((s) => [
-      `"${s.wellName.replace(/"/g, '""')}"`,
-      `"${s.plantName.replace(/"/g, '""')}"`,
-      `"${s.statusMeta.label}"`,
+      s.wellName,
+      s.plantName,
+      s.statusMeta.label,
       s.surveyDate ?? '',
       s.daysSinceSurvey ?? '',
       s.drillingDepth ?? '',
       s.swl ?? '',
       s.pwl ?? '',
       s.drawdown ?? '',
-      `"${(s.pumpSetting ?? '').replace(/"/g, '""')}"`,
+      s.pumpSetting ?? '',
       s.motorHp ?? '',
       s.surveyTds ?? '',
       s.surveyTurbidity ?? '',
       s.livePressure ?? '',
       s.liveTds ?? '',
-      `"${(s.latestSurvey?.remarks ?? '').replace(/"/g, '""')}"`,
+      s.latestSurvey?.remarks ?? '',
     ]);
 
-    const csvContent = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', `hydraulic_fleet_data_${new Date().toISOString().slice(0, 10)}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    downloadCSVMatrix(`hydraulic_fleet_data_${new Date().toISOString().slice(0, 10)}.csv`, headers, rows);
   };
 
   const statusChips: Array<{ id: HydraulicStatus | 'ALL'; label: string; count: number; icon: React.ReactNode }> = [

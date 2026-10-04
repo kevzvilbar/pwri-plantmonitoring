@@ -8,6 +8,7 @@ import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Ba
 import { fmtNum } from '@/lib/calculations';
 import { fmtIsoDate } from '@/lib/format';
 import { toast } from 'sonner';
+import { downloadCSVMatrix } from '@/shared/csv';
 
 // ─── Train History Chart ─────────────────────────────────────────────────────
 // Queries ro_train_readings for daily production volume and renders a bar chart.
@@ -45,10 +46,9 @@ export function TrainHistoryChart({ trainId, trainLabel }: { trainId: string; tr
 
   const exportCSV = () => {
     if (!rows.length) { toast.error('No data to export'); return; }
-    const blob = new Blob([['date,volume_m3', ...rows.map(r => `${r.date},${r.volume}`)].join('\n')], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href = url;
-    a.download = `${trainLabel.replace(/\s+/g,'_')}_history.csv`; a.click(); URL.revokeObjectURL(url);
+    const headers = ['date', 'volume_m3'];
+    const dataRows = rows.map(r => [r.date, r.volume]);
+    downloadCSVMatrix(`${trainLabel.replace(/\s+/g,'_')}_history.csv`, headers, dataRows);
     toast.success('CSV exported');
   };
 

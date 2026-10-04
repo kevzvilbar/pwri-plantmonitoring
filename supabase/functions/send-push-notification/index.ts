@@ -76,6 +76,15 @@ const json = (body: unknown, status = 200) =>
     headers: { ...corsHeaders, 'Content-Type': 'application/json' },
   });
 
+function timingSafeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let result = 0;
+  for (let i = 0; i < a.length; i++) {
+    result |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return result === 0;
+}
+
 serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -84,7 +93,8 @@ serve(async (req: Request) => {
   // Only authorized callers (service role) may invoke push delivery
   const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
   const authHeader = req.headers.get('Authorization') ?? '';
-  if (!serviceKey || authHeader !== `Bearer ${serviceKey}`) {
+  const expectedHeader = `Bearer ${serviceKey}`;
+  if (!serviceKey || !timingSafeEqual(authHeader, expectedHeader)) {
     return json({ error: 'Unauthorized' }, 401);
   }
 

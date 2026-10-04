@@ -7,6 +7,7 @@ import { TrendingUp, Download } from 'lucide-react';
 import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
 import { fmtNum } from '@/lib/calculations';
 import { toast } from 'sonner';
+import { downloadCSVMatrix } from '@/shared/csv';
 
 // ─── TrainMetricChart ────────────────────────────────────────────────────────
 // Renders a bar chart for one or two numeric columns from ro_train_readings.
@@ -70,15 +71,9 @@ export function TrainMetricChart({
   const exportCSV = () => {
     if (!rows.length) { toast.error('No data to export'); return; }
     const csvCols = ['date', ...metrics.map(m => m.key)];
-    const header  = csvCols.join(',');
-    const lines   = rows.map(r => csvCols.map(c => r[c] ?? '').join(','));
-    const blob    = new Blob([[header, ...lines].join('\n')], { type: 'text/csv' });
-    const url     = URL.createObjectURL(blob);
-    const a       = document.createElement('a');
-    a.href        = url;
-    a.download    = `${trainLabel.replace(/\s+/g, '_')}_${metrics[0].key}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+    const headers = ['date', ...metrics.map(m => m.label || m.key)];
+    const dataRows = rows.map(r => csvCols.map(c => r[c] ?? ''));
+    downloadCSVMatrix(`${trainLabel.replace(/\s+/g, '_')}_${metrics[0].key}.csv`, headers, dataRows);
     toast.success('CSV exported');
   };
 

@@ -7,6 +7,7 @@
     "test": "npm --prefix frontend test",
     "types:check": "node scripts/check-types-sync.mjs",
     "types:validate": "node scripts/check-types-sync.mjs && npm --prefix frontend run types:check-tsc",
+    "security:audit": "node scripts/security-audit.mjs",
     "types:gen:local": "npx supabase gen types typescript --local > frontend/src/integrations/supabase/types.ts",
     "types:gen": "npx supabase gen types typescript --project-id \"$VITE_SUPABASE_PROJECT_ID\" > frontend/src/integrations/supabase/types.ts"
   },

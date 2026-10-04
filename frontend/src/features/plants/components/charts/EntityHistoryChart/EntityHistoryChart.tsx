@@ -8,6 +8,7 @@ import { ResponsiveContainer, ComposedChart, BarChart, CartesianGrid, XAxis, YAx
 import { fmtNum, nrwColor, ALERTS } from '@/lib/calculations';
 import { fmtIsoDate } from '@/lib/format';
 import { toast } from 'sonner';
+import { downloadCSVMatrix } from '@/shared/csv';
 import { C_CONSUMPTION, C_NRW, C_RAWWATER, C_BLEND_PCT, C_BLEND_VOLUME } from '@/lib/chartColors';
 import { useEntityChartData, type HistoryRow, type SiblingLocator } from './useEntityChartData';
 import { ChartStats, type ChartStatsProps } from './ChartStats';
@@ -70,29 +71,30 @@ export default function EntityHistoryChart({
 
   const exportCSV = () => {
     if (!aggregated.length) { toast.error('No data to export'); return; }
-    const siblingCols = (siblingLocators ?? []).map(l => l.name.replace(/[,\n]/g, ' '));
-    const header = hasSiblings
-      ? ['date,consumption_m3,reading,locators_total_m3,nrw_pct', ...siblingCols.map(n => `${n}_m3`)].join(',')
+    const siblingCols = (siblingLocators ?? []).map(l => `${l.name}_m3`);
+    const headers = hasSiblings
+      ? ['date', 'consumption_m3', 'reading', 'locators_total_m3', 'nrw_pct', ...siblingCols]
       : hasBlending
-      ? 'date,raw_water_m3,reading,blended_m3,blended_pct'
-      : 'date,consumption_m3,reading';
-    const lines = ((hasSiblings || hasBlending) ? chartData : aggregated).map((r: any) =>
+      ? ['date', 'raw_water_m3', 'reading', 'blended_m3', 'blended_pct']
+      : ['date', 'consumption_m3', 'reading'];
+
+    const dataset = (hasSiblings || hasBlending) ? chartData : aggregated;
+    const rows = dataset.map((r: any) =>
       hasSiblings
         ? [
-            `${r.date},${r.consumption},${r.reading ?? ''},${r.siblingTotal ?? ''},${r.nrw ?? ''}`,
+            r.date,
+            r.consumption,
+            r.reading ?? '',
+            r.siblingTotal ?? '',
+            r.nrw ?? '',
             ...(siblingLocators ?? []).map(l => r[`sib_${l.id}`] ?? ''),
-          ].join(',')
+          ]
         : hasBlending
-        ? `${r.date},${r.consumption},${r.reading ?? ''},${r.blendedVolume ?? ''},${r.blendedPct ?? ''}`
-        : `${r.date},${r.consumption},${r.reading ?? ''}`
+        ? [r.date, r.consumption, r.reading ?? '', r.blendedVolume ?? '', r.blendedPct ?? '']
+        : [r.date, r.consumption, r.reading ?? '']
     );
-    const blob = new Blob([[header, ...lines].join('\n')], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${entityName.replace(/\s+/g, '_')}_history.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+
+    downloadCSVMatrix(`${entityName.replace(/\s+/g, '_')}_history.csv`, headers, rows);
     toast.success('CSV exported');
   };
 

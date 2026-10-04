@@ -1,5 +1,6 @@
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { downloadCSVMatrix } from '@/shared/csv';
 import {
   MapPin, Activity, Building2, Waves, Droplet, Gauge,
   Thermometer, FlaskConical, Zap, CircleDot,
@@ -335,7 +336,7 @@ export async function downloadTemplate(
   plantId?: string,
   plants?: Array<{ id: string; name: string }>,
 ) {
-  let sampleRows: string[][] = [];
+  let sampleRows: (string | number | null | undefined)[][] = [];
 
   if (plantId && config.entityTable && config.entityNameKey) {
     try {
@@ -348,9 +349,9 @@ export async function downloadTemplate(
       if (entities && entities.length > 0) {
         sampleRows = entities.map((e: any, idx: number) => {
           return config.columns.map(c => {
-            if (c.key === config.entityNameKey) return `"${e.name}"`;
-            if (c.type === 'date') return `2025-01-15T08:00`;
-            if (c.type === 'number') return `${100 + idx * 25}`;
+            if (c.key === config.entityNameKey) return e.name ?? '';
+            if (c.type === 'date') return '2025-01-15T08:00';
+            if (c.type === 'number') return 100 + idx * 25;
             if (c.type === 'select') return c.selectOptions?.[0] ?? '';
             return '';
           });
@@ -364,7 +365,7 @@ export async function downloadTemplate(
   if (sampleRows.length === 0) {
     const example = config.columns.map(c => {
       if (c.type === 'date') return '2025-01-15T08:00';
-      if (c.type === 'number') return '100';
+      if (c.type === 'number') return 100;
       if (c.type === 'select') return c.selectOptions?.[0] ?? '';
       if (c.key.endsWith('_name')) return c.key === 'locator_name' ? 'MCWD - M1' : c.key === 'well_name' ? 'Well #1' : 'Meter A';
       if (c.key === 'train_id') return 'paste-ro-train-uuid-here';
@@ -373,13 +374,13 @@ export async function downloadTemplate(
     sampleRows.push(example);
   }
 
-  const csvContent = [config.csvTemplate, ...sampleRows.map(r => r.join(','))].join('\n');
-  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
+  const headerRow = config.csvTemplate.split(',');
   const plantSlug = plants?.find(p => p.id === plantId)?.name?.toLowerCase().replace(/\s+/g, '_') ?? 'general';
-  a.download = `template_${config.id}_${plantSlug}.csv`;
-  a.click();
+  downloadCSVMatrix(
+    `template_${config.id}_${plantSlug}.csv`,
+    headerRow,
+    sampleRows,
+  );
 }
 
 export const CATEGORY_GROUPS: { label: string; types: ImportType[] }[] = [

@@ -6,6 +6,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { PivotTable } from './TrendChartTables/PivotTable';
 import { fmtNum } from '@/lib/calculations';
+import { downloadCSVMatrix } from '@/shared/csv';
 import { toast } from 'sonner';
 
 export interface BlendingDataSummaryModalProps {
@@ -39,8 +40,8 @@ export function BlendingDataSummaryModal({
       return;
     }
 
-    const headers = ['Date', ...entities.map((e) => `"${e.label.replace(/"/g, '""')} (m³)"`), '"Total Blending (m³)"'];
-    const rows: string[] = [];
+    const headers = ['Date', ...entities.map((e) => `${e.label} (m³)`), 'Total Blending (m³)'];
+    const rows: (string | number)[][] = [];
 
     const colSums: Record<string, number> = {};
     entities.forEach((e) => { colSums[e.id] = 0; });
@@ -56,25 +57,17 @@ export function BlendingDataSummaryModal({
         return v > 0 ? v.toFixed(2) : '0.00';
       });
       grandTotal += dayTotal;
-      rows.push([d, ...rowVals, dayTotal.toFixed(2)].join(','));
+      rows.push([d, ...rowVals, dayTotal.toFixed(2)]);
     });
 
     const totalRow = [
-      '"Total"',
+      'Total',
       ...entities.map((e) => (colSums[e.id] ?? 0).toFixed(2)),
       grandTotal.toFixed(2),
-    ].join(',');
+    ];
+    rows.push(totalRow);
 
-    const csvContent = [headers.join(','), ...rows, totalRow].join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.setAttribute('href', url);
-    link.setAttribute('download', `blending_volume_summary_${new Date().toISOString().slice(0, 10)}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+    downloadCSVMatrix(`blending_volume_summary_${new Date().toISOString().slice(0, 10)}.csv`, headers, rows);
     toast.success('Blending volume summary exported to CSV.');
   };
 
