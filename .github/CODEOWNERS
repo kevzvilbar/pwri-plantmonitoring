@@ -1,0 +1,9 @@
+# Default reviewers for everything. Pair with a branch-protection rule
+# ("Require review from Code Owners") for this to be enforced.
+*  @kevzvilbar
+
+# Security-sensitive paths
+/supabase/migrations/   @kevzvilbar
+/supabase/functions/    @kevzvilbar
+/.github/               @kevzvilbar
+/frontend/vercel.json   @kevzvilbar

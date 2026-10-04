@@ -1,0 +1,34 @@
+# gitleaks config: blocks NEW secrets. The commits listed in [allowlist] are the
+# ones that introduced the already-reported admin bootstrap password (it must be
+# rotated; see docs/SECURITY-ROLLOUT.md). Do not add commits here for any other reason.
+title = "pwri-plantmonitoring gitleaks config"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "plaintext-password-note"
+description = "Plaintext password written in docs, SQL comments or notes"
+regex = '''(?i)\bpassword\s*[:=]\s*[^\s'"`<>{}$]*[0-9!@#%^&*][^\s'"`<>{}$]*'''
+path = '''(?i)\.(md|sql|txt)$'''
+tags = ["password"]
+
+[allowlist]
+description = "Known reported leak; public Supabase demo anon key; test fixtures"
+# Supabase's published local-dev demo anon key (iss=supabase-demo, role=anon). Public by design.
+regexes = [
+  '''eyJ[A-Za-z0-9_-]+\.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24i[A-Za-z0-9_-]*\.[A-Za-z0-9_-]+''',
+]
+# Test fixtures (VAPID public keys, cycle keys, e2e demo config) are not secrets.
+paths = [
+  '''frontend/e2e/.*''',
+  '''.*\.(test|spec)\.tsx?$''',
+]
+commits = [
+  "da14c0e67ea51dfe3f92739dd2ef066a6c753c6a",
+  "ffaa7ce6faa2dfd43e3deae1f133c056f5d66c16",
+  "9b3bc176a894c32f12700d504b9eb7d0b4f6e3f4",
+  "7810b8b2e09bc86be3088c52235d45fda0a70363",
+  "6ca68a1f32bd9b556eb6df3d3aec13e94a555ff2",
+]
+

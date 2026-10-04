@@ -5248,6 +5248,24 @@ export type Database = {
           },
         ]
       }
+      security_settings: {
+        Row: {
+          key: string
+          updated_at: string
+          value: boolean
+        }
+        Insert: {
+          key: string
+          updated_at?: string
+          value: boolean
+        }
+        Update: {
+          key?: string
+          updated_at?: string
+          value?: boolean
+        }
+        Relationships: []
+      }
       shift_duty_log: {
         Row: {
           confirmed_by: string | null
@@ -6853,6 +6871,10 @@ export type Database = {
       }
     }
     Functions: {
+      admin_mfa_required: {
+        Args: never
+        Returns: boolean
+      }
       admin_set_user_password: {
         Args: { _new_password: string; _user_id: string }
         Returns: undefined

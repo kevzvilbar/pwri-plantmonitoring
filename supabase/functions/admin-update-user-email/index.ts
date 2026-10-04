@@ -9,6 +9,7 @@
  * Security requirements:
  * 1. Caller must supply a valid authenticated JWT in Authorization header.
  * 2. Caller must possess the Admin role (verified via database is_admin RPC).
+ * 2b. When `require_admin_mfa` is on, the caller's token must be aal2 (TOTP-verified).
  * 3. Caller cannot update their own email via this route (prevents self-lockout/bypass).
  * 4. Input validation: target_user_id must be a UUID, new_email must be valid format.
  * 5. Uses service_role client to update auth.users with email_confirm: true.
@@ -27,6 +28,17 @@ const json = (body: unknown, status = 200) =>
     status,
     headers: { ...corsHeaders, 'Content-Type': 'application/json' },
   });
+
+/** `aal` claim of an already-verified Supabase access token ('aal1' | 'aal2'). */
+function jwtAal(token: string): string {
+  try {
+    const b64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+    const payload = JSON.parse(atob(b64.padEnd(Math.ceil(b64.length / 4) * 4, '=')));
+    return typeof payload.aal === 'string' ? payload.aal : 'aal1';
+  } catch {
+    return 'aal1';
+  }
+}
 
 interface UpdateEmailRequest {
   target_user_id: string;
@@ -79,6 +91,15 @@ serve(async (req: Request) => {
 
   if (adminCheckError || !isAdmin) {
     return json({ error: 'Forbidden: Admin access required' }, 403);
+  }
+
+  // 2b. MFA: once `require_admin_mfa` is switched on, Admin actions need an aal2 session.
+  const { data: mfaRequired, error: mfaError } = await adminClient.rpc('admin_mfa_required');
+  if (mfaError) {
+    return json({ error: 'Unable to verify MFA policy' }, 500);
+  }
+  if (mfaRequired && jwtAal(token) !== 'aal2') {
+    return json({ error: 'Forbidden: multi-factor authentication (aal2) required' }, 403);
   }
 
   // 3. Parse and validate body

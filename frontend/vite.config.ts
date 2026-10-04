@@ -3,6 +3,7 @@ import react from "@vitejs/plugin-react-swc";
 import { VitePWA } from "vite-plugin-pwa";
 import path from "path";
 import { createRequire } from "node:module";
+import { cspHashes } from "./vite-plugins/cspHashes";
 
 const require = createRequire(import.meta.url);
 
@@ -19,6 +20,7 @@ export default defineConfig(({ mode }) => ({
   },
   plugins: [
     react(),
+    cspHashes(),
     VitePWA({
       // "prompt": a new service worker waits until src/main.tsx activates it via
       // lib/pwaUpdate.ts — automatically once the tab has been idle ≥10 min with

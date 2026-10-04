@@ -89,15 +89,14 @@ _Last updated: 2026-07-21 (iteration 11 — stack correction: MongoDB removed, S
   reporting (Solar vs Grid).
 
 ## 3. Tech stack
-- Frontend: React + Vite + Tailwind + shadcn/ui + TanStack Query +
-  Supabase JS.
-- Backend: FastAPI + emergentintegrations LLM SDK +
-  supabase-py (user-JWT-aware). Motor/MongoDB were removed; the app is
-  Supabase-only (see migration history).
-- Database: Supabase Postgres (all data — readings, alerts, blending
-  audit, AI sessions, corrections, notifications).
-- Serverless: all cron jobs are plain HTTP `POST /api/cron/*`,
-  scheduled via `vercel.json`. No background daemons.
+- Frontend: React 18 + Vite + Tailwind + shadcn/ui + TanStack Query + Supabase JS (PWA, offline queue in IndexedDB).
+- Backend: **none of our own.** The FastAPI server was retired on 2026-08-03. The SPA calls Supabase
+  directly (PostgREST + RPCs) under Row-Level Security; privileged work runs in three Supabase Edge
+  Functions (`admin-update-user-email`, `notify-train-offline`, `send-push-notification`).
+- Database: Supabase Postgres (readings, alerts, audit logs, corrections, notifications) with RLS.
+- Scheduled work: GitHub Actions workflows in `.github/workflows/` call Supabase with the service-role secret.
+- Hosting: Vercel (primary, with security headers from `frontend/vercel.json`); GitHub Pages (secondary).
+- See `ARCHITECTURE.md` for the current design.
 
 ## 4. Core Requirements status
 
@@ -123,6 +122,7 @@ _Last updated: 2026-07-21 (iteration 11 — stack correction: MongoDB removed, S
   Grid chart-6).
 
 ### 4.3 AI Agent
+> **Legacy:** the `/api/ai/*` routes below were FastAPI endpoints retired on 2026-08-03. Treat this item as historical until the AI features are re-specified against Supabase.
 - [x] `/api/ai/chat`, `/api/ai/chat-tools`, `/api/ai/anomalies`,
   `/api/ai/pm-forecast` — all on emergentintegrations gpt-5.1.
 
@@ -188,41 +188,10 @@ _Last updated: 2026-07-21 (iteration 11 — stack correction: MongoDB removed, S
 - **Database Functions & RPCs:** High-throughput aggregations, cascade integrity, compliance calculations, and water balance reconciliation.
 - **Client Services:** High-precision regression corrections (`DataAnalysis.tsx`), CSV parsers, and client-side offline queuing via IndexedDB.
 
-### Architecture decision — 2026-07-21: Python regression service retired (§4 item 1)
+### Architecture decision log
 
-**Decision:** Retire `regression_service.py` and all seven `/api/data-analysis/`
-routes. The frontend's TypeScript implementation in `DataAnalysis.tsx` is the
-single authoritative copy of regression logic going forward.
-
-**Rationale:**
-
-| Dimension | Python (`regression_service.py`) | TypeScript (`DataAnalysis.tsx`) |
-|---|---|---|
-| Frontend usage | Zero calls — never invoked | Live path for all regression work |
-| Algorithm | Single-pass OLS on raw values | Two-pass: reset detection → OLS on cleaned values |
-| Z-threshold | Fixed `2.5` regardless of n | Dynamic `getZThreshold(n)` — widens for small n |
-| Race condition | None — concurrent apply/retract could double-write | Compare-and-swap claim before any writes (D6 fix) |
-| Meter delta cascade | Not present | `recalculateTrainDeltas()` after permeate_meter apply |
-| `norm_status` handling | Uniform for all tables | `TABLES_WITHOUT_NORM_STATUS` guard |
-| Gap detection | Not present | `detectGaps()` with linear interpolation |
-
-The duplication caused real harm: bug D2 (retract left corrected values in place)
-was verified "fixed" on the Python side while the live TypeScript path still had
-the identical defect. Maintaining two copies of the same business logic is the
-exact failure mode §4 item 1 was flagging.
-
-**What was removed:**
-- `backend/regression_service.py` → renamed `_retired_regression_service.py` (kept for archaeology)
-- `server.py` import: `from regression_service import ...`
-- `server.py` models: `RegressionRunRequest`, `RawEditRequest`, `ApplyRegressionRequest`, `RetractRegressionRequest`
-- `server.py` routes: `GET /tables`, `POST /run-regression`, `POST /apply-regression`, `POST /retract-regression`, `GET /results`, `POST /edit-raw`, `GET /raw-edit-log`
-
-**What owns it now:**
-- Regression run: `runOLS()` in `DataAnalysis.tsx`
-- Apply: `handleApply()` — compare-and-swap + train cascade
-- Retract: `handleRetract()` — compare-and-swap + original-value restore
-- Raw edits: `EditRawDialog` → direct Supabase upsert + `raw_edit_log` insert
-- Audit log: `AuditLogTab` → direct Supabase read of `raw_edit_log`
+- 2026-07-21: Python regression service retired; the TypeScript implementation in `DataAnalysis.tsx` is the single
+  source of truth. Full record: [`docs/archive/ADR-2026-07-21-python-regression-service-retired.md`](../docs/archive/ADR-2026-07-21-python-regression-service-retired.md).
 
 ## 6. Prioritized backlog
 ### P0 (shipped — iteration 6)

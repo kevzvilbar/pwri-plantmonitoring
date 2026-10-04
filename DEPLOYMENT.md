@@ -163,3 +163,13 @@ Supabase), the pgTAP RLS suite, `npm audit --audit-level=high`, and CodeQL.
   baseline.
 - Two deploy targets share one build config; keep manifest paths relative and
   test both hosts after any service-worker/scope change.
+
+## Security headers and hosting limits
+
+- `frontend/vercel.json` sends `Content-Security-Policy: frame-ancestors 'none'`, `X-Frame-Options`, HSTS,
+  `nosniff`, `Referrer-Policy` and `Permissions-Policy` on the **Vercel** deployment only.
+- **GitHub Pages cannot send response headers**, so the Pages copy has no clickjacking protection or HSTS. Its
+  in-page (meta) CSP still applies. Retire the Pages deploy if that matters.
+- `script-src` has no `'unsafe-inline'` in production builds: `frontend/vite-plugins/cspHashes.ts` writes SHA-256
+  hashes of the inline scripts at build time. `npm run build` fails if the placeholder is missing.
+- Admin MFA rollout and one-time manual security steps: [`docs/SECURITY-ROLLOUT.md`](docs/SECURITY-ROLLOUT.md).

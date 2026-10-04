@@ -5,6 +5,7 @@ import { OPERATOR_DESIGNATION } from '@/components/DesignationCombobox';
 import { AppLoading } from '@/components/AppLoading';
 import { isOperatorOnly } from '@/lib/permissions';
 import { toast } from 'sonner';
+import { AdminMfaGate } from '@/features/auth/components/AdminMfaGate';
 
 // Routes an Operator is allowed to visit. Everything else redirects to /.
 // Maintained by hand; checked by navConfig.test.ts (P1-6) against
@@ -71,5 +72,6 @@ export function ProtectedRoute({ children }: { children: ReactNode }) {
     if (!allowed) return <AccessDenied />;
   }
 
-  return <>{children}</>;
+  // Admins must hold an aal2 (TOTP) session; non-admins pass straight through.
+  return <AdminMfaGate>{children}</AdminMfaGate>;
 }
