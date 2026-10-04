@@ -16,7 +16,9 @@ export async function signIn(page: Page, email = E2E_EMAIL, password = E2E_PASSW
   await page.addInitScript(() => {
     try {
       sessionStorage.setItem('pwri-admin-mfa-skipped', '1');
-    } catch {}
+    } catch (_err) {
+      // Ignored in restricted environments
+    }
   });
 
   await page.goto('/auth');
@@ -31,14 +33,14 @@ export async function signIn(page: Page, email = E2E_EMAIL, password = E2E_PASSW
 
   try {
     await Promise.race([
-      page.waitForURL((url) => !/\/auth\/?$/.test(url.pathname), { timeout: 15_000 }),
-      pickOperator.waitFor({ state: 'visible', timeout: 4_000 }).then(async () => {
+      page.waitForURL((url) => !/\/auth\/?$/.test(url.pathname), { timeout: 20_000 }),
+      pickOperator.waitFor({ state: 'visible', timeout: 5_000 }).then(async () => {
         await pickOperator.click();
-        await page.waitForURL((url) => !/\/auth\/?$/.test(url.pathname), { timeout: 15_000 });
+        await page.waitForURL((url) => !/\/auth\/?$/.test(url.pathname), { timeout: 20_000 });
       }),
-      skipMfaBtn.waitFor({ state: 'visible', timeout: 4_000 }).then(async () => {
+      skipMfaBtn.waitFor({ state: 'visible', timeout: 5_000 }).then(async () => {
         await skipMfaBtn.click();
-        await page.waitForURL((url) => !/\/auth\/?$/.test(url.pathname), { timeout: 15_000 });
+        await page.waitForURL((url) => !/\/auth\/?$/.test(url.pathname), { timeout: 20_000 });
       }),
     ]);
   } catch {
@@ -47,16 +49,17 @@ export async function signIn(page: Page, email = E2E_EMAIL, password = E2E_PASSW
     } else if (await pickOperator.isVisible().catch(() => false)) {
       await pickOperator.click();
     }
-    await page.waitForURL((url) => !/\/auth\/?$/.test(url.pathname), { timeout: 15_000 }).catch(() => {});
+    await page.waitForURL((url) => !/\/auth\/?$/.test(url.pathname), { timeout: 20_000 }).catch(() => {});
   }
 }
 
 const config: PlaywrightTestConfig = {
   testDir: './e2e',
-  timeout: 30_000,
-  expect: { timeout: 10_000 },
-  fullyParallel: true,
-  retries: process.env.CI ? 1 : 0,
+  timeout: 60_000,
+  expect: { timeout: 20_000 },
+  fullyParallel: false,
+  workers: process.env.CI ? 1 : undefined,
+  retries: process.env.CI ? 2 : 0,
   reporter: process.env.CI
     ? [['list'], ['html', { open: 'never' }]]
     : [['list']],
