@@ -123,19 +123,26 @@ BEGIN
   -- 8. Create user_profiles
   -- auth.users inserts above fire handle_new_user(), which already created a
   -- 'Pending' profile + default 'Operator' role for each user, so upsert here.
-  INSERT INTO public.user_profiles (id, email, first_name, last_name, plant_assignments, status, profile_complete, confirmed)
+  INSERT INTO public.user_profiles (id, email, username, first_name, last_name, designation, plant_assignments, status, profile_complete, confirmed)
   VALUES
-    (v_operator_id, 'e2e-operator@test.local', 'E2E', 'Operator', ARRAY[v_plant_id], 'Active', true, true),
-    (v_manager_id, 'e2e-manager@test.local', 'E2E', 'Manager', ARRAY[v_plant_id], 'Active', true, true),
-    (v_admin_id, 'e2e-admin@test.local', 'E2E', 'Admin', ARRAY[v_plant_id], 'Active', true, true)
+    (v_operator_id, 'e2e-operator@test.local', 'e2e_operator', 'E2E', 'Operator', 'Operator', ARRAY[v_plant_id], 'Active', true, true),
+    (v_manager_id, 'e2e-manager@test.local', 'e2e_manager', 'E2E', 'Manager', 'Manager', ARRAY[v_plant_id], 'Active', true, true),
+    (v_admin_id, 'e2e-admin@test.local', 'e2e_admin', 'E2E', 'Admin', 'Admin', ARRAY[v_plant_id], 'Active', true, true)
   ON CONFLICT (id) DO UPDATE SET
     email = EXCLUDED.email,
+    username = EXCLUDED.username,
     first_name = EXCLUDED.first_name,
     last_name = EXCLUDED.last_name,
+    designation = EXCLUDED.designation,
     plant_assignments = EXCLUDED.plant_assignments,
     status = EXCLUDED.status,
     profile_complete = EXCLUDED.profile_complete,
     confirmed = EXCLUDED.confirmed;
+
+  -- Ensure Admin MFA requirement is explicitly dormant in test environment
+  INSERT INTO public.security_settings (key, value)
+  VALUES ('require_admin_mfa', false)
+  ON CONFLICT (key) DO UPDATE SET value = false;
 
   -- 9. Assign roles (drop the trigger's default Operator role first so
   --    Manager/Admin users don't also carry Operator)

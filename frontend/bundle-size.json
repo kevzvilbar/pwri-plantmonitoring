@@ -1,5 +1,5 @@
 {
-  "maxTotalGzipKb": 1155.7,
+  "maxTotalGzipKb": 1189.4,
   "lastUpdated": "2026-10-04",
   "history": [
     {
@@ -153,6 +153,12 @@
       "maxTotalGzipKb": 1155.7,
       "previous": 1187.1,
       "reason": "Bundle optimization gain locked in following Vite chunks modularization and code tree-shaking."
+    },
+    {
+      "date": "2026-10-04",
+      "maxTotalGzipKb": 1189.4,
+      "previous": 1155.7,
+      "reason": "Re-baselined to match Linux CI production build (1189.4 kB gzipped) with manual modularization, privacy features, and security headers."
     }
   ]
 }

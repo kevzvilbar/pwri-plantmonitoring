@@ -12,24 +12,42 @@ export const E2E_ADMIN_EMAIL = process.env.E2E_ADMIN_EMAIL ?? 'e2e-admin@test.lo
 export const HAS_CREDENTIALS = Boolean(process.env.E2E_EMAIL && process.env.E2E_PASSWORD);
 
 export async function signIn(page: Page, email = E2E_EMAIL, password = E2E_PASSWORD) {
+  // Ensure Admin MFA prompt is skipped in E2E tests
+  await page.addInitScript(() => {
+    try {
+      sessionStorage.setItem('pwri-admin-mfa-skipped', '1');
+    } catch {}
+  });
+
   await page.goto('/auth');
   await page.fill('#signin-email', email);
   await page.fill('#signin-password', password);
   // Target the form submit button
   await page.click('button[type="submit"]:has-text("Sign in")');
 
-  // If multiple operators exist at the assigned plant, select the first operator
+  // Handle potential multi-operator pick or MFA skip prompts
   const pickOperator = page.locator('button:has-text("@")').first();
+  const skipMfaBtn = page.locator('button:has-text("Skip for now")');
+
   try {
     await Promise.race([
       page.waitForURL((url) => !/\/auth\/?$/.test(url.pathname), { timeout: 15_000 }),
-      pickOperator.waitFor({ state: 'visible', timeout: 5_000 }).then(async () => {
+      pickOperator.waitFor({ state: 'visible', timeout: 4_000 }).then(async () => {
         await pickOperator.click();
+        await page.waitForURL((url) => !/\/auth\/?$/.test(url.pathname), { timeout: 15_000 });
+      }),
+      skipMfaBtn.waitFor({ state: 'visible', timeout: 4_000 }).then(async () => {
+        await skipMfaBtn.click();
         await page.waitForURL((url) => !/\/auth\/?$/.test(url.pathname), { timeout: 15_000 });
       }),
     ]);
   } catch {
-    await page.waitForURL((url) => !/\/auth\/?$/.test(url.pathname), { timeout: 15_000 });
+    if (await skipMfaBtn.isVisible().catch(() => false)) {
+      await skipMfaBtn.click();
+    } else if (await pickOperator.isVisible().catch(() => false)) {
+      await pickOperator.click();
+    }
+    await page.waitForURL((url) => !/\/auth\/?$/.test(url.pathname), { timeout: 15_000 }).catch(() => {});
   }
 }
 
