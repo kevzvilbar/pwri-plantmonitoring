@@ -31,13 +31,27 @@ export function useStaffData(onlineIds: OnlineIds) {
 
   const { data: roles = [] } = useAllUserRoles();
 
+  const getMemberRole = useCallback((member: StaffMember) => {
+    const found = (roles as any[]).find((r) => r.user_id === member.id)?.role;
+    if (found) return found;
+    if (member.designation) {
+      if (member.designation === 'Admin') return 'Admin';
+      if (member.designation === 'Manager') return 'Manager';
+      if (member.designation === 'Data Analyst') return 'Data Analyst';
+      if (member.designation === 'Technician' || member.designation === 'Maintenance') return 'Technician';
+      if (member.designation === 'Operator') return 'Operator';
+      return member.designation;
+    }
+    return 'Operator';
+  }, [roles]);
+
   const onlineCount = staff.filter((s) => onlineIds.has(s.id) || getPresence(s.last_seen_at, s.status, onlineIds.has(s.id)) === 'active').length;
   const leadershipCount = staff.filter((s) => {
-    const r = (roles as any[]).find((x) => x.user_id === s.id)?.role;
+    const r = getMemberRole(s);
     return r === 'Admin' || r === 'Manager';
   }).length;
   const analystCount = staff.filter((s) => {
-    const r = (roles as any[]).find((x) => x.user_id === s.id)?.role;
+    const r = getMemberRole(s);
     return r === 'Data Analyst';
   }).length;
   const operatorCount = staff.length - leadershipCount - analystCount;
@@ -48,7 +62,7 @@ export function useStaffData(onlineIds: OnlineIds) {
       const nameMatch = !q || fullName(s).toLowerCase().includes(q) || (s.username ?? '').toLowerCase().includes(q);
       const plantMatch = filterPlant === 'all' || s.plant_assignments?.includes(filterPlant);
 
-      const r = (roles as any[]).find((x) => x.user_id === s.id)?.role ?? 'Operator';
+      const r = getMemberRole(s);
       const isOnline = onlineIds.has(s.id) || getPresence(s.last_seen_at, s.status, onlineIds.has(s.id)) === 'active';
 
       let roleMatch = true;
@@ -59,20 +73,18 @@ export function useStaffData(onlineIds: OnlineIds) {
 
       return nameMatch && plantMatch && roleMatch;
     });
-  }, [staff, roles, onlineIds]);
+  }, [staff, getMemberRole, onlineIds]);
 
   const plantsWithStaff = (plants ?? []).filter((p) => staff.some((s) => s.plant_assignments?.includes(p.id)));
 
   const getGroup = useCallback((filtered: StaffMember[], groupName: string) => {
     return filtered.filter((s) => {
-      const r = (roles as any[]).find((x) => x.user_id === s.id)?.role;
+      const r = getMemberRole(s);
       if (groupName === 'leadership') return r === 'Admin' || r === 'Manager';
       if (groupName === 'analyst') return r === 'Data Analyst';
       return r !== 'Admin' && r !== 'Manager' && r !== 'Data Analyst';
     });
-  }, [roles]);
-
-  const getMemberRole = (member: StaffMember) => (roles as any[]).find((r) => r.user_id === member.id)?.role ?? 'Operator';
+  }, [getMemberRole]);
 
   return {
     staff,

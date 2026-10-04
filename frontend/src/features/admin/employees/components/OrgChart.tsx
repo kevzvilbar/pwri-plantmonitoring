@@ -10,20 +10,20 @@ function OrgNodeFixed({ member, allStaff, roles, depth = 0, accentLine }: {
   member: StaffMember; allStaff: StaffMember[]; roles: any[];
   depth?: number; accentLine?: string;
 }) {
-  const getRoleRank = (userId: string) => {
-    const r = (roles as any[]).find((x) => x.user_id === userId)?.role;
+  const getRoleRank = (m: StaffMember) => {
+    const r = (roles as any[]).find((x) => x.user_id === m.id)?.role ?? m.designation;
     const idx = ROLE_HIERARCHY.findIndex((rh) => rh.role === r);
     return idx >= 0 ? idx : 99;
   };
 
   const rawChildren = allStaff.filter((s) => s.immediate_head_id === member.id);
   const children = [...rawChildren].sort((a, b) => {
-    const diff = getRoleRank(a.id) - getRoleRank(b.id);
+    const diff = getRoleRank(a) - getRoleRank(b);
     if (diff !== 0) return diff;
     return fullName(a).localeCompare(fullName(b));
   });
 
-  const memberRole = (roles as any[]).find((r) => r.user_id === member.id)?.role ?? '—';
+  const memberRole = (roles as any[]).find((r) => r.user_id === member.id)?.role ?? member.designation ?? '—';
   const hasChildren = children.length > 0;
   const depthShade = DEPTH_SHADES[Math.min(depth, DEPTH_SHADES.length - 1)];
   const lineColor = accentLine ?? CONNECTOR_COLORS[Math.min(depth, CONNECTOR_COLORS.length - 1)];
@@ -143,8 +143,8 @@ function HierarchyLegend({ className }: { className?: string }) {
 function OrgChart({ staff, roles, plants, hideLegend = false }: {
   staff: StaffMember[]; roles: any[]; plants: any[]; hideLegend?: boolean;
 }) {
-  const getRoleRank = (userId: string) => {
-    const r = (roles as any[]).find((x) => x.user_id === userId)?.role;
+  const getRoleRank = (m: StaffMember) => {
+    const r = (roles as any[]).find((x) => x.user_id === m.id)?.role ?? m.designation;
     const idx = ROLE_HIERARCHY.findIndex((rh) => rh.role === r);
     return idx >= 0 ? idx : 99;
   };
@@ -155,7 +155,7 @@ function OrgChart({ staff, roles, plants, hideLegend = false }: {
     const staffIds = new Set(staff.map((s) => s.id));
     const rawRoots = staff.filter((s) => !s.immediate_head_id || !staffIds.has(s.immediate_head_id));
     const roots = [...rawRoots].sort((a, b) => {
-      const diff = getRoleRank(a.id) - getRoleRank(b.id);
+      const diff = getRoleRank(a) - getRoleRank(b);
       if (diff !== 0) return diff;
       return fullName(a).localeCompare(fullName(b));
     });
@@ -209,7 +209,7 @@ function OrgChart({ staff, roles, plants, hideLegend = false }: {
             (s) => !s.immediate_head_id || !plantStaffIds.has(s.immediate_head_id)
           );
           const roots = [...rawRoots].sort((a, b) => {
-            const diff = getRoleRank(a.id) - getRoleRank(b.id);
+            const diff = getRoleRank(a) - getRoleRank(b);
             if (diff !== 0) return diff;
             return fullName(a).localeCompare(fullName(b));
           });

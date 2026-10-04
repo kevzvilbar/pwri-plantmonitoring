@@ -7,9 +7,27 @@ const ROLES = ['Admin', 'Manager', 'Technician', 'Operator'] as const;
 
 function DirectoryStats({ staff, roles, plants }: { staff: StaffMember[]; roles: any[]; plants: any[] }) {
   const activeCount = staff.filter((s) => s.status === 'Active').length;
+  const roleMap = new Map<string, string>();
+  (roles as any[]).forEach((r) => {
+    if (r.user_id && r.role) roleMap.set(r.user_id, r.role);
+  });
+
+  const getRole = (s: StaffMember) => {
+    const r = roleMap.get(s.id);
+    if (r) return r;
+    if (s.designation) {
+      if (s.designation === 'Admin') return 'Admin';
+      if (s.designation === 'Manager') return 'Manager';
+      if (s.designation === 'Data Analyst') return 'Data Analyst';
+      if (s.designation === 'Technician' || s.designation === 'Maintenance') return 'Technician';
+      return 'Operator';
+    }
+    return 'Operator';
+  };
+
   const roleCounts = ROLES.map((role) => ({
     role,
-    count: (roles as any[]).filter((r) => r.role === role).length,
+    count: staff.filter((s) => getRole(s) === role).length,
   }));
   const coveredPlantIds = new Set(staff.flatMap((s) => s.plant_assignments ?? []));
   const plantsCount = plants.filter((p) => coveredPlantIds.has(p.id)).length;

@@ -455,10 +455,26 @@ export function useKpiData(opts: UseKpiDataOptions): UseKpiDataResult {
   const elapsedFraction = Math.min(1, Math.max(0, (nowManila.getHours() + nowManila.getMinutes() / 60) / 24));
 
   const operators = useMemo(() => {
-    const opIds = new Set(
-      (roles as any[]).filter((r) => r.role === 'Operator').map((r) => r.user_id)
-    );
-    return staff.filter((s) => opIds.has(s.id) && s.status === 'Active');
+    const roleMap = new Map<string, string>();
+    (roles as any[]).forEach((r) => {
+      if (r.user_id && r.role) roleMap.set(r.user_id, r.role);
+    });
+
+    return staff.filter((s) => {
+      if (s.status !== 'Active') return false;
+      const role = roleMap.get(s.id);
+      if (role) {
+        return role === 'Operator' || role === 'Technician';
+      }
+      if (s.designation) {
+        return (
+          s.designation === 'Operator' ||
+          s.designation === 'Technician' ||
+          (s.designation !== 'Admin' && s.designation !== 'Manager' && s.designation !== 'Data Analyst' && s.designation !== 'Supervisor')
+        );
+      }
+      return true;
+    });
   }, [staff, roles]);
 
   const plantsWithOps = useMemo(() =>

@@ -1,5 +1,5 @@
 {
-  "maxWarnings": 2677,
+  "maxWarnings": 2663,
   "lastUpdated": "2026-10-04",
   "history": [
     {
@@ -313,6 +313,11 @@
       "date": "2026-10-04",
       "maxWarnings": 2677,
       "previous": 2688
+    },
+    {
+      "date": "2026-10-04",
+      "maxWarnings": 2663,
+      "previous": 2677
     }
   ]
 }

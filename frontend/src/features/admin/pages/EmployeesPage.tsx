@@ -11,6 +11,8 @@ import { KpiTab } from '../employees/tabs/KpiTab';
 import { OrgChartTab } from '../employees/tabs/OrgChartTab';
 import { StaffMember, getPresence } from '../employees/types';
 
+import { useStaff, useAllUserRoles } from '@/data/hooks/useStaff';
+
 const EMPLOYEE_TABS = ['staff', 'kpi', 'org-chart'] as const;
 
 export default function EmployeesPage() {
@@ -18,33 +20,9 @@ export default function EmployeesPage() {
   const [tab, setTab] = useUrlTab('tab', EMPLOYEE_TABS, 'staff', { aliases: { info: 'org-chart' } });
 
   const { data: plants = [] } = usePlants();
-
-  const { data: staff = [] } = useQuery<StaffMember[]>({
-    queryKey: ['staff'],
-    queryFn: async () => {
-      const { data: rpcData, error: rpcError } = await (supabase as any).rpc('get_all_staff_profiles');
-      if (!rpcError && rpcData) return rpcData as StaffMember[];
-      const { data, error } = await supabase
-        .from('user_profiles')
-        .select('id, first_name, last_name, middle_name, suffix, username, designation, plant_assignments, status, updated_at, last_seen_at, immediate_head_id, email, confirmed, profile_complete, created_at')
-        .order('last_name');
-      if (error) throw error;
-      return (data ?? []) as StaffMember[];
-    },
-    staleTime: 60_000,
-  });
-
-  const { data: roles = [] } = useQuery({
-    queryKey: ['all-roles'],
-    queryFn: async () => {
-      const { data: rpcData, error: rpcError } = await (supabase as any).rpc('get_all_user_roles');
-      if (!rpcError && rpcData) return rpcData as { user_id: string; role: string }[];
-      const { data } = await (supabase as any).from('user_profiles').select('id, user_roles(role)');
-      return (data ?? []).flatMap((p: any) =>
-        (p.user_roles ?? []).map((r: any) => ({ user_id: p.id, role: r.role }))
-      );
-    },
-  });
+  const { data: staffData = [] } = useStaff();
+  const staff = staffData as StaffMember[];
+  const { data: roles = [] } = useAllUserRoles();
 
   const { isUserOnline: isEmpOnline } = usePresence();
 

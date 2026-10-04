@@ -13,6 +13,7 @@ function DetailDrawer({ member, roles, plants, allStaff, onChat, onClose, isSelf
   const presence = getPresence(member.last_seen_at, member.status, onlineIds.has(member.id));
   const pc = presenceConfig[presence];
   const memberRoles = roles.filter((r) => r.user_id === member.id).map((r) => r.role);
+  const displayRoles = memberRoles.length > 0 ? memberRoles.join(', ') : (member.designation || 'Operator');
   const memberPlants = plants.filter((p) => member.plant_assignments?.includes(p.id)).map((p) => p.name);
   const head = allStaff.find((s) => s.id === member.immediate_head_id);
 
@@ -48,7 +49,7 @@ function DetailDrawer({ member, roles, plants, allStaff, onChat, onClose, isSelf
 
           <div className="px-4 space-y-3 pb-6">
             <InfoRow icon={<User className="h-3.5 w-3.5" />}       label="Designation"    value={member.designation ?? '—'} />
-            <InfoRow icon={<ShieldCheck className="h-3.5 w-3.5" />} label="Role(s)"        value={memberRoles.join(', ') || '—'} />
+            <InfoRow icon={<ShieldCheck className="h-3.5 w-3.5" />} label="Role(s)"        value={displayRoles} />
             <InfoRow icon={<Building2 className="h-3.5 w-3.5" />}  label="Plants"         value={memberPlants.join(', ') || '—'} />
             <InfoRow icon={<MapPin className="h-3.5 w-3.5" />}     label="Reports to"     value={head ? fullName(head) : '—'} />
             <InfoRow icon={<Clock className="h-3.5 w-3.5" />}      label="Account status" value={member.status} />

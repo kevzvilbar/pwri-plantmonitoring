@@ -7,40 +7,15 @@ import { OrgChart, HierarchyLegend } from '../components/OrgChart';
 import { StaffMember } from '../types';
 import { useCan } from '@/hooks/usePermission';
 import { usePlants } from '@/hooks/usePlants';
-import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { useStaff, useAllUserRoles } from '@/data/hooks/useStaff';
 
 /** Directory overview and reporting tree. Accounts are approved in Admin →
  *  Users; this tab only reports how many are waiting. */
 function OrgChartTab() {
   const { data: plants = [] } = usePlants();
-
-  const { data: staff = [] } = useQuery<StaffMember[]>({
-    queryKey: ['staff'],
-    queryFn: async () => {
-      const { data: rpcData, error: rpcError } = await (supabase as any).rpc('get_all_staff_profiles');
-      if (!rpcError && rpcData) return rpcData as StaffMember[];
-      const { data, error } = await supabase
-        .from('user_profiles')
-        .select('id, first_name, last_name, middle_name, suffix, username, designation, plant_assignments, status, updated_at, last_seen_at, immediate_head_id, email, confirmed, profile_complete, created_at')
-        .order('last_name');
-      if (error) throw error;
-      return (data ?? []) as StaffMember[];
-    },
-    staleTime: 30_000,
-  });
-
-  const { data: roles = [] } = useQuery({
-    queryKey: ['all-roles'],
-    queryFn: async () => {
-      const { data: rpcData, error: rpcError } = await (supabase as any).rpc('get_all_user_roles');
-      if (!rpcError && rpcData) return rpcData as { user_id: string; role: string }[];
-      const { data } = await (supabase as any).from('user_profiles').select('id, user_roles(role)');
-      return (data ?? []).flatMap((p: any) =>
-        (p.user_roles ?? []).map((r: any) => ({ user_id: p.id, role: r.role }))
-      );
-    },
-  });
+  const { data: staffData = [] } = useStaff();
+  const staff = staffData as StaffMember[];
+  const { data: roles = [] } = useAllUserRoles();
 
   const canApprove = useCan()('admin_users');
   const pending = useMemo(() => staff.filter((s) => s.status === 'Pending'), [staff]);
