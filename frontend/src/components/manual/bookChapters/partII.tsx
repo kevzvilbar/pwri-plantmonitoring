@@ -1,4 +1,4 @@
-﻿import type { BookPart } from './types';
+import type { BookPart } from './types';
 import { Lead, P, H3, List, Ref, Note, ManualFigure, WorkflowStrip } from '../bookPrimitives';
 import { FlaskConical, Droplets } from 'lucide-react';
 export const partII : BookPart =   {
@@ -276,18 +276,25 @@ export const partII : BookPart =   {
             </P>
             <P>
               Two checkboxes bypass the false-positive side of those checks when an abnormal-looking reading is
-              legitimate:{' '}
-              <strong className="font-sans font-semibold not-italic">Meter replacement/Estimated</strong> for a
-              newly installed meter or a deliberate estimate, and{' '}
-              <strong className="font-sans font-semibold not-italic">Meter rollover</strong> for when the same
-              physical meter has wrapped around its maximum digits, the system then computes the true
-              wrap-around delta instead of clamping usage to zero.
+              legitimate: <strong className="font-sans font-semibold not-italic">Meter replacement/Estimated</strong> for a
+              newly installed meter, and <strong className="font-sans font-semibold not-italic">Meter rollover</strong> when
+              the counter wraps around its maximum digits.
             </P>
+            <H3>Worked Calculation: Meter Rollover & Multiplier Scaling</H3>
             <P>
-              Wherever your browser has location permission enabled, saving a reading automatically geotags it
-              with your GPS position and flags it if you&rsquo;re more than about 100 meters from where that
-              asset is registered, a quiet cross-check that a reading was actually taken on-site.
+              When an analog or digital water meter wraps around its maximum capacity (e.g., 6 digits rolling from 999,999 back to 000,000), ticking the <strong className="font-sans font-semibold not-italic">Meter rollover</strong> box applies wrap-around math to compute true volume:
             </P>
+            <Ref
+              cols={['Calculation Step', 'Formula / Equation', 'Worked Numerical Example']}
+              rows={[
+                ['1. Wrap Delta', 'Delta = (Meter Max - Previous Reading) + Current Reading', '(1,000,000 - 998,450) + 1,230 = 1,550 + 1,230 = 2,780 m³'],
+                ['2. Multiplier Scaling', 'Total Volume = Delta × Meter Multiplier (M)', '2,780 m³ × 1.0 = 2,780.00 m³'],
+                ['3. Power CT/PT Scaling', 'Billed kWh = (kWh_curr - kWh_prev) × (CT Ratio × PT Ratio)', '(1,245.5 - 1,200.5) × (40 × 1) = 45.0 × 40 = 1,800.00 kWh'],
+              ]}
+            />
+            <Note kind="tip">
+              <strong className="font-semibold text-foreground">Non-Technical Operator Rule:</strong> If today&rsquo;s dial number is smaller than yesterday&rsquo;s because the meter passed 999,999, do not enter zero or guess. Simply type the exact digits on the dial, tick &ldquo;Meter rollover,&rdquo; and let the system compute the true flow.
+            </Note>
             <Note kind="warn">
               Found a mistake after the fact? Don&rsquo;t submit a second reading to &ldquo;correct&rdquo; it,
               that just creates a second data point. Wells and locators can be edited within the same session
@@ -327,10 +334,23 @@ export const partII : BookPart =   {
               delta; suction/feed/reject pressures with an automatic Î”P; and water quality, feed, permeate,
               and reject TDS and pH, with salt rejection and salt-passage percentages calculated for you, plus
               turbidity, temperature, and chlorine residual. A field showing a warning highlight (an
-              out-of-range Î”P or a drifting permeate pH) isn&rsquo;t blocked from saving, it&rsquo;s a visual
+              out-of-range ΔP or a drifting permeate pH) isn&rsquo;t blocked from saving, it&rsquo;s a visual
               flag to double-check before you submit, and it typically also feeds a Compliance threshold
               (Chapter 21).
             </P>
+            <H3>Worked Calculation: RO Recovery & Membrane Performance</H3>
+            <Ref
+              cols={['Metric / Performance Indicator', 'Formula / Derivation', 'Worked Numerical Example']}
+              rows={[
+                ['1. Recovery Rate (%)', 'Recovery = (Permeate Flow / Feed Flow) × 100%', '(37.5 m³/h / 50.0 m³/h) × 100% = 75.0%'],
+                ['2. Salt Rejection (%)', 'Rejection = [1 - (Permeate TDS / Feed TDS)] × 100%', '[1 - (24 ppm / 1,200 ppm)] × 100% = 98.0%'],
+                ['3. Differential Pressure (ΔP)', 'ΔP = Feed Pressure - Concentrate Pressure', '14.8 bar - 13.6 bar = 1.2 bar (17.4 psi)'],
+                ['4. Chemical Stroke Rate (mL/min)', 'Dosing = (Feed m³/h × Target ppm) / (Active Conc g/L × 60)', '(50.0 × 3.0 ppm) / (1.15 × 60) = 2.17 mL/min'],
+              ]}
+            />
+            <Note kind="tip">
+              <strong className="font-semibold text-foreground">Non-Technical Operator Rule:</strong> If Salt Rejection falls below 95% or Differential Pressure (ΔP) rises above normal baseline by &gt;15%, the membrane requires backwashing or Clean-In-Place (CIP) to prevent permanent fouling.
+            </Note>
             <H3>CIP and Chemical Dosing</H3>
             <P>
               The <strong className="font-sans font-semibold not-italic">CIP</strong> tab logs cleaning cycles,

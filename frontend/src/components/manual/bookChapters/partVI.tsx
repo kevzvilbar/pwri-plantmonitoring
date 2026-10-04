@@ -1,4 +1,4 @@
-﻿import type { BookPart } from './types';
+import type { BookPart } from './types';
 import { Lead, P, H3, List, Ref, Note, ManualFigure, WorkflowStrip } from '../bookPrimitives';
 export const partVI : BookPart =   {
     part: 'Part VI: Data & Analysis',
@@ -23,6 +23,13 @@ export const partVI : BookPart =   {
               handful of bad rows don&rsquo;t block the whole file, a progress log then shows exactly what was
               processed and what wasn&rsquo;t.
             </P>
+            <WorkflowStrip
+              steps={[
+                { label: 'Download Template', detail: 'Select category and target plant, then download the standardized CSV template.' },
+                { label: 'Upload & Parse', detail: 'Drop in your CSV to view a pre-commit row validation preview.' },
+                { label: 'Review & Commit', detail: 'Toggle "Skip invalid rows" to ingest clean records while flagging row errors.' },
+              ]}
+            />
             <Note kind="warn">
               A CSV aimed at the wrong plant, or one that&rsquo;s badly malformed, can create records you didn&rsquo;t
               want. An Admin can bulk-remove them afterward using Bad Import Cleanup in the Admin Console
@@ -66,6 +73,13 @@ export const partVI : BookPart =   {
               Analysis & Review is the exception, visible to Manager, Data Analyst, and Admin, though Manager
               access is view-only; only Data Analyst and Admin can actually run the tool and edit values.
             </Lead>
+            <WorkflowStrip
+              steps={[
+                { label: 'Select Metric', detail: 'Pick the target parameter (e.g. daily volume, TDS, kWh) and date window.' },
+                { label: 'Run OLS Regression', detail: 'The engine flags anomalies where |Z| > 2.58 and calculates trend predictions.' },
+                { label: 'Review & Apply', detail: 'Inspect proposed interpolations, click Apply to update, or Retract if invalid.' },
+              ]}
+            />
             <P>
               The core tool runs an{' '}
               <strong className="font-sans font-semibold not-italic">OLS regression</strong> against a chosen
@@ -77,10 +91,20 @@ export const partVI : BookPart =   {
               <strong className="font-sans font-semibold not-italic">Retract</strong> a correction you&rsquo;ve
               already applied. A raw-data table alongside it lets you edit any of the latest 200 rows by hand
               instead, when that&rsquo;s the more direct fix, either way, every edit is written to the audit
-              trail. Two sub-tabs round the page out: Edit Audit (every manual edit made here) and Flagged
-              Readings (what&rsquo;s currently marked abnormal for the selected table), a narrower,
-              table-specific slice of what Data Corrections shows across every table at once.
+              trail.
             </P>
+            <H3>Worked Calculation: Statistical Outlier & Interpolation Math</H3>
+            <Ref
+              cols={['Analysis Method', 'Statistical Formula', 'Worked Numerical Example']}
+              rows={[
+                ['1. Z-Score Outlier Flag', 'Z = (Value - Mean) / Standard Deviation', '(1,850 m³ - 1,200 m³) / 210 = +3.095 (Flagged: |Z| > 2.58)'],
+                ['2. Linear Trend Prediction', 'Predicted = Intercept (β₀) + Slope (β₁) × Day Index (t)', '1,150 + (12.5 × 18) = 1,375.00 m³ proposed fix'],
+                ['3. Recovery Drift Detection', 'Deviation = |Observed Recovery - 30-Day Moving Avg|', '|62.0% - 75.2%| = 13.2% (> 5.0% threshold alert)'],
+              ]}
+            />
+            <Note kind="tip">
+              <strong className="font-semibold text-foreground">Non-Technical Explanation:</strong> The system looks at the last 30 days of data to find the normal pattern. If a reading jumps way higher or lower than normal (|Z| &gt; 2.58), it gets flagged so you can review if someone typed an extra zero or misplaced a decimal point.
+            </Note>
           </>
         ),
       },
@@ -96,6 +120,13 @@ export const partVI : BookPart =   {
               This is where every backward reading, spike, and manually-requested correction across the whole
               app ends up for review.
             </Lead>
+            <WorkflowStrip
+              steps={[
+                { label: 'Maker Proposes', detail: 'Operator or technician submits request with proposed value and operational reason.' },
+                { label: 'Checker Reviews', detail: 'Supervisor compares historical trend, previous reading, and audit delta.' },
+                { label: 'Immutable Audit', detail: 'Approval locks the record and writes actor, timestamp, and delta to audit log.' },
+              ]}
+            />
             <H3>Pending</H3>
             <P>
               Lists readings the system auto-tagged pending review, plus correction requests submitted by field
@@ -120,6 +151,15 @@ export const partVI : BookPart =   {
               <strong className="font-sans font-semibold not-italic">Daily Logs &rarr; My Corrections</strong>, which
               lists each request with its status and, for a rejection, the reviewer&rsquo;s reason.
             </P>
+            <Ref
+              cols={['Correction Reason Code', 'When to Select', 'Required Audit Evidence']}
+              rows={[
+                ['Meter Misread / Typo', 'Operator transposed digits (e.g. 15,200 instead of 12,500)', 'Physical meter log photograph or dial re-read'],
+                ['Meter Replacement', 'Physical meter swapped but replacement dialog was bypassed', 'Old meter final reading + new meter serial & initial reading'],
+                ['Meter Rollover', 'Dial passed maximum digits without rollover checkbox ticked', 'Verified meter max capacity (e.g. 999,999 m³)'],
+                ['Wrong Asset Selected', 'Reading was recorded under Well 2 instead of Well 1', 'Reassignment to target asset with supervisor approval'],
+              ]}
+            />
             <H3>Inbox, History, and Operators</H3>
             <P>
               <strong className="font-sans font-semibold not-italic">Inbox</strong> is a separate safety net,
@@ -153,6 +193,15 @@ export const partVI : BookPart =   {
               explicit logged maintenance or outage reason), and pending correction resolution. It offers area
               managers immediate visibility into operational compliance trends without requiring manual log audits.
             </P>
+            <H3>Scorecard Metrics Derivation</H3>
+            <Ref
+              cols={['Dimension', 'Calculation Method', 'Target Benchmark']}
+              rows={[
+                ['Data Completeness', 'Completeness = (Actual Logged Readings / Expected Daily Readings) × 100%', '≥ 95.0% expected daily'],
+                ['Gap Reason Coverage', 'Coverage = (Documented Gap Reasons / Total Missing Readings) × 100%', '100% (zero undocumented outages)'],
+                ['Correction Resolution Time', 'Average hours from Maker submission to Checker final approval/rejection', '< 24 hours SLA'],
+              ]}
+            />
           </>
         ),
       },

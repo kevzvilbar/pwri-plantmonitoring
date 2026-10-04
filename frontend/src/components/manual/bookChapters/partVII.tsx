@@ -1,4 +1,4 @@
-﻿import type { BookPart } from './types';
+import type { BookPart } from './types';
 import { Lead, P, H3, List, Ref, Note, ManualFigure, WorkflowStrip } from '../bookPrimitives';
 export const partVII : BookPart =   {
     part: 'Part VII: Oversight & Alarms',
@@ -15,10 +15,17 @@ export const partVII : BookPart =   {
               The Alert &amp; Notification Center is the central triage console for live plant alarms, sensor threshold breaches,
               and historical system notifications across the entire fleet.
             </Lead>
+            <WorkflowStrip
+              steps={[
+                { label: 'Alarm Ingestion', detail: 'Live sensor threshold breach triggers top-bar lamp and single-tone alert chime.' },
+                { label: 'Triage & Acknowledge', detail: 'Operator inspects live telemetry, snoozes (1h/24h), or flags for maintenance.' },
+                { label: 'Resolve & Archive', detail: 'Clearing the condition auto-resolves alarm and logs resolution in the System Log.' },
+              ]}
+            />
             <Ref
               cols={['Severity Tier', 'Visual Indicator', 'Operational Meaning']}
               rows={[
-                ['Critical', 'Red glow Lamp + Rose edge-light', 'Immediate operational threat, high TDS, extreme pressure differential (Î”P), critical tank levels, or severe telemetry spike.'],
+                ['Critical', 'Red glow Lamp + Rose edge-light', 'Immediate operational threat, high TDS, extreme pressure differential (ΔP), critical tank levels, or severe telemetry spike.'],
                 ['Warning', 'Amber glow Lamp + Amber edge-light', 'Approaching threshold or abnormal reading requiring supervisor remark or timely inspection.'],
                 ['Info / Normal', 'Sky/Teal Lamp + Blue edge-light', 'Routine lifecycle events, PM completions, shift handovers, and informational system notices.'],
               ]}
@@ -52,30 +59,46 @@ export const partVII : BookPart =   {
         id: 'compliance',
         number: 20,
         title: 'Compliance',
-        dek: 'Scoring plants against configurable thresholds',
+        dek: 'Scoring plants against configurable thresholds and PNSDW 2017 standards',
         body: (
           <>
             <Lead>
               Hidden for Operators. Compliance scores your plant(s) against ten configurable operating
-              thresholds across three tabs: Status, Thresholds, and What-if.
+              thresholds and PNSDW 2017 drinking water standards across three tabs: Status, Thresholds, and What-if.
             </Lead>
+            <WorkflowStrip
+              steps={[
+                { label: 'Select Window', detail: 'Choose 7, 30, or 90 days scope for global or single-plant evaluation.' },
+                { label: 'Run Assessment', detail: 'The engine compares daily water quality, downtime, and NRW against standards.' },
+                { label: 'What-if Simulation', detail: 'Simulate metric improvements to test compliance score changes before executing.' },
+              ]}
+            />
             <Ref
-              cols={['Metric', 'Default threshold']}
+              cols={['Regulatory / Operating Metric', 'PNSDW / Operational Threshold', 'Compliance Impact']}
               rows={[
-                ['NRW % (Non-Revenue Water)', 'Max 20%'],
-                ['Downtime (hrs/day)', 'Max 2 hrs'],
-                ['Permeate TDS', 'Max 500 ppm'],
-                ['Permeate pH', 'Min 6.5 / Max 8.5'],
-                ['Raw turbidity', 'Max 5 NTU'],
-                ['Î”P (differential pressure)', 'Max 15 psi'],
-                ['Recovery %', 'Min 70%'],
-                ['PV ratio', 'Max 1.2'],
-                ['Chemical stock (days remaining)', 'Min 7 days'],
+                ['Product Water TDS', 'Max 500 ppm (PNSDW 2017)', 'Mandatory aesthetic & health parameter'],
+                ['Product Water pH', '6.50 – 8.50 pH (PNSDW 2017)', 'Corrosion and disinfection efficacy range'],
+                ['Turbidity', 'Max 5.00 NTU (Target < 1.0 NTU)', 'Filtration and clarity standard'],
+                ['Free Chlorine Residual', '0.30 – 1.50 ppm', 'Disinfection residual protection'],
+                ['NRW % (Non-Revenue Water)', 'Max 20.0%', 'Distribution flow balance efficiency'],
+                ['Downtime (hrs/day)', 'Max 2.0 hrs/day', 'Plant availability SLA threshold'],
+                ['Membrane ΔP', 'Max 15.0 psi (1.03 bar)', 'Membrane fouling prevention limit'],
+                ['RO Recovery Rate', 'Min 70.0% – 75.0%', 'Raw water conversion efficiency'],
+                ['Chemical Stock Horizon', 'Min 7 days remaining', 'Consumables exhaustion prevention'],
+              ]}
+            />
+            <H3>Worked Calculation: Plant Compliance Score</H3>
+            <Ref
+              cols={['Scoring Element', 'Derivation Formula', 'Worked Numerical Example']}
+              rows={[
+                ['1. Metric Compliance', 'C_i = 1 if observed within threshold bounds, else 0', '9 compliant metrics out of 10 evaluated'],
+                ['2. Overall Score (%)', 'Score = (Sum of Compliant Metrics / Total Metrics) × 100%', '(9 / 10) × 100% = 90.0% (Grade A: Compliant)'],
+                ['3. Weighted Water Quality', 'WQ_Score = (0.4 × TDS) + (0.3 × pH) + (0.3 × Cl₂)', '0.4(1.0) + 0.3(1.0) + 0.3(1.0) = 100.0%'],
               ]}
             />
             <P>
               Running an evaluation, Technician and above, takes a scope (global or one plant) and a window
-              in days, then returns an overall compliant/breached banner, a 0â€“100 Compliance Score, period
+              in days, then returns an overall compliant/breached banner, a 0–100 Compliance Score, period
               averages with trend arrows against the previous window, and a list of any specific violations.
               Editing the thresholds themselves is Manager/Admin only, and doesn&rsquo;t retroactively change
               evaluations already run. The{' '}
@@ -100,6 +123,13 @@ export const partVII : BookPart =   {
               migrations. Data Analyst is redirected to Data Corrections instead. Technician and Operator have
               no access at all.
             </Lead>
+            <WorkflowStrip
+              steps={[
+                { label: 'Review Sign-Up', detail: 'Pending registrations appear at the top of Users with requested credentials.' },
+                { label: 'Assign Role & Plants', detail: 'Select role (e.g. Operator, Technician) and bind authorized plants.' },
+                { label: 'Activate & Audit', detail: 'Approve to enable instant sign-in; action is recorded in the immutable Audit log.' },
+              ]}
+            />
             <H3>Approving and managing users</H3>
             <P>
               New sign-ups arrive as Pending, defaulting internally to the Operator role. Waiting accounts are

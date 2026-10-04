@@ -1,5 +1,5 @@
 {
-  "maxTotalGzipKb": 1152.9,
+  "maxTotalGzipKb": 1155.6,
   "lastUpdated": "2026-10-04",
   "history": [
     {
@@ -141,6 +141,11 @@
       "maxTotalGzipKb": 1152.9,
       "previous": 1144.4,
       "reason": "Re-baselined for expanded and revised Operations Manual & User Guide: rich step-by-step operator workflows, worked calculations/formulas, and comprehensive troubleshooting chapters across lazy-loaded Help chunks."
+    },
+    {
+      "date": "2026-10-04",
+      "maxTotalGzipKb": 1155.6,
+      "previous": 1152.9
     }
   ]
 }
