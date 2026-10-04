@@ -28,7 +28,7 @@ export default function TermsPage() {
           Terms of Use for PWRI Plant Monitoring Platform
         </h1>
         <p className="text-sm text-muted-foreground leading-relaxed">
-          These Terms of Use govern the authorized access, operational logging, and system usage of the PrimeWater Resources, Inc. (&ldquo;PWRI&rdquo;) Plant Monitoring and Industrial Control Intelligence Platform.
+          These Terms of Use govern the authorized access, operational logging, and system usage of the Pilipinas Water Resources, Inc. (&ldquo;PWRI&rdquo;) Plant Monitoring and Industrial Control Intelligence Platform.
         </p>
       </div>
 
@@ -84,7 +84,7 @@ export default function TermsPage() {
             <Scale className="h-4 w-4 text-primary" /> 4. Intellectual Property &amp; Operational Data
           </h2>
           <p>
-            All plant configuration schemas, algorithms, user interface code, chemical dosage matrices, and collected water production datasets remain the exclusive proprietary property of PrimeWater Resources, Inc.
+            All plant configuration schemas, algorithms, user interface code, chemical dosage matrices, and collected water production datasets remain the exclusive proprietary property of Pilipinas Water Resources, Inc.
           </p>
         </Card>
 
@@ -101,7 +101,7 @@ export default function TermsPage() {
 
       {/* Footer Links */}
       <div className="pt-6 border-t flex flex-wrap items-center justify-between gap-4 text-xs text-muted-foreground">
-        <p>&copy; {new Date().getFullYear()} PrimeWater Resources, Inc. All rights reserved.</p>
+        <p>&copy; {new Date().getFullYear()} Pilipinas Water Resources, Inc. (PWRI). All rights reserved.</p>
         <div className="flex items-center gap-4">
           <Link to="/terms" className="hover:text-primary transition-colors font-semibold text-foreground">Terms of Use</Link>
           <Link to="/privacy" className="hover:text-primary transition-colors">Privacy Notice</Link>

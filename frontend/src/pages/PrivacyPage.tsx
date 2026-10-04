@@ -29,7 +29,7 @@ export default function PrivacyPage() {
           Privacy Notice for PWRI Plant Monitoring Platform
         </h1>
         <p className="text-sm text-muted-foreground leading-relaxed">
-          PrimeWater Resources, Inc. (&ldquo;PWRI&rdquo;, &ldquo;Company&rdquo;, &ldquo;we&rdquo;, &ldquo;us&rdquo;) is committed to protecting the privacy and confidentiality of personal data in compliance with Republic Act No. 10173, otherwise known as the <strong>Philippine Data Privacy Act of 2012 (DPA 2012)</strong>, its Implementing Rules and Regulations (IRR), and issuances by the National Privacy Commission (NPC).
+          Pilipinas Water Resources, Inc. (&ldquo;PWRI&rdquo;, &ldquo;Company&rdquo;, &ldquo;we&rdquo;, &ldquo;us&rdquo;) is committed to protecting the privacy and confidentiality of personal data in compliance with Republic Act No. 10173, otherwise known as the <strong>Philippine Data Privacy Act of 2012 (DPA 2012)</strong>, its Implementing Rules and Regulations (IRR), and issuances by the National Privacy Commission (NPC).
         </p>
       </div>
 
@@ -126,17 +126,18 @@ export default function PrivacyPage() {
           <p>
             For privacy inquiries, rights enforcement requests, or reporting security incidents, please contact the designated Data Protection Officer:
           </p>
-          <div className="p-3 rounded-md bg-card border text-xs space-y-1">
-            <p className="font-semibold text-foreground">Data Protection Officer — PrimeWater Resources, Inc.</p>
+          <div className="p-3.5 rounded-md bg-card border text-xs space-y-1.5">
+            <p className="font-semibold text-foreground">Data Protection Officer — Pilipinas Water Resources, Inc. (PWRI)</p>
             <p>Email: <a href="mailto:dpo@pwri.com.ph" className="text-primary hover:underline font-mono">dpo@pwri.com.ph</a></p>
-            <p>Address: PrimeWater Head Office, Philippines</p>
+            <p>Address: Cebu South Coastal Road, Cogon Pardo, 6000 Cebu City, Philippines</p>
+            <p>Website: <a href="https://www.pilipinaswater.com.ph/" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline font-mono inline-flex items-center gap-1">https://www.pilipinaswater.com.ph/ <ExternalLink className="h-2.5 w-2.5" /></a></p>
           </div>
         </Card>
       </div>
 
       {/* Footer Links */}
       <div className="pt-6 border-t flex flex-wrap items-center justify-between gap-4 text-xs text-muted-foreground">
-        <p>&copy; {new Date().getFullYear()} PrimeWater Resources, Inc. All rights reserved.</p>
+        <p>&copy; {new Date().getFullYear()} Pilipinas Water Resources, Inc. (PWRI). All rights reserved.</p>
         <div className="flex items-center gap-4">
           <Link to="/terms" className="hover:text-primary transition-colors">Terms of Use</Link>
           <Link to="/privacy" className="hover:text-primary transition-colors font-semibold text-foreground">Privacy Notice</Link>

@@ -1,6 +1,8 @@
 # Data Retention & Disposal Schedule
 
-**Organization:** PrimeWater Resources, Inc. (PWRI)  
+**Organization:** Pilipinas Water Resources, Inc. (PWRI)  
+**Head Office:** Cebu South Coastal Road, Cogon Pardo, 6000 Cebu City, Philippines  
+**Website:** https://www.pilipinaswater.com.ph/  
 **System:** Plant Monitoring & Operational Intelligence Platform  
 **Compliance Standard:** Philippine Data Privacy Act of 2012 (RA 10173), NPC Guidelines, DOH/PNSDW Regulatory Requirements  
 **Revision:** 2026-10

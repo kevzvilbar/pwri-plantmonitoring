@@ -1,6 +1,8 @@
 # Personal Data Breach Management & Incident Response Plan
 
-**Organization:** PrimeWater Resources, Inc. (PWRI)  
+**Organization:** Pilipinas Water Resources, Inc. (PWRI)  
+**Head Office:** Cebu South Coastal Road, Cogon Pardo, 6000 Cebu City, Philippines  
+**Website:** https://www.pilipinaswater.com.ph/  
 **System:** Plant Monitoring & Operational Intelligence Platform  
 **Compliance Standard:** National Privacy Commission (NPC) Circular No. 16-03 (Personal Data Breach Management) & RA 10173  
 **DPO Contact:** `dpo@pwri.com.ph`  

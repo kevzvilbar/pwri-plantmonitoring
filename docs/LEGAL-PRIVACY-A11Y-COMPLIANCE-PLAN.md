@@ -1,6 +1,8 @@
 # Legal, Privacy, and Accessibility (a11y) Compliance Plan
 
-**Application:** PWRI Plant Monitoring System (PrimeWater Resources, Inc.)  
+**Application:** PWRI Plant Monitoring System (Pilipinas Water Resources, Inc.)  
+**Head Office Address:** Cebu South Coastal Road, Cogon Pardo, 6000 Cebu City, Philippines  
+**Official Website:** https://www.pilipinaswater.com.ph/  
 **Jurisdiction:** Republic of the Philippines (Philippine Data Privacy Act of 2012 / RA 10173; National Privacy Commission Circulars 16-01, 16-03, 2022-04; WCAG 2.1 Level AA)  
 **Effective Date:** October 2026 (v2026-10)
 

@@ -16,6 +16,9 @@ describe('Legal & Compliance Pages (RA 10173 / Terms)', () => {
     expect(screen.getByText(/RA 10173 \(DPA 2012\)/i)).toBeInTheDocument();
     expect(screen.getAllByText(/Data Protection Officer/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/dpo@pwri.com.ph/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Pilipinas Water Resources, Inc\./i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/Cebu South Coastal Road, Cogon Pardo/i)).toBeInTheDocument();
+    expect(screen.getByText(/https:\/\/www\.pilipinaswater\.com\.ph\//i)).toBeInTheDocument();
   });
 
   it('renders TermsPage with acceptable use and data integrity policies', () => {
