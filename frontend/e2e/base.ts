@@ -1,3 +1,4 @@
+import process from 'node:process';
 import { test as base, devices, type Page, type PlaywrightTestConfig } from '@playwright/test';
 
 // Local Supabase instance (started by supabase start in CI)

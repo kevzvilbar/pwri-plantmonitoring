@@ -14,9 +14,10 @@
 
     /* Linting */
     "strict": true,
+    "types": ["node"],
     "noUnusedLocals": false,
     "noUnusedParameters": false,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["vite.config.ts", "vite-plugins/**/*.ts"]
+  "include": ["vite.config.ts", "vite-plugins/**/*.ts", "e2e/**/*.ts", "playwright.config.ts"]
 }
