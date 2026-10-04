@@ -56,14 +56,14 @@ export function ProfilePrivacyCard() {
       // Fetch personal data items associated with user
       const [correctionsRes, myAuditsRes] = await Promise.all([
         supabase
-          .from('reading_data_corrections')
-          .select('id, plant_id, meter_id, reading_type, reading_date, original_value, corrected_value, reason, created_at')
-          .eq('user_id', user.id)
+          .from('correction_requests')
+          .select('id, plant_id, source_id, source_table, original_value, proposed_value, reason, status, created_at')
+          .eq('submitted_by', user.id)
           .limit(100),
         supabase
-          .from('reading_audit_logs')
-          .select('id, plant_id, meter_id, reading_date, old_value, new_value, reason, created_at')
-          .eq('user_id', user.id)
+          .from('reading_edit_audit_log')
+          .select('id, plant_id, table_name, record_id, action, changes, reason, edited_at')
+          .eq('actor_user_id', user.id)
           .limit(100),
       ]);
 

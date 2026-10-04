@@ -23,6 +23,10 @@ export interface Profile {
   profile_complete: boolean;
   /** Admin-approval flag (replaces Supabase email confirmation, iter 9) */
   confirmed?: boolean;
+  notice_version?: string | null;
+  notice_acknowledged_at?: string | null;
+  created_at?: string;
+  updated_at?: string;
 }
 
 interface AuthContextValue {

@@ -11,6 +11,7 @@ export function useDeleteEntity({ kind, id, invalidateKeys, onDeleted }: DeleteM
   const [openSoft, setOpenSoft] = useState(false);
   const [openHard, setOpenHard] = useState(false);
   const [openForce, setOpenForce] = useState(false);
+  const [openAnon, setOpenAnon] = useState(false);
   const [forceAck, setForceAck] = useState(false);
   const [busy, setBusy] = useState(false);
   const [reason, setReason] = useState('');
@@ -27,6 +28,7 @@ export function useDeleteEntity({ kind, id, invalidateKeys, onDeleted }: DeleteM
     setOpenSoft(false);
     setOpenHard(false);
     setOpenForce(false);
+    setOpenAnon(false);
   }, []);
 
   const doSoft = useCallback(async () => {
@@ -96,6 +98,33 @@ export function useDeleteEntity({ kind, id, invalidateKeys, onDeleted }: DeleteM
     }
   }, [kind, id, copy, reasonValid, invalidateKeys, qc, resetAndClose, onDeleted]);
 
+  const doAnonymize = useCallback(async () => {
+    if (kind !== 'user') return;
+    try {
+      setBusy(true);
+      const { error } = await supabase
+        .from('user_profiles')
+        .update({
+          first_name: 'Former',
+          last_name: 'Employee',
+          middle_name: null,
+          suffix: null,
+          designation: 'Archived / Deactivated',
+          status: 'Suspended',
+        })
+        .eq('id', id);
+      if (error) throw new Error(error.message);
+      toast.success('User profile pseudonymized & suspended (RA 10173)');
+      invalidateKeys.forEach((k) => qc.invalidateQueries({ queryKey: k }));
+      resetAndClose();
+      onDeleted?.();
+    } catch (e) {
+      toast.error(friendlyError(e));
+    } finally {
+      setBusy(false);
+    }
+  }, [kind, id, invalidateKeys, qc, resetAndClose, onDeleted]);
+
   const openHardWithDeps = useCallback(() => {
     setReason('');
     setDeps(null);
@@ -113,6 +142,7 @@ export function useDeleteEntity({ kind, id, invalidateKeys, onDeleted }: DeleteM
     openSoft, setOpenSoft,
     openHard, setOpenHard,
     openForce, setOpenForce,
+    openAnon, setOpenAnon,
     forceAck, setForceAck,
     busy,
     reason, setReason,
@@ -121,6 +151,7 @@ export function useDeleteEntity({ kind, id, invalidateKeys, onDeleted }: DeleteM
     resetAndClose,
     doSoft,
     doHard,
+    doAnonymize,
     loadDeps,
     openHardWithDeps,
     promptForce,
