@@ -42,11 +42,8 @@ begin
 end $$;
 
 -- 3. Identical duplicate indexes (keep the one with scan history) ----------------
--- Only plain, non-unique, non-constraint indexes (verified live). The ro_train_data_gaps
--- pair is left alone: one of the two backs a unique constraint.
+-- Only plain, non-unique, non-constraint indexes. (Reading table duplicates are
+-- already handled in 20260916000006_drop_duplicate_reading_indexes.sql).
 drop index if exists public.idx_lmr_locator;
 drop index if exists public.product_meter_readings_plant_dt_idx;
-drop index if exists public.idx_ro_pretreatment_readings_plant_id;
-drop index if exists public.idx_pretreatment_train_dt;
-drop index if exists public.idx_rtr_train_dt;
 drop index if exists public.idx_wells_plant;
