@@ -1,14 +1,13 @@
 import { test, expect } from '@playwright/test';
-import { signIn, E2E_ADMIN_EMAIL, HAS_CREDENTIALS } from './base';
+import { authFile, HAS_CREDENTIALS } from './base';
 
 test.describe('Import Page', () => {
-  test.beforeEach(async ({ page }) => {
-    if (!HAS_CREDENTIALS) {
-      test.skip(true, 'Skipping: set E2E_EMAIL and E2E_PASSWORD to run this suite.');
-      return;
-    }
-    // Admin, not the default Operator: /import isn't in OPERATOR_ALLOWED_PATHS.
-    await signIn(page, E2E_ADMIN_EMAIL);
+  // Signed in once in e2e/global-setup.ts and reused; a UI login before every test
+  // is what made this job overrun its time limit.
+  // Admin, not the default Operator: /import isn't in OPERATOR_ALLOWED_PATHS.
+  test.use({ storageState: authFile('admin') });
+  test.beforeEach(() => {
+    test.skip(!HAS_CREDENTIALS, 'Skipping: set E2E_EMAIL and E2E_PASSWORD to run this suite.');
   });
   test('renders the import page with a dropzone and no crash', async ({ page }) => {
     await page.goto('/import');

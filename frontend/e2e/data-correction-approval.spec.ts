@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { signIn, E2E_MANAGER_EMAIL, HAS_CREDENTIALS } from './base';
+import { authFile, HAS_CREDENTIALS } from './base';
 
 /**
  * Critical workflow: Manager reviews and approves a data correction.
@@ -15,13 +15,11 @@ import { signIn, E2E_MANAGER_EMAIL, HAS_CREDENTIALS } from './base';
  *   redirected away from /data-corrections by ProtectedRoute.
  */
 test.describe('Manager Data Correction Approval Workflow', () => {
-  test.beforeEach(async ({ page }) => {
-    if (!HAS_CREDENTIALS) {
-      test.skip(true, 'Skipping: set E2E_EMAIL and E2E_PASSWORD to run this suite.');
-      return;
-    }
-
-    await signIn(page, E2E_MANAGER_EMAIL);
+  // Signed in once in e2e/global-setup.ts and reused; a UI login before every test
+  // is what made this job overrun its time limit.
+  test.use({ storageState: authFile('manager') });
+  test.beforeEach(() => {
+    test.skip(!HAS_CREDENTIALS, 'Skipping: set E2E_EMAIL and E2E_PASSWORD to run this suite.');
   });
 
   test('loads the Data Corrections page without errors', async ({ page }) => {

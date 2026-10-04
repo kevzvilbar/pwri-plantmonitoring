@@ -235,7 +235,10 @@ jobs:
     name: E2E authenticated (Playwright vs local Supabase)
     runs-on: ubuntu-latest
     needs: baseline-check
-    timeout-minutes: 15
+    # Timeouts are nested so the innermost fires first and the report still uploads:
+    # Playwright globalTimeout (6 min) < test step (8 min) < job (20 min). A job-level
+    # timeout *cancels* the job, which skips the `if: failure()` upload step below.
+    timeout-minutes: 20
 
     # Roadmap Phase 2: runs the 5 critical authenticated workflows
     # against a disposable local Supabase instance (same one used by rls-tests).
@@ -288,10 +291,24 @@ jobs:
         working-directory: frontend
         run: npx playwright install --with-deps chromium
 
+      - name: Build app for E2E (served by `vite preview`, not the dev server)
+        working-directory: frontend
+        # `vite dev` serves every source module as its own request and compiles routes on
+        # demand, and each test starts a fresh browser context (cold cache) -- on a small CI
+        # runner that made every page load slow. The production bundle is a few cached,
+        # pre-compiled chunks. VITE_SUPABASE_* come from $GITHUB_ENV (set by the seed step)
+        # and are baked in at build time; E2E_ROOT_BASE serves from "/" and must match what
+        # `vite preview` sees (see e2e/base.ts).
+        run: npm run build
+        env:
+          E2E_ROOT_BASE: '1'
+
       - name: Run authenticated E2E tests
         working-directory: frontend
+        timeout-minutes: 8
         run: npx playwright test --grep="Workflow|Dashboard|Import"
         env:
+          E2E_PREVIEW: '1'
           # Test credentials (matching the seeded users)
           E2E_EMAIL: e2e-operator@test.local
           E2E_PASSWORD: testpassword123
@@ -301,7 +318,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report-authenticated
-          path: frontend/playwright-report/
+          path: |
+            frontend/playwright-report/
+            frontend/test-results/
           retention-days: 7
 
       - name: Stop local Supabase

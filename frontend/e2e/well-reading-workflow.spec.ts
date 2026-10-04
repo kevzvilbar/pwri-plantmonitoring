@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { signIn, HAS_CREDENTIALS } from './base';
+import { authFile, HAS_CREDENTIALS } from './base';
 
 /**
  * Critical workflow: Well Reading entry on /operations.
@@ -11,13 +11,11 @@ import { signIn, HAS_CREDENTIALS } from './base';
  * Without credentials, the entire suite is skipped with a clear message.
  */
 test.describe('Well Reading Workflow', () => {
-  test.beforeEach(async ({ page }) => {
-    if (!HAS_CREDENTIALS) {
-      test.skip(true, 'Skipping: set E2E_EMAIL and E2E_PASSWORD to run this suite.');
-      return;
-    }
-
-    await signIn(page);
+  // Signed in once in e2e/global-setup.ts and reused; a UI login before every test
+  // is what made this job overrun its time limit.
+  test.use({ storageState: authFile('operator') });
+  test.beforeEach(() => {
+    test.skip(!HAS_CREDENTIALS, 'Skipping: set E2E_EMAIL and E2E_PASSWORD to run this suite.');
   });
 
   test('navigates to Operations and shows Wells tab with well rows', async ({ page }) => {

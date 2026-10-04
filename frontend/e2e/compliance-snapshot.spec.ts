@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { signIn, E2E_ADMIN_EMAIL, HAS_CREDENTIALS } from './base';
+import { authFile, HAS_CREDENTIALS } from './base';
 
 /**
  * Critical workflow: Plant-wide compliance snapshot.
@@ -17,13 +17,11 @@ import { signIn, E2E_ADMIN_EMAIL, HAS_CREDENTIALS } from './base';
  *   ProtectedRoute bounces Operators off /compliance (OPERATOR_ALLOWED_PATHS).
  */
 test.describe('Compliance Snapshot Workflow', () => {
-  test.beforeEach(async ({ page }) => {
-    if (!HAS_CREDENTIALS) {
-      test.skip(true, 'Skipping: set E2E_EMAIL and E2E_PASSWORD to run this suite.');
-      return;
-    }
-
-    await signIn(page, E2E_ADMIN_EMAIL);
+  // Signed in once in e2e/global-setup.ts and reused; a UI login before every test
+  // is what made this job overrun its time limit.
+  test.use({ storageState: authFile('admin') });
+  test.beforeEach(() => {
+    test.skip(!HAS_CREDENTIALS, 'Skipping: set E2E_EMAIL and E2E_PASSWORD to run this suite.');
   });
 
   test('compliance page renders without errors', async ({ page }) => {

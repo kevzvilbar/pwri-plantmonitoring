@@ -1,13 +1,12 @@
 import { test, expect } from '@playwright/test';
-import { signIn, HAS_CREDENTIALS } from './base';
+import { authFile, HAS_CREDENTIALS } from './base';
 
 test.describe('Dashboard loads', () => {
-  test.beforeEach(async ({ page }) => {
-    if (!HAS_CREDENTIALS) {
-      test.skip(true, 'Skipping: set E2E_EMAIL and E2E_PASSWORD to run this suite.');
-      return;
-    }
-    await signIn(page);
+  // Signed in once in e2e/global-setup.ts and reused; a UI login before every test
+  // is what made this job overrun its time limit.
+  test.use({ storageState: authFile('operator') });
+  test.beforeEach(() => {
+    test.skip(!HAS_CREDENTIALS, 'Skipping: set E2E_EMAIL and E2E_PASSWORD to run this suite.');
   });
   test('renders Dashboard with KPI cards and no error boundary', async ({ page }) => {
     await page.goto('/');

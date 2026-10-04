@@ -27,3 +27,5 @@ playwright/.cache
 *.njsproj
 *.sln
 *.sw?
+# Saved Playwright sessions (live tokens) written by e2e/global-setup.ts
+e2e/.auth/
