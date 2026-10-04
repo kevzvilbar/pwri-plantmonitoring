@@ -23,16 +23,17 @@ export const partVIII: BookPart = {
               ['"cooldown, next reading available in ..."', 'You already saved a reading for this asset within the last 45 minutes.', 'Wait it out, or have a different authorized person take it if genuinely urgent.'],
               ['A reading is greyed out / flagged', 'Auto-tagged as a backward reading or a spike.', 'No action needed, a Manager/Data Analyst reviews it in Data Corrections.'],
               ["I can't edit a reading I entered", "It's outside your edit window, or belongs to someone else.", 'Submit a correction request instead (Chapter 17).'],
+              ['"Server Reconnecting" / 503 error', 'Database undergoing maintenance or automatic restart.', 'Circuit breaker will probe and reconnect automatically in 30-60s. Do not spam refresh.'],
               ['CSV import fails immediately', "Column headers don't match the expected template.", 'Re-download the current template and match headers exactly.'],
               ["An import created records I didn't want", 'A malformed CSV, or the wrong target plant.', "Ask an Admin to run Bad Import Cleanup in the Admin Console."],
             ]}
           />
           <H3>Frequently asked questions</H3>
           <P>
-            <strong className="font-sans font-semibold not-italic">Can I use the app offline?</strong> No, it&rsquo;s
-            a connected web app; you need network access to sign in and save data. If connectivity at your
-            site is unreliable, plan to record readings on paper as a backup and enter them once you&rsquo;re
-            back online.
+            <strong className="font-sans font-semibold not-italic">Can I use the app offline?</strong> Yes.
+            The PWA stores plant assets and unsubmitted readings in local IndexedDB storage. You can continue
+            logging readings in remote pump houses with no cellular signal. Once connectivity returns, the
+            background synchronization manager flushes queued readings to the database automatically.
           </P>
           <P>
             <strong className="font-sans font-semibold not-italic">Why can&rsquo;t I see Compliance, Costs,
@@ -46,6 +47,9 @@ export const partVIII: BookPart = {
             (Chapter 17), a correction request if you can&rsquo;t edit it directly, or the regression/raw-edit
             tool in Data Analysis &amp; Review (Chapter 16) if you have Data Analyst/Admin access, so the
             change is reviewed and captured in the audit trail.
+          </P>
+          <P>
+            <strong className="font-sans font-semibold not-italic">How do I update to the latest version of the app?</strong> The app checks for new versions in the background every 30 minutes and reloads automatically when idle for 10 minutes. If you are actively typing, click the &ldquo;Update Now&rdquo; toast notification to apply updates immediately.
           </P>
         </>
       ),
@@ -74,6 +78,11 @@ export const partVIII: BookPart = {
               ['ΔP', 'Differential pressure, the pressure drop across a filter, membrane, or element; a rising ΔP often signals fouling.'],
               ['Recovery %', 'The percentage of feed water converted to permeate (product) water in an RO process.'],
               ['Salt rejection %', "The percentage of dissolved salts an RO membrane removes from the feed stream."],
+              ['Multiplier', 'A CT/PT scaling factor applied to raw meter dial differences (e.g. × 120 on high-voltage power meters).'],
+              ['Maker-Checker', 'A data governance model where operators submit correction requests (Makers) and supervisors approve them (Checkers).'],
+              ['Circuit Breaker', 'A client-side safety mechanism that intercepts network storms during database restarts to prevent log flooding.'],
+              ['PNSDW', 'Philippine National Standards for Drinking Water regulatory parameters (Turbidity, Chlorine, TDS, pH).'],
+              ['DPA 2012 (RA 10173)', 'Philippine Data Privacy Act regulating employee data rights, telemetry opt-outs, and pseudonymization.'],
               ['Designation', "A user's descriptive job title, distinct from their system role."],
               ['Role', 'The access-control level assigned to a user: Operator, Technician, Manager, Data Analyst, or Admin.'],
               ['Soft delete', 'Deactivating a record without erasing it, reversible.'],

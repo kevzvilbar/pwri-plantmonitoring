@@ -1,4 +1,4 @@
-﻿import type { BookPart } from './types';
+import type { BookPart } from './types';
 import { Lead, P, H3, List, Ref, Note, ManualFigure, WorkflowStrip } from '../bookPrimitives';
 export const partIV : BookPart =   {
     part: 'Part IV: Finance',

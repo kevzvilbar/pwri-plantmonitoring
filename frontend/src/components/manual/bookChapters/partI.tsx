@@ -1,4 +1,4 @@
-﻿import type { BookPart } from './types';
+import type { BookPart } from './types';
 import { Lead, P, H3, List, Ref, Note, ManualFigure, WorkflowStrip } from '../bookPrimitives';
 export const partI : BookPart =   {
     part: 'Part I: Orientation',
@@ -74,12 +74,20 @@ export const partI : BookPart =   {
               Signing up walks you through a short wizard: email, password, and a designation (your job
               title, Operator switches the whole wizard into shared-email mode); how many operators will
               share this device, if applicable; each person&rsquo;s username and name; which plant(s) you belong
-              to; and a final review step. Every new account, however it was created, starts in{' '}
+              to; and mandatory acknowledgement of the Philippine Data Privacy Act of 2012 (RA 10173) Notice and
+              Terms of Use. Every new account, however it was created, starts in{' '}
               <strong className="font-sans font-semibold not-italic">Pending</strong> status. Trying to sign in
               before an Admin approves you lands you on an &ldquo;awaiting approval&rdquo; screen with a{' '}
               <strong className="font-sans font-semibold not-italic">Refresh status</strong> button that drops
               you straight into the app the moment you&rsquo;re approved, no need to sign out and back in.
             </P>
+            <WorkflowStrip
+              steps={[
+                { label: 'Sign Up & Consent', detail: 'Enter account info and agree to DPA 2012 Privacy Notice & Terms.' },
+                { label: 'Admin Approval', detail: 'Administrator verifies plant assignment and assigns system role.' },
+                { label: 'Shift Login / Pick User', detail: 'Select name in Operator Switcher for shift duty attribution.' },
+              ]}
+            />
             <H3>Signing in, and the operator picker</H3>
             <P>
               Enter your email and password as usual. If more than one Operator is active at your assigned
@@ -108,10 +116,20 @@ export const partI : BookPart =   {
             <Lead>
               On desktop and tablet, a left sidebar handles navigation and a top bar carries context; on a
               phone, the sidebar becomes a bottom navigation bar with a &ldquo;More&rdquo; sheet for anything
-              that doesn&rsquo;t fit in the main row. In every layout, items are organized into named
-              groups, Overview, Operations, Maintenance, Finance, Team, Data, Analysis, Admin, and which
-              groups you actually see depends entirely on your role.
+              that doesn&rsquo;t fit in the main row. In every layout, items are organized into six clear
+              groups: Monitor, Daily Logs, Assets, Review &amp; Corrections, Reports &amp; Data, and Team &amp; Admin.
             </Lead>
+            <Ref
+              cols={['Nav Group', 'Key Modules Included', 'Primary Purpose']}
+              rows={[
+                ['Monitor', 'Dashboard, Alerts, Compliance', 'Fleet-wide health, real-time threshold alarms, and water quality compliance scores.'],
+                ['Daily Logs', 'Daily Readings, RO Trains, PM Schedule, Incidents', 'Core day-to-day logging, reverse osmosis train telemetry, checklists, and tickets.'],
+                ['Assets', 'Plants, Hydraulics, Network Topology', 'Physical facility registry, deep well status, and interactive process flow graph.'],
+                ['Review & Corrections', 'Data Corrections, My Corrections, Data Analysis, Scorecard', 'Maker-Checker data corrections, personal requests, and multi-variable analytics.'],
+                ['Reports & Data', 'Costs & Tariffs, Data Exports, Smart Import', 'OPEX financial rollups, CSV bulk exports, and historical import wizard.'],
+                ['Team & Admin', 'Employees, Admin Console, Profile, Help, Privacy, Terms', 'Roster management, system security settings, DPA 2012 data rights, and manual.'],
+              ]}
+            />
             <P>
               The top bar is constant across every page. A{' '}
               <strong className="font-sans font-semibold not-italic">plant selector</strong> controls which

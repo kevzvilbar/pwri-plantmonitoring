@@ -1,5 +1,5 @@
 {
-  "maxTotalGzipKb": 1144.4,
+  "maxTotalGzipKb": 1152.9,
   "lastUpdated": "2026-10-04",
   "history": [
     {
@@ -135,6 +135,12 @@
       "maxTotalGzipKb": 1144.4,
       "previous": 1141.7,
       "reason": "Re-baselined for Legal, Privacy, and Accessibility Compliance (LEGAL-PRIVACY-A11Y-COMPLIANCE-PLAN.md): PrivacyPage (/privacy), TermsPage (/terms), ProfilePrivacyCard with Data Portability export & DNT/telemetry opt-out, and WCAG 2.1 AA accessibility improvements."
+    },
+    {
+      "date": "2026-10-04",
+      "maxTotalGzipKb": 1152.9,
+      "previous": 1144.4,
+      "reason": "Re-baselined for expanded and revised Operations Manual & User Guide: rich step-by-step operator workflows, worked calculations/formulas, and comprehensive troubleshooting chapters across lazy-loaded Help chunks."
     }
   ]
 }
