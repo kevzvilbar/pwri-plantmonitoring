@@ -44,6 +44,46 @@ export const authFile = (role: E2ERole) => `e2e/.auth/${role}.json`;
 const isPastAuth = (url: URL) => !/\/auth\/?$/.test(url.pathname);
 
 /**
+ * The Shift Handover Verification dialog (components/ShiftHandoverModal.tsx).
+ *
+ * It opens for every Operator/Technician whose browser has no stored confirmation for the
+ * current shift cycle -- i.e. in EVERY fresh Playwright context, since a saved session has
+ * no `pwri_shift_confirmation_*` key for the current cycle by the time a test runs (shifts
+ * roll over at 07:00 / 15:00 / 23:00 local time). It is a Radix modal, which marks the rest
+ * of the page `aria-hidden`: role-based queries such as
+ * `getByRole('heading', { name: 'Daily Readings' })` then match NOTHING until it is
+ * dismissed, while text locators (`text=Dashboard`) still do. That is why role-based
+ * assertions timed out on /operations and /ro-trains but the dashboard spec passed.
+ */
+const shiftHandoverConfirm = (page: Page) => page.getByRole('button', { name: /Continue Shift/ });
+
+/**
+ * Confirms the handover through the real UI so the app itself writes the confirmation into
+ * localStorage (and the saved storageState carries it). No-op when the dialog never opens
+ * (Manager/Admin accounts, or an already-confirmed session).
+ */
+export async function confirmShiftHandover(page: Page, timeout = 15_000) {
+  const confirm = shiftHandoverConfirm(page);
+  const appeared = await confirm.waitFor({ state: 'visible', timeout }).then(() => true, () => false);
+  if (!appeared) return false;
+  await confirm.click();
+  await confirm.waitFor({ state: 'hidden', timeout: 10_000 });
+  return true;
+}
+
+/**
+ * Belt and braces for Operator specs: dismiss the dialog whenever it appears mid-test (for
+ * example when a run straddles a 07:00 / 15:00 / 23:00 shift boundary and the stored
+ * confirmation from global-setup goes stale). Playwright runs the handler before any
+ * actionability check or auto-waiting assertion, then waits for the overlay to go away.
+ */
+export async function autoDismissShiftHandover(page: Page) {
+  await page.addLocatorHandler(shiftHandoverConfirm(page), async (confirm) => {
+    await confirm.click();
+  });
+}
+
+/**
  * Signs in through the real UI. Used by global-setup only -- specs reuse the
  * saved session. It fails fast, with the reason, instead of silently burning a
  * test timeout: an on-screen login error aborts immediately; otherwise it waits

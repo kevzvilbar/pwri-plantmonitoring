@@ -1,6 +1,6 @@
 import { chromium, type FullConfig } from '@playwright/test';
 import fs from 'node:fs';
-import { BASE_URL, BYPASS_CSP, E2E_ROLES, HAS_CREDENTIALS, authFile, signIn } from './base';
+import { BASE_URL, BYPASS_CSP, E2E_ROLES, HAS_CREDENTIALS, authFile, confirmShiftHandover, signIn } from './base';
 
 /**
  * Runs once before the suite (after the webServer is up): signs in as each seeded
@@ -30,6 +30,11 @@ export default async function globalSetup(_config: FullConfig) {
       const startedAt = Date.now();
       try {
         await signIn(page, email);
+        if (role === 'operator') {
+          // Operators get a blocking Shift Handover dialog in every fresh browser; confirming
+          // it here stores the confirmation in the saved session (see base.ts for why it matters).
+          await confirmShiftHandover(page);
+        }
         if (role === 'admin') {
           await page.evaluate(() => {
             try {

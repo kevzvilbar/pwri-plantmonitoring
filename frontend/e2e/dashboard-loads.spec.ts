@@ -1,12 +1,14 @@
 import { test, expect } from '@playwright/test';
-import { authFile, HAS_CREDENTIALS } from './base';
+import { authFile, autoDismissShiftHandover, HAS_CREDENTIALS } from './base';
 
 test.describe('Dashboard loads', () => {
   // Signed in once in e2e/global-setup.ts and reused; a UI login before every test
   // is what made this job overrun its time limit.
   test.use({ storageState: authFile('operator') });
-  test.beforeEach(() => {
+  test.beforeEach(async ({ page }) => {
     test.skip(!HAS_CREDENTIALS, 'Skipping: set E2E_EMAIL and E2E_PASSWORD to run this suite.');
+    // The Operator's Shift Handover dialog hides the page from role queries; see base.ts.
+    await autoDismissShiftHandover(page);
   });
   test('renders Dashboard with KPI cards and no error boundary', async ({ page }) => {
     await page.goto('/');

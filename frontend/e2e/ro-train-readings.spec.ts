@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { authFile, HAS_CREDENTIALS } from './base';
+import { authFile, autoDismissShiftHandover, HAS_CREDENTIALS } from './base';
 
 /**
  * Critical workflow: RO Train Hourly Readings on /ro-trains.
@@ -14,8 +14,10 @@ test.describe('RO Train Hourly Readings Workflow', () => {
   // Signed in once in e2e/global-setup.ts and reused; a UI login before every test
   // is what made this job overrun its time limit.
   test.use({ storageState: authFile('operator') });
-  test.beforeEach(() => {
+  test.beforeEach(async ({ page }) => {
     test.skip(!HAS_CREDENTIALS, 'Skipping: set E2E_EMAIL and E2E_PASSWORD to run this suite.');
+    // The Operator's Shift Handover dialog hides the page from role queries; see base.ts.
+    await autoDismissShiftHandover(page);
   });
 
   test('navigates to RO Trains and shows the Pre-Treatment tab', async ({ page }) => {
