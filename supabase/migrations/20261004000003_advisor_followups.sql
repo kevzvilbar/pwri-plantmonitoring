@@ -1,5 +1,5 @@
 -- =============================================================================
--- Migration: 20261004000002_advisor_followups.sql
+-- Migration: 20261004000003_advisor_followups.sql
 --
 -- Items from the 2026-10-04 Security/Performance Advisor review that are NOT already
 -- covered by the unapplied hardening migrations 20260923000001, 20260930000001..3.

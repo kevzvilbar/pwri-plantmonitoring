@@ -143,7 +143,7 @@ check('Database RLS & Migration Invariants', () => {
   }
 
   if (!latestHardeningFound) {
-    fail('Migration 20261004000001_security_hardening_costs_and_rpcs.sql is missing');
+    fail('Migration 20261004000002_security_hardening_costs_and_rpcs.sql is missing');
   } else {
     pass('Production costs RLS & summary RPC hardening migration present');
   }

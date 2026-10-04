@@ -1,5 +1,5 @@
 -- =============================================================================
--- Migration: 20261004000004_roles_visible_to_plant_colleagues.sql
+-- Migration: 20261004000005_roles_visible_to_plant_colleagues.sql
 -- Description:
 --   Fix: an Operator opening People & Staff Management > KPI saw almost no
 --   other operators.

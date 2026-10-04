@@ -1,5 +1,5 @@
 -- =============================================================================
--- Migration: 20261004000001_security_hardening_costs_and_rpcs.sql
+-- Migration: 20261004000002_security_hardening_costs_and_rpcs.sql
 -- Description:
 --   1. SEC-01: Hardens production_costs RLS policies so regular Operators
 --      cannot modify financial / OPEX / tariff calculations, while maintaining
