@@ -3,6 +3,8 @@ import { fmtIsoDate } from '@/lib/format';
 import { useQueryClient } from '@tanstack/react-query';
 import type { ScoreMatrix, ScoreMap2, EntityTypeScore, DayScore2, KpiRange2 } from './constants';
 import type { StaffMember } from '../../types';
+import { useAuth } from '@/hooks/useAuth';
+import { selectKpiOperators, type RoleRow } from './selectKpiOperators';
 import { generateDays2, SHARED_COLS, DEFAULT_RO_OPERATOR_SHIFT_TARGET, roTargetForPlant, computeEntityOverallScore } from './constants';
 import {
   usePlantFlags,
@@ -454,28 +456,15 @@ export function useKpiData(opts: UseKpiDataOptions): UseKpiDataResult {
   const nowManila = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Manila' }));
   const elapsedFraction = Math.min(1, Math.max(0, (nowManila.getHours() + nowManila.getMinutes() / 60) / 24));
 
-  const operators = useMemo(() => {
-    const roleMap = new Map<string, string>();
-    (roles as any[]).forEach((r) => {
-      if (r.user_id && r.role) roleMap.set(r.user_id, r.role);
-    });
-
-    return staff.filter((s) => {
-      if (s.status !== 'Active') return false;
-      const role = roleMap.get(s.id);
-      if (role) {
-        return role === 'Operator' || role === 'Technician';
-      }
-      if (s.designation) {
-        return (
-          s.designation === 'Operator' ||
-          s.designation === 'Technician' ||
-          (s.designation !== 'Admin' && s.designation !== 'Manager' && s.designation !== 'Data Analyst' && s.designation !== 'Supervisor')
-        );
-      }
-      return true;
-    });
-  }, [staff, roles]);
+  const { roles: viewerRoles, profile: viewerProfile } = useAuth();
+  const viewerPlantIds = viewerProfile?.plant_assignments;
+  const operators = useMemo(
+    () => selectKpiOperators(staff, roles as RoleRow[], {
+      roles: viewerRoles ?? [],
+      plantIds: viewerPlantIds ?? [],
+    }),
+    [staff, roles, viewerRoles, viewerPlantIds],
+  );
 
   const plantsWithOps = useMemo(() =>
     plants.filter((p) => operators.some((op) => op.plant_assignments?.includes(p.id))),
