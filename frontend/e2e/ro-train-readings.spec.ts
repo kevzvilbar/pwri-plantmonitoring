@@ -53,10 +53,10 @@ test.describe('RO Train Hourly Readings Workflow', () => {
 
   test('displays existing RO train log entries (log modal opens)', async ({ page }) => {
     await page.goto('/ro-trains');
-    await page.waitForTimeout(2_000);
+    await expect(page.getByRole('heading', { name: 'RO Trains & Pre-Treatment', exact: true })).toBeVisible({ timeout: 15_000 });
 
     // The Overview tab shows a table of trains
-    const overviewTab = page.locator('button:has-text("Overview"), [role="tab"]:has-text("Overview")');
+    const overviewTab = page.locator('button:has-text("Overview"), [role="tab"]:has-text("Overview")').first();
     const hasOverview = (await overviewTab.count()) > 0;
 
     if (hasOverview) {
@@ -66,5 +66,6 @@ test.describe('RO Train Hourly Readings Workflow', () => {
 
     // Should see at least the page without crash
     await expect(page.locator('text=Application Error')).toHaveCount(0);
+    await expect(page.locator('text=Something went wrong')).toHaveCount(0);
   });
 });

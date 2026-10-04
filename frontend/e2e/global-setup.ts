@@ -30,6 +30,16 @@ export default async function globalSetup(_config: FullConfig) {
       const startedAt = Date.now();
       try {
         await signIn(page, email);
+        if (role === 'admin') {
+          await page.evaluate(() => {
+            try {
+              localStorage.setItem('pwri-admin-mfa-skipped', '1');
+              sessionStorage.setItem('pwri-admin-mfa-skipped', '1');
+            } catch {
+              // Ignore in private browsing or restricted environments
+            }
+          });
+        }
         await context.storageState({ path: authFile(role) });
         // Logged so CI shows how long a real login takes on that runner.
         console.log(`[e2e] signed in as ${role} in ${((Date.now() - startedAt) / 1000).toFixed(1)}s`);

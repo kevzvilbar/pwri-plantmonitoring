@@ -9,8 +9,21 @@ import { resolveMfaGate, type MfaGateState } from '../lib/mfaGate';
 import { TotpChallengeForm, TotpEnrollForm } from './MfaForms';
 
 const SKIP_KEY = 'pwri-admin-mfa-skipped';
-const readSkip = () => { try { return sessionStorage.getItem(SKIP_KEY) === '1'; } catch { return false; } };
-const writeSkip = () => { try { sessionStorage.setItem(SKIP_KEY, '1'); } catch { /* private mode */ } };
+const readSkip = () => {
+  try {
+    return sessionStorage.getItem(SKIP_KEY) === '1' || localStorage.getItem(SKIP_KEY) === '1';
+  } catch {
+    return false;
+  }
+};
+const writeSkip = () => {
+  try {
+    sessionStorage.setItem(SKIP_KEY, '1');
+    localStorage.setItem(SKIP_KEY, '1');
+  } catch {
+    /* private mode */
+  }
+};
 
 /**
  * Wraps the protected app. Non-admins pass straight through. Admins must hold an

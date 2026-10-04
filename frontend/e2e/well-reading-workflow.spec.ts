@@ -49,22 +49,19 @@ test.describe('Well Reading Workflow', () => {
 
   test('enters a meter reading and saves', async ({ page }) => {
     await page.goto('/operations?tab=well');
-    await page.waitForTimeout(2000);
+    await expect(page.getByRole('heading', { name: 'Daily Readings' })).toBeVisible({ timeout: 15_000 });
 
-    // Wait for plant selector or wells to appear
-    const plantSelector = page.locator('#wellsection-plant');
-    const hasPlantSelector = (await plantSelector.count()) > 0;
+    const activeWells = page.getByText('Active Wells', { exact: true }).first();
+    const choosePlant = page.getByRole('group', { name: 'Choose a plant' });
+    await expect(activeWells.or(choosePlant)).toBeVisible({ timeout: 20_000 });
 
-    if (hasPlantSelector) {
-      const firstOption = plantSelector.locator('option').nth(1);
-      if ((await firstOption.count()) > 0) {
-        await plantSelector.selectOption({ index: 1 });
-        await page.waitForTimeout(1500);
-      }
+    if (await choosePlant.isVisible()) {
+      await choosePlant.getByRole('button', { name: 'E2E Test Plant' }).click();
+      await expect(activeWells).toBeVisible({ timeout: 15_000 });
     }
 
-    // Look for a meter reading input — WellRow exposes odometer inputs as inputs
-    const readingInput = page.locator('input[type="number"]').first();
+    // Look for a meter reading input — WellRow exposes odometer inputs or number inputs
+    const readingInput = page.locator('input[type="number"], [data-testid*="well-meter-input"]').first();
     const inputCount = await readingInput.count();
 
     if (inputCount === 0) {
@@ -72,7 +69,8 @@ test.describe('Well Reading Workflow', () => {
       return;
     }
 
-    await readingInput.fill('9999');
+    // Enter realistic non-anomalous reading (seeded previous reading was 1000)
+    await readingInput.fill('1050');
     await page.waitForTimeout(500);
 
     // Click the first save/submit button associated with a well row
