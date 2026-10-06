@@ -60,11 +60,10 @@ export default function ROTrains() {
     queryKey: ['ro-last-all', trainIdsKey],
     queryFn: async () => {
       if (!trainIds.length) return {};
-      type RoTrainReadingRow = Database['public']['Tables']['ro_train_readings']['Row'];
       const { data } = await supabase.from('ro_train_readings_latest' as unknown as 'ro_train_readings')
-        .select('*')
+        .select('id, train_id, reading_datetime, permeate_flow, feed_flow, recovery_pct, permeate_tds, feed_tds, dp_psi, feed_pressure_psi, reject_pressure_psi, rejection_pct')
         .in('train_id', trainIds)
-        .returns<RoTrainReadingRow[]>();
+        .returns<any[]>();
       const map: Record<string, any> = {};
       for (const r of data ?? []) { map[r.train_id] = r; }
       return map;

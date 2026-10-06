@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS public.alert_events (
   plant_id      uuid        REFERENCES public.plants(id) ON DELETE CASCADE,
   action        text        NOT NULL
                             CHECK (action IN ('acknowledged','resolved','snoozed','reopened')),
-  user_id       uuid        NOT NULL DEFAULT auth.uid() REFERENCES auth.users(id) ON DELETE SET NULL,
+  user_id       uuid        NOT NULL DEFAULT auth.uid() REFERENCES auth.users(id) ON DELETE CASCADE,
   -- Free text. Required by the UI for 'resolved' (D2), optional otherwise.
   note          text,
   -- Only set for action = 'snoozed'. The client caps this at 24 h and never

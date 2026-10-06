@@ -23,16 +23,19 @@ CREATE INDEX IF NOT EXISTS idx_shift_duty_log_cycle ON public.shift_duty_log (cy
 
 ALTER TABLE public.shift_duty_log ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "shift_duty_log_select_authenticated" ON public.shift_duty_log;
 CREATE POLICY "shift_duty_log_select_authenticated"
   ON public.shift_duty_log FOR SELECT
   TO authenticated
   USING (true);
 
+DROP POLICY IF EXISTS "shift_duty_log_insert_authenticated" ON public.shift_duty_log;
 CREATE POLICY "shift_duty_log_insert_authenticated"
   ON public.shift_duty_log FOR INSERT
   TO authenticated
   WITH CHECK (auth.uid() = operator_id OR auth.uid() = partner_operator_id OR auth.uid() = confirmed_by);
 
+DROP POLICY IF EXISTS "shift_duty_log_update_authenticated" ON public.shift_duty_log;
 CREATE POLICY "shift_duty_log_update_authenticated"
   ON public.shift_duty_log FOR UPDATE
   TO authenticated

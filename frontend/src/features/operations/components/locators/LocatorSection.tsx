@@ -217,7 +217,7 @@ export function LocatorReadingForm({ highlightId }: { highlightId?: string | nul
       const results = await Promise.all(
         locatorIds.map(id =>
           supabase.from('locator_readings')
-            .select('*')
+            .select('id, locator_id, reading_datetime, current_reading, is_locked, is_estimated, remarks, recorded_by, created_at')
             .eq('locator_id', id)
             .order('reading_datetime', { ascending: false })
             .limit(1),
@@ -276,7 +276,7 @@ export function LocatorReadingForm({ highlightId }: { highlightId?: string | nul
     queryFn: async () => {
       const { data, error } = await supabase
         .from('reading_gap_reasons' as any)
-        .select('*')
+        .select('id, plant_id, entity_type, entity_id, gap_date, meter_key, reason, notes, reported_by, created_at')
         .eq('plant_id', plantId)
         .eq('entity_type', 'locator')
         .eq('gap_date', todayDateStr);

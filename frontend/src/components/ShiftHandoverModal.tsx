@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth, type Profile } from '@/hooks/useAuth';
 import { useAppStore } from '@/store/appStore';
 import { supabase } from '@/integrations/supabase/client';
@@ -50,61 +50,15 @@ export function ShiftHandoverModal() {
   const currentOperator = activeOperator ?? profile;
   const currentOperatorId = activeOperatorId ?? user?.id ?? '';
 
-  // Check if current shift cycle has been verified by the logged operator
-  const checkShift = useCallback(() => {
-    if (!user || !profile) {
-      setIsOpen(false);
-      return;
-    }
-
-    // Only apply handover checks for operator roles or active operator sessions
-    const isOperator = profile.designation === 'Operator' || profile.designation === 'Technician' || activeOperatorId !== null;
-    if (!isOperator) {
-      setIsOpen(false);
-      return;
-    }
-
-    const now = new Date();
-    const shift = getCurrentShift(now);
-    const cycleKey = getShiftCycleKey(now);
-    setCurrentShift(shift);
-
-    const stored = getStoredShiftConfirmation(user.id, currentOperatorId);
-
-    // If no confirmation, cycle/operator changed, or >8 hours elapsed, trigger the prompt
-    if (isShiftConfirmationExpired(stored, cycleKey, currentOperatorId, now)) {
-      setIsOpen(true);
-      setShowSwitchPicker(false);
-      setSearchTerm('');
-      loadPeerOperators();
-    } else {
-      setIsOpen(false);
-    }
-  }, [user, profile, activeOperatorId, currentOperatorId]);
-
-  // Periodic check (every 30s) + on tab focus / visibility change
-  useEffect(() => {
-    checkShift();
-    const interval = setInterval(checkShift, 30_000);
-
-    const onVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        checkShift();
-      }
-    };
-
-    window.addEventListener('visibilitychange', onVisibilityChange);
-    window.addEventListener('focus', checkShift);
-
-    return () => {
-      clearInterval(interval);
-      window.removeEventListener('visibilitychange', onVisibilityChange);
-      window.removeEventListener('focus', checkShift);
-    };
-  }, [checkShift]);
+  const lastPeerFetchRef = useRef<number>(0);
 
   // Fetch peer operators on the same plant when handover is selected
-  const loadPeerOperators = async () => {
+  const loadPeerOperators = useCallback(async (force = false) => {
+    const now = Date.now();
+    if (!force && now - lastPeerFetchRef.current < 5 * 60_000 && peerOperators.length > 0) {
+      return;
+    }
+    lastPeerFetchRef.current = now;
     setLoadingPeers(true);
     try {
       const plantAssignments = profile?.plant_assignments ?? (selectedPlantId ? [selectedPlantId] : []);
@@ -128,7 +82,64 @@ export function ShiftHandoverModal() {
     } finally {
       setLoadingPeers(false);
     }
-  };
+  }, [profile?.plant_assignments, selectedPlantId, peerOperators.length]);
+
+  // Check if current shift cycle has been verified by the logged operator
+  const checkShift = useCallback(() => {
+    if (!user || !profile) {
+      setIsOpen(false);
+      return;
+    }
+
+    // Only apply handover checks for operator roles or active operator sessions
+    const isOperator = profile.designation === 'Operator' || profile.designation === 'Technician' || activeOperatorId !== null;
+    if (!isOperator) {
+      setIsOpen(false);
+      return;
+    }
+
+    const now = new Date();
+    const shift = getCurrentShift(now);
+    const cycleKey = getShiftCycleKey(now);
+    setCurrentShift(shift);
+
+    const stored = getStoredShiftConfirmation(user.id, currentOperatorId);
+
+    // If no confirmation, cycle/operator changed, or >8 hours elapsed, trigger the prompt
+    if (isShiftConfirmationExpired(stored, cycleKey, currentOperatorId, now)) {
+      setIsOpen((prev) => {
+        if (!prev) {
+          setShowSwitchPicker(false);
+          setSearchTerm('');
+          loadPeerOperators();
+        }
+        return true;
+      });
+    } else {
+      setIsOpen(false);
+    }
+  }, [user, profile, activeOperatorId, currentOperatorId, loadPeerOperators]);
+
+  // Periodic check (every 30s) + on tab focus / visibility change
+  useEffect(() => {
+    checkShift();
+    const interval = setInterval(checkShift, 30_000);
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        checkShift();
+      }
+    };
+
+    window.addEventListener('visibilitychange', onVisibilityChange);
+    window.addEventListener('focus', checkShift);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('visibilitychange', onVisibilityChange);
+      window.removeEventListener('focus', checkShift);
+    };
+  }, [checkShift]);
 
   // Option 1: Confirm same operator continuing
   const handleConfirmSame = async () => {

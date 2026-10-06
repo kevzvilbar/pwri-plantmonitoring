@@ -15,10 +15,10 @@
 --     (per-train EM config UI)
 
 ALTER TABLE ro_trains
-  ADD COLUMN uses_em_meter      boolean NOT NULL DEFAULT true,
-  ADD COLUMN em_all_streams     boolean NOT NULL DEFAULT true,
-  ADD COLUMN em_stream_feed     boolean NOT NULL DEFAULT true,
-  ADD COLUMN em_stream_permeate boolean NOT NULL DEFAULT true,
-  ADD COLUMN em_stream_reject   boolean NOT NULL DEFAULT true;
+  ADD COLUMN IF NOT EXISTS uses_em_meter      boolean NOT NULL DEFAULT true,
+  ADD COLUMN IF NOT EXISTS em_all_streams     boolean NOT NULL DEFAULT true,
+  ADD COLUMN IF NOT EXISTS em_stream_feed     boolean NOT NULL DEFAULT true,
+  ADD COLUMN IF NOT EXISTS em_stream_permeate boolean NOT NULL DEFAULT true,
+  ADD COLUMN IF NOT EXISTS em_stream_reject   boolean NOT NULL DEFAULT true;
 
 -- No backfill needed: defaults preserve existing behavior.

@@ -42,7 +42,7 @@ function useSamePlantOperators(plantAssignments: string[]) {
         plantAssignments.map((pid) =>
           supabase
             .from('user_profiles')
-            .select('*')
+            .select('id, username, first_name, middle_name, last_name, suffix, designation, immediate_head_id, plant_assignments, status, profile_complete, confirmed, updated_at')
             .eq('status', 'Active')
             .eq('designation', 'Operator')
             .contains('plant_assignments', [pid])

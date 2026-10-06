@@ -15,5 +15,8 @@ ALTER TABLE public.reading_gap_reasons
   DROP CONSTRAINT IF EXISTS reading_gap_reasons_entity_type_entity_id_gap_date_key;
 
 ALTER TABLE public.reading_gap_reasons
+  DROP CONSTRAINT IF EXISTS reading_gap_reasons_entity_type_entity_id_gap_date_meter_key_key;
+
+ALTER TABLE public.reading_gap_reasons
   ADD CONSTRAINT reading_gap_reasons_entity_type_entity_id_gap_date_meter_key_key
   UNIQUE (entity_type, entity_id, gap_date, meter_key);

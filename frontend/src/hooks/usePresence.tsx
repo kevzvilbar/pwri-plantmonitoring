@@ -115,10 +115,12 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
   // ---------------------------------------------------------------------------
   // Stamp: write updated_at via RPC to DB + broadcast to all other browsers
   // ---------------------------------------------------------------------------
-  const stamp = useCallback(async () => {
+  const stamp = useCallback(async (force = false) => {
     if (!currentUserId) return;
     const now = Date.now();
-    if (now - lastStampRef.current < 10_000) return; // debounce 10 s
+    // 5 minutes (300 s) for routine / focus stamps; 10 s for explicit mutations (force = true)
+    const minInterval = force ? 10_000 : 300_000;
+    if (now - lastStampRef.current < minInterval) return;
     lastStampRef.current = now;
 
     const isoNow = new Date(now).toISOString();
@@ -154,9 +156,9 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
     }
   }, [currentUserId, patchCacheAndPing]);
 
-  // Register as the global stamp function.
+  // Register as the global stamp function (always force-enabled for explicit data actions).
   useEffect(() => {
-    _globalStamp = stamp;
+    _globalStamp = () => stamp(true);
     return () => { _globalStamp = null; };
   }, [stamp]);
 
@@ -208,7 +210,7 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
     if (!currentUserId) return;
     const isLowQuota = import.meta.env.VITE_LOW_QUOTA_MODE === '1' || import.meta.env.VITE_LOW_QUOTA_MODE === 'true';
 
-    stamp(); // immediate on mount / login / operator switch
+    stamp(true); // immediate on mount / login / operator switch
 
     if (isLowQuota) return; // In low quota mode, skip periodic background heartbeats
 

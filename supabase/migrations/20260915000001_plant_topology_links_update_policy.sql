@@ -8,6 +8,8 @@
 -- INSERT and DELETE policies on this table.
 -- Applied live via Supabase MCP on 2026-09-15; this file keeps the repo in sync with that.
 
+DROP POLICY IF EXISTS "topology_links_update" ON "public"."plant_topology_links";
+
 CREATE POLICY "topology_links_update" ON "public"."plant_topology_links"
 FOR UPDATE
 USING (

@@ -56,15 +56,18 @@ CREATE TABLE IF NOT EXISTS "public"."plant_process_stages" (
 
 ALTER TABLE "public"."plant_process_stages" OWNER TO "postgres";
 
-ALTER TABLE ONLY "public"."plant_process_stages"
-    ADD CONSTRAINT "plant_process_stages_pkey" PRIMARY KEY ("id");
-
-ALTER TABLE ONLY "public"."plant_process_stages"
-    ADD CONSTRAINT "plant_process_stages_plant_id_stage_key_key" UNIQUE ("plant_id", "stage_key");
-
-ALTER TABLE ONLY "public"."plant_process_stages"
-    ADD CONSTRAINT "plant_process_stages_plant_id_fkey"
-    FOREIGN KEY ("plant_id") REFERENCES "public"."plants"("id") ON DELETE CASCADE;
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'plant_process_stages_pkey') THEN
+        ALTER TABLE ONLY "public"."plant_process_stages" ADD CONSTRAINT "plant_process_stages_pkey" PRIMARY KEY ("id");
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'plant_process_stages_plant_id_stage_key_key') THEN
+        ALTER TABLE ONLY "public"."plant_process_stages" ADD CONSTRAINT "plant_process_stages_plant_id_stage_key_key" UNIQUE ("plant_id", "stage_key");
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'plant_process_stages_plant_id_fkey') THEN
+        ALTER TABLE ONLY "public"."plant_process_stages" ADD CONSTRAINT "plant_process_stages_plant_id_fkey" FOREIGN KEY ("plant_id") REFERENCES "public"."plants"("id") ON DELETE CASCADE;
+    END IF;
+END $$;
 
 CREATE INDEX IF NOT EXISTS "idx_process_stages_plant"
     ON "public"."plant_process_stages" USING "btree" ("plant_id", "sort_order");
@@ -91,19 +94,21 @@ CREATE TABLE IF NOT EXISTS "public"."product_tanks" (
 
 ALTER TABLE "public"."product_tanks" OWNER TO "postgres";
 
-ALTER TABLE ONLY "public"."product_tanks"
-    ADD CONSTRAINT "product_tanks_pkey" PRIMARY KEY ("id");
-
-ALTER TABLE ONLY "public"."product_tanks"
-    ADD CONSTRAINT "product_tanks_plant_id_tank_number_key" UNIQUE ("plant_id", "tank_number");
-
-ALTER TABLE ONLY "public"."product_tanks"
-    ADD CONSTRAINT "product_tanks_plant_id_fkey"
-    FOREIGN KEY ("plant_id") REFERENCES "public"."plants"("id") ON DELETE CASCADE;
-
-ALTER TABLE ONLY "public"."product_tanks"
-    ADD CONSTRAINT "product_tanks_product_meter_id_fkey"
-    FOREIGN KEY ("product_meter_id") REFERENCES "public"."product_meters"("id") ON DELETE SET NULL;
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'product_tanks_pkey') THEN
+        ALTER TABLE ONLY "public"."product_tanks" ADD CONSTRAINT "product_tanks_pkey" PRIMARY KEY ("id");
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'product_tanks_plant_id_tank_number_key') THEN
+        ALTER TABLE ONLY "public"."product_tanks" ADD CONSTRAINT "product_tanks_plant_id_tank_number_key" UNIQUE ("plant_id", "tank_number");
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'product_tanks_plant_id_fkey') THEN
+        ALTER TABLE ONLY "public"."product_tanks" ADD CONSTRAINT "product_tanks_plant_id_fkey" FOREIGN KEY ("plant_id") REFERENCES "public"."plants"("id") ON DELETE CASCADE;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'product_tanks_product_meter_id_fkey') THEN
+        ALTER TABLE ONLY "public"."product_tanks" ADD CONSTRAINT "product_tanks_product_meter_id_fkey" FOREIGN KEY ("product_meter_id") REFERENCES "public"."product_meters"("id") ON DELETE SET NULL;
+    END IF;
+END $$;
 
 CREATE INDEX IF NOT EXISTS "idx_product_tanks_plant"
     ON "public"."product_tanks" USING "btree" ("plant_id", "tank_number");
@@ -128,16 +133,18 @@ CREATE TABLE IF NOT EXISTS "public"."dosing_points" (
 
 ALTER TABLE "public"."dosing_points" OWNER TO "postgres";
 
-ALTER TABLE ONLY "public"."dosing_points"
-    ADD CONSTRAINT "dosing_points_pkey" PRIMARY KEY ("id");
-
-ALTER TABLE ONLY "public"."dosing_points"
-    ADD CONSTRAINT "dosing_points_plant_chem_stage_key"
-    UNIQUE ("plant_id", "chemical", "injects_into_stage_key");
-
-ALTER TABLE ONLY "public"."dosing_points"
-    ADD CONSTRAINT "dosing_points_plant_id_fkey"
-    FOREIGN KEY ("plant_id") REFERENCES "public"."plants"("id") ON DELETE CASCADE;
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'dosing_points_pkey') THEN
+        ALTER TABLE ONLY "public"."dosing_points" ADD CONSTRAINT "dosing_points_pkey" PRIMARY KEY ("id");
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'dosing_points_plant_chem_stage_key') THEN
+        ALTER TABLE ONLY "public"."dosing_points" ADD CONSTRAINT "dosing_points_plant_chem_stage_key" UNIQUE ("plant_id", "chemical", "injects_into_stage_key");
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'dosing_points_plant_id_fkey') THEN
+        ALTER TABLE ONLY "public"."dosing_points" ADD CONSTRAINT "dosing_points_plant_id_fkey" FOREIGN KEY ("plant_id") REFERENCES "public"."plants"("id") ON DELETE CASCADE;
+    END IF;
+END $$;
 
 CREATE INDEX IF NOT EXISTS "idx_dosing_points_plant"
     ON "public"."dosing_points" USING "btree" ("plant_id");

@@ -18,9 +18,13 @@ import type { Database } from '@/integrations/supabase/types';
 type WellRow = Database['public']['Tables']['wells']['Row'];
 type WellReadingRow = Database['public']['Tables']['well_readings']['Row'];
 
+const WELL_SELECT_FIELDS = 'id, plant_id, name, status, size, diameter, drilling_depth_m, gps_lat, gps_lng, is_blending_well, has_power_meter, meter_brand, meter_serial, meter_size, meter_installed_date, electric_meter_brand, electric_meter_serial, electric_meter_size, electric_meter_installed_date, meter_multiplier, multiplier_enabled, created_at, updated_at';
+
+const WELL_READING_SELECT_FIELDS = 'id, plant_id, well_id, reading_datetime, current_reading, previous_reading, daily_volume, pressure_psi, power_meter_reading, daily_power_kwh, tds_ppm, turbidity_ntu, recorded_by, locked_by, locked_at, is_estimated, is_meter_replacement, is_meter_rollover, meter_rollover_max, norm_status, off_location_flag, gps_lat, gps_lng, multiplier_at_reading, created_at';
+
 /** All wells, optionally filtered to one plant. */
 export async function fetchWells(plantId?: string): Promise<WellRow[]> {
-  let q = supabase.from('wells').select('*').order('name');
+  let q = supabase.from('wells').select(WELL_SELECT_FIELDS).order('name');
   if (plantId) q = q.eq('plant_id', plantId);
   const { data, error } = await q;
   if (error) throw error;
@@ -34,7 +38,7 @@ export async function fetchWellReadings(
 ): Promise<WellReadingRow[]> {
   const { data, error } = await supabase
     .from('well_readings')
-    .select('*')
+    .select(WELL_READING_SELECT_FIELDS)
     .eq('well_id', wellId)
     .order('reading_datetime', { ascending: false })
     .limit(limit);

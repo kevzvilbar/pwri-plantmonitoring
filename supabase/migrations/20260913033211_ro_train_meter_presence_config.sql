@@ -16,9 +16,9 @@
 --     (per-train meter visibility in the reading form)
 
 ALTER TABLE ro_trains
-  ADD COLUMN has_feed_meter     boolean NOT NULL DEFAULT true,
-  ADD COLUMN has_permeate_meter boolean NOT NULL DEFAULT true,
-  ADD COLUMN has_reject_meter   boolean NOT NULL DEFAULT true;
+  ADD COLUMN IF NOT EXISTS has_feed_meter     boolean NOT NULL DEFAULT true,
+  ADD COLUMN IF NOT EXISTS has_permeate_meter boolean NOT NULL DEFAULT true,
+  ADD COLUMN IF NOT EXISTS has_reject_meter   boolean NOT NULL DEFAULT true;
 
 -- No backfill needed: defaults preserve existing behavior.
 

@@ -202,7 +202,7 @@ export function useProductSectionData({
     queryFn: async () => {
       const { data, error } = await supabase
         .from('reading_gap_reasons' as any)
-        .select('*')
+        .select('id, plant_id, entity_type, entity_id, gap_date, meter_key, reason, notes, reported_by, created_at')
         .eq('plant_id', plantId)
         .eq('entity_type', 'product')
         .eq('gap_date', todayDateStr);

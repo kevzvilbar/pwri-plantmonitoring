@@ -646,7 +646,10 @@ export async function fetchCorrectionInbox(tableFilter?: SourceTable): Promise<F
 
 /** Fetch correction requests */
 export async function fetchCorrectionRequests(status?: string): Promise<CorrectionRequest[]> {
-  let q = supabase.from('correction_requests').select('*').order('created_at', { ascending: false });
+  let q = supabase
+    .from('correction_requests')
+    .select('id, plant_id, source_table, source_id, original_value, proposed_value, reason, note, status, submitted_by, resolution_note, resolved_at, resolved_by, created_at')
+    .order('created_at', { ascending: false });
   if (status) q = q.eq('status', status);
   const { data: reqs, error } = await q;
   if (error) throw error;
@@ -689,7 +692,7 @@ export async function fetchEditHistory(
 ): Promise<Database['public']['Tables']['reading_normalizations']['Row'][]> {
   const { data, error } = await supabase
     .from('reading_normalizations')
-    .select('*')
+    .select('id, action, adjusted_value, note, original_value, performed_at, performed_by, performed_role, retractable, source_id, source_table')
     .order('performed_at', { ascending: false })
     .limit(limit);
   if (error) throw error;
