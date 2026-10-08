@@ -212,6 +212,9 @@ export function TrendChart({
           showTotalCostLine={s.showTotalCostLine} showPowerCostLine={s.showPowerCostLine} showChemCostLine={s.showChemCostLine}
           stackMode={s.stackMode} rawwaterBreakdown={s.rawwaterBreakdown} viewBreakdown={s.viewBreakdown}
           prodDrillSource={s.prodDrillSource}
+          roReadings={roReadings ?? []} roTrainEntities={roTrainEntities} roTrainNames={roTrainNames}
+          compact={compact} selectedTrainIds={s.selectedTrainIds}
+          toggleTrain={toggleTrain} selectAllTrains={selectAllTrains} clearAllTrains={clearAllTrains}
         />
       </div>
 
