@@ -129,4 +129,28 @@ describe('ChlorineResidualChart', () => {
 
     expect(screen.getByText(/6h gap/i)).toBeInTheDocument();
   });
+  it('treats blank readings as missing: an overnight blank run becomes a gap', () => {
+    const readings = [
+      { id: 'a', train_id: 'train-1', reading_datetime: '2026-10-07T22:00:00Z', chlorine_residual_mg_l: 0.9 },
+      { id: 'b', train_id: 'train-1', reading_datetime: '2026-10-08T00:00:00Z', chlorine_residual_mg_l: null },
+      { id: 'c', train_id: 'train-1', reading_datetime: '2026-10-08T02:00:00Z', chlorine_residual_mg_l: '' },
+      { id: 'd', train_id: 'train-1', reading_datetime: '2026-10-08T04:00:00Z', chlorine_residual_mg_l: 1.1 },
+    ];
+    render(<ChlorineResidualChart roReadings={readings} roTrainEntities={mockTrainEntities} />);
+    expect(screen.getByText(/6h gap/i)).toBeInTheDocument();
+    // only the 2 real readings are counted
+    expect(screen.getByText('Valid Readings').nextSibling?.textContent).toBe('2');
+  });
+
+  it('drops retracted readings and counts normalized suspect readings as verified', () => {
+    const readings = [
+      { id: 'a', train_id: 'train-1', reading_datetime: '2026-10-08T01:00:00Z', chlorine_residual_mg_l: 0.9 },
+      { id: 'b', train_id: 'train-1', reading_datetime: '2026-10-08T02:00:00Z', chlorine_residual_mg_l: 8.3, norm_status: 'retracted' },
+      { id: 'c', train_id: 'train-1', reading_datetime: '2026-10-08T03:00:00Z', chlorine_residual_mg_l: 8.3, norm_status: 'normalized' },
+    ];
+    render(<ChlorineResidualChart roReadings={readings} roTrainEntities={mockTrainEntities} />);
+    // retracted gone; normalized 8.3 is verified -> valid, not suspect
+    expect(screen.getByText('Valid Readings').nextSibling?.textContent).toBe('2');
+  });
+
 });

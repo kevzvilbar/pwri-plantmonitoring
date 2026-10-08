@@ -10,7 +10,6 @@ import {
   ReferenceArea,
   ReferenceLine,
 } from 'recharts';
-import { format } from 'date-fns';
 import {
   FlaskConical,
   AlertTriangle,
@@ -35,12 +34,30 @@ import { DRILL_COLORS } from './TrendChartLegend';
 import { CHART_CURSOR } from './TrendChartCanvas/chartShell';
 import { INSTRUMENT_TOOLTIP_STYLE } from '@/shared/chartColors';
 
+// All timestamps render in Plant time (Asia/Manila), never the viewer's device TZ.
+const PH_TZ = 'Asia/Manila';
+const AXIS_FMT = new Intl.DateTimeFormat('en-US', {
+  month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false, timeZone: PH_TZ,
+});
+const FULL_FMT = new Intl.DateTimeFormat('en-US', {
+  month: 'short', day: 'numeric', year: 'numeric',
+  hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false, timeZone: PH_TZ,
+});
+const fmtAxis = (ts: number) => AXIS_FMT.format(new Date(ts));
+const fmtFull = (ts: number) => FULL_FMT.format(new Date(ts));
+
+/** Suspect readings are drawn pinned to this ceiling; the real value is shown in the tooltip. */
+const Y_CAP = 3.5;
+const SEG_SEP = '::';
+
 export interface ChlorineReadingInput {
   id?: string;
   train_id?: string;
   reading_datetime?: string;
   chlorine_residual_mg_l?: number | string | null;
   verified?: boolean;
+  /** ro_train_readings.norm_status: 'retracted' rows are dropped, 'normalized' counts as verified. */
+  norm_status?: string | null;
 }
 
 export interface ChlorineResidualChartProps {
@@ -87,11 +104,6 @@ export function ChlorineResidualChart({
       .sort((a, b) => a.label.localeCompare(b.label));
   }, [roTrainEntities, roReadings, roTrainNames]);
 
-  const visibleTrainEntities = useMemo(() => {
-    if (activeTrainSet === null) return availableTrainEntities;
-    return availableTrainEntities.filter((e) => activeTrainSet.has(e.id));
-  }, [availableTrainEntities, activeTrainSet]);
-
   const handleTrainToggle = useCallback(
     (id: string) => {
       if (onToggleTrain) {
@@ -125,21 +137,27 @@ export function ChlorineResidualChart({
     setLocalSelectedTrains(new Set());
   }, [onClearAllTrains]);
 
-  // Transform readings into RawChlorinePoint format
+  // Transform readings into RawChlorinePoint format.
+  // Missing values (null/blank/NaN) and retracted rows are dropped here: a missing
+  // reading is never a measurement, and the gap logic must see only real readings.
   const rawPoints = useMemo<RawChlorinePoint[]>(() => {
-    return roReadings
-      .filter((r): r is ChlorineReadingInput & { train_id: string; reading_datetime: string } =>
-        Boolean(r.reading_datetime && r.train_id),
-      )
-      .map((r) => ({
+    const out: RawChlorinePoint[] = [];
+    for (const r of roReadings) {
+      if (!r.reading_datetime || !r.train_id) continue;
+      if (r.norm_status === 'retracted') continue;
+      if (r.chlorine_residual_mg_l == null || r.chlorine_residual_mg_l === '') continue;
+      const val = Number(r.chlorine_residual_mg_l);
+      if (!Number.isFinite(val)) continue;
+      out.push({
         id: r.id,
         train_id: r.train_id,
         train_name: roTrainNames?.get(r.train_id) || `Train ${r.train_id.slice(-4)}`,
         reading_datetime: r.reading_datetime,
-        chlorine_residual_mg_l:
-          r.chlorine_residual_mg_l != null ? Number(r.chlorine_residual_mg_l) : null,
-        verified: r.verified ?? false,
-      }));
+        chlorine_residual_mg_l: val,
+        verified: r.verified === true || r.norm_status === 'normalized',
+      });
+    }
+    return out;
   }, [roReadings, roTrainNames]);
 
   // Filter raw points by visible trains
@@ -163,62 +181,61 @@ export function ChlorineResidualChart({
     return detectChlorineGaps(filteredRawPoints, gapThresholdMinutes, roTrainNames);
   }, [filteredRawPoints, gapThresholdMinutes, roTrainNames]);
 
-  // Build chart pivot rows grouped by timestamp
-  const { chartRows, maxObservedValue } = useMemo(() => {
-    const timestampMap = new Map<
-      number,
-      {
-        timestamp: number;
-        label: string;
-        isoDatetime: string;
-        [trainId: string]: number | string | Map<string, RawChlorinePoint> | undefined;
-        _meta?: Map<string, RawChlorinePoint>;
-      }
-    >();
-
-    let maxVal = 1.5;
-
-    for (const pt of filteredRawPoints) {
-      const dt = new Date(pt.reading_datetime);
-      const ts = dt.getTime();
-
-      let row = timestampMap.get(ts);
-      if (!row) {
-        row = {
-          timestamp: ts,
-          label: format(dt, 'MMM d, HH:mm'),
-          isoDatetime: pt.reading_datetime,
-          _meta: new Map<string, RawChlorinePoint>(),
-        };
-        timestampMap.set(ts, row);
-      }
-
-      if (pt.chlorine_residual_mg_l != null) {
-        const val = pt.chlorine_residual_mg_l;
-        row[pt.train_id] = val;
-        row._meta!.set(pt.train_id, pt);
-        if (val > maxVal) {
-          maxVal = val;
-        }
-      }
+  // One series per (train, continuous segment). A new segment starts after every gap
+  // longer than the active threshold, so the line breaks across gaps and stays
+  // connected across shorter ones (nulls from other trains' timestamps are skipped).
+  const { chartRows, series, hasOffScale } = useMemo(() => {
+    const gapEnds = new Map<string, number[]>();
+    for (const g of gaps) {
+      const list = gapEnds.get(g.train_id) ?? [];
+      list.push(g.end_ts);
+      gapEnds.set(g.train_id, list);
     }
 
-    const sortedRows = Array.from(timestampMap.values()).sort(
-      (a, b) => a.timestamp - b.timestamp,
-    );
+    type Row = { ts: number; _meta: Map<string, RawChlorinePoint> } & Record<string, unknown>;
+    const rowMap = new Map<number, Row>();
+    const segCount = new Map<string, number>();
+    let offScale = false;
+
+    for (const pt of filteredRawPoints) {
+      const ts = new Date(pt.reading_datetime).getTime();
+      const val = pt.chlorine_residual_mg_l as number;
+      const seg = (gapEnds.get(pt.train_id) ?? []).filter((end) => end <= ts).length;
+      segCount.set(pt.train_id, Math.max(segCount.get(pt.train_id) ?? 0, seg + 1));
+
+      let row = rowMap.get(ts);
+      if (!row) {
+        row = { ts, _meta: new Map() } as Row;
+        rowMap.set(ts, row);
+      }
+      if (val > Y_CAP) offScale = true;
+      row[`${pt.train_id}${SEG_SEP}${seg}`] = Math.min(val, Y_CAP);
+      row._meta.set(pt.train_id, pt);
+    }
+
+    const seriesList: { key: string; trainId: string }[] = [];
+    segCount.forEach((n, trainId) => {
+      for (let i = 0; i < n; i++) seriesList.push({ key: `${trainId}${SEG_SEP}${i}`, trainId });
+    });
 
     return {
-      chartRows: sortedRows,
-      maxObservedValue: maxVal,
+      chartRows: Array.from(rowMap.values()).sort((x, y) => x.ts - y.ts),
+      series: seriesList,
+      hasOffScale: offScale,
     };
-  }, [filteredRawPoints]);
+  }, [filteredRawPoints, gaps]);
 
-  // Dynamic Y-axis ceiling: clamp at 3.5 mg/L to avoid squashing the 0.3 - 1.5 band when extreme outliers occur (>3.0)
-  const yAxisMax = useMemo(() => {
-    if (maxObservedValue <= 2.0) return 2.0;
-    if (maxObservedValue <= 3.5) return +(maxObservedValue + 0.3).toFixed(1);
-    return 3.5; // Cap at 3.5 to keep compliance band clearly legible
-  }, [maxObservedValue]);
+  const trainMeta = useMemo(() => {
+    const m = new Map<string, { label: string; color: string }>();
+    availableTrainEntities.forEach((e) => m.set(e.id, { label: e.label, color: e.color }));
+    return m;
+  }, [availableTrainEntities]);
+
+  // Y-axis always shows 0 to 1.5 (plus headroom); suspect values are pinned at Y_CAP.
+  const yAxisMax = hasOffScale ? Y_CAP : (() => {
+    const m = filteredRawPoints.reduce((mx, p) => Math.max(mx, p.chlorine_residual_mg_l ?? 0), 0);
+    return m <= 1.8 ? 2.0 : Math.min(Y_CAP, +(m + 0.3).toFixed(1));
+  })();
 
   interface CustomDotProps {
     cx?: number;
@@ -229,78 +246,83 @@ export function ChlorineResidualChart({
     stroke?: string;
   }
 
-  // Custom Dot Renderer
+  // Custom dot: colour by status of the REAL value (not the pinned plot value).
   const renderCustomDot = useCallback(
     (props: CustomDotProps): React.ReactElement => {
-      const { cx, cy, value, dataKey } = props;
-      if (value == null || isNaN(value) || cx == null || cy == null) {
-        return <circle cx={cx || 0} cy={cy || 0} r={0} opacity={0} key={`dot-empty-${dataKey}-${cx}-${cy}`} />;
-      }
+      const { cx, cy, value, dataKey, payload } = props;
+      const empty = <circle key={`dot-empty-${dataKey}-${cx}`} cx={cx || 0} cy={cy || 0} r={0} opacity={0} />;
+      if (value == null || !Number.isFinite(value) || cx == null || cy == null) return empty;
 
-      const isSuspect = value > CHLORINE_CONFIG.suspect_threshold;
-      const isBelowMin = value < CHLORINE_CONFIG.min_limit;
-      const isAboveMax = value > CHLORINE_CONFIG.max_limit && !isSuspect;
+      const trainId = String(dataKey ?? '').split(SEG_SEP)[0];
+      const pt = payload?._meta?.get(trainId);
+      const real = pt?.chlorine_residual_mg_l ?? value;
+      const status = classifyChlorineReading(real, CHLORINE_CONFIG);
+      const unverifiedSuspect = status === 'suspect' && !pt?.verified;
+      const k = `dot-${dataKey}-${cx}-${cy}`;
 
-      if (isSuspect) {
+      if (unverifiedSuspect) {
+        const offScale = real > Y_CAP;
         return (
-          <g key={`dot-suspect-${dataKey}-${cx}-${cy}`}>
-            <circle cx={cx} cy={cy} r={6} fill="none" stroke="#e11d48" strokeWidth={2.5} strokeDasharray="2 2" />
-            <circle cx={cx} cy={cy} r={3} fill="#e11d48" />
+          <g key={k}>
+            <circle cx={cx} cy={cy} r={6} fill="#ffffff" stroke="#e11d48" strokeWidth={2} strokeDasharray="2 2" />
+            {offScale && (
+              <text x={cx} y={cy + 16} textAnchor="middle" fontSize={9} fontWeight={700} fill="#e11d48">
+                {`▲ ${real.toFixed(1)}`}
+              </text>
+            )}
           </g>
         );
       }
-
-      if (isBelowMin) {
-        return (
-          <g key={`dot-low-${dataKey}-${cx}-${cy}`}>
-            <circle cx={cx} cy={cy} r={4.5} fill="#f59e0b" stroke="#ffffff" strokeWidth={1.5} />
-          </g>
-        );
+      if (status === 'below_min') {
+        return <circle key={k} cx={cx} cy={cy} r={4.5} fill="#f59e0b" stroke="#ffffff" strokeWidth={1.5} />;
       }
-
-      if (isAboveMax) {
-        return (
-          <g key={`dot-high-${dataKey}-${cx}-${cy}`}>
-            <circle cx={cx} cy={cy} r={4.5} fill="#ef4444" stroke="#ffffff" strokeWidth={1.5} />
-          </g>
-        );
+      if (status === 'above_max' || status === 'suspect') {
+        // suspect + verified is a confirmed real exceedance
+        return <circle key={k} cx={cx} cy={cy} r={4.5} fill="#ef4444" stroke="#ffffff" strokeWidth={1.5} />;
       }
-
-      return (
-        <circle
-          key={`dot-ok-${dataKey}-${cx}-${cy}`}
-          cx={cx}
-          cy={cy}
-          r={3}
-          fill={props.stroke || '#10b981'}
-          stroke="#ffffff"
-          strokeWidth={1}
-        />
-      );
+      return <circle key={k} cx={cx} cy={cy} r={3} fill={props.stroke || '#10b981'} stroke="#ffffff" strokeWidth={1} />;
     },
     [],
   );
 
   interface TooltipEntry {
     value?: number | string | null;
-    name?: string;
-    color?: string;
     dataKey?: string;
-    payload?: { isoDatetime?: string };
+    payload?: { ts?: number; _meta?: Map<string, RawChlorinePoint> };
   }
 
   interface CustomTooltipProps {
     active?: boolean;
     payload?: TooltipEntry[];
-    label?: string;
   }
 
-  // Custom Tooltip
-  const CustomTooltip = ({ active, payload, label }: CustomTooltipProps) => {
-    if (!active || !payload || !payload.length) return null;
+  const statusBadge = (status: ReturnType<typeof classifyChlorineReading>, verified: boolean) => {
+    if (status === 'below_min')
+      return <Badge variant="outline" className="text-[10px] px-1 py-0 border-amber-500/40 text-amber-600 dark:text-amber-400 bg-amber-500/10">Below 0.3</Badge>;
+    if (status === 'above_max')
+      return <Badge variant="outline" className="text-[10px] px-1 py-0 border-rose-500/40 text-rose-600 dark:text-rose-400 bg-rose-500/10">Above 1.5</Badge>;
+    if (status === 'suspect')
+      return verified
+        ? <Badge variant="outline" className="text-[10px] px-1 py-0 border-rose-500/40 text-rose-600 dark:text-rose-400 bg-rose-500/10">Above 1.5 (verified)</Badge>
+        : <Badge variant="destructive" className="text-[10px] px-1 py-0 bg-red-600 text-white">Suspect (&gt;3.0)</Badge>;
+    return <Badge variant="outline" className="text-[10px] px-1 py-0 border-emerald-500/40 text-emerald-600 dark:text-emerald-400 bg-emerald-500/10">In Range</Badge>;
+  };
 
+  const CustomTooltip = ({ active, payload }: CustomTooltipProps) => {
+    if (!active || !payload || !payload.length) return null;
     const row = payload[0]?.payload;
-    const dtStr = row?.isoDatetime ? format(new Date(row.isoDatetime), 'MMM d, yyyy · HH:mm:ss') : label;
+    const rows = payload
+      .filter((e) => e.value != null)
+      .map((e) => {
+        const trainId = String(e.dataKey ?? '').split(SEG_SEP)[0];
+        const pt = row?._meta?.get(trainId);
+        return pt ? { trainId, pt } : null;
+      })
+      .filter((x): x is { trainId: string; pt: RawChlorinePoint } => x !== null);
+    if (!rows.length) return null;
+
+    const anySuspect = rows.some(({ pt }) =>
+      classifyChlorineReading(pt.chlorine_residual_mg_l, CHLORINE_CONFIG) === 'suspect' && !pt.verified);
 
     return (
       <div style={INSTRUMENT_TOOLTIP_STYLE} className="p-3 min-w-[220px] max-w-[320px] space-y-2 text-xs">
@@ -309,63 +331,30 @@ export function ChlorineResidualChart({
             <FlaskConical className="h-3.5 w-3.5 text-emerald-500" />
             <span>Chlorine Residual</span>
           </div>
-          <span className="text-[10px] text-muted-foreground font-mono">{dtStr}</span>
+          <span className="text-[10px] text-muted-foreground font-mono">{row?.ts != null ? fmtFull(row.ts) : ''}</span>
         </div>
-
         <div className="space-y-1.5">
-          {payload.map((entry) => {
-            if (entry.value == null) return null;
-            const val = +entry.value;
-            const status = classifyChlorineReading(val, CHLORINE_CONFIG);
-
-            let statusBadge = (
-              <Badge variant="outline" className="text-[10px] px-1 py-0 border-emerald-500/40 text-emerald-600 dark:text-emerald-400 bg-emerald-500/10">
-                In Range
-              </Badge>
-            );
-
-            if (status === 'below_min') {
-              statusBadge = (
-                <Badge variant="outline" className="text-[10px] px-1 py-0 border-amber-500/40 text-amber-600 dark:text-amber-400 bg-amber-500/10">
-                  Below 0.3
-                </Badge>
-              );
-            } else if (status === 'above_max') {
-              statusBadge = (
-                <Badge variant="outline" className="text-[10px] px-1 py-0 border-rose-500/40 text-rose-600 dark:text-rose-400 bg-rose-500/10">
-                  Above 1.5
-                </Badge>
-              );
-            } else if (status === 'suspect') {
-              statusBadge = (
-                <Badge variant="destructive" className="text-[10px] px-1 py-0 bg-red-600 text-white animate-pulse">
-                  Suspect (&gt;3.0)
-                </Badge>
-              );
-            }
-
+          {rows.map(({ trainId, pt }) => {
+            const val = pt.chlorine_residual_mg_l as number;
+            const meta = trainMeta.get(trainId);
             return (
-              <div key={entry.dataKey} className="flex items-center justify-between gap-2 py-0.5">
+              <div key={trainId} className="flex items-center justify-between gap-2 py-0.5">
                 <div className="flex items-center gap-1.5">
-                  <span className="h-2 w-2 rounded-full" style={{ backgroundColor: entry.color }} />
-                  <span className="font-medium text-muted-foreground">{entry.name}</span>
+                  <span className="h-2 w-2 rounded-full" style={{ backgroundColor: meta?.color }} />
+                  <span className="font-medium text-muted-foreground">{meta?.label ?? pt.train_name}</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="font-mono font-bold text-foreground">
-                    {val.toFixed(2)} {CHLORINE_CONFIG.unit}
-                  </span>
-                  {statusBadge}
+                  <span className="font-mono font-bold text-foreground">{val.toFixed(2)} {CHLORINE_CONFIG.unit}</span>
+                  {statusBadge(classifyChlorineReading(val, CHLORINE_CONFIG), pt.verified === true)}
                 </div>
               </div>
             );
           })}
         </div>
-
-        {/* Warning if any suspect value is present */}
-        {payload.some((entry) => entry.value != null && +entry.value > CHLORINE_CONFIG.suspect_threshold) && (
+        {anySuspect && (
           <div className="mt-2 pt-1.5 border-t border-destructive/20 text-[10px] text-destructive flex items-center gap-1">
             <ShieldAlert className="h-3 w-3 shrink-0" />
-            <span>Outlier readings &gt; 3.0 mg/L excluded from compliance calculations.</span>
+            <span>Readings &gt; 3.0 mg/L are excluded from compliance stats until verified.</span>
           </div>
         )}
       </div>
@@ -555,7 +544,11 @@ export function ChlorineResidualChart({
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.5} vertical={false} />
 
               <XAxis
-                dataKey="label"
+                dataKey="ts"
+                type="number"
+                scale="time"
+                domain={['dataMin', 'dataMax']}
+                tickFormatter={fmtAxis}
                 tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
                 axisLine={{ stroke: 'hsl(var(--border))' }}
                 tickLine={false}
@@ -627,41 +620,41 @@ export function ChlorineResidualChart({
                 />
               )}
 
-              {/* Render Detected Gaps as grey ReferenceAreas */}
-              {gaps.map((gap, idx) => {
-                const startLabel = format(new Date(gap.start_iso), 'MMM d, HH:mm');
-                const endLabel = format(new Date(gap.end_iso), 'MMM d, HH:mm');
-                return (
-                  <ReferenceArea
-                    key={`gap-${idx}`}
-                    x1={startLabel}
-                    x2={endLabel}
-                    fill="#64748b"
-                    fillOpacity={0.12}
-                    stroke="#94a3b8"
-                    strokeOpacity={0.3}
-                    strokeDasharray="2 2"
-                  />
-                );
-              })}
+              {/* Detected gaps: grey bands on a true time axis, so width = duration */}
+              {gaps.map((gap, idx) => (
+                <ReferenceArea
+                  key={`gap-${gap.train_id}-${idx}`}
+                  x1={gap.start_ts}
+                  x2={gap.end_ts}
+                  fill="#64748b"
+                  fillOpacity={0.14}
+                  stroke="#94a3b8"
+                  strokeOpacity={0.35}
+                  strokeDasharray="2 2"
+                  ifOverflow="hidden"
+                />
+              ))}
 
               <Tooltip content={<CustomTooltip />} cursor={CHART_CURSOR} />
 
-              {/* Series per active RO Train */}
-              {visibleTrainEntities.map(({ id, label, color }) => (
-                <Line
-                  key={id}
-                  type="monotone"
-                  dataKey={id}
-                  name={label}
-                  stroke={color}
-                  strokeWidth={2}
-                  dot={renderCustomDot}
-                  activeDot={{ r: 5, strokeWidth: 1.5, stroke: '#ffffff' }}
-                  connectNulls={false} // Breaks line across gaps
-                  isAnimationActive={false}
-                />
-              ))}
+              {/* One Line per (train, segment); segments break at gaps */}
+              {series.map(({ key, trainId }) => {
+                const meta = trainMeta.get(trainId);
+                return (
+                  <Line
+                    key={key}
+                    type="linear"
+                    dataKey={key}
+                    name={meta?.label ?? trainId}
+                    stroke={meta?.color ?? '#10b981'}
+                    strokeWidth={2}
+                    dot={renderCustomDot}
+                    activeDot={{ r: 5, strokeWidth: 1.5, stroke: '#ffffff' }}
+                    connectNulls
+                    isAnimationActive={false}
+                  />
+                );
+              })}
             </ComposedChart>
           </ResponsiveContainer>
         )}

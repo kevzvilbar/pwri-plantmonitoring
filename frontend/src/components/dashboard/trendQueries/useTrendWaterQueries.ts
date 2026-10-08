@@ -147,8 +147,8 @@ export function useTrendWaterQueries({
       const trainIds = roTrainIdsForReadings ?? [];
       if (!trainIds.length) return [];
 
-      const FULL_SELECT   = 'train_id,recovery_pct,permeate_tds,chlorine_residual_mg_l,permeate_meter,permeate_meter_prev,permeate_meter_delta,feed_meter,feed_meter_prev,feed_meter_delta,reject_meter,reject_meter_prev,reject_meter_delta,reading_datetime,is_meter_replacement';
-      const LEGACY_SELECT = 'train_id,recovery_pct,permeate_tds,permeate_meter,reading_datetime,is_meter_replacement';
+      const FULL_SELECT   = 'train_id,recovery_pct,permeate_tds,chlorine_residual_mg_l,norm_status,permeate_meter,permeate_meter_prev,permeate_meter_delta,feed_meter,feed_meter_prev,feed_meter_delta,reject_meter,reject_meter_prev,reject_meter_delta,reading_datetime,is_meter_replacement';
+      const LEGACY_SELECT = 'train_id,recovery_pct,permeate_tds,permeate_meter,reading_datetime,is_meter_replacement,norm_status';
       const NEW_COLS = ['chlorine_residual_mg_l', 'permeate_meter_prev', 'permeate_meter_delta', 'feed_meter_delta', 'reject_meter_delta'];
       const isNewColError = (msg: string) => NEW_COLS.some(c => msg.includes(c));
 
