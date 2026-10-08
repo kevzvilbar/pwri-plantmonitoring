@@ -19,6 +19,9 @@ import {
   SlidersHorizontal,
   Info,
   Layers,
+  TrendingUp,
+  TrendingDown,
+  Minus,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -27,6 +30,7 @@ import {
   classifyChlorineReading,
   detectChlorineGaps,
   computeChlorineStats,
+  computeDailyChlorineAverages,
   type RawChlorinePoint,
   type ChlorineGap,
 } from '@/lib/chlorineConfig';
@@ -48,6 +52,19 @@ const DATE_KEY_FMT = new Intl.DateTimeFormat('en-CA', {
 });
 const fmtAxis = (ts: number) => AXIS_FMT.format(new Date(ts));
 const fmtFull = (ts: number) => FULL_FMT.format(new Date(ts));
+const DAY_FMT = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', timeZone: PH_TZ });
+const fmtDay = (ts: number) => DAY_FMT.format(new Date(ts));
+const HALF_DAY_MS = 43_200_000;
+
+type ViewMode = 'daily' | 'readings';
+
+const STATUS_TONE: Record<string, { text: string; border: string; bg: string }> = {
+  in_range: { text: 'text-emerald-600 dark:text-emerald-400', border: 'border-emerald-500/40', bg: 'bg-emerald-500/10' },
+  below_min: { text: 'text-amber-600 dark:text-amber-400', border: 'border-amber-500/40', bg: 'bg-amber-500/10' },
+  above_max: { text: 'text-rose-600 dark:text-rose-400', border: 'border-rose-500/40', bg: 'bg-rose-500/10' },
+  suspect: { text: 'text-rose-600 dark:text-rose-400', border: 'border-rose-500/40', bg: 'bg-rose-500/10' },
+  missing: { text: 'text-muted-foreground', border: 'border-border/60', bg: 'bg-muted/30' },
+};
 
 /** Suspect readings are drawn pinned to this ceiling; the real value is shown in the tooltip. */
 const Y_CAP = 3.5;
@@ -90,6 +107,7 @@ export function ChlorineResidualChart({
   const [gapViewMode, setGapViewMode] = useState<GapViewMode>('operator');
   const [localSelectedTrains, setLocalSelectedTrains] = useState<Set<string> | null>(null);
   const [showOverallAvg, setShowOverallAvg] = useState(true);
+  const [viewMode, setViewMode] = useState<ViewMode>('daily');
 
   const activeTrainSet = selectedTrainIds !== undefined ? selectedTrainIds : localSelectedTrains;
 
@@ -254,6 +272,43 @@ export function ChlorineResidualChart({
     };
   }, [filteredRawPoints, gaps]);
 
+  // Daily averages (Plant calendar day), the default view.
+  const dailyDays = useMemo(
+    () => computeDailyChlorineAverages(filteredRawPoints, CHLORINE_CONFIG),
+    [filteredRawPoints],
+  );
+
+  const dailyRows = useMemo(
+    () =>
+      dailyDays.map((d) => {
+        const row: Record<string, number | string | null> = { ts: d.ts, overall: d.overall, _n: d.overallCount };
+        Object.entries(d.perTrain).forEach(([id, v]) => { row[id] = v.avg; });
+        return row;
+      }),
+    [dailyDays],
+  );
+
+  const dailySummary = useMemo(() => {
+    const withData = dailyDays.filter((d) => d.overall != null);
+    if (withData.length === 0) return null;
+    const latest = withData[withData.length - 1];
+    const prev = withData.length > 1 ? withData[withData.length - 2] : null;
+    const periodAvg = +(withData.reduce((a, d) => a + (d.overall as number), 0) / withData.length).toFixed(2);
+    const inBand = withData.filter(
+      (d) => classifyChlorineReading(d.overall as number, CHLORINE_CONFIG) === 'in_range',
+    ).length;
+    return { latest, prev, periodAvg, daysWithData: withData.length, inBand };
+  }, [dailyDays]);
+
+  const dailyYMax = useMemo(() => {
+    let m = 0;
+    for (const d of dailyDays) {
+      if (d.overall != null) m = Math.max(m, d.overall);
+      Object.values(d.perTrain).forEach((v) => { m = Math.max(m, v.avg); });
+    }
+    return m <= 1.8 ? 2.0 : +(m + 0.3).toFixed(1);
+  }, [dailyDays]);
+
   const trainMeta = useMemo(() => {
     const m = new Map<string, { label: string; color: string }>();
     availableTrainEntities.forEach((e) => m.set(e.id, { label: e.label, color: e.color }));
@@ -402,6 +457,40 @@ export function ChlorineResidualChart({
     );
   };
 
+  const DailyTooltip = ({ active, payload }: { active?: boolean; payload?: { payload?: Record<string, number | string | null> }[] }) => {
+    if (!active || !payload?.length) return null;
+    const row = payload[0]?.payload;
+    if (!row) return null;
+    const overall = row.overall as number | null;
+    return (
+      <div style={INSTRUMENT_TOOLTIP_STYLE} className="p-3 min-w-[200px] max-w-[300px] space-y-2 text-xs">
+        <div className="border-b border-border/60 pb-1.5 font-medium text-foreground">{fmtDay(Number(row.ts))} · daily average</div>
+        {overall == null ? (
+          <div className="text-muted-foreground">No valid readings this day</div>
+        ) : (
+          <div className="flex items-center justify-between gap-2">
+            <span className="font-semibold text-sky-500">Overall</span>
+            <span className="flex items-center gap-2">
+              <span className="font-mono font-bold text-foreground">{overall.toFixed(2)} {CHLORINE_CONFIG.unit}</span>
+              {statusBadge(classifyChlorineReading(overall, CHLORINE_CONFIG), false)}
+            </span>
+          </div>
+        )}
+        {overall != null && <div className="text-[10px] text-muted-foreground">{String(row._n)} valid reading(s)</div>}
+        {availableTrainEntities
+          .filter((t) => row[t.id] != null)
+          .map((t) => (
+            <div key={t.id} className="flex items-center justify-between gap-2">
+              <span className="flex items-center gap-1.5 text-muted-foreground">
+                <span className="h-2 w-2 rounded-full" style={{ backgroundColor: t.color }} />{t.label}
+              </span>
+              <span className="font-mono font-semibold text-foreground">{Number(row[t.id]).toFixed(2)}</span>
+            </div>
+          ))}
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-3" data-testid="chlorine-residual-chart-container">
       {/* Top Header & Sensitivity Mode Switch */}
@@ -454,57 +543,79 @@ export function ChlorineResidualChart({
         </div>
       </div>
 
-      {/* KPI & Compliance Chips Banner */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 text-xs">
-        <div className="bg-muted/40 border border-border/60 rounded-lg p-2 flex flex-col justify-between">
-          <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Valid Readings</span>
-          <span className="text-base font-bold font-mono text-foreground mt-0.5">{stats.validCount}</span>
-        </div>
+      {/* Daily average hero: the first thing the reader sees */}
+      {dailySummary && (() => {
+        const { latest, prev, periodAvg, daysWithData, inBand } = dailySummary;
+        const lv = latest.overall as number;
+        const st = classifyChlorineReading(lv, CHLORINE_CONFIG);
+        const tone = STATUS_TONE[st] ?? STATUS_TONE.missing;
+        const delta = prev?.overall != null ? +(lv - (prev.overall as number)).toFixed(2) : null;
+        const recent = dailyDays.slice(-14);
+        return (
+          <div
+            className="rounded-xl border border-border/60 bg-muted/20 p-3 flex flex-col lg:flex-row lg:items-center gap-3"
+            data-testid="daily-avg-hero"
+          >
+            <div className="shrink-0 min-w-[190px]">
+              <div className="text-[10px] uppercase tracking-wider font-medium text-muted-foreground">
+                Daily average · {fmtDay(latest.ts)}
+              </div>
+              <div className="flex items-baseline gap-2 mt-0.5">
+                <span className={`text-3xl font-bold font-mono ${tone.text}`} data-testid="daily-avg-latest">
+                  {lv.toFixed(2)}
+                </span>
+                <span className="text-xs text-muted-foreground">{CHLORINE_CONFIG.unit}</span>
+                {statusBadge(st, false)}
+              </div>
+              <div className="flex items-center gap-2 text-[11px] text-muted-foreground mt-1">
+                {delta != null && (
+                  <span className="inline-flex items-center gap-0.5 font-medium">
+                    {delta > 0 ? <TrendingUp className="h-3 w-3" /> : delta < 0 ? <TrendingDown className="h-3 w-3" /> : <Minus className="h-3 w-3" />}
+                    {delta > 0 ? '+' : ''}{delta.toFixed(2)} vs {prev ? fmtDay(prev.ts) : ''}
+                  </span>
+                )}
+                <span>{latest.overallCount} readings</span>
+              </div>
+              <div className="text-[11px] text-muted-foreground mt-0.5">
+                Period avg <span className="font-mono font-semibold text-foreground">{periodAvg.toFixed(2)}</span> ·{' '}
+                {inBand}/{daysWithData} days in range
+              </div>
+            </div>
+            <div className="flex gap-1.5 overflow-x-auto pb-1 min-w-0" data-testid="daily-avg-chips">
+              {recent.map((d) => {
+                const dst = d.overall == null ? 'missing' : classifyChlorineReading(d.overall, CHLORINE_CONFIG);
+                const t = STATUS_TONE[dst] ?? STATUS_TONE.missing;
+                return (
+                  <div
+                    key={d.dateKey}
+                    className={`shrink-0 w-[58px] rounded-lg border px-1.5 py-1 text-center ${t.border} ${t.bg}`}
+                    title={d.overall == null ? `${fmtDay(d.ts)}: no valid readings` : `${fmtDay(d.ts)}: ${d.overall.toFixed(2)} mg/L (${d.overallCount} readings)`}
+                  >
+                    <div className="text-[9px] text-muted-foreground">{fmtDay(d.ts)}</div>
+                    <div className={`text-sm font-bold font-mono ${t.text}`}>{d.overall == null ? '—' : d.overall.toFixed(2)}</div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
 
-        <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-2 flex flex-col justify-between">
-          <span className="text-[10px] text-emerald-700 dark:text-emerald-400 font-medium uppercase tracking-wider flex items-center gap-1">
-            <CheckCircle2 className="h-3 w-3" /> Compliance
-          </span>
-          <span className="text-base font-bold font-mono text-emerald-600 dark:text-emerald-400 mt-0.5">
-            {stats.compliancePct != null ? `${stats.compliancePct}%` : '—'}
-          </span>
-        </div>
-
-        <div className="bg-muted/40 border border-border/60 rounded-lg p-2 flex flex-col justify-between">
-          <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Avg Residual</span>
-          <span className="text-base font-bold font-mono text-foreground mt-0.5">
-            {stats.avgResidual != null ? `${stats.avgResidual} mg/L` : '—'}
-          </span>
-        </div>
-
-        <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-2 flex flex-col justify-between">
-          <span className="text-[10px] text-amber-700 dark:text-amber-400 font-medium uppercase tracking-wider">
-            Below 0.3 mg/L
-          </span>
-          <span className="text-base font-bold font-mono text-amber-600 dark:text-amber-400 mt-0.5">
-            {stats.belowMinCount}
-          </span>
-        </div>
-
-        <div className="bg-rose-500/10 border border-rose-500/20 rounded-lg p-2 flex flex-col justify-between">
-          <span className="text-[10px] text-rose-700 dark:text-rose-400 font-medium uppercase tracking-wider">
-            Above 1.5 mg/L
-          </span>
-          <span className="text-base font-bold font-mono text-rose-600 dark:text-rose-400 mt-0.5">
-            {stats.aboveMaxCount}
-          </span>
-        </div>
-
-        <div className={`rounded-lg p-2 flex flex-col justify-between border ${
-          stats.suspectCount > 0 ? 'bg-red-500/15 border-red-500/40 text-red-600' : 'bg-muted/40 border-border/60 text-muted-foreground'
-        }`}>
-          <span className="text-[10px] font-medium uppercase tracking-wider flex items-center gap-1">
-            <ShieldAlert className="h-3 w-3" /> Suspect (&gt;3.0)
-          </span>
-          <span className="text-base font-bold font-mono mt-0.5">
-            {stats.suspectCount}
-          </span>
-        </div>
+      {/* View mode */}
+      <div className="flex items-center gap-1.5 bg-muted/60 p-0.5 rounded-lg border border-border/60 text-xs w-fit">
+        {([['daily', 'Daily average'], ['readings', 'All readings']] as [ViewMode, string][]).map(([m, label]) => (
+          <button
+            key={m}
+            type="button"
+            onClick={() => setViewMode(m)}
+            data-testid={`view-mode-${m}`}
+            className={`px-2.5 py-1 rounded-md transition-all text-xs font-medium ${
+              viewMode === m ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
       </div>
 
       {/* Train Filter Selector Pills */}
@@ -565,28 +676,103 @@ export function ChlorineResidualChart({
         </div>
       )}
 
-      {/* Detected Missing Data Gaps Notification Bar */}
-      {gaps.length > 0 && (
-        <div className="flex items-center justify-between gap-2 px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-700 dark:text-amber-300 text-xs">
-          <div className="flex items-center gap-2">
-            <Clock className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
-            <span>
-              <strong>{gaps.length} logging gap{gaps.length > 1 ? 's' : ''} detected</strong> (exceeding {gapThresholdMinutes / 60}h):{' '}
-              {gaps.slice(0, 3).map((g, idx) => (
-                <span key={idx} className="font-mono text-[11px] mr-2">
-                  [{g.train_name}: {g.duration_hours}h gap]
-                </span>
-              ))}
-              {gaps.length > 3 && <span>+{gaps.length - 3} more</span>}
-            </span>
-          </div>
-          <span className="text-[10px] opacity-80">Line series disconnected across gap intervals</span>
-        </div>
-      )}
-
       {/* Main Chart Canvas */}
       <div className={`w-full ${compact ? 'h-[240px]' : 'h-[360px]'} min-w-0 transition-all`}>
-        {chartRows.length === 0 ? (
+        {viewMode === 'daily' ? (
+          dailyRows.length === 0 ? (
+            <div className="h-full flex flex-col items-center justify-center text-muted-foreground gap-2 border border-dashed rounded-xl bg-muted/20">
+              <FlaskConical className="h-8 w-8 text-muted-foreground/40" />
+              <p className="text-sm font-medium">
+                {filteredRawPoints.length === 0
+                  ? 'No Chlorine Residual readings for the selected range'
+                  : 'No valid daily averages for the selected range'}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {filteredRawPoints.length === 0
+                  ? 'Operator readings logged under Pretreatment / RO logs will appear here'
+                  : 'Readings above 3.0 mg/L are excluded until verified'}
+              </p>
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={dailyRows} margin={{ top: 22, right: 16, left: 0, bottom: 6 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.5} vertical={false} />
+                <XAxis
+                  dataKey="ts"
+                  type="number"
+                  scale="time"
+                  domain={[(dailyRows[0].ts as number) - HALF_DAY_MS, (dailyRows[dailyRows.length - 1].ts as number) + HALF_DAY_MS]}
+                  ticks={dailyRows.length <= 16 ? dailyRows.map((r) => r.ts as number) : undefined}
+                  tickFormatter={fmtDay}
+                  tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
+                  axisLine={{ stroke: 'hsl(var(--border))' }}
+                  tickLine={false}
+                />
+                <YAxis
+                  domain={[0, dailyYMax]}
+                  tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
+                  axisLine={false}
+                  tickLine={false}
+                  unit=" mg/L"
+                  width={56}
+                />
+                <ReferenceArea y1={CHLORINE_CONFIG.min_limit} y2={CHLORINE_CONFIG.max_limit} fill="#10b981" fillOpacity={0.08} stroke="#10b981" strokeOpacity={0.25} strokeDasharray="3 3" />
+                <ReferenceLine y={CHLORINE_CONFIG.min_limit} stroke="#f59e0b" strokeDasharray="4 4" strokeWidth={1.5} />
+                <ReferenceLine y={CHLORINE_CONFIG.max_limit} stroke="#ef4444" strokeDasharray="4 4" strokeWidth={1.5} />
+                {dailyRows
+                  .filter((r) => r.overall == null)
+                  .map((r) => (
+                    <ReferenceArea
+                      key={`nodata-${r.ts}`}
+                      x1={(r.ts as number) - HALF_DAY_MS}
+                      x2={(r.ts as number) + HALF_DAY_MS}
+                      fill="#64748b"
+                      fillOpacity={0.14}
+                      stroke="#94a3b8"
+                      strokeOpacity={0.35}
+                      strokeDasharray="2 2"
+                    />
+                  ))}
+                <Tooltip content={<DailyTooltip />} cursor={CHART_CURSOR} />
+                {availableTrainEntities
+                  .filter((t) => dailyDays.some((d) => d.perTrain[t.id]))
+                  .map((t) => (
+                    <Line
+                      key={t.id}
+                      type="linear"
+                      dataKey={t.id}
+                      name={t.label}
+                      stroke={t.color}
+                      strokeWidth={1.5}
+                      strokeOpacity={0.7}
+                      dot={{ r: 2.5, fill: t.color, stroke: '#ffffff', strokeWidth: 1 }}
+                      activeDot={{ r: 4 }}
+                      connectNulls={false}
+                      isAnimationActive={false}
+                    />
+                  ))}
+                {showOverallAvg && (
+                  <Line
+                    type="linear"
+                    dataKey="overall"
+                    name="Overall daily average"
+                    stroke="#38bdf8"
+                    strokeWidth={3}
+                    dot={{ r: 4.5, fill: '#38bdf8', stroke: '#ffffff', strokeWidth: 1.5 }}
+                    activeDot={{ r: 6, strokeWidth: 2, stroke: '#ffffff', fill: '#0284c7' }}
+                    connectNulls={false}
+                    isAnimationActive={false}
+                    label={
+                      dailyRows.length <= 14
+                        ? { position: 'top', fontSize: 10, fontWeight: 600, fill: '#38bdf8', formatter: (v: unknown) => (v == null ? '' : Number(v).toFixed(2)) }
+                        : undefined
+                    }
+                  />
+                )}
+              </ComposedChart>
+            </ResponsiveContainer>
+          )
+        ) : chartRows.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-muted-foreground gap-2 border border-dashed rounded-xl bg-muted/20">
             <FlaskConical className="h-8 w-8 text-muted-foreground/40" />
             <p className="text-sm font-medium">No Chlorine Residual readings for the selected range</p>
@@ -729,6 +915,78 @@ export function ChlorineResidualChart({
           </ResponsiveContainer>
         )}
       </div>
+
+      {/* KPI & Compliance Chips Banner */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 text-xs">
+        <div className="bg-muted/40 border border-border/60 rounded-lg p-2 flex flex-col justify-between">
+          <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Valid Readings</span>
+          <span className="text-base font-bold font-mono text-foreground mt-0.5">{stats.validCount}</span>
+        </div>
+
+        <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-2 flex flex-col justify-between">
+          <span className="text-[10px] text-emerald-700 dark:text-emerald-400 font-medium uppercase tracking-wider flex items-center gap-1">
+            <CheckCircle2 className="h-3 w-3" /> Compliance
+          </span>
+          <span className="text-base font-bold font-mono text-emerald-600 dark:text-emerald-400 mt-0.5">
+            {stats.compliancePct != null ? `${stats.compliancePct}%` : '—'}
+          </span>
+        </div>
+
+        <div className="bg-muted/40 border border-border/60 rounded-lg p-2 flex flex-col justify-between">
+          <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Avg Residual</span>
+          <span className="text-base font-bold font-mono text-foreground mt-0.5">
+            {stats.avgResidual != null ? `${stats.avgResidual} mg/L` : '—'}
+          </span>
+        </div>
+
+        <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-2 flex flex-col justify-between">
+          <span className="text-[10px] text-amber-700 dark:text-amber-400 font-medium uppercase tracking-wider">
+            Below 0.3 mg/L
+          </span>
+          <span className="text-base font-bold font-mono text-amber-600 dark:text-amber-400 mt-0.5">
+            {stats.belowMinCount}
+          </span>
+        </div>
+
+        <div className="bg-rose-500/10 border border-rose-500/20 rounded-lg p-2 flex flex-col justify-between">
+          <span className="text-[10px] text-rose-700 dark:text-rose-400 font-medium uppercase tracking-wider">
+            Above 1.5 mg/L
+          </span>
+          <span className="text-base font-bold font-mono text-rose-600 dark:text-rose-400 mt-0.5">
+            {stats.aboveMaxCount}
+          </span>
+        </div>
+
+        <div className={`rounded-lg p-2 flex flex-col justify-between border ${
+          stats.suspectCount > 0 ? 'bg-red-500/15 border-red-500/40 text-red-600' : 'bg-muted/40 border-border/60 text-muted-foreground'
+        }`}>
+          <span className="text-[10px] font-medium uppercase tracking-wider flex items-center gap-1">
+            <ShieldAlert className="h-3 w-3" /> Suspect (&gt;3.0)
+          </span>
+          <span className="text-base font-bold font-mono mt-0.5">
+            {stats.suspectCount}
+          </span>
+        </div>
+      </div>
+
+      {/* Detected Missing Data Gaps Notification Bar */}
+      {viewMode === 'readings' && gaps.length > 0 && (
+        <div className="flex items-center justify-between gap-2 px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-700 dark:text-amber-300 text-xs">
+          <div className="flex items-center gap-2">
+            <Clock className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
+            <span>
+              <strong>{gaps.length} logging gap{gaps.length > 1 ? 's' : ''} detected</strong> (exceeding {gapThresholdMinutes / 60}h):{' '}
+              {gaps.slice(0, 3).map((g, idx) => (
+                <span key={idx} className="font-mono text-[11px] mr-2">
+                  [{g.train_name}: {g.duration_hours}h gap]
+                </span>
+              ))}
+              {gaps.length > 3 && <span>+{gaps.length - 3} more</span>}
+            </span>
+          </div>
+          <span className="text-[10px] opacity-80">Line series disconnected across gap intervals</span>
+        </div>
+      )}
 
       {/* Legend & Guide Footer */}
       <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-border/50 text-[11px] text-muted-foreground">

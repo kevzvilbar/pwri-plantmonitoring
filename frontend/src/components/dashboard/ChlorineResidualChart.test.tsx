@@ -127,6 +127,7 @@ describe('ChlorineResidualChart', () => {
       />,
     );
 
+    fireEvent.click(screen.getByTestId('view-mode-readings'));
     expect(screen.getByText(/6h gap/i)).toBeInTheDocument();
   });
   it('treats blank readings as missing: an overnight blank run becomes a gap', () => {
@@ -137,6 +138,7 @@ describe('ChlorineResidualChart', () => {
       { id: 'd', train_id: 'train-1', reading_datetime: '2026-10-08T04:00:00Z', chlorine_residual_mg_l: 1.1 },
     ];
     render(<ChlorineResidualChart roReadings={readings} roTrainEntities={mockTrainEntities} />);
+    fireEvent.click(screen.getByTestId('view-mode-readings'));
     expect(screen.getByText(/6h gap/i)).toBeInTheDocument();
     // only the 2 real readings are counted
     expect(screen.getByText('Valid Readings').nextSibling?.textContent).toBe('2');
@@ -168,5 +170,20 @@ describe('ChlorineResidualChart', () => {
     // Click to toggle off
     fireEvent.click(overallAvgBtn);
     expect(overallAvgBtn.className).not.toContain('bg-sky-500/15');
+  });
+  it('shows the daily average hero first, with the latest day and a chip per day', () => {
+    const readings = [
+      { id: 'a', train_id: 'train-1', reading_datetime: '2026-10-07T02:00:00Z', chlorine_residual_mg_l: 1.0 },
+      { id: 'b', train_id: 'train-1', reading_datetime: '2026-10-07T06:00:00Z', chlorine_residual_mg_l: 1.4 },
+      { id: 'c', train_id: 'train-1', reading_datetime: '2026-10-08T02:00:00Z', chlorine_residual_mg_l: 8.3 },
+      { id: 'd', train_id: 'train-1', reading_datetime: '2026-10-08T03:00:00Z', chlorine_residual_mg_l: 1.1 },
+    ];
+    render(<ChlorineResidualChart roReadings={readings} roTrainEntities={mockTrainEntities} />);
+    expect(screen.getByTestId('daily-avg-hero')).toBeInTheDocument();
+    // latest day excludes the unverified 8.3 -> 1.10
+    expect(screen.getByTestId('daily-avg-latest').textContent).toBe('1.10');
+    expect(screen.getByTestId('daily-avg-chips').children).toHaveLength(2);
+    // daily view is the default
+    expect(screen.queryByText(/logging gap/i)).not.toBeInTheDocument();
   });
 });

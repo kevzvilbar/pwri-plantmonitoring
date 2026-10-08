@@ -201,3 +201,70 @@ export function computeChlorineStats(
   };
 }
 
+
+// ── Daily averages ─────────────────────────────────────────────────────────
+
+export interface DailyChlorineAvg {
+  /** yyyy-MM-dd in Plant time (Asia/Manila) */
+  dateKey: string;
+  /** Noon of that Plant-time day, epoch ms (stable x position for charts) */
+  ts: number;
+  /** Mean of all valid readings across the selected trains; null = no valid reading that day */
+  overall: number | null;
+  overallCount: number;
+  perTrain: Record<string, { avg: number; count: number }>;
+}
+
+const DAY_KEY_FMT = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit',
+});
+const DAY_MS = 86_400_000;
+const dayTs = (dateKey: string) => Date.parse(`${dateKey}T12:00:00+08:00`);
+
+/**
+ * Per-day averages by Plant calendar day. Unverified suspect readings (> suspect_threshold)
+ * and missing values are excluded. Days with no valid reading are still returned
+ * (overall = null) so charts can break the line and show "no data" instead of bridging.
+ */
+export function computeDailyChlorineAverages(
+  points: RawChlorinePoint[],
+  config: ChlorineConfig = CHLORINE_CONFIG,
+): DailyChlorineAvg[] {
+  const acc = new Map<string, { sum: number; n: number; trains: Map<string, { sum: number; n: number }> }>();
+  for (const p of points) {
+    const v = p.chlorine_residual_mg_l;
+    if (v == null || !Number.isFinite(v)) continue;
+    if (classifyChlorineReading(v, config) === 'suspect' && !p.verified) continue;
+    const t = new Date(p.reading_datetime);
+    if (Number.isNaN(t.getTime())) continue;
+    const dk = DAY_KEY_FMT.format(t);
+    const d = acc.get(dk) ?? { sum: 0, n: 0, trains: new Map() };
+    d.sum += v;
+    d.n += 1;
+    const tr = d.trains.get(p.train_id) ?? { sum: 0, n: 0 };
+    tr.sum += v;
+    tr.n += 1;
+    d.trains.set(p.train_id, tr);
+    acc.set(dk, d);
+  }
+  if (acc.size === 0) return [];
+
+  const keys = Array.from(acc.keys()).sort();
+  const first = dayTs(keys[0]);
+  const last = dayTs(keys[keys.length - 1]);
+  const out: DailyChlorineAvg[] = [];
+  for (let ts = first; ts <= last; ts += DAY_MS) {
+    const dk = DAY_KEY_FMT.format(new Date(ts));
+    const d = acc.get(dk);
+    const perTrain: DailyChlorineAvg['perTrain'] = {};
+    d?.trains.forEach((v, id) => { perTrain[id] = { avg: +(v.sum / v.n).toFixed(2), count: v.n }; });
+    out.push({
+      dateKey: dk,
+      ts: dayTs(dk),
+      overall: d ? +(d.sum / d.n).toFixed(2) : null,
+      overallCount: d?.n ?? 0,
+      perTrain,
+    });
+  }
+  return out;
+}

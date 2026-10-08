@@ -84,3 +84,36 @@ describe('computeChlorineStats', () => {
     expect(st.compliancePct).toBe(100);
   });
 });
+
+import { computeDailyChlorineAverages } from './chlorineConfig';
+
+describe('computeDailyChlorineAverages', () => {
+  it('averages per Plant (Manila) day, excluding unverified suspect values', () => {
+    const days = computeDailyChlorineAverages([
+      pt('2026-10-07T01:00:00Z', 1.0),
+      pt('2026-10-07T05:00:00Z', 1.4),
+      pt('2026-10-07T06:00:00Z', 8.3), // suspect, excluded
+      pt('2026-10-08T01:00:00Z', 1.2, { train_id: 'RO7' }),
+    ]);
+    expect(days).toHaveLength(2);
+    expect(days[0].dateKey).toBe('2026-10-07');
+    expect(days[0].overall).toBe(1.2);
+    expect(days[0].overallCount).toBe(2);
+    expect(days[1].perTrain.RO7.avg).toBe(1.2);
+  });
+  it('uses Manila day boundaries (16:30Z is already the next Manila day)', () => {
+    const days = computeDailyChlorineAverages([pt('2026-10-07T16:30:00Z', 1.0)]);
+    expect(days[0].dateKey).toBe('2026-10-08');
+  });
+  it('returns empty days as null so lines can break, not bridge', () => {
+    const days = computeDailyChlorineAverages([pt('2026-10-05T02:00:00Z', 1.0), pt('2026-10-08T02:00:00Z', 1.1)]);
+    expect(days.map((d) => d.overall)).toEqual([1.0, null, null, 1.1]);
+  });
+  it('counts a verified suspect reading', () => {
+    const days = computeDailyChlorineAverages([pt('2026-10-07T02:00:00Z', 8.3, { verified: true })]);
+    expect(days[0].overall).toBe(8.3);
+  });
+  it('returns [] when nothing is valid', () => {
+    expect(computeDailyChlorineAverages([pt('2026-10-07T02:00:00Z', null)])).toEqual([]);
+  });
+});
