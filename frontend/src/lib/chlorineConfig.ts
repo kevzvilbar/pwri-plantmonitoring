@@ -32,6 +32,13 @@ export const CHLORINE_CONFIG: ChlorineConfig = {
   },
 };
 
+/**
+ * A reading at or below this value means "effectively no residual" (dosing failure,
+ * or a placeholder entry). It is still a real, compliance-relevant reading and stays
+ * in the stats, but the UI flags it as critical and shows averages with and without it.
+ */
+export const NO_RESIDUAL_MG_L = 0.05;
+
 export type ChlorineReadingStatus = 'in_range' | 'below_min' | 'above_max' | 'suspect' | 'missing';
 
 export interface RawChlorinePoint {
@@ -143,6 +150,88 @@ export function detectChlorineGaps(
   return gaps.sort((a, b) => a.start_ts - b.start_ts);
 }
 
+export interface ChlorineGapSummary {
+  count: number;
+  longestMinutes: number;
+  longestHours: number;
+  longestTrainName: string | null;
+}
+
+/** Count + longest gap, for KPI chips (so gaps are visible without the readings view). */
+export function summarizeChlorineGaps(gaps: ChlorineGap[]): ChlorineGapSummary {
+  let longest: ChlorineGap | null = null;
+  for (const g of gaps) if (!longest || g.duration_minutes > longest.duration_minutes) longest = g;
+  return {
+    count: gaps.length,
+    longestMinutes: longest?.duration_minutes ?? 0,
+    longestHours: longest ? +(longest.duration_minutes / 60).toFixed(1) : 0,
+    longestTrainName: longest?.train_name ?? null,
+  };
+}
+
+export interface LatestTrainReading {
+  train_id: string;
+  train_name: string;
+  value: number;
+  iso: string;
+  ts: number;
+  verified: boolean;
+  status: ChlorineReadingStatus;
+  /** Minutes this train's latest valid reading trails the newest valid reading of any train. */
+  behindMinutes: number;
+  /** A newer reading that is an unverified suspect (> suspect_threshold), awaiting review. */
+  newerSuspect: { value: number; iso: string } | null;
+}
+
+/**
+ * Latest valid reading per train within the points given ("latest in the loaded range", not live).
+ * Unverified suspects are never reported as the latest value; a newer one is attached as
+ * `newerSuspect` so the UI can say so instead of silently skipping it.
+ */
+export function latestChlorineByTrain(
+  points: RawChlorinePoint[],
+  config: ChlorineConfig = CHLORINE_CONFIG,
+): LatestTrainReading[] {
+  const byTrain = new Map<string, { ts: number; p: RawChlorinePoint; value: number }[]>();
+  for (const p of points) {
+    const v = p.chlorine_residual_mg_l;
+    if (!p.train_id || v == null || !Number.isFinite(v)) continue;
+    const ts = new Date(p.reading_datetime).getTime();
+    if (Number.isNaN(ts)) continue;
+    const list = byTrain.get(p.train_id) ?? [];
+    list.push({ ts, p, value: v });
+    byTrain.set(p.train_id, list);
+  }
+
+  const out: Omit<LatestTrainReading, 'behindMinutes'>[] = [];
+  byTrain.forEach((list, trainId) => {
+    list.sort((a, b) => a.ts - b.ts);
+    const isUnverifiedSuspect = (x: { p: RawChlorinePoint; value: number }) =>
+      classifyChlorineReading(x.value, config) === 'suspect' && !x.p.verified;
+    let latest: (typeof list)[number] | null = null;
+    for (let i = list.length - 1; i >= 0; i--) {
+      if (!isUnverifiedSuspect(list[i])) { latest = list[i]; break; }
+    }
+    if (!latest) return;
+    const newer = [...list].reverse().find((x) => x.ts > latest!.ts && isUnverifiedSuspect(x)) ?? null;
+    out.push({
+      train_id: trainId,
+      train_name: latest.p.train_name || `Train ${trainId.slice(-4)}`,
+      value: latest.value,
+      iso: latest.p.reading_datetime,
+      ts: latest.ts,
+      verified: latest.p.verified === true,
+      status: classifyChlorineReading(latest.value, config),
+      newerSuspect: newer ? { value: newer.value, iso: newer.p.reading_datetime } : null,
+    });
+  });
+
+  const newest = out.reduce((m, r) => Math.max(m, r.ts), 0);
+  return out
+    .map((r) => ({ ...r, behindMinutes: Math.round((newest - r.ts) / 60000) }))
+    .sort((a, b) => a.train_name.localeCompare(b.train_name));
+}
+
 /**
  * Computes compliance metrics and averages, strictly excluding unverified suspect readings.
  */
@@ -212,6 +301,16 @@ export interface DailyChlorineAvg {
   /** Mean of all valid readings across the selected trains; null = no valid reading that day */
   overall: number | null;
   overallCount: number;
+  /** Lowest / highest valid reading that day (null = no valid reading). A daily mean can hide these. */
+  min: number | null;
+  max: number | null;
+  /** Individual valid readings below the min / above the max limit that day. */
+  belowCount: number;
+  aboveCount: number;
+  /** Readings at or below NO_RESIDUAL_MG_L (a subset of belowCount). */
+  noResidualCount: number;
+  /** Mean with no-residual readings left out; equals `overall` when there are none. */
+  overallExclNoResidual: number | null;
   perTrain: Record<string, { avg: number; count: number }>;
 }
 
@@ -230,7 +329,14 @@ export function computeDailyChlorineAverages(
   points: RawChlorinePoint[],
   config: ChlorineConfig = CHLORINE_CONFIG,
 ): DailyChlorineAvg[] {
-  const acc = new Map<string, { sum: number; n: number; trains: Map<string, { sum: number; n: number }> }>();
+  interface DayAcc {
+    sum: number; n: number;
+    sumNr: number; nNr: number;
+    min: number; max: number;
+    below: number; above: number; noRes: number;
+    trains: Map<string, { sum: number; n: number }>;
+  }
+  const acc = new Map<string, DayAcc>();
   for (const p of points) {
     const v = p.chlorine_residual_mg_l;
     if (v == null || !Number.isFinite(v)) continue;
@@ -238,9 +344,17 @@ export function computeDailyChlorineAverages(
     const t = new Date(p.reading_datetime);
     if (Number.isNaN(t.getTime())) continue;
     const dk = DAY_KEY_FMT.format(t);
-    const d = acc.get(dk) ?? { sum: 0, n: 0, trains: new Map() };
+    const d: DayAcc = acc.get(dk) ?? {
+      sum: 0, n: 0, sumNr: 0, nNr: 0, min: Infinity, max: -Infinity, below: 0, above: 0, noRes: 0, trains: new Map(),
+    };
     d.sum += v;
     d.n += 1;
+    d.min = Math.min(d.min, v);
+    d.max = Math.max(d.max, v);
+    if (v <= NO_RESIDUAL_MG_L) d.noRes += 1;
+    else { d.sumNr += v; d.nNr += 1; }
+    if (v < config.min_limit) d.below += 1;
+    else if (v > config.max_limit) d.above += 1;
     const tr = d.trains.get(p.train_id) ?? { sum: 0, n: 0 };
     tr.sum += v;
     tr.n += 1;
@@ -263,6 +377,12 @@ export function computeDailyChlorineAverages(
       ts: dayTs(dk),
       overall: d ? +(d.sum / d.n).toFixed(2) : null,
       overallCount: d?.n ?? 0,
+      min: d ? +d.min.toFixed(2) : null,
+      max: d ? +d.max.toFixed(2) : null,
+      belowCount: d?.below ?? 0,
+      aboveCount: d?.above ?? 0,
+      noResidualCount: d?.noRes ?? 0,
+      overallExclNoResidual: d && d.nNr > 0 ? +(d.sumNr / d.nNr).toFixed(2) : null,
       perTrain,
     });
   }

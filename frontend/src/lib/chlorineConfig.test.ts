@@ -85,7 +85,7 @@ describe('computeChlorineStats', () => {
   });
 });
 
-import { computeDailyChlorineAverages } from './chlorineConfig';
+import { computeDailyChlorineAverages, summarizeChlorineGaps, latestChlorineByTrain, NO_RESIDUAL_MG_L } from './chlorineConfig';
 
 describe('computeDailyChlorineAverages', () => {
   it('averages per Plant (Manila) day, excluding unverified suspect values', () => {
@@ -115,5 +115,87 @@ describe('computeDailyChlorineAverages', () => {
   });
   it('returns [] when nothing is valid', () => {
     expect(computeDailyChlorineAverages([pt('2026-10-07T02:00:00Z', null)])).toEqual([]);
+  });
+});
+
+describe('daily min/max and hidden excursions', () => {
+  it('exposes min, max and per-day out-of-range counts that a mean would hide', () => {
+    const [d] = computeDailyChlorineAverages([
+      pt('2026-10-07T01:00:00Z', 0.2),
+      pt('2026-10-07T03:00:00Z', 1.0),
+      pt('2026-10-07T05:00:00Z', 1.6),
+      pt('2026-10-07T07:00:00Z', 1.2),
+    ]);
+    expect(d.overall).toBe(1);
+    expect(d.min).toBe(0.2);
+    expect(d.max).toBe(1.6);
+    expect(d.belowCount).toBe(1);
+    expect(d.aboveCount).toBe(1);
+  });
+  it('tracks no-residual readings and gives the average without them', () => {
+    const [d] = computeDailyChlorineAverages([pt('2026-10-07T01:00:00Z', 0), pt('2026-10-07T03:00:00Z', 1.2)]);
+    expect(NO_RESIDUAL_MG_L).toBeGreaterThan(0);
+    expect(d.overall).toBe(0.6);
+    expect(d.noResidualCount).toBe(1);
+    expect(d.overallExclNoResidual).toBe(1.2);
+  });
+  it('has null min/max on days with no valid reading', () => {
+    const days = computeDailyChlorineAverages([pt('2026-10-05T02:00:00Z', 1.0), pt('2026-10-07T02:00:00Z', 1.1)]);
+    expect(days[1]).toMatchObject({ overall: null, min: null, max: null, belowCount: 0, aboveCount: 0 });
+  });
+});
+
+describe('summarizeChlorineGaps', () => {
+  it('returns zeros for no gaps', () => {
+    expect(summarizeChlorineGaps([])).toEqual({ count: 0, longestMinutes: 0, longestHours: 0, longestTrainName: null });
+  });
+  it('reports count and the longest gap', () => {
+    const gaps = detectChlorineGaps(
+      [
+        pt('2026-10-07T00:00:00Z', 1.0),
+        pt('2026-10-07T03:00:00Z', 1.0),
+        pt('2026-10-07T13:00:00Z', 1.0),
+      ],
+      120,
+    );
+    const sum = summarizeChlorineGaps(gaps);
+    expect(sum.count).toBe(2);
+    expect(sum.longestHours).toBe(10);
+  });
+});
+
+describe('latestChlorineByTrain', () => {
+  it('returns the latest valid reading per train, sorted by name', () => {
+    const r = latestChlorineByTrain([
+      pt('2026-10-08T01:00:00Z', 1.0, { train_id: 'B', train_name: 'RO 2' }),
+      pt('2026-10-08T03:00:00Z', 1.2, { train_id: 'B', train_name: 'RO 2' }),
+      pt('2026-10-08T02:00:00Z', 0.9, { train_id: 'A', train_name: 'RO 1' }),
+    ]);
+    expect(r.map((x) => [x.train_name, x.value])).toEqual([['RO 1', 0.9], ['RO 2', 1.2]]);
+    expect(r[0].status).toBe('in_range');
+  });
+  it('reports how far each train trails the newest reading of any train', () => {
+    const r = latestChlorineByTrain([
+      pt('2026-10-08T01:00:00Z', 1.0, { train_id: 'A', train_name: 'RO 1' }),
+      pt('2026-10-08T04:00:00Z', 1.0, { train_id: 'B', train_name: 'RO 2' }),
+    ]);
+    expect(r.find((x) => x.train_id === 'A')?.behindMinutes).toBe(180);
+    expect(r.find((x) => x.train_id === 'B')?.behindMinutes).toBe(0);
+  });
+  it('never reports an unverified suspect as latest; attaches it as newerSuspect', () => {
+    const [r] = latestChlorineByTrain([
+      pt('2026-10-08T01:00:00Z', 1.1),
+      pt('2026-10-08T02:00:00Z', 8.3),
+    ]);
+    expect(r.value).toBe(1.1);
+    expect(r.newerSuspect?.value).toBe(8.3);
+  });
+  it('uses a verified suspect as a normal latest value', () => {
+    const [r] = latestChlorineByTrain([pt('2026-10-08T02:00:00Z', 8.3, { verified: true })]);
+    expect(r.value).toBe(8.3);
+    expect(r.newerSuspect).toBeNull();
+  });
+  it('ignores null readings and returns [] when nothing is valid', () => {
+    expect(latestChlorineByTrain([pt('2026-10-08T02:00:00Z', null)])).toEqual([]);
   });
 });

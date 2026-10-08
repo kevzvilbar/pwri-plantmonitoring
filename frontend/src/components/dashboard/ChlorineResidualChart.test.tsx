@@ -280,4 +280,84 @@ describe('ChlorineResidualChart', () => {
     expect(screen.getByTestId('correction-request-dialog')).toBeInTheDocument();
     expect(screen.getByText('Correction: RO Train 2')).toBeInTheDocument();
   });
+  it('flags a day whose average is in range but contains out-of-range readings', () => {
+    const readings = [
+      { id: 'a', train_id: 'train-1', reading_datetime: '2026-10-08T01:00:00Z', chlorine_residual_mg_l: 0.2 },
+      { id: 'b', train_id: 'train-1', reading_datetime: '2026-10-08T02:00:00Z', chlorine_residual_mg_l: 1.4 },
+      { id: 'c', train_id: 'train-1', reading_datetime: '2026-10-08T03:00:00Z', chlorine_residual_mg_l: 1.4 },
+    ];
+    render(<ChlorineResidualChart roReadings={readings} roTrainEntities={mockTrainEntities} />);
+    // mean 1.00 is in range, but one reading is below 0.3
+    expect(screen.getByTestId('daily-avg-latest').textContent).toBe('1.00');
+    expect(screen.getByTestId('daily-avg-out-of-range').textContent).toMatch(/1 reading out of range/);
+    expect(screen.getByTestId('daily-chip-range-2026-10-08').textContent).toContain('0.2–1.4 !');
+  });
+
+  it('treats a 0.00 day as critical and shows the period average with and without it', () => {
+    const readings = [
+      { id: 'a', train_id: 'train-1', reading_datetime: '2026-10-06T02:00:00Z', chlorine_residual_mg_l: 1.3 },
+      { id: 'b', train_id: 'train-1', reading_datetime: '2026-10-07T02:00:00Z', chlorine_residual_mg_l: 0 },
+      { id: 'c', train_id: 'train-1', reading_datetime: '2026-10-08T02:00:00Z', chlorine_residual_mg_l: 1.1 },
+    ];
+    render(<ChlorineResidualChart roReadings={readings} roTrainEntities={mockTrainEntities} />);
+    // zero stays in the headline average (it is a real reading) ...
+    expect(screen.getByTestId('daily-avg-hero').textContent).toContain('Period avg 0.8');
+    // ... and the version without it is shown next to it
+    expect(screen.getByTestId('period-avg-excl-no-residual').textContent).toMatch(/1\.20 excl\. 1 no-residual reading/);
+    // the 0.00 tile is announced as no residual, not just coloured
+    fireEvent.click(screen.getByTestId('daily-chip-2026-10-07'));
+    expect(screen.getByTestId('daily-chip-2026-10-07').getAttribute('aria-label')).toMatch(/no residual/);
+    expect(screen.getByText('No residual')).toBeInTheDocument();
+  });
+
+  it('shows gap count and longest gap in the daily view without opening the readings view', () => {
+    render(<ChlorineResidualChart roReadings={mockReadings} roTrainEntities={mockTrainEntities} />);
+    const kpi = screen.getByTestId('gap-kpi');
+    expect(kpi.textContent).toContain('longest 6h');
+    fireEvent.click(screen.getByRole('button', { name: /Management \(4h Gaps\)/i }));
+    expect(screen.getByTestId('gap-kpi').textContent).toContain('Gaps >4h');
+  });
+
+  it('gives every day tile an accessible status that does not rely on colour', () => {
+    const readings = [
+      { id: 'a', train_id: 'train-1', reading_datetime: '2026-10-07T02:00:00Z', chlorine_residual_mg_l: 1.8 },
+      { id: 'b', train_id: 'train-1', reading_datetime: '2026-10-09T02:00:00Z', chlorine_residual_mg_l: 0.9 },
+    ];
+    render(<ChlorineResidualChart roReadings={readings} roTrainEntities={mockTrainEntities} />);
+    expect(screen.getByTestId('daily-chip-2026-10-07').getAttribute('aria-label')).toMatch(/above maximum/);
+    expect(screen.getByTestId('daily-chip-2026-10-08').getAttribute('aria-label')).toMatch(/no valid readings/);
+    expect(screen.getByTestId('daily-chip-2026-10-09').getAttribute('aria-label')).toMatch(/in range/);
+  });
+  it('shows the latest valid reading per train on the band, using plant-time timestamps', () => {
+    render(<ChlorineResidualChart roReadings={mockReadings} roTrainEntities={mockTrainEntities} />);
+    expect(screen.getByTestId('latest-readings')).toBeInTheDocument();
+    // train-1: latest valid is 1.80 (the later 4.50 is an unverified suspect)
+    expect(screen.getByTestId('latest-value-train-1').textContent).toContain('1.80');
+    expect(screen.getByTestId('latest-row-train-1').getAttribute('aria-label')).toMatch(/above maximum/);
+    expect(screen.getByTestId('latest-suspect-train-1').textContent).toMatch(/4\.50.*awaiting verification/);
+    // train-2: 1.10 in range
+    expect(screen.getByTestId('latest-value-train-2').textContent).toContain('1.10');
+    expect(screen.getByTestId('latest-row-train-2').getAttribute('aria-label')).toMatch(/in range/);
+    // 2026-10-01T15:00Z = Oct 1, 23:00 in Asia/Manila
+    expect(screen.getByTestId('latest-row-train-1').textContent).toContain('23:00');
+  });
+
+  it('flags a train whose latest reading trails the others by more than the gap limit', () => {
+    render(<ChlorineResidualChart roReadings={mockReadings} roTrainEntities={mockTrainEntities} />);
+    // train-2 last read 08:00Z, train-1 valid latest 15:00Z -> 7.0h behind (> 2h operator limit)
+    expect(screen.getByTestId('latest-behind-train-2').textContent).toMatch(/7\.0h/);
+    expect(screen.queryByTestId('latest-behind-train-1')).not.toBeInTheDocument();
+  });
+
+  it('respects the train filter in the latest-reading panel', () => {
+    render(
+      <ChlorineResidualChart
+        roReadings={mockReadings}
+        roTrainEntities={mockTrainEntities}
+        selectedTrainIds={new Set(['train-2'])}
+      />,
+    );
+    expect(screen.queryByTestId('latest-row-train-1')).not.toBeInTheDocument();
+    expect(screen.getByTestId('latest-row-train-2')).toBeInTheDocument();
+  });
 });
