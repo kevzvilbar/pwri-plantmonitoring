@@ -16,6 +16,16 @@ vi.mock('recharts', async () => {
   };
 });
 
+vi.mock('@/components/CorrectionRequestDialog', () => ({
+  CorrectionRequestDialog: ({ target, onClose }: { target: { entityName: string; currentReading: number }; onClose: () => void }) => (
+    <div data-testid="correction-request-dialog">
+      <span>Correction: {target.entityName}</span>
+      <span>Value: {target.currentReading}</span>
+      <button type="button" onClick={onClose}>Close Dialog</button>
+    </div>
+  ),
+}));
+
 describe('ChlorineResidualChart', () => {
   const mockReadings = [
     {
@@ -171,6 +181,7 @@ describe('ChlorineResidualChart', () => {
     fireEvent.click(overallAvgBtn);
     expect(overallAvgBtn.className).not.toContain('bg-sky-500/15');
   });
+
   it('shows the daily average hero first, with the latest day and a chip per day', () => {
     const readings = [
       { id: 'a', train_id: 'train-1', reading_datetime: '2026-10-07T02:00:00Z', chlorine_residual_mg_l: 1.0 },
@@ -185,5 +196,88 @@ describe('ChlorineResidualChart', () => {
     expect(screen.getByTestId('daily-avg-chips').children).toHaveLength(2);
     // daily view is the default
     expect(screen.queryByText(/logging gap/i)).not.toBeInTheDocument();
+  });
+
+  it('allows clicking day chips to focus and inspect previous day averages', () => {
+    const readings = [
+      { id: 'a', train_id: 'train-1', reading_datetime: '2026-10-07T02:00:00Z', chlorine_residual_mg_l: 1.0 },
+      { id: 'b', train_id: 'train-1', reading_datetime: '2026-10-07T06:00:00Z', chlorine_residual_mg_l: 1.4 },
+      { id: 'c', train_id: 'train-1', reading_datetime: '2026-10-08T03:00:00Z', chlorine_residual_mg_l: 0.8 },
+    ];
+    render(<ChlorineResidualChart roReadings={readings} roTrainEntities={mockTrainEntities} />);
+
+    // Default hero shows latest day (Oct 8 -> 0.80)
+    expect(screen.getByTestId('daily-avg-latest').textContent).toBe('0.80');
+
+    // Click Oct 7 chip
+    const oct7Chip = screen.getByTestId('daily-chip-2026-10-07');
+    fireEvent.click(oct7Chip);
+
+    // Hero now inspects Oct 7 (average of 1.0 and 1.4 is 1.20)
+    expect(screen.getByTestId('daily-avg-latest').textContent).toBe('1.20');
+    expect(screen.getByTestId('reset-day-focus-btn')).toBeInTheDocument();
+
+    // Click reset to latest
+    fireEvent.click(screen.getByTestId('reset-day-focus-btn'));
+    expect(screen.getByTestId('daily-avg-latest').textContent).toBe('0.80');
+  });
+
+  it('triggers quick correction request dialog on suspect outlier review', () => {
+    render(
+      <ChlorineResidualChart
+        roReadings={mockReadings}
+        roTrainEntities={mockTrainEntities}
+      />,
+    );
+
+    const reviewBtn = screen.getByTestId('review-suspect-btn');
+    expect(reviewBtn).toBeInTheDocument();
+
+    fireEvent.click(reviewBtn);
+
+    // CorrectionRequestDialog should be rendered with the suspect reading details
+    expect(screen.getByTestId('correction-request-dialog')).toBeInTheDocument();
+    expect(screen.getByText('Correction: RO Train 1')).toBeInTheDocument();
+    expect(screen.getByText('Value: 4.5')).toBeInTheDocument();
+
+    // Clicking close closes dialog
+    fireEvent.click(screen.getByRole('button', { name: /Close Dialog/i }));
+    expect(screen.queryByTestId('correction-request-dialog')).not.toBeInTheDocument();
+  });
+
+  it('opens suspect list dialog when multiple suspect readings exist', () => {
+    const multiSuspectReadings = [
+      ...mockReadings,
+      {
+        id: 'r6',
+        train_id: 'train-2',
+        train_name: 'RO Train 2',
+        reading_datetime: '2026-10-01T17:00:00Z',
+        chlorine_residual_mg_l: 5.20,
+      },
+    ];
+
+    render(
+      <ChlorineResidualChart
+        roReadings={multiSuspectReadings}
+        roTrainEntities={mockTrainEntities}
+      />,
+    );
+
+    const reviewBtn = screen.getByTestId('review-suspect-btn');
+    fireEvent.click(reviewBtn);
+
+    // Should open suspect readings list
+    expect(screen.getByTestId('suspect-readings-list')).toBeInTheDocument();
+    expect(screen.getByText(/5\.20 mg\/L/i)).toBeInTheDocument();
+
+    // Click Request Correction on the second item
+    const requestBtns = screen.getAllByRole('button', { name: /Request Correction/i });
+    expect(requestBtns).toHaveLength(2);
+    fireEvent.click(requestBtns[1]);
+
+    // Now CorrectionRequestDialog is open for Train 2
+    expect(screen.getByTestId('correction-request-dialog')).toBeInTheDocument();
+    expect(screen.getByText('Correction: RO Train 2')).toBeInTheDocument();
   });
 });

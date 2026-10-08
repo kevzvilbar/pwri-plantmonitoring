@@ -16,15 +16,19 @@ import {
   CheckCircle2,
   Clock,
   ShieldAlert,
-  SlidersHorizontal,
   Info,
   Layers,
   TrendingUp,
   TrendingDown,
   Minus,
+  RotateCcw,
+  Edit3,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { useAppStore } from '@/store/appStore';
+import { CorrectionRequestDialog, type CorrectionTarget } from '@/components/CorrectionRequestDialog';
+import { ResponsiveDialog } from '@/components/ui/responsive-dialog';
 import {
   CHLORINE_CONFIG,
   classifyChlorineReading,
@@ -73,6 +77,8 @@ const SEG_SEP = '::';
 export interface ChlorineReadingInput {
   id?: string;
   train_id?: string;
+  train_name?: string;
+  plant_id?: string;
   reading_datetime?: string;
   chlorine_residual_mg_l?: number | string | null;
   verified?: boolean;
@@ -81,6 +87,7 @@ export interface ChlorineReadingInput {
 }
 
 export interface ChlorineResidualChartProps {
+  plantId?: string;
   roReadings?: ChlorineReadingInput[];
   roTrainEntities?: { id: string; label: string; color: string }[];
   plantNames?: Map<string, string>;
@@ -95,6 +102,7 @@ export interface ChlorineResidualChartProps {
 type GapViewMode = 'operator' | 'management';
 
 export function ChlorineResidualChart({
+  plantId,
   roReadings = [],
   roTrainEntities = [],
   roTrainNames,
@@ -104,10 +112,16 @@ export function ChlorineResidualChart({
   onSelectAllTrains,
   onClearAllTrains,
 }: ChlorineResidualChartProps) {
+  const storePlantId = useAppStore((s) => s.selectedPlantId);
+  const activePlantId = plantId ?? storePlantId ?? '';
+
   const [gapViewMode, setGapViewMode] = useState<GapViewMode>('operator');
   const [localSelectedTrains, setLocalSelectedTrains] = useState<Set<string> | null>(null);
   const [showOverallAvg, setShowOverallAvg] = useState(true);
   const [viewMode, setViewMode] = useState<ViewMode>('daily');
+  const [selectedDayKey, setSelectedDayKey] = useState<string | null>(null);
+  const [correctionTarget, setCorrectionTarget] = useState<CorrectionTarget | null>(null);
+  const [suspectListOpen, setSuspectListOpen] = useState(false);
 
   const activeTrainSet = selectedTrainIds !== undefined ? selectedTrainIds : localSelectedTrains;
 
@@ -173,7 +187,7 @@ export function ChlorineResidualChart({
       out.push({
         id: r.id,
         train_id: r.train_id,
-        train_name: roTrainNames?.get(r.train_id) || `Train ${r.train_id.slice(-4)}`,
+        train_name: r.train_name || roTrainNames?.get(r.train_id) || `Train ${r.train_id.slice(-4)}`,
         reading_datetime: r.reading_datetime,
         chlorine_residual_mg_l: val,
         verified: r.verified === true || r.norm_status === 'normalized',
@@ -300,6 +314,73 @@ export function ChlorineResidualChart({
     return { latest, prev, periodAvg, daysWithData: withData.length, inBand };
   }, [dailyDays]);
 
+  // Active focused day (user-selected or latest day with readings)
+  const activeDay = useMemo(() => {
+    if (selectedDayKey) {
+      const found = dailyDays.find((d) => d.dateKey === selectedDayKey);
+      if (found) return found;
+    }
+    return dailySummary?.latest ?? null;
+  }, [dailyDays, selectedDayKey, dailySummary]);
+
+  // Chronological predecessor of the active day
+  const activeDayPrev = useMemo(() => {
+    if (!activeDay) return null;
+    const idx = dailyDays.findIndex((d) => d.dateKey === activeDay.dateKey);
+    if (idx <= 0) return null;
+    return dailyDays[idx - 1];
+  }, [dailyDays, activeDay]);
+
+  const activeDayDelta = useMemo(() => {
+    if (!activeDay || activeDay.overall == null || !activeDayPrev || activeDayPrev.overall == null) return null;
+    return +(activeDay.overall - activeDayPrev.overall).toFixed(2);
+  }, [activeDay, activeDayPrev]);
+
+  // Suspect unverified readings available for review / correction
+  const suspectPoints = useMemo(() => {
+    return filteredRawPoints.filter((pt) => {
+      const val = pt.chlorine_residual_mg_l;
+      return val != null && classifyChlorineReading(val, CHLORINE_CONFIG) === 'suspect' && !pt.verified;
+    });
+  }, [filteredRawPoints]);
+
+  const trainMeta = useMemo(() => {
+    const m = new Map<string, { label: string; color: string }>();
+    availableTrainEntities.forEach((e) => m.set(e.id, { label: e.label, color: e.color }));
+    return m;
+  }, [availableTrainEntities]);
+
+  const handleOpenSuspectReview = useCallback((pt?: RawChlorinePoint) => {
+    if (pt) {
+      setCorrectionTarget({
+        id: pt.id || '',
+        sourceTable: 'ro_train_readings',
+        plantId: activePlantId,
+        entityName: pt.train_name || trainMeta.get(pt.train_id)?.label || `Train ${pt.train_id.slice(-4)}`,
+        currentReading: Number(pt.chlorine_residual_mg_l),
+        previousReading: null,
+        dailyVolume: null,
+        readingDatetime: pt.reading_datetime,
+      });
+      return;
+    }
+    if (suspectPoints.length === 1) {
+      const single = suspectPoints[0];
+      setCorrectionTarget({
+        id: single.id || '',
+        sourceTable: 'ro_train_readings',
+        plantId: activePlantId,
+        entityName: single.train_name || trainMeta.get(single.train_id)?.label || `Train ${single.train_id.slice(-4)}`,
+        currentReading: Number(single.chlorine_residual_mg_l),
+        previousReading: null,
+        dailyVolume: null,
+        readingDatetime: single.reading_datetime,
+      });
+    } else if (suspectPoints.length > 1) {
+      setSuspectListOpen(true);
+    }
+  }, [suspectPoints, activePlantId, trainMeta]);
+
   const dailyYMax = useMemo(() => {
     let m = 0;
     for (const d of dailyDays) {
@@ -308,12 +389,6 @@ export function ChlorineResidualChart({
     }
     return m <= 1.8 ? 2.0 : +(m + 0.3).toFixed(1);
   }, [dailyDays]);
-
-  const trainMeta = useMemo(() => {
-    const m = new Map<string, { label: string; color: string }>();
-    availableTrainEntities.forEach((e) => m.set(e.id, { label: e.label, color: e.color }));
-    return m;
-  }, [availableTrainEntities]);
 
   // Y-axis always shows 0 to 1.5 (plus headroom); suspect values are pinned at Y_CAP.
   const yAxisMax = hasOffScale ? Y_CAP : (() => {
@@ -405,7 +480,7 @@ export function ChlorineResidualChart({
       .filter((x): x is { trainId: string; pt: RawChlorinePoint } => x !== null);
     if (!rows.length) return null;
 
-    const anySuspect = rows.some(({ pt }) =>
+    const suspectRows = rows.filter(({ pt }) =>
       classifyChlorineReading(pt.chlorine_residual_mg_l, CHLORINE_CONFIG) === 'suspect' && !pt.verified);
 
     return (
@@ -447,10 +522,26 @@ export function ChlorineResidualChart({
             </div>
           </div>
         )}
-        {anySuspect && (
-          <div className="mt-2 pt-1.5 border-t border-destructive/20 text-[10px] text-destructive flex items-center gap-1">
-            <ShieldAlert className="h-3 w-3 shrink-0" />
-            <span>Readings &gt; 3.0 mg/L are excluded from compliance stats until verified.</span>
+        {suspectRows.length > 0 && (
+          <div className="mt-2 pt-1.5 border-t border-destructive/20 text-[10px] text-destructive flex flex-col gap-1.5">
+            <div className="flex items-center gap-1">
+              <ShieldAlert className="h-3 w-3 shrink-0" />
+              <span>Readings &gt; 3.0 mg/L are excluded from stats until verified.</span>
+            </div>
+            {suspectRows.map(({ pt }) => (
+              <button
+                key={`suspect-tt-${pt.id || pt.train_id}`}
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleOpenSuspectReview(pt);
+                }}
+                data-testid="tooltip-correct-suspect-btn"
+                className="w-full inline-flex items-center justify-center gap-1 px-2 py-1 rounded bg-red-500/15 border border-red-500/30 text-[10px] font-semibold text-red-700 dark:text-red-300 hover:bg-red-500/25 transition-colors cursor-pointer"
+              >
+                <Edit3 className="h-2.5 w-2.5" /> Flag / Correct Outlier
+              </button>
+            ))}
           </div>
         )}
       </div>
@@ -543,38 +634,54 @@ export function ChlorineResidualChart({
         </div>
       </div>
 
-      {/* Daily average hero: the first thing the reader sees */}
-      {dailySummary && (() => {
-        const { latest, prev, periodAvg, daysWithData, inBand } = dailySummary;
-        const lv = latest.overall as number;
-        const st = classifyChlorineReading(lv, CHLORINE_CONFIG);
+      {/* Daily average hero & Interactive Day Focus Strip */}
+      {dailySummary && activeDay && (() => {
+        const { periodAvg, daysWithData, inBand } = dailySummary;
+        const lv = activeDay.overall as number | null;
+        const st = lv != null ? classifyChlorineReading(lv, CHLORINE_CONFIG) : 'missing';
         const tone = STATUS_TONE[st] ?? STATUS_TONE.missing;
-        const delta = prev?.overall != null ? +(lv - (prev.overall as number)).toFixed(2) : null;
+        const delta = activeDayDelta;
+        const isInspectingNonLatest = selectedDayKey !== null && selectedDayKey !== dailySummary.latest.dateKey;
         const recent = dailyDays.slice(-14);
+
         return (
           <div
             className="rounded-xl border border-border/60 bg-muted/20 p-3 flex flex-col lg:flex-row lg:items-center gap-3"
             data-testid="daily-avg-hero"
           >
-            <div className="shrink-0 min-w-[190px]">
-              <div className="text-[10px] uppercase tracking-wider font-medium text-muted-foreground">
-                Daily average · {fmtDay(latest.ts)}
+            <div className="shrink-0 min-w-[195px]">
+              <div className="flex items-center justify-between gap-1">
+                <span className="text-[10px] uppercase tracking-wider font-medium text-muted-foreground">
+                  Daily average · {fmtDay(activeDay.ts)}
+                </span>
+                {isInspectingNonLatest && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setSelectedDayKey(null)}
+                    data-testid="reset-day-focus-btn"
+                    className="h-5 text-[10px] px-1.5 py-0 text-sky-600 dark:text-sky-400 hover:text-sky-700 inline-flex items-center gap-0.5"
+                    title="Reset to latest day"
+                  >
+                    <RotateCcw className="h-2.5 w-2.5" /> Latest
+                  </Button>
+                )}
               </div>
               <div className="flex items-baseline gap-2 mt-0.5">
                 <span className={`text-3xl font-bold font-mono ${tone.text}`} data-testid="daily-avg-latest">
-                  {lv.toFixed(2)}
+                  {lv != null ? lv.toFixed(2) : '—'}
                 </span>
                 <span className="text-xs text-muted-foreground">{CHLORINE_CONFIG.unit}</span>
-                {statusBadge(st, false)}
+                {lv != null && statusBadge(st, false)}
               </div>
               <div className="flex items-center gap-2 text-[11px] text-muted-foreground mt-1">
                 {delta != null && (
                   <span className="inline-flex items-center gap-0.5 font-medium">
                     {delta > 0 ? <TrendingUp className="h-3 w-3" /> : delta < 0 ? <TrendingDown className="h-3 w-3" /> : <Minus className="h-3 w-3" />}
-                    {delta > 0 ? '+' : ''}{delta.toFixed(2)} vs {prev ? fmtDay(prev.ts) : ''}
+                    {delta > 0 ? '+' : ''}{delta.toFixed(2)} vs {activeDayPrev ? fmtDay(activeDayPrev.ts) : ''}
                   </span>
                 )}
-                <span>{latest.overallCount} readings</span>
+                <span>{activeDay.overallCount} readings</span>
               </div>
               <div className="text-[11px] text-muted-foreground mt-0.5">
                 Period avg <span className="font-mono font-semibold text-foreground">{periodAvg.toFixed(2)}</span> ·{' '}
@@ -585,15 +692,28 @@ export function ChlorineResidualChart({
               {recent.map((d) => {
                 const dst = d.overall == null ? 'missing' : classifyChlorineReading(d.overall, CHLORINE_CONFIG);
                 const t = STATUS_TONE[dst] ?? STATUS_TONE.missing;
+                const isFocused = activeDay.dateKey === d.dateKey;
                 return (
-                  <div
+                  <button
                     key={d.dateKey}
-                    className={`shrink-0 w-[58px] rounded-lg border px-1.5 py-1 text-center ${t.border} ${t.bg}`}
-                    title={d.overall == null ? `${fmtDay(d.ts)}: no valid readings` : `${fmtDay(d.ts)}: ${d.overall.toFixed(2)} mg/L (${d.overallCount} readings)`}
+                    type="button"
+                    onClick={() => setSelectedDayKey((prev) => (prev === d.dateKey ? null : d.dateKey))}
+                    aria-pressed={isFocused}
+                    data-testid={`daily-chip-${d.dateKey}`}
+                    className={`shrink-0 w-[58px] rounded-lg border px-1.5 py-1 text-center transition-all cursor-pointer hover:shadow-xs focus:outline-none ${t.border} ${t.bg} ${
+                      isFocused
+                        ? 'ring-2 ring-sky-500 ring-offset-1 ring-offset-background scale-105 font-bold shadow-sm'
+                        : 'hover:border-foreground/30 opacity-90 hover:opacity-100'
+                    }`}
+                    title={
+                      d.overall == null
+                        ? `${fmtDay(d.ts)}: no valid readings`
+                        : `${fmtDay(d.ts)}: ${d.overall.toFixed(2)} mg/L (${d.overallCount} readings) - click to inspect`
+                    }
                   >
                     <div className="text-[9px] text-muted-foreground">{fmtDay(d.ts)}</div>
                     <div className={`text-sm font-bold font-mono ${t.text}`}>{d.overall == null ? '—' : d.overall.toFixed(2)}</div>
-                  </div>
+                  </button>
                 );
               })}
             </div>
@@ -960,9 +1080,21 @@ export function ChlorineResidualChart({
         <div className={`rounded-lg p-2 flex flex-col justify-between border ${
           stats.suspectCount > 0 ? 'bg-red-500/15 border-red-500/40 text-red-600' : 'bg-muted/40 border-border/60 text-muted-foreground'
         }`}>
-          <span className="text-[10px] font-medium uppercase tracking-wider flex items-center gap-1">
-            <ShieldAlert className="h-3 w-3" /> Suspect (&gt;3.0)
-          </span>
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-medium uppercase tracking-wider flex items-center gap-1">
+              <ShieldAlert className="h-3 w-3" /> Suspect (&gt;3.0)
+            </span>
+            {stats.suspectCount > 0 && (
+              <button
+                type="button"
+                onClick={() => handleOpenSuspectReview()}
+                data-testid="review-suspect-btn"
+                className="inline-flex items-center gap-1 text-[10px] font-semibold text-rose-600 hover:text-rose-700 dark:text-rose-400 underline underline-offset-2 cursor-pointer"
+              >
+                <Edit3 className="h-2.5 w-2.5" /> Review
+              </button>
+            )}
+          </div>
           <span className="text-base font-bold font-mono mt-0.5">
             {stats.suspectCount}
           </span>
@@ -1013,6 +1145,67 @@ export function ChlorineResidualChart({
           <span>Gaps span &gt;{gapThresholdMinutes / 60}h without logged readings.</span>
         </div>
       </div>
+
+      {/* Suspect Readings Selection Modal (when multiple suspects exist) */}
+      {suspectListOpen && (
+        <ResponsiveDialog
+          open
+          onOpenChange={(o) => { if (!o) setSuspectListOpen(false); }}
+          title={`Suspect Chlorine Readings (${suspectPoints.length})`}
+          description="Readings exceeding 3.0 mg/L are excluded from compliance calculations until verified or corrected."
+          className="max-w-md"
+          footer={(
+            <Button variant="outline" size="sm" onClick={() => setSuspectListOpen(false)}>
+              Close
+            </Button>
+          )}
+        >
+          <div className="space-y-2 py-2 max-h-[340px] overflow-y-auto" data-testid="suspect-readings-list">
+            {suspectPoints.map((pt) => {
+              const val = Number(pt.chlorine_residual_mg_l);
+              const name = pt.train_name || trainMeta.get(pt.train_id)?.label || `Train ${pt.train_id.slice(-4)}`;
+              const dt = fmtFull(new Date(pt.reading_datetime).getTime());
+              return (
+                <div
+                  key={pt.id || `${pt.train_id}-${pt.reading_datetime}`}
+                  className="flex items-center justify-between gap-3 p-2.5 rounded-lg border border-red-500/30 bg-red-500/5 text-xs"
+                >
+                  <div className="space-y-0.5">
+                    <div className="font-semibold text-foreground flex items-center gap-1.5">
+                      <span className="h-2 w-2 rounded-full bg-red-500" />
+                      <span>{name}</span>
+                      <span className="font-mono font-bold text-red-600 dark:text-red-400 ml-1">
+                        {val.toFixed(2)} mg/L
+                      </span>
+                    </div>
+                    <div className="text-[11px] text-muted-foreground font-mono">{dt}</div>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-xs border-red-500/40 text-red-600 hover:bg-red-500/10 shrink-0"
+                    onClick={() => {
+                      setSuspectListOpen(false);
+                      handleOpenSuspectReview(pt);
+                    }}
+                  >
+                    <Edit3 className="h-3 w-3 mr-1" /> Request Correction
+                  </Button>
+                </div>
+              );
+            })}
+          </div>
+        </ResponsiveDialog>
+      )}
+
+      {/* Direct Outlier Correction Request Dialog */}
+      {correctionTarget && (
+        <CorrectionRequestDialog
+          target={correctionTarget}
+          onClose={() => setCorrectionTarget(null)}
+          onSubmitted={() => setCorrectionTarget(null)}
+        />
+      )}
     </div>
   );
 }
