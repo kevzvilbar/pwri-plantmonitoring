@@ -43,6 +43,9 @@ const FULL_FMT = new Intl.DateTimeFormat('en-US', {
   month: 'short', day: 'numeric', year: 'numeric',
   hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false, timeZone: PH_TZ,
 });
+const DATE_KEY_FMT = new Intl.DateTimeFormat('en-CA', {
+  year: 'numeric', month: '2-digit', day: '2-digit', timeZone: PH_TZ,
+});
 const fmtAxis = (ts: number) => AXIS_FMT.format(new Date(ts));
 const fmtFull = (ts: number) => FULL_FMT.format(new Date(ts));
 
@@ -86,6 +89,7 @@ export function ChlorineResidualChart({
 }: ChlorineResidualChartProps) {
   const [gapViewMode, setGapViewMode] = useState<GapViewMode>('operator');
   const [localSelectedTrains, setLocalSelectedTrains] = useState<Set<string> | null>(null);
+  const [showOverallAvg, setShowOverallAvg] = useState(true);
 
   const activeTrainSet = selectedTrainIds !== undefined ? selectedTrainIds : localSelectedTrains;
 
@@ -213,6 +217,31 @@ export function ChlorineResidualChart({
       row._meta.set(pt.train_id, pt);
     }
 
+    // Compute overall daily averages across valid (non-suspect) readings
+    const dayPointsAcc = new Map<string, { sum: number; count: number }>();
+    for (const pt of filteredRawPoints) {
+      const val = pt.chlorine_residual_mg_l as number;
+      const status = classifyChlorineReading(val, CHLORINE_CONFIG);
+      if (status === 'suspect' && !pt.verified) continue;
+      const dt = new Date(pt.reading_datetime);
+      const dk = DATE_KEY_FMT.format(dt);
+      const cur = dayPointsAcc.get(dk) ?? { sum: 0, count: 0 };
+      dayPointsAcc.set(dk, { sum: cur.sum + val, count: cur.count + 1 });
+    }
+
+    const dayAvgMap = new Map<string, number>();
+    dayPointsAcc.forEach((v, dk) => {
+      if (v.count > 0) dayAvgMap.set(dk, +(v.sum / v.count).toFixed(2));
+    });
+
+    for (const row of rowMap.values()) {
+      const dk = DATE_KEY_FMT.format(new Date(row.ts));
+      const dayAvg = dayAvgMap.get(dk);
+      if (dayAvg != null) {
+        row.overall_daily_avg = dayAvg;
+      }
+    }
+
     const seriesList: { key: string; trainId: string }[] = [];
     segCount.forEach((n, trainId) => {
       for (let i = 0; i < n; i++) seriesList.push({ key: `${trainId}${SEG_SEP}${i}`, trainId });
@@ -288,7 +317,7 @@ export function ChlorineResidualChart({
   interface TooltipEntry {
     value?: number | string | null;
     dataKey?: string;
-    payload?: { ts?: number; _meta?: Map<string, RawChlorinePoint> };
+    payload?: { ts?: number; _meta?: Map<string, RawChlorinePoint>; overall_daily_avg?: number } & Record<string, unknown>;
   }
 
   interface CustomTooltipProps {
@@ -351,6 +380,18 @@ export function ChlorineResidualChart({
             );
           })}
         </div>
+        {showOverallAvg && row?.overall_daily_avg != null && (
+          <div className="flex items-center justify-between gap-2 py-1 border-t border-border/60 mt-1 pt-1">
+            <div className="flex items-center gap-1.5">
+              <span className="h-2 w-2 rounded-full bg-sky-400" />
+              <span className="font-semibold text-foreground">Overall Daily Avg</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="font-mono font-bold text-sky-500">{Number(row.overall_daily_avg).toFixed(2)} {CHLORINE_CONFIG.unit}</span>
+              {statusBadge(classifyChlorineReading(Number(row.overall_daily_avg), CHLORINE_CONFIG), false)}
+            </div>
+          </div>
+        )}
         {anySuspect && (
           <div className="mt-2 pt-1.5 border-t border-destructive/20 text-[10px] text-destructive flex items-center gap-1">
             <ShieldAlert className="h-3 w-3 shrink-0" />
@@ -480,6 +521,19 @@ export function ChlorineResidualChart({
           >
             All ({availableTrainEntities.length})
           </Button>
+          <button
+            type="button"
+            onClick={() => setShowOverallAvg((prev) => !prev)}
+            data-testid="toggle-overall-avg"
+            className={`inline-flex items-center gap-1.5 h-6 px-2 rounded-md text-[11px] font-medium border transition-all ${
+              showOverallAvg
+                ? 'bg-sky-500/15 border-sky-500/40 text-sky-600 dark:text-sky-400 shadow-xs font-semibold'
+                : 'bg-muted/30 border-transparent text-muted-foreground hover:bg-muted/60 opacity-60'
+            }`}
+          >
+            <span className="h-2 w-2 rounded-full bg-sky-400" />
+            <span>Overall Daily Avg</span>
+          </button>
           {availableTrainEntities.map((t) => {
             const isSelected = activeTrainSet === null || activeTrainSet.has(t.id);
             return (
@@ -637,6 +691,22 @@ export function ChlorineResidualChart({
 
               <Tooltip content={<CustomTooltip />} cursor={CHART_CURSOR} />
 
+              {/* Overall Daily Average Trend Line */}
+              {showOverallAvg && (
+                <Line
+                  type="monotone"
+                  dataKey="overall_daily_avg"
+                  name="Overall Daily Avg"
+                  stroke="#38bdf8"
+                  strokeWidth={2.5}
+                  strokeDasharray="4 4"
+                  dot={{ r: 3, fill: '#38bdf8', stroke: '#ffffff', strokeWidth: 1.5 }}
+                  activeDot={{ r: 5, strokeWidth: 2, stroke: '#ffffff', fill: '#0284c7' }}
+                  connectNulls
+                  isAnimationActive={false}
+                />
+              )}
+
               {/* One Line per (train, segment); segments break at gaps */}
               {series.map(({ key, trainId }) => {
                 const meta = trainMeta.get(trainId);
@@ -674,6 +744,9 @@ export function ChlorineResidualChart({
           </span>
           <span className="flex items-center gap-1 text-red-600 dark:text-red-400 font-semibold">
             <span className="h-2.5 w-2.5 rounded-full border border-red-600 inline-flex items-center justify-center text-[7px]">!</span> Suspect (&gt;3.0)
+          </span>
+          <span className="flex items-center gap-1 text-sky-600 dark:text-sky-400 font-medium">
+            <span className="h-0.5 w-3 bg-sky-400 border-b border-dashed inline-block" /> Overall Daily Avg
           </span>
         </div>
 

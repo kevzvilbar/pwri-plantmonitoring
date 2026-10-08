@@ -153,4 +153,20 @@ describe('ChlorineResidualChart', () => {
     expect(screen.getByText('Valid Readings').nextSibling?.textContent).toBe('2');
   });
 
+  it('renders and toggles Overall Daily Avg button', () => {
+    render(
+      <ChlorineResidualChart
+        roReadings={mockReadings}
+        roTrainEntities={mockTrainEntities}
+      />,
+    );
+
+    const overallAvgBtn = screen.getByTestId('toggle-overall-avg');
+    expect(overallAvgBtn).toBeInTheDocument();
+    expect(overallAvgBtn.className).toContain('bg-sky-500/15');
+
+    // Click to toggle off
+    fireEvent.click(overallAvgBtn);
+    expect(overallAvgBtn.className).not.toContain('bg-sky-500/15');
+  });
 });
