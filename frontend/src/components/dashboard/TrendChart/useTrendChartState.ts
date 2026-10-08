@@ -138,7 +138,7 @@ export function useTrendChartState(metric: string, plantIds: string[]): Omit<Tre
   const hasConsumptionDrill = metric === 'production' || metric === 'nrw';
   const usesSharedGranularity =
     hasConsumptionDrill || metric === 'rawwater' || metric === 'productionCost'
-    || metric === 'pv' || metric === 'kwh' || metric === 'tds' || metric === 'recovery';
+    || metric === 'pv' || metric === 'kwh' || metric === 'tds' || metric === 'recovery' || metric === 'chlorine';
 
   const drillMode = viewBreakdown !== 'total' ? 'drilldown' : 'default';
   const prodDrillSource = viewBreakdown === 'by-source' ? 'source' : 'locator';
@@ -173,7 +173,7 @@ export function useTrendChartState(metric: string, plantIds: string[]): Omit<Tre
 
   const [roDrillMode, setRoDrillMode] = useState<'default' | 'by-train' | 'by-hour'>('default');
   useEffect(() => { setDrillFocus(null); }, [metric, viewBreakdown, roDrillMode, rawwaterBreakdown]);
-  const hasRoDrill = metric === 'tds' || metric === 'recovery';
+  const hasRoDrill = metric === 'tds' || metric === 'recovery' || metric === 'chlorine';
   const [selectedTrainIds, setSelectedTrainIds] = useState<Set<string> | null>(null);
   const [trainSearch, setTrainSearch] = useState('');
   const [showTrainFilter, setShowTrainFilter] = useState(false);

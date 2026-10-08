@@ -12,8 +12,8 @@ export function useRoDrillData(p: Record<string, any>) {
     setSelectedTrainIds, trainSearch,
   } = p;
 
-  const valueKey = metric === 'tds' ? 'permeate_tds' : 'recovery_pct';
-  const roUnit   = metric === 'tds' ? 'ppm' : '%';
+  const valueKey = metric === 'chlorine' ? 'chlorine_residual_mg_l' : metric === 'tds' ? 'permeate_tds' : 'recovery_pct';
+  const roUnit   = metric === 'chlorine' ? 'mg/L' : metric === 'tds' ? 'ppm' : '%';
 
   const roTrainEntities = useMemo<{ id: string; label: string; color: string }[]>(() => {
     if (!hasRoDrill) return [];
@@ -89,7 +89,7 @@ export function useRoDrillData(p: Record<string, any>) {
       const avgRow = new Map<string, number>();
       const wRow = new Map<string, number>();
       trainAcc.forEach(({ sum, count }, tid) => {
-        avgRow.set(tid, +(sum / count).toFixed(metric === 'tds' ? 0 : 1));
+        avgRow.set(tid, +(sum / count).toFixed(metric === 'chlorine' ? 2 : metric === 'tds' ? 0 : 1));
         wRow.set(tid, count);
       });
       avgPivot.set(dk, avgRow);
@@ -119,7 +119,7 @@ export function useRoDrillData(p: Record<string, any>) {
       acc.set(slotKey, { sum: prev.sum + +r[valueKey], count: prev.count + 1, ts: prev.ts });
     });
 
-    const dec = metric === 'tds' ? 0 : 1;
+    const dec = metric === 'chlorine' ? 2 : metric === 'tds' ? 0 : 1;
 
     return Array.from(acc.entries())
       .sort((a, b) => a[1].ts - b[1].ts)

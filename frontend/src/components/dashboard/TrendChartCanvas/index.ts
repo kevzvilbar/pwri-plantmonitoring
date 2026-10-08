@@ -12,4 +12,5 @@ export { RawWaterAreaChart } from './RawWaterAreaChart';
 export { TdsAreaChart } from './TdsAreaChart';
 export { ROTrainWaterFlowChart } from './ROTrainWaterFlowChart';
 export { DefaultAreaChart } from './DefaultAreaChart';
+export { ChlorineResidualChart } from '../ChlorineResidualChart';
 export * from './chartShell';

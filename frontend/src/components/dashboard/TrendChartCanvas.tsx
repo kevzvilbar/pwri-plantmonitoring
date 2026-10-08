@@ -33,6 +33,7 @@ import {
   TdsAreaChart,
   ROTrainWaterFlowChart,
   DefaultAreaChart,
+  ChlorineResidualChart,
 } from './TrendChartCanvas/index';
 import { C_CHEM_COST, C_POWER_COST } from '@/lib/chartColors';
 
@@ -202,6 +203,17 @@ export function TrendChartCanvas(props: Record<string, any>) {
           formatYAxis={formatYAxis}
           permTdsMax={permTdsMax}
           NegativeAwareTooltip={NegativeAwareTooltip}
+        />
+      ) : metric === 'chlorine' ? (
+        <ChlorineResidualChart
+          roReadings={props.roReadings}
+          roTrainEntities={props.roTrainEntities}
+          roTrainNames={props.roTrainNames}
+          compact={props.compact}
+          selectedTrainIds={props.selectedTrainIds}
+          onToggleTrain={props.toggleTrain}
+          onSelectAllTrains={props.selectAllTrains}
+          onClearAllTrains={props.clearAllTrains}
         />
       ) : (
         <DefaultAreaChart

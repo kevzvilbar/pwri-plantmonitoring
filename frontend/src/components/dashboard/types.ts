@@ -77,6 +77,7 @@ export const TREND_Y_LABEL: Record<string, string> = {
   roFlowBalance: 'Flow Volume (m³)',
   recovery: 'Recovery (%)',
   tds: 'Permeate TDS (ppm)',
+  chlorine: 'Free Chlorine Residual (mg/L)',
   pv: 'kWh · m³',
   productionCost: 'Cost (₱)',
 };
@@ -117,6 +118,7 @@ export const OVERVIEW_CHART_METRICS: ChartMetric[] = [
 
 export const QUALITY_CHART_METRICS: ChartMetric[] = [
   { metric: 'tds',      title: 'Permeate TDS Trend' },
+  { metric: 'chlorine', title: 'Free Chlorine Residual Trend' },
   { metric: 'recovery', title: 'Recovery Trendline' },
 ];
 

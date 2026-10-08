@@ -10,6 +10,7 @@ interface QualityClusterProps {
   avgFeedTds: number | null;
   roByTrain: any[];
   avgPermTds: number | null;
+  avgChlorineResidual: number | null;
   thresholds: any;
   wellsByQuality: any[];
   plantCodeById: Map<string, string>;
@@ -23,16 +24,16 @@ interface QualityClusterProps {
 }
 
 export function QualityCluster({
-  avgFeedTds, roByTrain, avgPermTds, thresholds, wellsByQuality, plantCodeById, plantIds,
+  avgFeedTds, roByTrain, avgPermTds, avgChlorineResidual, thresholds, wellsByQuality, plantCodeById, plantIds,
   avgRecovery, avgRawTds, avgRawTurb, viewMode, expandedMetric, onMetricClick,
 }: QualityClusterProps) {
   return (
     <section id="quality-cluster" className="scroll-mt-40 space-y-2.5">
       <ClusterHeader icon={FlaskConical} title="Quality" accent="text-accent" subtitle="RO output" />
 
-      <div className="grid gap-2.5 sm:gap-3 grid-cols-2 md:grid-cols-3 xl:grid-cols-5 items-stretch">
+      <div className="grid gap-2.5 sm:gap-3 grid-cols-1 md:grid-cols-2 xl:grid-cols-6 items-stretch">
         {/* Primary Compliance North Stars */}
-        <div className="col-span-2 md:col-span-3 xl:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3">
+        <div className="md:col-span-2 xl:col-span-3 grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3">
           <StatCard
             icon={FlaskConical}
             label="Product TDS"
@@ -51,6 +52,23 @@ export function QualityCluster({
           />
 
           <StatCard
+            icon={FlaskConical}
+            label="Free Chlorine"
+            value={avgChlorineResidual != null ? avgChlorineResidual.toFixed(2) : '—'}
+            unit="mg/L"
+            size="lg"
+            threshold="0.3 – 1.5"
+            calc
+            calcTooltip="PNSDW Free Chlorine Residual limit: 0.3 – 1.5 mg/L (suspect > 3.0 excluded)"
+            onClick={onMetricClick('chlorine', 'Free Chlorine Residual Trend')}
+            expandRows={roByTrain.map((r) => ({
+              label: r.train_name ?? (r.train_number != null ? `Train ${r.train_number}` : '?'),
+              value: r.chlorine_residual_mg_l != null ? +r.chlorine_residual_mg_l.toFixed(2) : null,
+            }))}
+            expandUnit="mg/L"
+          />
+
+          <StatCard
             icon={Percent}
             label="Recovery"
             value={avgRecovery ?? '—'}
@@ -64,7 +82,7 @@ export function QualityCluster({
         </div>
 
         {/* Upstream Quality Conditions */}
-        <div className="col-span-2 md:col-span-3 grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3">
+        <div className="md:col-span-2 xl:col-span-3 grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3">
           <StatCard
             icon={Gauge}
             label="Feed TDS"

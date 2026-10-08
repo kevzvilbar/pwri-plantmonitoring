@@ -305,6 +305,7 @@ export default function Dashboard() {
         avgFeedTds={qualityStats.avgFeedTds}
         roByTrain={qualityStats.roByTrain}
         avgPermTds={qualityStats.avgPermTds}
+        avgChlorineResidual={qualityStats.avgChlorineResidual}
         thresholds={thresholds}
         wellsByQuality={qualityStats.wellsByQuality}
         plantCodeById={qualityStats.plantCodeById}

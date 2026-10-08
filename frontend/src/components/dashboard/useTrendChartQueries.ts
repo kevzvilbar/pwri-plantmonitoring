@@ -17,7 +17,7 @@ export function useTrendChartQueries({
   const needsWellReadings = metric === 'nrw' || metric === 'rawwater' || metric === 'pv' || metric === 'productionCost';
   const needsProductMeterReadings = metric === 'production' || metric === 'nrw' || metric === 'pv' || metric === 'productionCost';
   const needsLocReadings = metric === 'production' || metric === 'nrw';
-  const needsRoReadings = metric === 'recovery' || metric === 'tds' || metric === 'plantHealth' || metric === 'roFlowBalance';
+  const needsRoReadings = metric === 'recovery' || metric === 'tds' || metric === 'plantHealth' || metric === 'roFlowBalance' || metric === 'chlorine';
   // productionCost also needs power readings (kWh delta × multiplier) and tariffs (₱/kWh).
   const needsPowerReadings = metric === 'pv' || metric === 'productionCost' || metric === 'kwh';
   // production_costs stores chem_cost (₱ per day) — still used for chemical side.

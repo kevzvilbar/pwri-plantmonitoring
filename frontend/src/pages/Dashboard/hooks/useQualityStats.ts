@@ -85,7 +85,7 @@ export function useQualityStats({
       const since = subDays(new Date(), 1).toISOString();
       const { data, error } = await supabase
         .from('ro_train_readings')
-        .select('id,train_id,permeate_tds,feed_tds,dp_psi,recovery_pct,permeate_ph,turbidity_ntu,reading_datetime,feed_meter_delta,permeate_meter_delta,reject_meter_delta,norm_status')
+        .select('id,train_id,permeate_tds,feed_tds,dp_psi,recovery_pct,permeate_ph,turbidity_ntu,chlorine_residual_mg_l,reading_datetime,feed_meter_delta,permeate_meter_delta,reject_meter_delta,norm_status')
         .in('train_id', qualityTrainIds)
         .gte('reading_datetime', since)
         .order('reading_datetime', { ascending: false });
@@ -243,6 +243,13 @@ export function useQualityStats({
     ? +(roByTrain.reduce((s, r) => s + (r.turbidity_ntu ?? 0), 0) / roByTrain.length).toFixed(2)
     : null;
 
+  const validChlorineReadings = roByTrain
+    .filter((r) => r.chlorine_residual_mg_l != null && r.chlorine_residual_mg_l <= 3.0)
+    .map((r) => r.chlorine_residual_mg_l as number);
+  const avgChlorineResidual = validChlorineReadings.length
+    ? +(validChlorineReadings.reduce((s, v) => s + v, 0) / validChlorineReadings.length).toFixed(2)
+    : null;
+
   const wellsWithTds  = wellsByQuality.filter((r) => r.tds_ppm != null);
   const wellsWithNtu  = wellsByQuality.filter((r) => r.turbidity_ntu != null);
   const avgRawTds = wellsWithTds.length
@@ -271,6 +278,7 @@ export function useQualityStats({
     roByTrain,
     wellsByQuality,
     avgPermTds,
+    avgChlorineResidual,
     avgFeedTds,
     avgRecovery,
     avgTurb,
