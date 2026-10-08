@@ -1,5 +1,6 @@
 export { RoDrillByTrainChart, RoDrillByTrainBarChart } from './RoDrillCharts';
 export { RoDrillByHourChart } from './RoDrillByHourChart';
+export { ChlorineHourlyByTrainChart } from './ChlorineHourlyByTrainChart';
 export { ConsumptionDrillDailyChart, ConsumptionDrillBarChart } from './ConsumptionDrillCharts';
 export { NrwChart } from './NrwChart';
 export { CostAreaChart } from './CostAreaChart';

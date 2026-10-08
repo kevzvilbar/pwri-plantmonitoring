@@ -18,6 +18,7 @@ import {
   RoDrillByTrainChart,
   RoDrillByTrainBarChart,
   RoDrillByHourChart,
+  ChlorineHourlyByTrainChart,
   ConsumptionDrillDailyChart,
   ConsumptionDrillBarChart,
   NrwChart,
@@ -39,7 +40,7 @@ import { C_CHEM_COST, C_POWER_COST } from '@/lib/chartColors';
 
 export function TrendChartCanvas(props: Record<string, any>) {
   const {
-    hasRoDrill, roDrillMode, viewGran, roTrainDrillData, roHourDrillData,
+    hasRoDrill, roDrillMode, viewGran, roTrainDrillData, roHourDrillData, roHourByTrainData,
     hasConsumptionDrill, hasPlantHealth, phDrillMode, phActiveData,
     metric, drillMode, chartData, trendRows, kwhChartRows, kwhSource,
     entityRows, visibleEntities, wellEntityRows, visibleWellEntities, visibleTrainEntities,
@@ -81,6 +82,12 @@ export function TrendChartCanvas(props: Record<string, any>) {
           stackMode={stackMode}
           drillFocusRange={drillFocusRange}
           handleDrillBarActivate={handleDrillBarActivate}
+        />
+      ) : (hasRoDrill && roDrillMode === 'by-hour' && metric === 'chlorine') ? (
+        <ChlorineHourlyByTrainChart
+          hourly={roHourByTrainData}
+          trainEntities={visibleTrainEntities}
+          handleTrainLegendIsolate={handleTrainLegendIsolate}
         />
       ) : (hasRoDrill && roDrillMode === 'by-hour') ? (
         <RoDrillByHourChart

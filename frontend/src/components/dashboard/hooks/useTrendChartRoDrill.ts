@@ -3,6 +3,7 @@ import { format } from 'date-fns';
 import { DRILL_COLORS } from '../TrendChartLegend';
 import { buildEntityPivotRows } from '../TrendChartAggregate';
 import { toggleIsolateEntity } from '../TrendChartDrillKit';
+import { buildHourlyChlorineByTrain, CHLORINE_CONFIG, type RawChlorinePoint } from '@/lib/chlorineConfig';
 
 export function useRoDrillData(p: Record<string, any>) {
   const {
@@ -132,11 +133,34 @@ export function useRoDrillData(p: Record<string, any>) {
       });
   }, [hasRoDrill, roDrillMode, roReadings, selectedTrainIds, valueKey, metric]);
 
+  // Chlorine "Hourly" is never combined: one series per RO train, with the same exclusions as the
+  // rest of the chlorine dashboard (retracted dropped, unverified > 3.0 mg/L suspects left out).
+  const roHourByTrainData = useMemo(() => {
+    if (!hasRoDrill || metric !== 'chlorine' || roDrillMode !== 'by-hour') return { rows: [], series: [] };
+    const pts: RawChlorinePoint[] = [];
+    for (const r of roReadings ?? []) {
+      if (!r.train_id || !r.reading_datetime) continue;
+      if (r.norm_status === 'retracted') continue;
+      if (selectedTrainIds !== null && !selectedTrainIds.has(r.train_id)) continue;
+      const raw = r.chlorine_residual_mg_l;
+      if (raw == null || raw === '') continue;
+      const val = Number(raw);
+      if (!Number.isFinite(val)) continue;
+      pts.push({
+        train_id: r.train_id,
+        reading_datetime: r.reading_datetime,
+        chlorine_residual_mg_l: val,
+        verified: r.verified === true || r.norm_status === 'normalized',
+      });
+    }
+    return buildHourlyChlorineByTrain(pts, CHLORINE_CONFIG.gap_threshold_minutes.operator, CHLORINE_CONFIG);
+  }, [hasRoDrill, metric, roDrillMode, roReadings, selectedTrainIds]);
+
   return {
     valueKey, roUnit,
     roTrainEntities, visibleTrainEntities, filteredTrainList,
     allTrainsSelected, noTrainsSelected,
     toggleTrain, selectAllTrains, clearAllTrains, handleTrainLegendIsolate,
-    roTrainDrillData, roHourDrillData,
+    roTrainDrillData, roHourDrillData, roHourByTrainData,
   };
 }

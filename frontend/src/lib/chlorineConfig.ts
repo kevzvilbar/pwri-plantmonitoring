@@ -232,6 +232,65 @@ export function latestChlorineByTrain(
     .sort((a, b) => a.train_name.localeCompare(b.train_name));
 }
 
+// ── Hourly, per train ──────────────────────────────────────────────────────
+
+export const HOURLY_SEG_SEP = '::';
+const HOUR_MS = 3_600_000;
+
+export interface HourlyChlorineSeries {
+  /** Recharts rows, one per hour that has data for any train. Keys: `ts`, `${train}::${segment}`, `val:${train}`, `n:${train}`. */
+  rows: Record<string, number>[];
+  /** One Line per (train, continuous segment). A new segment starts after a gap longer than gapMinutes. */
+  series: { key: string; trainId: string }[];
+}
+
+/**
+ * Hourly average per train (never combined across trains). Hour buckets are absolute
+ * (UTC hour boundaries == Plant-time boundaries, Manila is UTC+8). Unverified suspect readings
+ * (> suspect_threshold) and missing values are excluded, same as every other chlorine average.
+ * Lines break across gaps longer than `gapMinutes`.
+ */
+export function buildHourlyChlorineByTrain(
+  points: RawChlorinePoint[],
+  gapMinutes: number = CHLORINE_CONFIG.gap_threshold_minutes.operator,
+  config: ChlorineConfig = CHLORINE_CONFIG,
+): HourlyChlorineSeries {
+  const acc = new Map<string, Map<number, { sum: number; n: number }>>();
+  for (const p of points) {
+    const v = p.chlorine_residual_mg_l;
+    if (!p.train_id || v == null || !Number.isFinite(v)) continue;
+    if (classifyChlorineReading(v, config) === 'suspect' && !p.verified) continue;
+    const t = new Date(p.reading_datetime).getTime();
+    if (Number.isNaN(t)) continue;
+    const slot = Math.floor(t / HOUR_MS) * HOUR_MS;
+    const perTrain = acc.get(p.train_id) ?? new Map<number, { sum: number; n: number }>();
+    const cur = perTrain.get(slot) ?? { sum: 0, n: 0 };
+    perTrain.set(slot, { sum: cur.sum + v, n: cur.n + 1 });
+    acc.set(p.train_id, perTrain);
+  }
+
+  const rowMap = new Map<number, Record<string, number>>();
+  const series: { key: string; trainId: string }[] = [];
+  acc.forEach((slots, trainId) => {
+    const sorted = Array.from(slots.entries()).sort((a, b) => a[0] - b[0]);
+    let seg = 0;
+    let prev: number | null = null;
+    sorted.forEach(([slot, { sum, n }]) => {
+      if (prev != null && (slot - prev) / 60_000 > gapMinutes) seg += 1;
+      prev = slot;
+      const avg = +(sum / n).toFixed(2);
+      const row = rowMap.get(slot) ?? { ts: slot };
+      row[`${trainId}${HOURLY_SEG_SEP}${seg}`] = avg;
+      row[`val:${trainId}`] = avg;
+      row[`n:${trainId}`] = n;
+      rowMap.set(slot, row);
+    });
+    for (let i = 0; i <= seg; i++) series.push({ key: `${trainId}${HOURLY_SEG_SEP}${i}`, trainId });
+  });
+
+  return { rows: Array.from(rowMap.values()).sort((a, b) => a.ts - b.ts), series };
+}
+
 /**
  * Computes compliance metrics and averages, strictly excluding unverified suspect readings.
  */

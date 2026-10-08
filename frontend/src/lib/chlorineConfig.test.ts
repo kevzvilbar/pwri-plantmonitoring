@@ -85,7 +85,7 @@ describe('computeChlorineStats', () => {
   });
 });
 
-import { computeDailyChlorineAverages, summarizeChlorineGaps, latestChlorineByTrain, NO_RESIDUAL_MG_L } from './chlorineConfig';
+import { computeDailyChlorineAverages, summarizeChlorineGaps, latestChlorineByTrain, buildHourlyChlorineByTrain, NO_RESIDUAL_MG_L } from './chlorineConfig';
 
 describe('computeDailyChlorineAverages', () => {
   it('averages per Plant (Manila) day, excluding unverified suspect values', () => {
@@ -197,5 +197,43 @@ describe('latestChlorineByTrain', () => {
   });
   it('ignores null readings and returns [] when nothing is valid', () => {
     expect(latestChlorineByTrain([pt('2026-10-08T02:00:00Z', null)])).toEqual([]);
+  });
+});
+
+describe('buildHourlyChlorineByTrain (hourly is never combined)', () => {
+  it('keeps one value per train per hour instead of averaging trains together', () => {
+    const { rows, series } = buildHourlyChlorineByTrain([
+      pt('2026-10-08T01:10:00Z', 0.5, { train_id: 'A' }),
+      pt('2026-10-08T01:40:00Z', 0.7, { train_id: 'A' }),
+      pt('2026-10-08T01:20:00Z', 1.4, { train_id: 'B' }),
+    ]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]['val:A']).toBe(0.6); // A's own hourly mean
+    expect(rows[0]['val:B']).toBe(1.4); // B untouched by A
+    expect(rows[0]['n:A']).toBe(2);
+    expect(series.map((x) => x.trainId).sort()).toEqual(['A', 'B']);
+  });
+  it('excludes unverified suspects and missing values, but keeps verified ones', () => {
+    const { rows } = buildHourlyChlorineByTrain([
+      pt('2026-10-08T01:00:00Z', 1.0),
+      pt('2026-10-08T01:30:00Z', 8.3),                   // suspect, excluded
+      pt('2026-10-08T02:00:00Z', null),                  // missing
+      pt('2026-10-08T03:00:00Z', 8.3, { verified: true }), // verified, kept
+    ]);
+    expect(rows.map((r) => r['val:RO5'])).toEqual([1.0, 8.3]);
+  });
+  it('starts a new segment (line break) after a gap longer than the limit, not before', () => {
+    const base = [
+      pt('2026-10-08T00:00:00Z', 1.0),
+      pt('2026-10-08T02:00:00Z', 1.0), // exactly 2h: still connected
+      pt('2026-10-08T05:00:00Z', 1.0), // 3h later: break
+    ];
+    const { series } = buildHourlyChlorineByTrain(base, 120);
+    expect(series.map((x) => x.key)).toEqual(['RO5::0', 'RO5::1']);
+    const { series: wide } = buildHourlyChlorineByTrain(base, 240); // management 4h
+    expect(wide.map((x) => x.key)).toEqual(['RO5::0']);
+  });
+  it('returns empty output when nothing is valid', () => {
+    expect(buildHourlyChlorineByTrain([pt('2026-10-08T00:00:00Z', null)])).toEqual({ rows: [], series: [] });
   });
 });

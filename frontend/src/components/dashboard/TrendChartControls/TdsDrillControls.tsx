@@ -31,6 +31,8 @@ export function TdsDrillControls({
   allTrainsSelected, noTrainsSelected, roTrainEntities, selectedTrainIds,
   stackMode, setStackMode, selectAllTrains, clearAllTrains, toggleTrain,
 }: TdsDrillControlsProps) {
+  // Chlorine "Hourly" is always per RO train (trains are never combined), so Breakdown is locked to "By train".
+  const hourlyPerTrain = metric === 'chlorine' && roDrillMode === 'by-hour';
   return (
     <div className="flex flex-wrap items-center gap-1 shrink-0">
       <span className="text-3xs text-muted-foreground uppercase tracking-wide mr-0.5 hidden sm:inline">View</span>
@@ -59,23 +61,31 @@ export function TdsDrillControls({
       <span className="text-3xs text-muted-foreground uppercase tracking-wide mr-0.5 hidden sm:inline">Breakdown</span>
       <button
         onClick={() => { if (roDrillMode === 'by-train') { setRoDrillMode('default'); setShowTrainFilter(false); } }}
+        disabled={hourlyPerTrain}
+        data-testid={`drill-${metric}-breakdown-total`}
         className={[
           'h-5 px-1.5 rounded text-2xs font-medium transition-colors leading-none border',
-          roDrillMode !== 'by-train'
-            ? 'bg-primary text-primary-foreground border-primary'
-            : 'bg-muted text-muted-foreground hover:text-foreground border-border',
+          hourlyPerTrain
+            ? 'bg-muted text-muted-foreground/50 border-border cursor-not-allowed'
+            : roDrillMode !== 'by-train'
+              ? 'bg-primary text-primary-foreground border-primary'
+              : 'bg-muted text-muted-foreground hover:text-foreground border-border',
         ].join(' ')}
-        title="Fleet average (all trains combined)"
+        title={hourlyPerTrain ? 'Hourly is always shown per RO train, trains are not combined' : 'Fleet average (all trains combined)'}
       >Total</button>
       <button
-        onClick={() => setRoDrillMode(roDrillMode === 'by-train' ? 'default' : 'by-train')}
+        onClick={() => { if (!hourlyPerTrain) setRoDrillMode(roDrillMode === 'by-train' ? 'default' : 'by-train'); }}
+        disabled={hourlyPerTrain}
+        aria-pressed={roDrillMode === 'by-train' || hourlyPerTrain}
+        data-testid={`drill-${metric}-breakdown-by-train`}
         className={[
           'h-5 px-1.5 rounded text-2xs font-medium transition-colors leading-none border flex items-center gap-0.5',
-          roDrillMode === 'by-train'
+          roDrillMode === 'by-train' || hourlyPerTrain
             ? 'bg-chart-2 text-white border-chart-2'
             : 'bg-muted text-muted-foreground hover:text-foreground border-border',
+          hourlyPerTrain ? 'cursor-default' : '',
         ].join(' ')}
-        title="Daily average per RO train"
+        title={hourlyPerTrain ? 'Hourly is always shown per RO train' : 'Daily average per RO train'}
       >
         <ChevronsDown className="h-3 w-3" />
         By train

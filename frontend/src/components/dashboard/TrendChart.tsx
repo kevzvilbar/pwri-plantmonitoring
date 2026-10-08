@@ -63,7 +63,7 @@ export function TrendChart({
     allSelected, noneSelected, toggleLocator, selectAllLocators, clearAllLocators,
     entityRows, roTrainEntities, visibleTrainEntities, filteredTrainList, allTrainsSelected, noTrainsSelected,
     toggleTrain, selectAllTrains, clearAllTrains, valueKey, roUnit,
-    roTrainDrillData, roHourDrillData, phTotalTrains, phDailyData, phHourlyData, phMonthlyData, phWeeklyData,
+    roTrainDrillData, roHourDrillData, roHourByTrainData, phTotalTrains, phDailyData, phHourlyData, phMonthlyData, phWeeklyData,
     phFocusedHourlyData, phActiveData, handlePhDayDotActivate, NegativeAwareTooltip, chartHeight,
     handleDrillBarActivate, drillFocusRange, focusedTrendRows, focusedEntityRows, drillCrumbs,
     handleLegendIsolate, handleTrainLegendIsolate, formatYAxis, PvTooltip,
@@ -194,6 +194,7 @@ export function TrendChart({
         <TrendChartCanvas
           hasRoDrill={s.hasRoDrill} roDrillMode={s.roDrillMode} viewGran={s.viewGran}
           roTrainDrillData={roTrainDrillData} roHourDrillData={roHourDrillData}
+          roHourByTrainData={roHourByTrainData}
           hasConsumptionDrill={s.hasConsumptionDrill} hasPlantHealth={s.hasPlantHealth}
           phDrillMode={s.phDrillMode} phActiveData={phActiveData} phDayFocus={s.phDayFocus}
           metric={metric} drillMode={s.drillMode} chartData={chartData} trendRows={trendRows}

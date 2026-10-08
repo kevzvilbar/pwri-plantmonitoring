@@ -249,6 +249,7 @@ export function useTrendChartDerived(p: Record<string, any>) {
     roUnit: roState.roUnit,
     roTrainDrillData: roState.roTrainDrillData,
     roHourDrillData: roState.roHourDrillData,
+    roHourByTrainData: roState.roHourByTrainData,
     handleTrainLegendIsolate: roState.handleTrainLegendIsolate,
     phTotalTrains: phState.phTotalTrains,
     phDailyData: phState.phDailyData,

@@ -43,6 +43,8 @@ export function TrendChartMobilePopover({
   kwhSource, setKwhSource, chartData, usePermeateForSource,
   showLocatorFilter, setShowLocatorFilter,
 }: TrendChartMobilePopoverProps) {
+  // Chlorine "Hourly" is always per RO train: Breakdown is locked to "By train".
+  const hourlyPerTrain = metric === 'chlorine' && roDrillMode === 'by-hour';
   return (
     <Popover>
       <PopoverTrigger asChild>
@@ -127,9 +129,13 @@ export function TrendChartMobilePopover({
             <p className="text-2xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Breakdown</p>
             <div className="flex flex-wrap gap-1">
               <button onClick={() => { if (roDrillMode === 'by-train') { setRoDrillMode('default'); } }}
-                className={['h-6 px-2 rounded text-2xs font-medium border', roDrillMode !== 'by-train' ? 'bg-primary text-primary-foreground border-primary' : 'bg-muted text-muted-foreground hover:text-foreground border-border'].join(' ')}>Total</button>
-              <button onClick={() => setRoDrillMode(roDrillMode === 'by-train' ? 'default' : 'by-train')}
-                className={['h-6 px-2 rounded text-2xs font-medium border flex items-center gap-1', roDrillMode === 'by-train' ? 'bg-chart-2 text-white border-chart-2' : 'bg-muted text-muted-foreground hover:text-foreground border-border'].join(' ')}>
+                disabled={hourlyPerTrain}
+                title={hourlyPerTrain ? 'Hourly is always shown per RO train' : undefined}
+                className={['h-6 px-2 rounded text-2xs font-medium border', hourlyPerTrain ? 'bg-muted text-muted-foreground/50 border-border cursor-not-allowed' : roDrillMode !== 'by-train' ? 'bg-primary text-primary-foreground border-primary' : 'bg-muted text-muted-foreground hover:text-foreground border-border'].join(' ')}>Total</button>
+              <button onClick={() => { if (!hourlyPerTrain) setRoDrillMode(roDrillMode === 'by-train' ? 'default' : 'by-train'); }}
+                disabled={hourlyPerTrain}
+                aria-pressed={roDrillMode === 'by-train' || hourlyPerTrain}
+                className={['h-6 px-2 rounded text-2xs font-medium border flex items-center gap-1', roDrillMode === 'by-train' || hourlyPerTrain ? 'bg-chart-2 text-white border-chart-2' : 'bg-muted text-muted-foreground hover:text-foreground border-border'].join(' ')}>
                 <ChevronsDown className="h-3 w-3" />By train
               </button>
             </div>
