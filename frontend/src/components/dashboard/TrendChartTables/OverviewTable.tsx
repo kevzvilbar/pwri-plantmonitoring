@@ -177,6 +177,61 @@ export function OverviewTable({
       fmt: (d) => d.tds != null ? d.tds + ' ppm' : <span className="text-muted-foreground/40">—</span>,
     });
   }
+  if (metric === 'chlorine') {
+    if (roTrainEntities && roTrainEntities.length > 0) {
+      roTrainEntities.forEach((e) => {
+        cols.push({
+          key: `train_chlorine_${e.id}`,
+          label: `${e.label} (mg/L)`,
+          fmt: (d) => {
+            const val = d.trainChlorine?.[e.id];
+            if (val == null) return <span className="text-muted-foreground/40">—</span>;
+            const isSuspect = val > 3.0;
+            const isLow = val < 0.3;
+            const isHigh = val > 1.5;
+            let colorClass = 'text-green-600 dark:text-green-400 font-semibold';
+            if (isSuspect) colorClass = 'text-destructive font-bold';
+            else if (isHigh) colorClass = 'text-rose-500 font-semibold';
+            else if (isLow) colorClass = 'text-amber-500 font-semibold';
+
+            return (
+              <span className={colorClass}>
+                {val.toFixed(2)}
+                {isSuspect && (
+                  <span className="ml-1 text-3xs px-1 py-0.5 bg-destructive/10 text-destructive rounded border border-destructive/30 font-normal">
+                    Suspect
+                  </span>
+                )}
+              </span>
+            );
+          },
+        });
+      });
+    }
+    cols.push({
+      key: 'chlorine',
+      label: roTrainEntities && roTrainEntities.length > 1 ? 'Avg Residual (mg/L)' : 'Residual (mg/L)',
+      fmt: (d) => (d.chlorine != null ? <span className="font-semibold">{d.chlorine.toFixed(2)} mg/L</span> : <span className="text-muted-foreground/40">—</span>),
+    });
+    cols.push({
+      key: 'chlorineStatus',
+      label: 'Compliance Status',
+      fmt: (d) => {
+        if (d.chlorine == null) return <span className="text-muted-foreground/40">—</span>;
+        const val = d.chlorine;
+        if (val > 3.0) {
+          return <span className="text-destructive font-semibold">Suspect (&gt;3.0)</span>;
+        }
+        if (val > 1.5) {
+          return <span className="text-rose-500 font-semibold">High (&gt;1.5)</span>;
+        }
+        if (val < 0.3) {
+          return <span className="text-amber-500 font-semibold">Low (&lt;0.3)</span>;
+        }
+        return <span className="text-green-600 dark:text-green-400 font-semibold">In Range</span>;
+      },
+    });
+  }
   if (metric === 'roFlowBalance') {
     cols.push(
       {

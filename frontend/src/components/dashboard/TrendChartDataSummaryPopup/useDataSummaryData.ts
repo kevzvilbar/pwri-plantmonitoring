@@ -43,6 +43,7 @@ export interface DataSummaryData {
   roTrainEntities: { id: string; label: string }[];
   roTrainRecoveryByDate: Map<string, Record<string, number>>;
   roTrainTdsByDate: Map<string, Record<string, number>>;
+  roTrainChlorineByDate: Map<string, Record<string, number>>;
   roTrainPermeatePivot: Map<string, Map<string, number>>;
   roTrainRejectPivot: Map<string, Map<string, number>>;
   /** plantHealth metric — per-day per-train status map */
@@ -97,6 +98,11 @@ export interface DataSummaryData {
     minTds: number | null;
     maxTds: number | null;
     tdsDays: number;
+    avgChlorine: number | null;
+    minChlorine: number | null;
+    maxChlorine: number | null;
+    chlorineDays: number;
+    chlorineCompliancePct: number | null;
   };
   /** plantHealth metric — period rollups for the Overview snapshot cards */
   plantHealthStats: PlantHealthStatsResult;
@@ -268,6 +274,7 @@ export function useDataSummaryData({
     : metric === 'chemCost' ? 'Chemical Cost'
     : metric === 'powerCost' ? 'Power Cost'
     : metric === 'kwh' ? 'Solar vs Grid'
+    : metric === 'chlorine' ? 'Residual Overview'
     : 'Overview';
 
   const prodTabLabel =
@@ -299,6 +306,7 @@ export function useDataSummaryData({
   const {
     roTrainRecoveryByDate,
     roTrainTdsByDate,
+    roTrainChlorineByDate,
     roTrainPermeatePivot,
     roTrainRejectPivot,
     roTrainFeedPivot,
@@ -335,7 +343,7 @@ export function useDataSummaryData({
 
     // TDS: still reading-averaged per train (no volume-based equivalent yet)
     const tdsAcc = new Map<string, Map<string, { sum: number; count: number }>>();
-    (filteredRoReadings ?? []).forEach((r: any) => {
+    (filteredRoReadings ?? []).forEach((r: { train_id?: string; reading_datetime?: string; permeate_tds?: number | string | null }) => {
       if (!r.train_id || !r.reading_datetime) return;
       const dk = format(new Date(r.reading_datetime), 'yyyy-MM-dd');
       if (r.permeate_tds != null && !isNaN(+r.permeate_tds)) {
@@ -355,9 +363,33 @@ export function useDataSummaryData({
       tdsByDate.set(dk, rec);
     });
 
+    // Chlorine: arithmetic average per train per day (excluding retracted rows)
+    const clAcc = new Map<string, Map<string, { sum: number; count: number }>>();
+    (filteredRoReadings ?? []).forEach((r: { train_id?: string; reading_datetime?: string; norm_status?: string | null; chlorine_residual_mg_l?: number | string | null }) => {
+      if (!r.train_id || !r.reading_datetime) return;
+      if (r.norm_status === 'retracted') return;
+      if (r.chlorine_residual_mg_l != null && r.chlorine_residual_mg_l !== '' && !isNaN(+r.chlorine_residual_mg_l)) {
+        const dk = format(new Date(r.reading_datetime), 'yyyy-MM-dd');
+        if (!clAcc.has(dk)) clAcc.set(dk, new Map());
+        const cMap = clAcc.get(dk)!;
+        const cur = cMap.get(r.train_id) ?? { sum: 0, count: 0 };
+        cMap.set(r.train_id, { sum: cur.sum + (+r.chlorine_residual_mg_l), count: cur.count + 1 });
+      }
+    });
+
+    const chlorineByDate = new Map<string, Record<string, number>>();
+    clAcc.forEach((cMap, dk) => {
+      const rec: Record<string, number> = {};
+      cMap.forEach((v, tid) => {
+        if (v.count > 0) rec[tid] = +(v.sum / v.count).toFixed(2);
+      });
+      chlorineByDate.set(dk, rec);
+    });
+
     return {
       roTrainRecoveryByDate: recoveryByDate,
       roTrainTdsByDate: tdsByDate,
+      roTrainChlorineByDate: chlorineByDate,
       roTrainPermeatePivot: permeatePivot,
       roTrainRejectPivot: rejectPivot,
       roTrainFeedPivot: feedPivot,
@@ -378,7 +410,7 @@ export function useDataSummaryData({
 
     // Group readings by date → train → unique hours (to estimate run hours)
     const dateTrainHours = new Map<string, Map<string, Set<string>>>();
-    filteredRoReadings.forEach((r: any) => {
+    filteredRoReadings.forEach((r: { train_id?: string; reading_datetime?: string }) => {
       if (!r.train_id || !r.reading_datetime) return;
       const dk = format(new Date(r.reading_datetime), 'yyyy-MM-dd');
       const hk = format(new Date(r.reading_datetime), 'yyyy-MM-dd HH');
@@ -576,6 +608,17 @@ export function useDataSummaryData({
       const existing = overviewByDate.get(dk);
       const trainRecoveries = roTrainRecoveryByDate.get(dk);
       const trainTds = roTrainTdsByDate.get(dk);
+      const trainChlorine = roTrainChlorineByDate.get(dk);
+
+      let dayChlorine: number | null = null;
+      if (existing?.chlorine != null && !isNaN(+existing.chlorine)) {
+        dayChlorine = +existing.chlorine;
+      } else if (trainChlorine) {
+        const vals = Object.values(trainChlorine).map((v) => Number(v)).filter((v) => Number.isFinite(v) && v <= 3.0);
+        if (vals.length > 0) {
+          dayChlorine = +(vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(2);
+        }
+      }
 
       const pivotProdTotal = prodEntities.reduce(
         (s, e) => s + (prodPivotMap.get(dk)?.get(e.id) ?? 0), 0,
@@ -603,7 +646,7 @@ export function useDataSummaryData({
       const base = existing ?? {
         date: format(new Date(dk + 'T00:00:00'), 'MMM d'),
         isoDate: dk + 'T00:00:00.000Z',
-        recovery: null, tds: null, kwh: null, solarKwh: null,
+        recovery: null, tds: null, chlorine: null, kwh: null, solarKwh: null,
         powerCost: null, chemCost: null, totalCost: null,
       };
 
@@ -645,6 +688,8 @@ export function useDataSummaryData({
         nrw,
         trainRecoveries,
         trainTds,
+        trainChlorine,
+        chlorine: dayChlorine,
         permeate: perm,
         reject: rej,
         feed,
@@ -655,7 +700,7 @@ export function useDataSummaryData({
       };
     });
   }, [overviewDates, overviewByDate, metric, prodDates, prodEntities, prodPivotMap,
-      consEntities, consPivot, roTrainRecoveryByDate, roTrainTdsByDate,
+      consEntities, consPivot, roTrainRecoveryByDate, roTrainTdsByDate, roTrainChlorineByDate,
       roTrainPermeatePivot, roTrainRejectPivot, roTrainFeedPivot]);
 
   const filteredCostReadings = useMemo(() => {
@@ -770,7 +815,7 @@ export function useDataSummaryData({
     hasProdTab, hasConsTab, hasGridTab, hasChemBreakdownTab,
     hasPermeateTab, hasRejectTab,
     overviewLabel, prodTabLabel,
-    roTrainEntities, roTrainRecoveryByDate, roTrainTdsByDate, phHealthByDate,
+    roTrainEntities, roTrainRecoveryByDate, roTrainTdsByDate, roTrainChlorineByDate, phHealthByDate,
     roTrainPermeatePivot, roTrainRejectPivot,
     prodEntities, prodPivotMap, prodDateKeys, prodDates,
     hasProductMeterData, hasPermeateData,

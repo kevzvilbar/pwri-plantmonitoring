@@ -61,6 +61,11 @@ interface SnapshotCardsProps {
     minTds: number | null;
     maxTds: number | null;
     tdsDays: number;
+    avgChlorine?: number | null;
+    minChlorine?: number | null;
+    maxChlorine?: number | null;
+    chlorineDays?: number;
+    chlorineCompliancePct?: number | null;
   };
   plantHealthStats?: PlantHealthStatsResult;
   prodEntities: { id: string; label: string; kind: string }[];
@@ -83,6 +88,39 @@ export function SnapshotCards({ metric, stats, plantHealthStats, prodEntities }:
         <StatCard icon={<TrendingDown className="text-destructive" />} iconColor="" label="Least Reliable RO"
           value={leastReliableTrain ? leastReliableTrain.label : '—'}
           unit={leastReliableTrain ? `· ${leastReliableTrain.uptimePct.toFixed(0)}% uptime` : undefined} />
+      </>
+    );
+  }
+
+  if (metric === 'chlorine') {
+    return (
+      <>
+        <StatCard
+          icon={<FlaskConical />}
+          iconColor="text-primary"
+          label="Avg Residual"
+          value={stats.avgChlorine != null ? stats.avgChlorine.toFixed(2) : '—'}
+          unit="mg/L"
+        />
+        <StatCard
+          icon={<Percent className="text-emerald-500" />}
+          iconColor=""
+          label="PNSDW Compliance"
+          value={stats.chlorineCompliancePct != null ? `${stats.chlorineCompliancePct.toFixed(1)}%` : '—'}
+        />
+        <StatCard
+          icon={<Activity className="text-sky-500" />}
+          iconColor=""
+          label="Target Range"
+          value="0.3 – 1.5"
+          unit="mg/L"
+        />
+        <StatCard
+          icon={<Calendar className="text-amber-500" />}
+          iconColor=""
+          label="Recorded Days"
+          value={stats.chlorineDays != null && stats.chlorineDays > 0 ? `${stats.chlorineDays} days` : '—'}
+        />
       </>
     );
   }

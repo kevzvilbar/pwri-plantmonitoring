@@ -13,6 +13,7 @@ export interface OverviewChartRowForStats {
   feed?: number | null;      // for volume-based recovery calculation
   reject?: number | null;
   tds?: number | null;
+  chlorine?: number | null;
   date?: string;
   [key: string]: unknown;
 }
@@ -75,6 +76,11 @@ export interface SummaryStatsResult {
   minTds: number | null;
   maxTds: number | null;
   tdsDays: number;
+  avgChlorine: number | null;
+  minChlorine: number | null;
+  maxChlorine: number | null;
+  chlorineDays: number;
+  chlorineCompliancePct: number | null;
 }
 
 import { recoveryFromVolumes } from '@/lib/roTrainDailyVolumes';
@@ -160,6 +166,32 @@ export function calculateDataSummaryStats(
   const maxTds = tdsRows.length > 0 ? Math.max(...tdsRows.map((r) => r.tds)) : null;
   const tdsDays = tdsRows.length;
 
+  const chlorineRows = overviewChartRows.filter(
+    (r): r is OverviewChartRowForStats & { chlorine: number } => r.chlorine != null && !isNaN(r.chlorine),
+  );
+  // Exclude suspect outliers (> 3.0 mg/L) from standard statistics
+  const validChlorineRows = chlorineRows.filter((r) => r.chlorine <= 3.0);
+  const avgChlorine =
+    validChlorineRows.length > 0
+      ? +(validChlorineRows.reduce((s, r) => s + r.chlorine, 0) / validChlorineRows.length).toFixed(2)
+      : null;
+  const minChlorine =
+    validChlorineRows.length > 0
+      ? +Math.min(...validChlorineRows.map((r) => r.chlorine)).toFixed(2)
+      : null;
+  const maxChlorine =
+    validChlorineRows.length > 0
+      ? +Math.max(...validChlorineRows.map((r) => r.chlorine)).toFixed(2)
+      : null;
+  const inRangeChlorineCount = validChlorineRows.filter(
+    (r) => r.chlorine >= 0.3 && r.chlorine <= 1.5,
+  ).length;
+  const chlorineCompliancePct =
+    validChlorineRows.length > 0
+      ? +((inRangeChlorineCount / validChlorineRows.length) * 100).toFixed(1)
+      : null;
+  const chlorineDays = chlorineRows.length;
+
   return {
     totalProd,
     totalCons,
@@ -193,6 +225,11 @@ export function calculateDataSummaryStats(
     minTds,
     maxTds,
     tdsDays,
+    avgChlorine,
+    minChlorine,
+    maxChlorine,
+    chlorineDays,
+    chlorineCompliancePct,
   };
 }
 

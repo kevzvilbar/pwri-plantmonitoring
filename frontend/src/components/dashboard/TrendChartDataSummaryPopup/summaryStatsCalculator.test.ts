@@ -35,6 +35,11 @@ describe('calculateDataSummaryStats', () => {
     expect(stats.totalFeed).toBe(0);
     expect(stats.avgTds).toBeNull();
     expect(stats.tdsDays).toBe(0);
+    expect(stats.avgChlorine).toBeNull();
+    expect(stats.minChlorine).toBeNull();
+    expect(stats.maxChlorine).toBeNull();
+    expect(stats.chlorineDays).toBe(0);
+    expect(stats.chlorineCompliancePct).toBeNull();
   });
 
   it('calculates water production, consumption, raw water, and NRW correctly', () => {
@@ -120,6 +125,25 @@ describe('calculateDataSummaryStats', () => {
     expect(stats.minTds).toBe(120);
     expect(stats.maxTds).toBe(130);
     expect(stats.tdsDays).toBe(2);
+  });
+
+  it('calculates chlorine residual and PNSDW compliance correctly', () => {
+    const rows: OverviewChartRowForStats[] = [
+      { date: 'Sep 1', chlorine: 1.0 },
+      { date: 'Sep 2', chlorine: 1.4 },
+      { date: 'Sep 3', chlorine: 0.2 }, // below min (0.3)
+      { date: 'Sep 4', chlorine: 4.5 }, // suspect outlier (>3.0) -> excluded from stats
+    ];
+    const tabDates = ['2026-09-01', '2026-09-02', '2026-09-03', '2026-09-04'];
+    const stats = calculateDataSummaryStats(rows, tabDates);
+
+    // Valid rows: 1.0, 1.4, 0.2 (avg = 2.6 / 3 = 0.866... -> 0.87)
+    expect(stats.avgChlorine).toBe(0.87);
+    expect(stats.minChlorine).toBe(0.2);
+    expect(stats.maxChlorine).toBe(1.4);
+    // In-range count: 1.0 and 1.4 (2 out of 3 valid = 66.7%)
+    expect(stats.chlorineCompliancePct).toBe(66.7);
+    expect(stats.chlorineDays).toBe(4);
   });
 });
 

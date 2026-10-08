@@ -87,6 +87,28 @@ export function useDataSummaryCsvExport({
           const avgVal = r.tds != null ? `${r.tds} ppm` : '';
           return [r.date, ...trainVals, avgVal];
         });
+      } else if (metric === 'chlorine') {
+        const trainCols = roTrainEntities.map((e) => `${e.label} (mg/L)`);
+        headers = [
+          'Date',
+          ...trainCols,
+          ...(roTrainEntities.length > 1 ? ['Avg Residual (mg/L)'] : ['Residual (mg/L)']),
+          'Compliance Status',
+        ];
+        rows = overviewChartRows.map((r) => {
+          const trainVals = roTrainEntities.map((e) =>
+            r.trainChlorine?.[e.id] != null ? `${(+r.trainChlorine[e.id]).toFixed(2)}` : '',
+          );
+          const avgVal = r.chlorine != null ? `${(+r.chlorine).toFixed(2)}` : '';
+          let status = '';
+          if (r.chlorine != null) {
+            if (r.chlorine > 3.0) status = 'Suspect (>3.0)';
+            else if (r.chlorine > 1.5) status = 'High (>1.5)';
+            else if (r.chlorine < 0.3) status = 'Low (<0.3)';
+            else status = 'In Range';
+          }
+          return [r.date, ...trainVals, avgVal, status];
+        });
       } else if (metric === 'roFlowBalance') {
         headers = ['Date', 'Feed Water (m3)', 'Permeate (m3)', 'Reject (m3)', 'Expected Feed (m3)', 'Variance (m3)', 'Variance (%)'];
         rows = overviewChartRows.map((r) => {

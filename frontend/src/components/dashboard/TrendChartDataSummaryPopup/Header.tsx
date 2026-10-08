@@ -56,6 +56,11 @@ interface HeaderProps {
     minTds: number | null;
     maxTds: number | null;
     tdsDays: number;
+    avgChlorine?: number | null;
+    minChlorine?: number | null;
+    maxChlorine?: number | null;
+    chlorineDays?: number;
+    chlorineCompliancePct?: number | null;
   };
   plantHealthStats: PlantHealthStatsResult;
   prodEntities: { id: string; label: string; kind: string }[];
