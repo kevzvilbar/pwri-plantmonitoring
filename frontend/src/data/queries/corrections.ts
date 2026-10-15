@@ -40,65 +40,55 @@ interface GenericReadingRow {
   entity_id: string;
 }
 
-async function fetchRawPending(table: SourceTable, limit: number): Promise<GenericReadingRow[]> {
-  if (table === 'locator_readings') {
-    const { data } = await supabase
-      .from('locator_readings')
-      .select('id, reading_datetime, previous_reading, current_reading, daily_volume, norm_status, recorded_by, plant_id, locator_id')
-      .eq('norm_status', 'pending_review')
-      .order('reading_datetime', { ascending: false })
-      .limit(limit);
-    return (data ?? []).map(r => ({
-      id: r.id,
-      reading_datetime: r.reading_datetime,
-      previous_reading: r.previous_reading,
-      current_reading: r.current_reading ?? 0,
-      daily_volume: r.daily_volume,
-      norm_status: r.norm_status ?? 'pending_review',
-      recorded_by: r.recorded_by,
-      plant_id: r.plant_id,
-      entity_id: r.locator_id,
-    }));
-  }
-  if (table === 'well_readings') {
-    const { data } = await supabase
-      .from('well_readings')
-      .select('id, reading_datetime, previous_reading, current_reading, daily_volume, norm_status, recorded_by, plant_id, well_id')
-      .eq('norm_status', 'pending_review')
-      .order('reading_datetime', { ascending: false })
-      .limit(limit);
-    return (data ?? []).map(r => ({
-      id: r.id,
-      reading_datetime: r.reading_datetime,
-      previous_reading: r.previous_reading,
-      current_reading: r.current_reading ?? 0,
-      daily_volume: r.daily_volume,
-      norm_status: r.norm_status ?? 'pending_review',
-      recorded_by: r.recorded_by,
-      plant_id: r.plant_id,
-      entity_id: r.well_id,
-    }));
-  }
-  if (table === 'product_meter_readings') {
-    const { data } = await supabase
-      .from('product_meter_readings')
-      .select('id, reading_datetime, previous_reading, current_reading, daily_volume, norm_status, recorded_by, plant_id, meter_id')
-      .eq('norm_status', 'pending_review')
-      .order('reading_datetime', { ascending: false })
-      .limit(limit);
-    return (data ?? []).map(r => ({
-      id: r.id,
-      reading_datetime: r.reading_datetime,
-      previous_reading: r.previous_reading,
-      current_reading: r.current_reading ?? 0,
-      daily_volume: r.daily_volume,
-      norm_status: r.norm_status ?? 'pending_review',
-      recorded_by: r.recorded_by,
-      plant_id: r.plant_id,
-      entity_id: r.meter_id,
-    }));
-  }
-  return [];
+/**
+ * Plants whose readings the current reviewer may see in the review queues.
+ * `null` = unrestricted (Admin / Data Analyst). Managers and everyone else are
+ * limited to their assigned plants, so a manager never sees (or tries to approve)
+ * another plant's items. RLS enforces the same rule server-side.
+ */
+export async function getReviewPlantScope(): Promise<string[] | null> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return [];
+  const [profileRes, rolesRes] = await Promise.all([
+    supabase.from('user_profiles').select('plant_assignments').eq('id', user.id).maybeSingle(),
+    supabase.from('user_roles').select('role').eq('user_id', user.id),
+  ]);
+  const roles = (rolesRes.data ?? []).map(r => String(r.role));
+  if (roles.includes('Admin') || roles.includes('Data Analyst')) return null;
+  return ((profileRes.data?.plant_assignments ?? []) as string[]).filter(Boolean);
+}
+
+const ENTITY_COL: Record<string, string> = {
+  locator_readings: 'locator_id',
+  well_readings: 'well_id',
+  product_meter_readings: 'meter_id',
+};
+
+async function fetchRawPending(
+  table: SourceTable,
+  limit: number,
+  scope: string[] | null,
+): Promise<GenericReadingRow[]> {
+  const entityCol = ENTITY_COL[table];
+  if (!entityCol) return [];
+  if (scope && scope.length === 0) return [];
+  let q = (supabase as any)
+    .from(table)
+    .select(`id, reading_datetime, previous_reading, current_reading, daily_volume, norm_status, recorded_by, plant_id, ${entityCol}`)
+    .eq('norm_status', 'pending_review');
+  if (scope) q = q.in('plant_id', scope);
+  const { data } = await q.order('reading_datetime', { ascending: false }).limit(limit);
+  return ((data ?? []) as Record<string, any>[]).map(r => ({
+    id: r.id,
+    reading_datetime: r.reading_datetime,
+    previous_reading: r.previous_reading,
+    current_reading: r.current_reading ?? 0,
+    daily_volume: r.daily_volume,
+    norm_status: r.norm_status ?? 'pending_review',
+    recorded_by: r.recorded_by,
+    plant_id: r.plant_id,
+    entity_id: r[entityCol],
+  }));
 }
 
 async function fetchPredecessors(
@@ -279,9 +269,10 @@ export async function fetchPending(
   const tables: SourceTable[] = ['locator_readings', 'well_readings', 'product_meter_readings'];
   const results: FlaggedRow[] = [];
   let truncated = false;
+  const scope = await getReviewPlantScope();
 
   for (const table of tables) {
-    const rows = await fetchRawPending(table, limit);
+    const rows = await fetchRawPending(table, limit, scope);
     if (!rows.length) continue;
     if (rows.length === limit) truncated = true;
 
@@ -490,14 +481,26 @@ export async function fetchPending(
   return { rows: results, truncated };
 }
 
+/** Count rows across the three reading tables for the badge, limited to the reviewer's plants. */
+async function countAcrossReadingTables(
+  apply: (q: any) => any,
+): Promise<number> {
+  const scope = await getReviewPlantScope();
+  if (scope && scope.length === 0) return 0;
+  const tables = ['locator_readings', 'well_readings', 'product_meter_readings'] as const;
+  const results = await Promise.all(
+    tables.map(t => {
+      let q = apply((supabase as any).from(t).select('id', { count: 'exact', head: true }));
+      if (scope) q = q.in('plant_id', scope);
+      return q;
+    }),
+  );
+  return (results as Array<{ count: number | null }>).reduce((sum, r) => sum + (r.count ?? 0), 0);
+}
+
 /** Count pending readings for badge */
 export async function fetchPendingCount(): Promise<number> {
-  const [locatorRes, wellRes, meterRes] = await Promise.all([
-    supabase.from('locator_readings').select('id', { count: 'exact', head: true }).eq('norm_status', 'pending_review'),
-    supabase.from('well_readings').select('id', { count: 'exact', head: true }).eq('norm_status', 'pending_review'),
-    supabase.from('product_meter_readings').select('id', { count: 'exact', head: true }).eq('norm_status', 'pending_review'),
-  ]);
-  return (locatorRes.count ?? 0) + (wellRes.count ?? 0) + (meterRes.count ?? 0);
+  return countAcrossReadingTables(q => q.eq('norm_status', 'pending_review'));
 }
 
 /** Count correction requests pending */
@@ -512,12 +515,8 @@ export async function fetchCorrectionRequestsCount(): Promise<number> {
 
 /** Count inbox items (negative daily_volume not flagged) */
 export async function fetchInboxCount(): Promise<number> {
-  const [locatorRes, wellRes, meterRes] = await Promise.all([
-    supabase.from('locator_readings').select('id', { count: 'exact', head: true }).eq('norm_status', 'normal').lt('daily_volume', 0).eq('is_meter_replacement', false),
-    supabase.from('well_readings').select('id', { count: 'exact', head: true }).eq('norm_status', 'normal').lt('daily_volume', 0).eq('is_meter_replacement', false),
-    supabase.from('product_meter_readings').select('id', { count: 'exact', head: true }).eq('norm_status', 'normal').lt('daily_volume', 0).eq('is_meter_replacement', false),
-  ]);
-  return (locatorRes.count ?? 0) + (wellRes.count ?? 0) + (meterRes.count ?? 0);
+  return countAcrossReadingTables(q =>
+    q.eq('norm_status', 'normal').lt('daily_volume', 0).eq('is_meter_replacement', false));
 }
 
 /** Fetch correction inbox items */
@@ -526,6 +525,7 @@ export async function fetchCorrectionInbox(tableFilter?: SourceTable): Promise<F
     ? [tableFilter]
     : ['locator_readings', 'well_readings', 'product_meter_readings'];
   const results: FlaggedRow[] = [];
+  const scope = await getReviewPlantScope();
 
   for (const table of tables) {
     let rows: GenericReadingRow[] = [];
@@ -590,6 +590,8 @@ export async function fetchCorrectionInbox(tableFilter?: SourceTable): Promise<F
         entity_id: r.meter_id,
       }));
     }
+
+    if (scope) rows = rows.filter(r => scope.includes(r.plant_id));
 
     if (!rows.length) continue;
 
