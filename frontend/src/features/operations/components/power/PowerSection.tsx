@@ -78,7 +78,10 @@ export function PowerForm() {
             Meter count &amp; names are configured in <strong className="text-foreground/70">Plants → Power</strong>.
           </p>
         )}
+      </Card>
 
+      {/* Main Power Reading Form (Visible on all devices) */}
+      <Card className="p-4 space-y-4">
         {powerAnomaly && (
           <AnomalyRemarkBanner
             result={powerAnomaly.result}
