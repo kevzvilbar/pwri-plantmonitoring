@@ -99,54 +99,59 @@ export default function Operations() {
 
   return (
     <div className="space-y-4 animate-fade-in max-w-[1600px] mx-auto pb-10">
-      <PageHeader
-        title="Daily Readings"
-        titleIcon={<Activity className="h-5 w-5 text-primary" />}
-        subtitle="Daily telemetry logs, flow rates, and active bypass management"
-        actions={
-          <div className="flex items-center gap-2 flex-wrap">
-            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-muted border text-xs font-medium">
-              <Clock className="h-3.5 w-3.5 text-primary" />
-              <span>{shiftInfo.name}</span>
-              <span className="text-muted-foreground text-3xs font-mono">({shiftInfo.timeRange})</span>
-            </div>
+      {/* ── Top Header: Compact on mobile, full on desktop ── */}
+      <div className="flex items-center justify-between gap-2 pt-1 pb-1">
+        <div className="min-w-0">
+          <h1 className="text-lg sm:text-xl font-bold tracking-tight text-foreground flex items-center gap-1.5">
+            <Activity className="h-4 w-4 sm:h-5 sm:w-5 text-primary shrink-0" />
+            <span>Daily Readings</span>
+          </h1>
+          <p className="hidden sm:block text-xs text-muted-foreground mt-0.5 truncate">
+            Daily telemetry logs, flow rates, and active bypass management
+          </p>
+        </div>
 
-            {/* P2-1: Operators have no smart_import view — never show a button
-                that ends in an "Access restricted" toast. */}
-            <CanLink module="smart_import">
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-8 px-2.5 text-xs gap-1.5 font-medium"
-                onClick={() => navigate('/import')}
-              >
-                <Upload className="h-3.5 w-3.5 text-primary" />
-                <span>Import</span>
-              </Button>
-            </CanLink>
-
-            <CanLink module="data_exports">
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-8 px-2.5 text-xs gap-1.5 font-medium"
-                onClick={() => navigate('/exports')}
-              >
-                <Download className="h-3.5 w-3.5 text-accent" />
-                <span>Export</span>
-              </Button>
-            </CanLink>
+        {/* Shift Badge & Desktop Import/Export */}
+        <div className="flex items-center gap-1.5 shrink-0">
+          <div className="flex items-center gap-1 px-2 py-1 rounded-lg bg-muted/80 border border-border/60 text-2xs font-semibold">
+            <Clock className="h-3 w-3 text-primary shrink-0" />
+            <span className="truncate">{shiftInfo.name}</span>
+            <span className="hidden xs:inline text-muted-foreground text-3xs font-mono">({shiftInfo.timeRange})</span>
           </div>
-        }
-      />
+
+          <CanLink module="smart_import">
+            <Button
+              size="sm"
+              variant="outline"
+              className="hidden sm:flex h-7 px-2 text-2xs gap-1 font-medium"
+              onClick={() => navigate('/import')}
+            >
+              <Upload className="h-3 w-3 text-primary" />
+              <span>Import</span>
+            </Button>
+          </CanLink>
+
+          <CanLink module="data_exports">
+            <Button
+              size="sm"
+              variant="outline"
+              className="hidden sm:flex h-7 px-2 text-2xs gap-1 font-medium"
+              onClick={() => navigate('/exports')}
+            >
+              <Download className="h-3 w-3 text-accent" />
+              <span>Export</span>
+            </Button>
+          </CanLink>
+        </div>
+      </div>
 
 
 
-      {/* ── Quick Jump Utility Ribbon ── */}
+      {/* ── Quick Jump Utility Ribbon (Desktop only; on mobile these live in the bottom bar and More drawer) ── */}
       {/* P2-1: each ribbon link is gated; the whole ribbon hides when the
           user can open none of them (e.g. Operator without overrides). */}
       {showRibbon && (
-      <div className="flex flex-wrap items-center justify-between gap-2.5 p-2 rounded-xl bg-muted/30 border border-border/60 text-xs">
+      <div className="hidden md:flex flex-wrap items-center justify-between gap-2.5 p-2 rounded-xl bg-muted/30 border border-border/60 text-xs">
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-3xs font-bold uppercase tracking-wider text-muted-foreground">Operations Tools:</span>
           <CanLink module="data_corrections">
@@ -194,11 +199,11 @@ export default function Operations() {
         onSelectTab={handleTabChange}
       />
 
-      {/* ── Tab Navigation Bar ── */}
+      {/* ── Tab Navigation Bar (Desktop secondary tablist; on mobile the Walk-List above already acts as the interactive tab selector) ── */}
       <div
         {...tabs.tablistProps}
         aria-label="Reading type"
-        className="flex gap-1.5 p-1.5 bg-muted/60 border border-border/70 rounded-2xl w-full shadow-inner"
+        className="hidden sm:flex gap-1.5 p-1.5 bg-muted/60 border border-border/70 rounded-2xl w-full shadow-inner"
       >
         {TAB_CONFIG.map(({ key, label, count, icon: Icon }) => {
           const active = tab === key;

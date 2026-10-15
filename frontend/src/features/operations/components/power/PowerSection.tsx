@@ -62,7 +62,8 @@ export function PowerForm() {
 
   return (
     <div className="space-y-3">
-      <Card className="p-4 space-y-4">
+      {/* Plant selector card (Hidden on mobile where TopBar handles active plant) */}
+      <Card className="p-4 space-y-4 hidden md:block">
         <PowerFormHeader
           plantId={plantId}
           setImportOpen={setImportOpen}

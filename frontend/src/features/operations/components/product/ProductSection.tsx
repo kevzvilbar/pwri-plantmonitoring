@@ -143,7 +143,8 @@ export function ProductForm({ highlightId }: { highlightId?: string | null } = {
 
   return (
     <div className="space-y-3">
-      <Card className="p-4">
+      {/* Plant selector card (Hidden on mobile where TopBar handles active plant) */}
+      <Card className="p-4 hidden md:block">
         <div className="flex items-end gap-3">
           <ActivePlantChip className="flex-1" />
           {canEdit && plantId && (
