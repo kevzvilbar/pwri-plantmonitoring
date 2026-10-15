@@ -54,10 +54,10 @@ export default function DataCorrectionsPage() {
   }
 
   return (
-    <div className="space-y-4 animate-fade-in">
+    <div className="space-y-3 sm:space-y-4 animate-fade-in">
       <PageHeader
         title="Data Corrections"
-        subtitle="Review flagged readings, approve operator requested corrections, retract errors, and track data quality in one place."
+        subtitle={<span className="hidden sm:inline">Review flagged readings, approve operator requested corrections, retract errors, and track data quality in one place.</span>}
       />
 
       <Tabs value={tab} onValueChange={setTab}>

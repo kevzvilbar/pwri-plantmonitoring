@@ -10,7 +10,9 @@ import {
   FileText, 
   ChevronRight, 
   Sparkles,
-  Inbox
+  Inbox,
+  RotateCcw,
+  Edit3
 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -37,6 +39,8 @@ export interface MobileReviewCardStackProps {
   items: MobileReviewItem[];
   onApprove: (item: MobileReviewItem) => Promise<boolean | void>;
   onReject: (item: MobileReviewItem, reason?: string) => Promise<boolean | void>;
+  onEdit?: (item: MobileReviewItem) => void;
+  onRollover?: (item: MobileReviewItem) => void;
   onRefresh?: () => void;
 }
 
@@ -44,6 +48,8 @@ export function MobileReviewCardStack({
   items,
   onApprove,
   onReject,
+  onEdit,
+  onRollover,
   onRefresh,
 }: MobileReviewCardStackProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -246,6 +252,36 @@ export function MobileReviewCardStack({
           </div>
         </Card>
       </div>
+
+      {/* Secondary Actions (Edit Value / Mark Rollover) */}
+      {(onEdit || onRollover) && (
+        <div className="flex items-center justify-end gap-2 px-1">
+          {onRollover && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={busy}
+              onClick={() => onRollover(activeItem)}
+              className="h-8 rounded-xl text-2xs text-muted-foreground hover:text-foreground gap-1.5"
+            >
+              <RotateCcw className="h-3 w-3" /> Mark Rollover
+            </Button>
+          )}
+          {onEdit && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={busy}
+              onClick={() => onEdit(activeItem)}
+              className="h-8 rounded-xl text-2xs text-muted-foreground hover:text-foreground gap-1.5"
+            >
+              <Edit3 className="h-3 w-3" /> Edit Value
+            </Button>
+          )}
+        </div>
+      )}
 
       {/* Tactile Action Triggers */}
       <div className="flex items-center gap-3 pt-2">

@@ -1,3 +1,4 @@
+import { useState, useMemo } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -6,6 +7,10 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { DataState } from '@/components/DataState';
 import { CheckCircle2, XCircle, AlertCircle, RefreshCw, Loader2, Search } from 'lucide-react';
+import { useIsMobile } from '@/hooks/use-mobile';
+import { MobileReviewCardStack, type MobileReviewItem } from '@/components/mobile';
+import { tableLabel, fmtDt } from '../types';
+import { cn } from '@/lib/utils';
 import { usePendingReviewActions } from './PendingReviewTab/usePendingReviewActions';
 import { CorrectionRequestCard } from './PendingReviewTab/CorrectionRequestCard';
 import { FlaggedReadingRow } from './PendingReviewTab/FlaggedReadingRow';
@@ -26,6 +31,25 @@ export function PendingReviewTab() {
     toggleAll, toggleOne, invalidate, corrReqs,
     handleSaveReason, approveRequest, rejectRequest, unlockReading, resolveOne, bulkResolve, recent,
   } = usePendingReviewActions();
+
+  const isMobile = useIsMobile();
+  const [mobileView, setMobileView] = useState<'cards' | 'list'>('cards');
+
+  const mobileReviewItems: MobileReviewItem[] = useMemo(() => {
+    return filtered.map((row) => ({
+      id: row.id,
+      entityName: row.entity_name,
+      plantName: row.plant_name,
+      sourceTable: tableLabel[row.source_table] || row.source_table,
+      operatorUsername: row.operator_username || row.recorded_by || 'Unknown',
+      datetimeStr: fmtDt(row.reading_datetime),
+      originalValue: row.predecessor?.current_reading ?? row.previous_reading ?? null,
+      proposedValue: row.current_reading,
+      unit: 'm³',
+      reasonText: notes[row.id] || customReasons[row.id] || row.anomaly_remark?.text || 'Automated Anomaly Quarantine',
+      flagReason: row.flag_reason || (row.daily_volume != null && row.daily_volume < 0 ? 'Meter Backward' : 'Pending Review'),
+    }));
+  }, [filtered, notes, customReasons]);
 
   if (isLoading) return <DataState loading />;
   if (error) return <DataState error={error} onRetry={refetch} />;
@@ -116,40 +140,101 @@ export function PendingReviewTab() {
           <div className="flex items-center justify-between px-1 pt-2">
             <div className="flex items-center gap-2">
               <p className="text-xs font-bold text-foreground uppercase tracking-wide">
-                Flagged Field Readings (Anomaly Quarantine)
+                <span className="hidden sm:inline">Flagged Field Readings (Anomaly Quarantine)</span>
+                <span className="sm:hidden">Quarantined Readings</span>
               </p>
               <Badge variant="outline" className="h-5 px-2 text-3xs font-semibold">
                 {filtered.length} Quarantined
               </Badge>
             </div>
-            <span className="text-3xs text-muted-foreground">Original submissions held by validation guards for supervisor review</span>
+            <div className="flex items-center gap-2">
+              <span className="text-3xs text-muted-foreground hidden sm:inline">
+                Original submissions held by validation guards for supervisor review
+              </span>
+              {isMobile && (
+                <div className="flex items-center gap-1 bg-muted/70 p-0.5 rounded-lg border border-border/60 text-2xs">
+                  <button
+                    type="button"
+                    onClick={() => setMobileView('cards')}
+                    className={cn(
+                      'px-2 py-0.5 rounded font-medium transition-colors',
+                      mobileView === 'cards'
+                        ? 'bg-background shadow-xs text-foreground font-bold'
+                        : 'text-muted-foreground'
+                    )}
+                  >
+                    Deck
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMobileView('list')}
+                    className={cn(
+                      'px-2 py-0.5 rounded font-medium transition-colors',
+                      mobileView === 'list'
+                        ? 'bg-background shadow-xs text-foreground font-bold'
+                        : 'text-muted-foreground'
+                    )}
+                  >
+                    List
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
 
-          <div className="flex items-center gap-2 px-1">
-            <Checkbox checked={allSelected} onCheckedChange={toggleAll} className="h-4 w-4" />
-            <span className="text-xs text-muted-foreground">{filtered.length} reading{filtered.length !== 1 ? 's' : ''} pending</span>
-          </div>
-
-          {filtered.map(row => (
-            <FlaggedReadingRow
-              key={row.id}
-              row={row}
-              isSelected={selected.has(row.id)}
-              isExpanded={expanded === row.id}
-              isBusy={!!busy[row.id]}
-              customReasons={customReasons}
-              notes={notes}
-              onToggleSelect={toggleOne}
-              onToggleExpand={(id) => setExpanded(id)}
-              onSaveReason={handleSaveReason}
-              onNoteChange={setNotes}
-              onResolve={resolveOne}
-              onEdit={setEditRow}
-              onRollover={setRolloverRow}
-              onUnlock={unlockReading}
-              onCustomReasonChange={setCustomReasons}
+          {isMobile && mobileView === 'cards' ? (
+            <MobileReviewCardStack
+              items={mobileReviewItems}
+              onApprove={async (item) => {
+                const targetRow = filtered.find(r => r.id === item.id);
+                if (targetRow) await resolveOne(targetRow, 'normal');
+              }}
+              onReject={async (item, reason) => {
+                const targetRow = filtered.find(r => r.id === item.id);
+                if (targetRow) {
+                  if (reason) setNotes(prev => ({ ...prev, [targetRow.id]: reason }));
+                  await resolveOne(targetRow, 'retracted');
+                }
+              }}
+              onEdit={(item) => {
+                const targetRow = filtered.find(r => r.id === item.id);
+                if (targetRow) setEditRow(targetRow);
+              }}
+              onRollover={(item) => {
+                const targetRow = filtered.find(r => r.id === item.id);
+                if (targetRow) setRolloverRow(targetRow);
+              }}
+              onRefresh={() => invalidate()}
             />
-          ))}
+          ) : (
+            <>
+              <div className="hidden sm:flex items-center gap-2 px-1">
+                <Checkbox checked={allSelected} onCheckedChange={toggleAll} className="h-4 w-4" />
+                <span className="text-xs text-muted-foreground">{filtered.length} reading{filtered.length !== 1 ? 's' : ''} pending</span>
+              </div>
+
+              {filtered.map(row => (
+                <FlaggedReadingRow
+                  key={row.id}
+                  row={row}
+                  isSelected={selected.has(row.id)}
+                  isExpanded={expanded === row.id}
+                  isBusy={!!busy[row.id]}
+                  customReasons={customReasons}
+                  notes={notes}
+                  onToggleSelect={toggleOne}
+                  onToggleExpand={(id) => setExpanded(id)}
+                  onSaveReason={handleSaveReason}
+                  onNoteChange={setNotes}
+                  onResolve={resolveOne}
+                  onEdit={setEditRow}
+                  onRollover={setRolloverRow}
+                  onUnlock={unlockReading}
+                  onCustomReasonChange={setCustomReasons}
+                />
+              ))}
+            </>
+          )}
         </div>
       )}
 
