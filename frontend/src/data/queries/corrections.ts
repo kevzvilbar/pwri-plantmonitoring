@@ -58,37 +58,70 @@ export async function getReviewPlantScope(): Promise<string[] | null> {
   return ((profileRes.data?.plant_assignments ?? []) as string[]).filter(Boolean);
 }
 
-const ENTITY_COL: Record<string, string> = {
-  locator_readings: 'locator_id',
-  well_readings: 'well_id',
-  product_meter_readings: 'meter_id',
-};
-
 async function fetchRawPending(
   table: SourceTable,
   limit: number,
   scope: string[] | null,
 ): Promise<GenericReadingRow[]> {
-  const entityCol = ENTITY_COL[table];
-  if (!entityCol) return [];
   if (scope && scope.length === 0) return [];
-  let q = (supabase as any)
-    .from(table)
-    .select(`id, reading_datetime, previous_reading, current_reading, daily_volume, norm_status, recorded_by, plant_id, ${entityCol}`)
-    .eq('norm_status', 'pending_review');
-  if (scope) q = q.in('plant_id', scope);
-  const { data } = await q.order('reading_datetime', { ascending: false }).limit(limit);
-  return ((data ?? []) as Record<string, any>[]).map(r => ({
-    id: r.id,
-    reading_datetime: r.reading_datetime,
-    previous_reading: r.previous_reading,
-    current_reading: r.current_reading ?? 0,
-    daily_volume: r.daily_volume,
-    norm_status: r.norm_status ?? 'pending_review',
-    recorded_by: r.recorded_by,
-    plant_id: r.plant_id,
-    entity_id: r[entityCol],
-  }));
+  if (table === 'locator_readings') {
+    let q = supabase
+      .from('locator_readings')
+      .select('id, reading_datetime, previous_reading, current_reading, daily_volume, norm_status, recorded_by, plant_id, locator_id')
+      .eq('norm_status', 'pending_review');
+    if (scope) q = q.in('plant_id', scope);
+    const { data } = await q.order('reading_datetime', { ascending: false }).limit(limit);
+    return (data ?? []).map(r => ({
+      id: r.id,
+      reading_datetime: r.reading_datetime,
+      previous_reading: r.previous_reading,
+      current_reading: r.current_reading ?? 0,
+      daily_volume: r.daily_volume,
+      norm_status: r.norm_status ?? 'pending_review',
+      recorded_by: r.recorded_by,
+      plant_id: r.plant_id,
+      entity_id: r.locator_id,
+    }));
+  }
+  if (table === 'well_readings') {
+    let q = supabase
+      .from('well_readings')
+      .select('id, reading_datetime, previous_reading, current_reading, daily_volume, norm_status, recorded_by, plant_id, well_id')
+      .eq('norm_status', 'pending_review');
+    if (scope) q = q.in('plant_id', scope);
+    const { data } = await q.order('reading_datetime', { ascending: false }).limit(limit);
+    return (data ?? []).map(r => ({
+      id: r.id,
+      reading_datetime: r.reading_datetime,
+      previous_reading: r.previous_reading,
+      current_reading: r.current_reading ?? 0,
+      daily_volume: r.daily_volume,
+      norm_status: r.norm_status ?? 'pending_review',
+      recorded_by: r.recorded_by,
+      plant_id: r.plant_id,
+      entity_id: r.well_id,
+    }));
+  }
+  if (table === 'product_meter_readings') {
+    let q = supabase
+      .from('product_meter_readings')
+      .select('id, reading_datetime, previous_reading, current_reading, daily_volume, norm_status, recorded_by, plant_id, meter_id')
+      .eq('norm_status', 'pending_review');
+    if (scope) q = q.in('plant_id', scope);
+    const { data } = await q.order('reading_datetime', { ascending: false }).limit(limit);
+    return (data ?? []).map(r => ({
+      id: r.id,
+      reading_datetime: r.reading_datetime,
+      previous_reading: r.previous_reading,
+      current_reading: r.current_reading ?? 0,
+      daily_volume: r.daily_volume,
+      norm_status: r.norm_status ?? 'pending_review',
+      recorded_by: r.recorded_by,
+      plant_id: r.plant_id,
+      entity_id: r.meter_id,
+    }));
+  }
+  return [];
 }
 
 async function fetchPredecessors(
@@ -481,26 +514,20 @@ export async function fetchPending(
   return { rows: results, truncated };
 }
 
-/** Count rows across the three reading tables for the badge, limited to the reviewer's plants. */
-async function countAcrossReadingTables(
-  apply: (q: any) => any,
-): Promise<number> {
-  const scope = await getReviewPlantScope();
-  if (scope && scope.length === 0) return 0;
-  const tables = ['locator_readings', 'well_readings', 'product_meter_readings'] as const;
-  const results = await Promise.all(
-    tables.map(t => {
-      let q = apply((supabase as any).from(t).select('id', { count: 'exact', head: true }));
-      if (scope) q = q.in('plant_id', scope);
-      return q;
-    }),
-  );
-  return (results as Array<{ count: number | null }>).reduce((sum, r) => sum + (r.count ?? 0), 0);
-}
-
 /** Count pending readings for badge */
 export async function fetchPendingCount(): Promise<number> {
-  return countAcrossReadingTables(q => q.eq('norm_status', 'pending_review'));
+  const scope = await getReviewPlantScope();
+  if (scope && scope.length === 0) return 0;
+  let q1 = supabase.from('locator_readings').select('id', { count: 'exact', head: true }).eq('norm_status', 'pending_review');
+  let q2 = supabase.from('well_readings').select('id', { count: 'exact', head: true }).eq('norm_status', 'pending_review');
+  let q3 = supabase.from('product_meter_readings').select('id', { count: 'exact', head: true }).eq('norm_status', 'pending_review');
+  if (scope) {
+    q1 = q1.in('plant_id', scope);
+    q2 = q2.in('plant_id', scope);
+    q3 = q3.in('plant_id', scope);
+  }
+  const [res1, res2, res3] = await Promise.all([q1, q2, q3]);
+  return (res1.count ?? 0) + (res2.count ?? 0) + (res3.count ?? 0);
 }
 
 /** Count correction requests pending */
@@ -515,8 +542,18 @@ export async function fetchCorrectionRequestsCount(): Promise<number> {
 
 /** Count inbox items (negative daily_volume not flagged) */
 export async function fetchInboxCount(): Promise<number> {
-  return countAcrossReadingTables(q =>
-    q.eq('norm_status', 'normal').lt('daily_volume', 0).eq('is_meter_replacement', false));
+  const scope = await getReviewPlantScope();
+  if (scope && scope.length === 0) return 0;
+  let q1 = supabase.from('locator_readings').select('id', { count: 'exact', head: true }).eq('norm_status', 'normal').lt('daily_volume', 0).eq('is_meter_replacement', false);
+  let q2 = supabase.from('well_readings').select('id', { count: 'exact', head: true }).eq('norm_status', 'normal').lt('daily_volume', 0).eq('is_meter_replacement', false);
+  let q3 = supabase.from('product_meter_readings').select('id', { count: 'exact', head: true }).eq('norm_status', 'normal').lt('daily_volume', 0).eq('is_meter_replacement', false);
+  if (scope) {
+    q1 = q1.in('plant_id', scope);
+    q2 = q2.in('plant_id', scope);
+    q3 = q3.in('plant_id', scope);
+  }
+  const [res1, res2, res3] = await Promise.all([q1, q2, q3]);
+  return (res1.count ?? 0) + (res2.count ?? 0) + (res3.count ?? 0);
 }
 
 /** Fetch correction inbox items */

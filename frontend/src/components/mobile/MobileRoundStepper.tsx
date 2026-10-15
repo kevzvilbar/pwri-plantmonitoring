@@ -133,8 +133,8 @@ export function MobileRoundStepper({
         toast.success('All assets in round completed!');
         onCompleteRound?.();
       }
-    } catch (err: any) {
-      toast.error(err?.message || 'Failed to save reading');
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Failed to save reading');
     } finally {
       setSaving(false);
     }

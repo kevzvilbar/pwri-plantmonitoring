@@ -89,8 +89,8 @@ export function MobileReviewCardStack({
       await onApprove(activeItem);
       toast.success(`Approved correction for ${activeItem.entityName}`);
       setCurrentIndex((i) => i + 1);
-    } catch (err: any) {
-      toast.error(err?.message || 'Failed to approve');
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Failed to approve');
     } finally {
       setBusy(false);
       setSwipeOffset(0);
@@ -104,8 +104,8 @@ export function MobileReviewCardStack({
       await onReject(activeItem);
       toast.success(`Rejected correction for ${activeItem.entityName}`);
       setCurrentIndex((i) => i + 1);
-    } catch (err: any) {
-      toast.error(err?.message || 'Failed to reject');
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Failed to reject');
     } finally {
       setBusy(false);
       setSwipeOffset(0);
