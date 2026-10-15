@@ -263,7 +263,7 @@ export function BlendingForm() {
       </Card>
 
       {plantId && blendingWells.length > 0 && (
-        <div className="grid grid-cols-3 gap-3">
+        <div className="hidden md:grid grid-cols-3 gap-3">
           <Card className="p-3.5">
             <div className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">Tagged wells</div>
             <div className="text-2xl font-semibold mt-1 tabular-nums">{blendingWells.length}</div>
