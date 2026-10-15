@@ -1,6 +1,7 @@
 import type { NavItem } from '@/navConfig';
 import { useAlertBadge } from '@/hooks/useAlertBadge';
 import { usePendingApprovalsCount } from '@/hooks/usePendingApprovalsCount';
+import { useInboxCount } from '@/features/readings/hooks/useCorrections';
 import { useCan } from '@/hooks/usePermission';
 import { cn } from '@/lib/utils';
 
@@ -18,6 +19,7 @@ type BadgeLook = Pick<NavItemBadgeProps, 'variant' | 'className'>;
 export function NavItemBadge({ kind, variant = 'count', className }: NavItemBadgeProps) {
   if (kind === 'alerts') return <AlertsBadge variant={variant} className={className} />;
   if (kind === 'approvals') return <ApprovalsBadge variant={variant} className={className} />;
+  if (kind === 'review') return <ReviewBadge variant={variant} className={className} />;
   return null;
 }
 
@@ -82,3 +84,24 @@ function ApprovalsCount({ variant, className }: BadgeLook) {
     />
   );
 }
+
+function ReviewBadge(look: BadgeLook) {
+  return useCan()('data_corrections') ? <ReviewCount {...look} /> : null;
+}
+
+function ReviewCount({ variant, className }: BadgeLook) {
+  const { data } = useInboxCount();
+  const count = data ?? 0;
+  if (count === 0) return null;
+
+  return (
+    <CountPill
+      count={count}
+      tone="bg-primary"
+      label={`${count} pending review items`}
+      variant={variant}
+      className={className}
+    />
+  );
+}
+

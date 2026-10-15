@@ -39,8 +39,9 @@ export interface NavItem {
    *  are listed in the "More" sheet. */
   readonly priority?: number;
   /** Live indicator rendered next to the item (see NavItemBadge). `approvals`
-   *  is the count of accounts waiting for an Admin; only Admins see it. */
-  readonly badge?: 'alerts' | 'approvals';
+   *  is the count of accounts waiting for an Admin; only Admins see it.
+   *  `review` is the pending corrections inbox count for managers. */
+  readonly badge?: 'alerts' | 'approvals' | 'review';
 }
 
 export interface NavGroup {

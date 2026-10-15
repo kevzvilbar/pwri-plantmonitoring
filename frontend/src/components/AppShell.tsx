@@ -1,7 +1,7 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { TopBar } from './TopBar';
-import { BottomNav } from './BottomNav';
+import { MobileBottomNav } from './mobile/MobileBottomNav';
 import { AppSidebar } from './AppSidebar';
 import { OfflineBanner } from './OfflineBanner';
 import { SidebarProvider } from '@/components/ui/sidebar';
@@ -170,7 +170,7 @@ export function AppShell() {
             </PageAnimationWrapper>
           </main>
 
-          <BottomNav />
+          <MobileBottomNav />
         </div>
       </div>
     </SidebarProvider>
