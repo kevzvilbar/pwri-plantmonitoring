@@ -104,7 +104,7 @@ export function ChlorineHourlyByTrainChart({
               </span>
               <span className="flex items-center gap-1.5">
                 <span className="font-mono font-bold text-foreground">{v.toFixed(2)} {CHLORINE_CONFIG.unit}</span>
-                <span className={`text-[10px] font-medium ${st.cls}`}>{st.glyph} {st.text}</span>
+                <span className={`text-2xs font-medium ${st.cls}`}>{st.glyph} {st.text}</span>
               </span>
             </div>
           );
@@ -116,7 +116,7 @@ export function ChlorineHourlyByTrainChart({
   return (
     <div className="flex h-full w-full flex-col" data-testid="chlorine-hourly-by-train">
       {/* Legend: one entry per train (the chart has several line segments per train, so a stock legend would repeat). */}
-      <div className="flex shrink-0 flex-wrap items-center gap-1.5 pb-1 text-[11px]">
+      <div className="flex shrink-0 flex-wrap items-center gap-1.5 pb-1 text-xs">
         {trainEntities.map((t) => (
           <button
             key={t.id}
@@ -130,7 +130,7 @@ export function ChlorineHourlyByTrainChart({
             {t.label}
           </button>
         ))}
-        <span className="ml-auto text-[10px] text-muted-foreground">
+        <span className="ml-auto text-2xs text-muted-foreground">
           Hourly avg per train · band {CHLORINE_CONFIG.min_limit}–{CHLORINE_CONFIG.max_limit} {CHLORINE_CONFIG.unit} · lines break after &gt;{CHLORINE_CONFIG.gap_threshold_minutes.operator / 60}h without data
         </span>
       </div>

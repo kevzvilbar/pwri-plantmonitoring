@@ -507,14 +507,14 @@ export function ChlorineResidualChart({
 
   const statusBadge = (status: ReturnType<typeof classifyChlorineReading>, verified: boolean) => {
     if (status === 'below_min')
-      return <Badge variant="outline" className="text-[10px] px-1 py-0 border-amber-500/40 text-amber-600 dark:text-amber-400 bg-amber-500/10">Below 0.3</Badge>;
+      return <Badge variant="outline" className="text-2xs px-1 py-0 border-amber-500/40 text-amber-600 dark:text-amber-400 bg-amber-500/10">Below 0.3</Badge>;
     if (status === 'above_max')
-      return <Badge variant="outline" className="text-[10px] px-1 py-0 border-rose-500/40 text-rose-600 dark:text-rose-400 bg-rose-500/10">Above 1.5</Badge>;
+      return <Badge variant="outline" className="text-2xs px-1 py-0 border-rose-500/40 text-rose-600 dark:text-rose-400 bg-rose-500/10">Above 1.5</Badge>;
     if (status === 'suspect')
       return verified
-        ? <Badge variant="outline" className="text-[10px] px-1 py-0 border-rose-500/40 text-rose-600 dark:text-rose-400 bg-rose-500/10">Above 1.5 (verified)</Badge>
-        : <Badge variant="destructive" className="text-[10px] px-1 py-0 bg-red-600 text-white">Suspect (&gt;3.0)</Badge>;
-    return <Badge variant="outline" className="text-[10px] px-1 py-0 border-emerald-500/40 text-emerald-600 dark:text-emerald-400 bg-emerald-500/10">In Range</Badge>;
+        ? <Badge variant="outline" className="text-2xs px-1 py-0 border-rose-500/40 text-rose-600 dark:text-rose-400 bg-rose-500/10">Above 1.5 (verified)</Badge>
+        : <Badge variant="destructive" className="text-2xs px-1 py-0 bg-red-600 text-white">Suspect (&gt;3.0)</Badge>;
+    return <Badge variant="outline" className="text-2xs px-1 py-0 border-emerald-500/40 text-emerald-600 dark:text-emerald-400 bg-emerald-500/10">In Range</Badge>;
   };
 
   const CustomTooltip = ({ active, payload }: CustomTooltipProps) => {
@@ -540,7 +540,7 @@ export function ChlorineResidualChart({
             <FlaskConical className="h-3.5 w-3.5 text-emerald-500" />
             <span>Chlorine Residual</span>
           </div>
-          <span className="text-[10px] text-muted-foreground font-mono">{row?.ts != null ? fmtFull(row.ts) : ''}</span>
+          <span className="text-2xs text-muted-foreground font-mono">{row?.ts != null ? fmtFull(row.ts) : ''}</span>
         </div>
         <div className="space-y-1.5">
           {rows.map(({ trainId, pt }) => {
@@ -573,7 +573,7 @@ export function ChlorineResidualChart({
           </div>
         )}
         {suspectRows.length > 0 && (
-          <div className="mt-2 pt-1.5 border-t border-destructive/20 text-[10px] text-destructive flex flex-col gap-1.5">
+          <div className="mt-2 pt-1.5 border-t border-destructive/20 text-2xs text-destructive flex flex-col gap-1.5">
             <div className="flex items-center gap-1">
               <ShieldAlert className="h-3 w-3 shrink-0" />
               <span>Readings &gt; 3.0 mg/L are excluded from stats until verified.</span>
@@ -587,7 +587,7 @@ export function ChlorineResidualChart({
                   handleOpenSuspectReview(pt);
                 }}
                 data-testid="tooltip-correct-suspect-btn"
-                className="w-full inline-flex items-center justify-center gap-1 px-2 py-1 rounded bg-red-500/15 border border-red-500/30 text-[10px] font-semibold text-red-700 dark:text-red-300 hover:bg-red-500/25 transition-colors cursor-pointer"
+                className="w-full inline-flex items-center justify-center gap-1 px-2 py-1 rounded bg-red-500/15 border border-red-500/30 text-2xs font-semibold text-red-700 dark:text-red-300 hover:bg-red-500/25 transition-colors cursor-pointer"
               >
                 <Edit3 className="h-2.5 w-2.5" /> Flag / Correct Outlier
               </button>
@@ -617,9 +617,9 @@ export function ChlorineResidualChart({
             </span>
           </div>
         )}
-        {overall != null && <div className="text-[10px] text-muted-foreground">{String(row._n)} valid reading(s)</div>}
+        {overall != null && <div className="text-2xs text-muted-foreground">{String(row._n)} valid reading(s)</div>}
         {overall != null && row._min != null && row._max != null && (
-          <div className="text-[10px] text-muted-foreground">
+          <div className="text-2xs text-muted-foreground">
             Range {Number(row._min).toFixed(2)}–{Number(row._max).toFixed(2)}
             {Number(row._below) + Number(row._above) > 0 && (
               <span className="text-amber-600 dark:text-amber-400 font-semibold">
@@ -655,11 +655,11 @@ export function ChlorineResidualChart({
               <h4 className="text-sm font-semibold tracking-tight text-foreground">
                 Free Chlorine Residual
               </h4>
-              <Badge variant="secondary" className="text-[10px] px-1.5 py-0 font-medium text-muted-foreground">
+              <Badge variant="secondary" className="text-2xs px-1.5 py-0 font-medium text-muted-foreground">
                 PNSDW 0.3 – 1.5 mg/L
               </Badge>
             </div>
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               Multi-train disinfection compliance & gap monitoring
             </p>
           </div>
@@ -713,7 +713,7 @@ export function ChlorineResidualChart({
           >
             <div className="shrink-0 min-w-[195px]">
               <div className="flex items-center justify-between gap-1">
-                <span className="text-[10px] uppercase tracking-wider font-medium text-muted-foreground">
+                <span className="text-2xs uppercase tracking-wider font-medium text-muted-foreground">
                   Daily average · {fmtDay(activeDay.ts)}
                 </span>
                 {isInspectingNonLatest && (
@@ -722,7 +722,7 @@ export function ChlorineResidualChart({
                     size="sm"
                     onClick={() => setSelectedDayKey(null)}
                     data-testid="reset-day-focus-btn"
-                    className="h-5 text-[10px] px-1.5 py-0 text-sky-600 dark:text-sky-400 hover:text-sky-700 inline-flex items-center gap-0.5"
+                    className="h-5 text-2xs px-1.5 py-0 text-sky-600 dark:text-sky-400 hover:text-sky-700 inline-flex items-center gap-0.5"
                     title="Reset to latest day"
                   >
                     <RotateCcw className="h-2.5 w-2.5" /> Latest
@@ -735,13 +735,13 @@ export function ChlorineResidualChart({
                 </span>
                 <span className="text-xs text-muted-foreground">{CHLORINE_CONFIG.unit}</span>
                 {lv != null && (st === 'critical_low'
-                  ? <Badge variant="destructive" className="text-[10px] px-1 py-0 bg-red-600 text-white">No residual</Badge>
+                  ? <Badge variant="destructive" className="text-2xs px-1 py-0 bg-red-600 text-white">No residual</Badge>
                   : statusBadge(st as ReturnType<typeof classifyChlorineReading>, false))}
               </div>
               {/* A daily mean can sit in range while individual readings are not. Say so. */}
               {lv != null && activeOut > 0 && (
                 <div
-                  className="mt-1 inline-flex items-center gap-1 rounded border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-300"
+                  className="mt-1 inline-flex items-center gap-1 rounded border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-2xs font-medium text-amber-700 dark:text-amber-300"
                   data-testid="daily-avg-out-of-range"
                 >
                   <AlertTriangle className="h-2.5 w-2.5" aria-hidden />
@@ -749,7 +749,7 @@ export function ChlorineResidualChart({
                   {activeDay.min != null && activeDay.max != null && ` (${activeDay.min.toFixed(2)}–${activeDay.max.toFixed(2)})`}
                 </div>
               )}
-              <div className="flex items-center gap-2 text-[11px] text-muted-foreground mt-1">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
                 {delta != null && (
                   <span className="inline-flex items-center gap-0.5 font-medium">
                     {delta > 0 ? <TrendingUp className="h-3 w-3" /> : delta < 0 ? <TrendingDown className="h-3 w-3" /> : <Minus className="h-3 w-3" />}
@@ -759,21 +759,21 @@ export function ChlorineResidualChart({
                 <span>{activeDay.overallCount} readings</span>
               </div>
               {deltaVsPeriod != null && daysWithData > 1 && (
-                <div className="text-[11px] text-muted-foreground mt-0.5" data-testid="daily-avg-vs-period">
+                <div className="text-xs text-muted-foreground mt-0.5" data-testid="daily-avg-vs-period">
                   {deltaVsPeriod > 0 ? '+' : ''}{deltaVsPeriod.toFixed(2)} vs period avg
                 </div>
               )}
-              <div className="text-[11px] text-muted-foreground mt-0.5">
+              <div className="text-xs text-muted-foreground mt-0.5">
                 Period avg <span className="font-mono font-semibold text-foreground">{periodAvg.toFixed(2)}</span> ·{' '}
                 {inBand}/{daysWithData} days in range
               </div>
               {noResidualReadings > 0 && periodAvgExcl != null && (
-                <div className="text-[11px] text-rose-600 dark:text-rose-400 mt-0.5" data-testid="period-avg-excl-no-residual">
+                <div className="text-xs text-rose-600 dark:text-rose-400 mt-0.5" data-testid="period-avg-excl-no-residual">
                   {periodAvgExcl.toFixed(2)} excl. {noResidualReadings} no-residual reading{noResidualReadings > 1 ? 's' : ''}
                 </div>
               )}
               {stats.compliancePct != null && (
-                <div className="text-[11px] text-muted-foreground mt-0.5" data-testid="readings-compliance">
+                <div className="text-xs text-muted-foreground mt-0.5" data-testid="readings-compliance">
                   {stats.compliancePct}% of individual readings in range
                 </div>
               )}
@@ -808,14 +808,14 @@ export function ChlorineResidualChart({
                         : `${fmtDay(d.ts)}: ${d.overall.toFixed(2)} mg/L (${d.overallCount} readings, ${d.min?.toFixed(2)}–${d.max?.toFixed(2)})${outN > 0 ? `, ${outN} out of range` : ''} - click to inspect`
                     }
                   >
-                    <div className="text-[9px] text-muted-foreground">{fmtDay(d.ts)}</div>
+                    <div className="text-3xs text-muted-foreground">{fmtDay(d.ts)}</div>
                     <div className={`text-sm font-bold font-mono inline-flex items-center justify-center gap-0.5 ${t.text}`}>
                       <StatusGlyph status={dst} />
                       {d.overall == null ? '—' : d.overall.toFixed(2)}
                     </div>
                     {d.overall != null && d.min != null && d.max != null && (
                       <div
-                        className={`text-[8px] font-mono leading-tight ${hiddenExcursion ? 'text-amber-600 dark:text-amber-400 font-semibold' : 'text-muted-foreground'}`}
+                        className={`text-3xs font-mono leading-tight ${hiddenExcursion ? 'text-amber-600 dark:text-amber-400 font-semibold' : 'text-muted-foreground'}`}
                         data-testid={`daily-chip-range-${d.dateKey}`}
                       >
                         {d.min.toFixed(1)}–{d.max.toFixed(1)}{hiddenExcursion ? ' !' : ''}
@@ -833,10 +833,10 @@ export function ChlorineResidualChart({
       {latestByTrain.length > 0 && (
         <div className="rounded-xl border border-border/60 bg-muted/20 p-3 space-y-2" data-testid="latest-readings">
           <div className="flex items-center justify-between gap-2">
-            <span className="text-[10px] uppercase tracking-wider font-medium text-muted-foreground">
+            <span className="text-2xs uppercase tracking-wider font-medium text-muted-foreground">
               Latest reading per train
             </span>
-            <span className="text-[10px] text-muted-foreground">Band {CHLORINE_CONFIG.min_limit}–{CHLORINE_CONFIG.max_limit} {CHLORINE_CONFIG.unit} · same limit for every train</span>
+            <span className="text-2xs text-muted-foreground">Band {CHLORINE_CONFIG.min_limit}–{CHLORINE_CONFIG.max_limit} {CHLORINE_CONFIG.unit} · same limit for every train</span>
           </div>
           <div className="space-y-1.5">
             {latestByTrain.map((r) => {
@@ -872,21 +872,21 @@ export function ChlorineResidualChart({
                       }`}
                       style={{ left: `${barPct(r.value)}%` }}
                     />
-                    <span className="absolute -bottom-2.5 -translate-x-1/2 text-[8px] font-mono text-muted-foreground" style={{ left: `${barPct(CHLORINE_CONFIG.min_limit)}%` }}>{CHLORINE_CONFIG.min_limit}</span>
-                    <span className="absolute -bottom-2.5 -translate-x-1/2 text-[8px] font-mono text-muted-foreground" style={{ left: `${barPct(CHLORINE_CONFIG.max_limit)}%` }}>{CHLORINE_CONFIG.max_limit}</span>
+                    <span className="absolute -bottom-2.5 -translate-x-1/2 text-3xs font-mono text-muted-foreground" style={{ left: `${barPct(CHLORINE_CONFIG.min_limit)}%` }}>{CHLORINE_CONFIG.min_limit}</span>
+                    <span className="absolute -bottom-2.5 -translate-x-1/2 text-3xs font-mono text-muted-foreground" style={{ left: `${barPct(CHLORINE_CONFIG.max_limit)}%` }}>{CHLORINE_CONFIG.max_limit}</span>
                   </div>
 
                   <div className="text-right leading-tight">
                     <span className={`inline-flex items-center gap-1 font-mono text-sm font-bold ${t.text}`} data-testid={`latest-value-${r.train_id}`}>
                       <StatusGlyph status={tone} />
                       {over && '▲ '}{r.value.toFixed(2)}
-                      <span className="text-[10px] font-normal text-muted-foreground">{CHLORINE_CONFIG.unit}</span>
+                      <span className="text-2xs font-normal text-muted-foreground">{CHLORINE_CONFIG.unit}</span>
                     </span>
-                    <div className="text-[10px] text-muted-foreground font-mono">{fmtAxis(r.ts)}</div>
+                    <div className="text-2xs text-muted-foreground font-mono">{fmtAxis(r.ts)}</div>
                   </div>
 
                   {(behind || r.newerSuspect) && (
-                    <div className="col-span-3 -mt-0.5 flex flex-wrap gap-x-3 pl-1 text-[10px]">
+                    <div className="col-span-3 -mt-0.5 flex flex-wrap gap-x-3 pl-1 text-2xs">
                       {behind && (
                         <span className="text-amber-600 dark:text-amber-400" data-testid={`latest-behind-${r.train_id}`}>
                           Trails the newest train reading by {(r.behindMinutes / 60).toFixed(1)}h
@@ -926,13 +926,13 @@ export function ChlorineResidualChart({
       {/* Train Filter Selector Pills */}
       {availableTrainEntities.length > 1 && (
         <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
-          <span className="text-[11px] text-muted-foreground font-medium mr-1 flex items-center gap-1">
+          <span className="text-xs text-muted-foreground font-medium mr-1 flex items-center gap-1">
             <Layers className="h-3 w-3" /> Trains:
           </span>
           <Button
             variant={activeTrainSet === null ? 'default' : 'outline'}
             size="sm"
-            className="h-6 text-[11px] px-2 rounded-md"
+            className="h-6 text-xs px-2 rounded-md"
             onClick={handleSelectAll}
           >
             All ({availableTrainEntities.length})
@@ -941,7 +941,7 @@ export function ChlorineResidualChart({
             type="button"
             onClick={() => setShowOverallAvg((prev) => !prev)}
             data-testid="toggle-overall-avg"
-            className={`inline-flex items-center gap-1.5 h-6 px-2 rounded-md text-[11px] font-medium border transition-all ${
+            className={`inline-flex items-center gap-1.5 h-6 px-2 rounded-md text-xs font-medium border transition-all ${
               showOverallAvg
                 ? 'bg-sky-500/15 border-sky-500/40 text-sky-600 dark:text-sky-400 shadow-xs font-semibold'
                 : 'bg-muted/30 border-transparent text-muted-foreground hover:bg-muted/60 opacity-60'
@@ -957,7 +957,7 @@ export function ChlorineResidualChart({
                 key={t.id}
                 type="button"
                 onClick={() => handleTrainToggle(t.id)}
-                className={`inline-flex items-center gap-1.5 h-6 px-2 rounded-md text-[11px] font-medium border transition-all ${
+                className={`inline-flex items-center gap-1.5 h-6 px-2 rounded-md text-xs font-medium border transition-all ${
                   isSelected
                     ? 'bg-background border-border text-foreground shadow-xs'
                     : 'bg-muted/30 border-transparent text-muted-foreground hover:bg-muted/60 opacity-60'
@@ -972,7 +972,7 @@ export function ChlorineResidualChart({
             <Button
               variant="ghost"
               size="sm"
-              className="h-6 text-[11px] px-2 text-muted-foreground hover:text-foreground"
+              className="h-6 text-xs px-2 text-muted-foreground hover:text-foreground"
               onClick={handleClearAll}
             >
               Clear
@@ -1224,12 +1224,12 @@ export function ChlorineResidualChart({
       {/* KPI & Compliance Chips Banner */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-2 text-xs">
         <div className="bg-muted/40 border border-border/60 rounded-lg p-2 flex flex-col justify-between">
-          <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Valid Readings</span>
+          <span className="text-2xs text-muted-foreground font-medium uppercase tracking-wider">Valid Readings</span>
           <span className="text-base font-bold font-mono text-foreground mt-0.5">{stats.validCount}</span>
         </div>
 
         <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-2 flex flex-col justify-between">
-          <span className="text-[10px] text-emerald-700 dark:text-emerald-400 font-medium uppercase tracking-wider flex items-center gap-1">
+          <span className="text-2xs text-emerald-700 dark:text-emerald-400 font-medium uppercase tracking-wider flex items-center gap-1">
             <CheckCircle2 className="h-3 w-3" /> Compliance
           </span>
           <span className="text-base font-bold font-mono text-emerald-600 dark:text-emerald-400 mt-0.5">
@@ -1238,14 +1238,14 @@ export function ChlorineResidualChart({
         </div>
 
         <div className="bg-muted/40 border border-border/60 rounded-lg p-2 flex flex-col justify-between">
-          <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Avg Residual</span>
+          <span className="text-2xs text-muted-foreground font-medium uppercase tracking-wider">Avg Residual</span>
           <span className="text-base font-bold font-mono text-foreground mt-0.5">
             {stats.avgResidual != null ? `${stats.avgResidual} mg/L` : '—'}
           </span>
         </div>
 
         <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-2 flex flex-col justify-between">
-          <span className="text-[10px] text-amber-700 dark:text-amber-400 font-medium uppercase tracking-wider">
+          <span className="text-2xs text-amber-700 dark:text-amber-400 font-medium uppercase tracking-wider">
             Below 0.3 mg/L
           </span>
           <span className="text-base font-bold font-mono text-amber-600 dark:text-amber-400 mt-0.5">
@@ -1254,7 +1254,7 @@ export function ChlorineResidualChart({
         </div>
 
         <div className="bg-rose-500/10 border border-rose-500/20 rounded-lg p-2 flex flex-col justify-between">
-          <span className="text-[10px] text-rose-700 dark:text-rose-400 font-medium uppercase tracking-wider">
+          <span className="text-2xs text-rose-700 dark:text-rose-400 font-medium uppercase tracking-wider">
             Above 1.5 mg/L
           </span>
           <span className="text-base font-bold font-mono text-rose-600 dark:text-rose-400 mt-0.5">
@@ -1268,13 +1268,13 @@ export function ChlorineResidualChart({
           }`}
           data-testid="gap-kpi"
         >
-          <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider flex items-center gap-1">
+          <span className="text-2xs text-muted-foreground font-medium uppercase tracking-wider flex items-center gap-1">
             <Clock className="h-3 w-3" aria-hidden /> Gaps &gt;{gapThresholdMinutes / 60}h
           </span>
           <span className="text-base font-bold font-mono text-foreground mt-0.5">
             {gapSummary.count}
             {gapSummary.count > 0 && (
-              <span className="ml-1 text-[10px] font-normal text-muted-foreground">longest {gapSummary.longestHours}h</span>
+              <span className="ml-1 text-2xs font-normal text-muted-foreground">longest {gapSummary.longestHours}h</span>
             )}
           </span>
         </div>
@@ -1283,7 +1283,7 @@ export function ChlorineResidualChart({
           stats.suspectCount > 0 ? 'bg-red-500/15 border-red-500/40 text-red-600' : 'bg-muted/40 border-border/60 text-muted-foreground'
         }`}>
           <div className="flex items-center justify-between">
-            <span className="text-[10px] font-medium uppercase tracking-wider flex items-center gap-1">
+            <span className="text-2xs font-medium uppercase tracking-wider flex items-center gap-1">
               <ShieldAlert className="h-3 w-3" /> Suspect (&gt;3.0)
             </span>
             {stats.suspectCount > 0 && (
@@ -1291,7 +1291,7 @@ export function ChlorineResidualChart({
                 type="button"
                 onClick={() => handleOpenSuspectReview()}
                 data-testid="review-suspect-btn"
-                className="inline-flex items-center gap-1 text-[10px] font-semibold text-rose-600 hover:text-rose-700 dark:text-rose-400 underline underline-offset-2 cursor-pointer"
+                className="inline-flex items-center gap-1 text-2xs font-semibold text-rose-600 hover:text-rose-700 dark:text-rose-400 underline underline-offset-2 cursor-pointer"
               >
                 <Edit3 className="h-2.5 w-2.5" /> Review
               </button>
@@ -1311,19 +1311,19 @@ export function ChlorineResidualChart({
             <span>
               <strong>{gaps.length} logging gap{gaps.length > 1 ? 's' : ''} detected</strong> (exceeding {gapThresholdMinutes / 60}h):{' '}
               {gaps.slice(0, 3).map((g, idx) => (
-                <span key={idx} className="font-mono text-[11px] mr-2">
+                <span key={idx} className="font-mono text-xs mr-2">
                   [{g.train_name}: {g.duration_hours}h gap]
                 </span>
               ))}
               {gaps.length > 3 && <span>+{gaps.length - 3} more</span>}
             </span>
           </div>
-          <span className="text-[10px] opacity-80">Line series disconnected across gap intervals</span>
+          <span className="text-2xs opacity-80">Line series disconnected across gap intervals</span>
         </div>
       )}
 
       {/* Legend & Guide Footer */}
-      <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-border/50 text-[11px] text-muted-foreground">
+      <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-border/50 text-xs text-muted-foreground">
         <div className="flex flex-wrap items-center gap-3">
           <span className="flex items-center gap-1 font-medium text-foreground">
             <span className="h-2 w-2 rounded-full bg-emerald-500 inline-block" /> In Range (0.3–1.5)
@@ -1341,17 +1341,17 @@ export function ChlorineResidualChart({
             <span className="h-2.5 w-2.5 rounded border border-border/60 bg-muted/30 inline-block" /> No valid data
           </span>
           <span className="flex items-center gap-1 text-amber-600 dark:text-amber-400">
-            <span className="font-mono text-[9px] font-semibold">min–max !</span> Avg in range, a reading was not
+            <span className="font-mono text-3xs font-semibold">min–max !</span> Avg in range, a reading was not
           </span>
           <span className="flex items-center gap-1 text-red-600 dark:text-red-400 font-semibold">
-            <span className="h-2.5 w-2.5 rounded-full border border-red-600 inline-flex items-center justify-center text-[7px]">!</span> Suspect (&gt;3.0)
+            <span className="h-2.5 w-2.5 rounded-full border border-red-600 inline-flex items-center justify-center text-3xs">!</span> Suspect (&gt;3.0)
           </span>
           <span className="flex items-center gap-1 text-sky-600 dark:text-sky-400 font-medium">
             <span className="h-0.5 w-3 bg-sky-400 border-b border-dashed inline-block" /> Overall Daily Avg
           </span>
         </div>
 
-        <div className="text-[10px] text-muted-foreground flex items-center gap-1">
+        <div className="text-2xs text-muted-foreground flex items-center gap-1">
           <Info className="h-3 w-3 text-muted-foreground" />
           <span>Gaps span &gt;{gapThresholdMinutes / 60}h without logged readings.</span>
         </div>
@@ -1389,7 +1389,7 @@ export function ChlorineResidualChart({
                         {val.toFixed(2)} mg/L
                       </span>
                     </div>
-                    <div className="text-[11px] text-muted-foreground font-mono">{dt}</div>
+                    <div className="text-xs text-muted-foreground font-mono">{dt}</div>
                   </div>
                   <Button
                     size="sm"

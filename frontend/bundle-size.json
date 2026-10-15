@@ -1,6 +1,6 @@
 {
-  "maxTotalGzipKb": 1189.4,
-  "lastUpdated": "2026-10-04",
+  "maxTotalGzipKb": 1167.6,
+  "lastUpdated": "2026-10-15",
   "history": [
     {
       "date": "2026-09-06",
@@ -159,6 +159,11 @@
       "maxTotalGzipKb": 1189.4,
       "previous": 1155.7,
       "reason": "Re-baselined to match Linux CI production build (1189.4 kB gzipped) with manual modularization, privacy features, and security headers."
+    },
+    {
+      "date": "2026-10-15",
+      "maxTotalGzipKb": 1167.6,
+      "previous": 1189.4
     }
   ]
 }
