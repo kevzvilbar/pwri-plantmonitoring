@@ -8,6 +8,7 @@ import {
   ShieldCheck,
   Waves,
   Activity,
+  ChevronDown,
 } from 'lucide-react';
 import { ROTrainIcon } from '@/components/icons/water-icons';
 import { Lamp } from '@/components/ui/Lamp';
@@ -46,6 +47,7 @@ export function ROTrainHero({
   recoveryMin,
 }: ROTrainHeroProps) {
   const [timeStr, setTimeStr] = useState('');
+  const [showAllMetricsMobile, setShowAllMetricsMobile] = useState(false);
 
   // Live PHT Clock updated every second
   useEffect(() => {
@@ -75,7 +77,7 @@ export function ROTrainHero({
               Membrane SCADA Telemetry
             </span>
             {plantName && (
-              <span className="px-2.5 py-0.5 rounded-md text-2xs font-semibold bg-slate-800 text-teal-300 border border-teal-500/30 flex items-center gap-1 font-mono">
+              <span className="hidden sm:inline-flex px-2.5 py-0.5 rounded-md text-2xs font-semibold bg-slate-800 text-teal-300 border border-teal-500/30 items-center gap-1 font-mono">
                 <Building2 className="h-3 w-3 text-teal-400" />
                 {plantName}
               </span>
@@ -120,7 +122,7 @@ export function ROTrainHero({
           </div>
 
           {/* 2. Permeate Flow */}
-          <div className="space-y-1">
+          <div className={cn("space-y-1", !showAllMetricsMobile && "hidden sm:block")}>
             <div className="text-3xs uppercase tracking-wider font-semibold text-slate-300 flex items-center gap-1.5">
               <Droplets className="h-3 w-3 text-slate-400" />
               <span>Permeate Flow</span>
@@ -137,7 +139,7 @@ export function ROTrainHero({
           </div>
 
           {/* 3. Feed Flow */}
-          <div className="space-y-1">
+          <div className={cn("space-y-1", !showAllMetricsMobile && "hidden sm:block")}>
             <div className="text-3xs uppercase tracking-wider font-semibold text-slate-300 flex items-center gap-1.5">
               <Waves className="h-3 w-3 text-slate-400" />
               <span>Feed Flow</span>
@@ -170,7 +172,7 @@ export function ROTrainHero({
           </div>
 
           {/* 5. Membrane Differential Pressure ΔP */}
-          <div className="space-y-1">
+          <div className={cn("space-y-1", !showAllMetricsMobile && "hidden sm:block")}>
             <div className="text-3xs uppercase tracking-wider font-semibold text-slate-300 flex items-center gap-1.5">
               <Gauge className="h-3 w-3 text-slate-400" />
               <span>Fleet Avg ΔP</span>
@@ -192,7 +194,7 @@ export function ROTrainHero({
           </div>
 
           {/* 6. Salt Rejection & Permeate TDS */}
-          <div className="space-y-1">
+          <div className={cn("space-y-1", !showAllMetricsMobile && "hidden sm:block")}>
             <div className="text-3xs uppercase tracking-wider font-semibold text-slate-300 flex items-center gap-1.5">
               <ShieldCheck className="h-3 w-3 text-slate-400" />
               <span>Salt Rejection</span>
@@ -208,6 +210,16 @@ export function ROTrainHero({
                 : 'Ionic barrier integrity'}
             </p>
           </div>
+
+          {/* Mobile Accordion Toggle for secondary telemetry */}
+          <button
+            type="button"
+            onClick={() => setShowAllMetricsMobile((prev) => !prev)}
+            className="sm:hidden col-span-2 flex items-center justify-center gap-1.5 py-1 text-2xs text-teal-400 font-mono hover:text-teal-300 transition-colors border-t border-slate-800/80 mt-0.5"
+          >
+            <span>{showAllMetricsMobile ? 'Collapse SCADA metrics' : 'More SCADA metrics (Flows, ΔP, Rejection)'}</span>
+            <ChevronDown className={cn("h-3 w-3 transition-transform duration-200", showAllMetricsMobile && "rotate-180")} />
+          </button>
         </div>
       </div>
   );

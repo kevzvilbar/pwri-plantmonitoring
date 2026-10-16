@@ -11,7 +11,7 @@ import { cn } from '@/lib/utils';
 import { deriveTrainStatus, TrainCard } from './index';
 import { loadThresholds, DEFAULT_THRESHOLDS } from '@/features/compliance';
 import { useTrainHourlyGaps, type TrainHourlyGap } from '@/hooks/useTrainHourlyGaps';
-import { Search, X, ShieldAlert, Gauge, LayoutGrid } from 'lucide-react';
+import { Search, X, ShieldAlert, Gauge, LayoutGrid, ChevronDown } from 'lucide-react';
 import { PlantPicker } from './shared/PlantPicker';
 
 // ─── Overview Dashboard ───────────────────────────────────────────────────────
@@ -21,6 +21,7 @@ export function Overview() {
   const [statusFilter, setStatusFilter] = useState<'All' | 'Running' | 'Maintenance' | 'Offline'>('All');
   const [viewMode, setViewMode] = useState<'compact' | 'diagnostics'>('diagnostics');
   const [search, setSearch] = useState('');
+  const [showOfflineMobile, setShowOfflineMobile] = useState(false);
   const lastSyncedPlantRef = useRef<string | null>(null);
   useEffect(() => {
     if (selectedPlantId === lastSyncedPlantRef.current) return;
@@ -169,7 +170,7 @@ export function Overview() {
     <div className="space-y-3">
       {/* ── Control & Filter Toolbar ── */}
       <div className="p-1.5 rounded-xl border border-border/50 bg-card flex flex-wrap gap-2 items-center justify-between">
-        <div className="flex items-center gap-2 flex-1 min-w-[180px] max-w-xs">
+        <div className="hidden sm:flex items-center gap-2 flex-1 min-w-[180px] max-w-xs">
           <div className="flex-1">
             <PlantPicker
               value={plantId}
@@ -284,14 +285,34 @@ export function Overview() {
             </div>
           </div>
 
-          {/* Offline / Standby Units (Stacked Half-Height Grid) */}
+          {/* Offline / Standby Units (Collapsible on mobile) */}
           <div className="space-y-2 pt-1">
-            <div className="flex items-center gap-2 text-2xs font-semibold text-muted-foreground uppercase tracking-wider">
-              <span className="h-1.5 w-1.5 rounded-full bg-rose-500 shrink-0" />
-              <span>Offline / Standby Units ({offlineTrains.length})</span>
-              <div className="h-px bg-border/40 flex-1" />
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+            <button
+              type="button"
+              onClick={() => setShowOfflineMobile((prev) => !prev)}
+              className="w-full flex items-center justify-between gap-2 text-2xs font-semibold text-muted-foreground uppercase tracking-wider hover:text-foreground transition-colors py-1 text-left"
+            >
+              <div className="flex items-center gap-2">
+                <span className="h-1.5 w-1.5 rounded-full bg-rose-500 shrink-0" />
+                <span>Offline / Standby Units ({offlineTrains.length})</span>
+                <span className="sm:hidden text-3xs font-normal normal-case text-muted-foreground/80 bg-muted/60 px-1.5 py-0.5 rounded border border-border/40">
+                  {showOfflineMobile ? 'Tap to hide' : 'Tap to expand'}
+                </span>
+              </div>
+              <div className="h-px bg-border/40 flex-1 hidden sm:block" />
+              <ChevronDown
+                className={cn(
+                  'h-3.5 w-3.5 sm:hidden text-muted-foreground transition-transform duration-200',
+                  showOfflineMobile && 'rotate-180'
+                )}
+              />
+            </button>
+            <div
+              className={cn(
+                'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5',
+                !showOfflineMobile && 'hidden sm:grid'
+              )}
+            >
               {offlineTrains.map((t: any) => (
                 <TrainCard
                   key={t.id}
