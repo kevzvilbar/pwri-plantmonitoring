@@ -49,8 +49,8 @@ export function ControlConsole({
   visiblePlants, snoozableCount, onSnoozeAll, onAcknowledgeAll, onResolveAll, onMarkAllRead,
 }: ControlConsoleProps) {
   return (
-    <div className="bg-card border border-border/80 p-3 sm:p-3.5 rounded-2xl space-y-3 shadow-xs">
-      <div className="flex items-center justify-between gap-2.5 sm:gap-3 flex-wrap">
+    <div className="bg-card border border-border/80 p-2.5 sm:p-3.5 rounded-2xl space-y-2 sm:space-y-3 shadow-xs">
+      <div className="flex items-center justify-between gap-2 sm:gap-3 flex-wrap">
         <div className="w-full sm:w-auto flex items-center p-1 bg-muted/60 rounded-xl border border-border/70">
           <button
             type="button"
@@ -77,10 +77,15 @@ export function ControlConsole({
           >
             <FileText className="h-3.5 w-3.5 text-accent" />
             <span>System Log ({notifsLength})</span>
+            {unreadLogsCount > 0 && (
+              <span className="sm:hidden text-3xs font-bold text-accent">
+                ({unreadLogsCount} new)
+              </span>
+            )}
           </button>
         </div>
 
-                <div className="w-full sm:w-auto flex items-center justify-end sm:justify-start gap-2">
+        <div className="w-full sm:w-auto flex items-center justify-end sm:justify-start gap-1.5 sm:gap-2">
           {activeView === 'active' && plantAlertsLength > 0 && (
             <>
               <Button
@@ -89,24 +94,24 @@ export function ControlConsole({
                 onClick={onSnoozeAll}
                 disabled={snoozableCount === 0}
                 title={snoozableCount === 0 ? 'All current alerts are critical — they cannot be snoozed' : undefined}
-                className="flex-1 sm:flex-initial h-8 gap-1.5 text-xs border-border/80 disabled:opacity-40 disabled:cursor-not-allowed"
+                className="flex-1 sm:flex-initial h-7.5 sm:h-8 px-2 sm:px-3 gap-1 sm:gap-1.5 text-2xs sm:text-xs border-border/80 disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                <BellOff className="h-3.5 w-3.5 text-warn" />
+                <BellOff className="h-3.5 w-3.5 text-warn shrink-0" />
                 <span>Snooze all (1h)</span>
               </Button>
-              <Button size="sm" variant="outline" onClick={onAcknowledgeAll} className="flex-1 sm:flex-initial h-8 gap-1.5 text-xs text-info hover:bg-info-soft border-info/30 hover:border-info/60">
-                <CheckCircle2 className="h-3.5 w-3.5 text-info" />
+              <Button size="sm" variant="outline" onClick={onAcknowledgeAll} className="flex-1 sm:flex-initial h-7.5 sm:h-8 px-2 sm:px-3 gap-1 sm:gap-1.5 text-2xs sm:text-xs text-info hover:bg-info-soft border-info/30 hover:border-info/60">
+                <CheckCircle2 className="h-3.5 w-3.5 text-info shrink-0" />
                 <span>Acknowledge all</span>
               </Button>
-              <Button size="sm" variant="outline" onClick={onResolveAll} className="flex-1 sm:flex-initial h-8 gap-1.5 text-xs text-success hover:bg-success-soft border-success/30 hover:border-success/60">
-                <CheckCheck className="h-3.5 w-3.5 text-success" />
+              <Button size="sm" variant="outline" onClick={onResolveAll} className="flex-1 sm:flex-initial h-7.5 sm:h-8 px-2 sm:px-3 gap-1 sm:gap-1.5 text-2xs sm:text-xs text-success hover:bg-success-soft border-success/30 hover:border-success/60">
+                <CheckCheck className="h-3.5 w-3.5 text-success shrink-0" />
                 <span>Resolve all</span>
               </Button>
             </>
           )}
 
           {activeView === 'logs' && unreadLogsCount > 0 && (
-            <Button size="sm" variant="outline" onClick={onMarkAllRead} className="flex-1 sm:flex-initial h-8 gap-1.5 text-xs text-accent border-accent/40 hover:bg-accent-soft">
+            <Button size="sm" variant="outline" onClick={onMarkAllRead} className="flex-1 sm:flex-initial h-7.5 sm:h-8 gap-1.5 text-xs text-accent border-accent/40 hover:bg-accent-soft">
               <CheckCheck className="h-3.5 w-3.5" />
               <span>Mark all read</span>
             </Button>
@@ -114,7 +119,7 @@ export function ControlConsole({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 pt-1 border-t border-border/50">
+      <div className="grid grid-cols-1 sm:grid-cols-12 gap-1.5 sm:gap-2.5 pt-1 border-t border-border/50">
         <div className="sm:col-span-4 flex items-center gap-1 overflow-x-auto p-0.5 scrollbar-none">
           <button type="button" onClick={() => setTierFilter('all')} className={cn('px-2.5 py-1 rounded-lg text-2xs font-semibold transition-all whitespace-nowrap', tierFilter === 'all' ? 'bg-primary text-primary-foreground shadow-2xs' : 'text-muted-foreground hover:bg-muted')}>
             All
@@ -152,8 +157,9 @@ export function ControlConsole({
           </div>
         )}
 
+        {/* Plant filter dropdown — hidden on mobile where TopBar already manages the active plant */}
         {activeView === 'active' && (
-          <div className="sm:col-span-3">
+          <div className="hidden sm:block sm:col-span-3">
             <Select value={plantFilter} onValueChange={setPlantFilter}>
               <SelectTrigger className="h-8 text-xs bg-muted/30 border-border/70">
                 <SelectValue placeholder="All Plants" />

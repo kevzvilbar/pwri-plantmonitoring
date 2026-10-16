@@ -56,19 +56,26 @@ export default function Alerts() {
   };
 
   return (
-    <div className="space-y-5 pb-12">
+    <div className="space-y-3 sm:space-y-5 pb-12">
       <PageHeader
         title="Alerts"
-        subtitle="Unified operations alarm triage, telemetry anomaly surveillance, and system event log."
+        subtitle={
+          <span className="hidden sm:inline">
+            Unified operations alarm triage, telemetry anomaly surveillance, and system event log.
+          </span>
+        }
       />
 
       {needsAssignment && <NoPlantsAssigned />}
 
-      <KpiCards
-        activeView={activeView} tierFilter={tierFilter} setActiveView={setActiveView} setTierFilter={setTierFilter}
-        plantAlertsLength={plantAlertsLength} criticalCount={criticalCount} warningCount={warningCount}
-        notifsLength={notifsLength} unreadLogsCount={unreadLogsCount}
-      />
+      {/* KPI summary cards — hidden on mobile where ControlConsole already displays identical counts and filters */}
+      <div className="hidden sm:block">
+        <KpiCards
+          activeView={activeView} tierFilter={tierFilter} setActiveView={setActiveView} setTierFilter={setTierFilter}
+          plantAlertsLength={plantAlertsLength} criticalCount={criticalCount} warningCount={warningCount}
+          notifsLength={notifsLength} unreadLogsCount={unreadLogsCount}
+        />
+      </div>
 
       <ControlConsole
         activeView={activeView} setActiveView={setActiveView} tierFilter={tierFilter} setTierFilter={setTierFilter}

@@ -423,17 +423,48 @@ export function useDashboardAlerts({
       });
     });
 
+    // Consolidate hourly gaps per (train_id, source_table) so a single train with
+    // multiple missed windows across 48h emits one summary alert per log type instead
+    // of flooding the Alerts feed with identical-looking cards.
+    const hourlyGapsByTrainSource = new Map<string, TrainHourlyGap[]>();
     trainHourlyGaps.forEach((g) => {
-      const tab = g.source_table === 'ro_train_readings' ? 'ro' : 'pretreat';
+      const key = `${g.train_id}|${g.source_table}`;
+      const list = hourlyGapsByTrainSource.get(key) ?? [];
+      list.push(g);
+      hourlyGapsByTrainSource.set(key, list);
+      // Clear legacy per-window alert IDs if any remain in memory
+      clearedConditionIds.push(`train-hourly-gap-${g.train_id}-${g.source_table}-${g.gap.gapStartAt}`);
+    });
+
+    hourlyGapsByTrainSource.forEach((group) => {
+      const sorted = [...group].sort(
+        (a, b) => new Date(b.gap.gapEndAt).getTime() - new Date(a.gap.gapEndAt).getTime(),
+      );
+      const primary = sorted[0];
+      const totalMissed = sorted.reduce((sum, item) => sum + item.gap.missedHours, 0);
+      const tab = primary.source_table === 'ro_train_readings' ? 'ro' : 'pretreat';
+      const label = tab === 'ro' ? 'RO Train' : 'Pre-Treatment';
+
+      const formatWindow = (item: TrainHourlyGap) => {
+        const start = new Date(item.gap.gapStartAt);
+        const end = new Date(new Date(item.gap.gapEndAt).getTime() - 1);
+        return `${format(start, 'MMM d')} ${format(start, 'HH:mm')}–${format(end, 'HH:mm')}`;
+      };
+
+      const description =
+        sorted.length === 1
+          ? `${label} reading not logged (${formatWindow(primary)}) — log why`
+          : `${label} readings not logged: ${sorted.slice(0, 2).map(formatWindow).join(', ')}${sorted.length > 2 ? ` +${sorted.length - 2} more` : ''} — log why`;
+
       storeAlerts.push({
-        id:          `train-hourly-gap-${g.train_id}-${g.source_table}-${g.gap.gapStartAt}`,
+        id:          `train-hourly-gap-${primary.train_id}-${primary.source_table}`,
         severity:    'warning',
-        title:       `Train ${g.train_number} — ${g.gap.missedHours} hr${g.gap.missedHours === 1 ? '' : 's'} missing`,
-        description: `${tab === 'ro' ? 'RO Train' : 'Pre-Treatment'} reading not logged from ${format(new Date(g.gap.gapStartAt), 'HH:mm')} to ${format(new Date(new Date(g.gap.gapEndAt).getTime() - 1), 'HH:mm')} — log why`,
+        title:       `Train ${primary.train_number} — ${totalMissed} hr${totalMissed === 1 ? '' : 's'} missing${sorted.length > 1 ? ` (${sorted.length} spans)` : ''}`,
+        description,
         source:      'RO Trains',
-        plantId:     g.plant_id,
+        plantId:     primary.plant_id,
         timestamp:   Date.now(),
-        linkPath:    `/ro-trains?tab=overview&plant=${g.plant_id}&train=${g.train_id}&log=1&logTab=${tab}&highlight=${encodeURIComponent(`gap:${g.gap.gapStartAt}`)}`,
+        linkPath:    `/ro-trains?tab=overview&plant=${primary.plant_id}&train=${primary.train_id}&log=1&logTab=${tab}&highlight=${encodeURIComponent(`gap:${primary.gap.gapStartAt}`)}`,
       });
     });
 

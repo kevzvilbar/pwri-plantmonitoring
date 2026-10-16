@@ -3,11 +3,10 @@ import { useTopBarState } from './useTopBarState';
 import { AlertPanel } from './AlertPanel';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
-import { Sheet, SheetTrigger, SheetContent } from '@/components/ui/sheet';
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent,
 } from '@/components/ui/dropdown-menu';
-import { useNavigate, NavLink } from 'react-router-dom';
+import { NavLink } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { SyncIndicator } from '@/components/SyncIndicator';
 import { Logomark } from '@/components/icons/Logomark';
@@ -22,7 +21,6 @@ export function TopBar({ onOpenSearch }: { onOpenSearch?: () => void } = {}) {
     setSelectedPlantId,
     visiblePlants,
     needsAssignment,
-    unreadCount,
     panelOpen,
     setPanelOpen,
     totalBadge,
@@ -124,51 +122,8 @@ export function TopBar({ onOpenSearch }: { onOpenSearch?: () => void } = {}) {
             </Button>
           )}
 
-          {isMobile ? (
-            <Sheet open={panelOpen} onOpenChange={setPanelOpen}>
-              <SheetTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  aria-label={totalBadge > 0 ? `Notifications (${totalBadge} unread)` : 'Notifications'}
-                  className={cn(
-                    'relative h-8.5 w-8.5 sm:h-9 sm:w-9 rounded-lg shrink-0',
-                    'hover:bg-white/10 focus-visible:ring-white/30',
-                    hasCritical
-                      ? 'text-danger'
-                      : plantAlerts.length > 0
-                        ? 'text-warn'
-                        : 'text-topbar-foreground hover:text-topbar-foreground',
-                  )}
-                >
-                  <Bell
-                    className={cn(
-                      'h-4 w-4 transition-colors',
-                      isRinging && 'animate-bell-ring-once',
-                    )}
-                  />
-                  {totalBadge > 0 && (
-                    <span
-                      className={cn(
-                        'absolute -top-0.5 -right-0.5 min-w-[16px] h-[16px] px-1',
-                        'flex items-center justify-center rounded-full',
-                        'text-3xs font-mono-num font-bold text-white leading-none',
-                        'ring-2 ring-topbar shadow-xs pointer-events-none',
-                        hasCritical ? 'bg-danger' : plantAlerts.length > 0 ? 'bg-warn' : 'bg-danger',
-                      )}
-                      aria-label={`${totalBadge} alerts`}
-                    >
-                      {totalBadge > 99 ? '99+' : totalBadge}
-                    </span>
-                  )}
-                </Button>
-              </SheetTrigger>
-              <SheetContent side="bottom" className="p-0 rounded-t-2xl max-h-[88vh] overflow-hidden border-t border-border/80">
-                <div className="w-12 h-1.5 bg-muted-foreground/30 rounded-full mx-auto my-2" />
-                <AlertPanel />
-              </SheetContent>
-            </Sheet>
-          ) : (
+          {/* Desktop Notification Bell (hidden on mobile where MobileBottomNav provides the dedicated Alerts tab) */}
+          {!isMobile && (
             <DropdownMenu open={panelOpen} onOpenChange={setPanelOpen}>
               <DropdownMenuTrigger asChild>
                 <Button
