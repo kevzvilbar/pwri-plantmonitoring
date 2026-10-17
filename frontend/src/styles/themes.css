@@ -115,7 +115,7 @@
     --kpi-meter:    38  92% 50%;    /* #f59e0b Amber      — Product Meter / Blending */
     --kpi-solar:    22  96% 52%;    /* #f97316 Orange     — Solar / Alert */
     --kpi-grid:     215 16% 47%;    /* #64748b Slate      — Grid / Neutral */
-    --kpi-chem:     158 64% 40%;    /* #10b981 Emerald    — Chemicals / NRW */
+    --kpi-chem:     189 96% 43%;    /* #06b6d4 Signal Cyan — Chemicals / Dosing */
 
     /* ── Charts (aligned with KPI palette) ──────────────────────── */
     --chart-1: 199 98% 48%;    /* Sky       — production volume */
@@ -516,7 +516,7 @@
     --kpi-meter:    38  85% 58%;
     --kpi-solar:    22  88% 60%;
     --kpi-grid:     215 12% 55%;
-    --kpi-chem:     158 55% 48%;
+    --kpi-chem:     189 85% 50%;
 
     /* Plant Topology node colors (dark) — same hue per kind as the
        light values above, remapped to a dark tinted card + brighter

@@ -27,7 +27,7 @@ const SIZE = 195;
 
 const POWER_COLOR = 'hsl(var(--chart-6))';
 const SOLAR_COLOR = 'hsl(var(--kpi-solar))';
-const CHEM_COLOR = 'hsl(var(--highlight))';
+const CHEM_COLOR = 'hsl(var(--kpi-chem))';
 const FILTER_COLOR = 'hsl(var(--chart-4))';
 
 function peso(n: number) {
@@ -48,15 +48,13 @@ function visibleSpan(d: RNode, focus: RNode) {
   return { x0, x1, y0: d.y0 - focus.depth, y1: d.y1 - focus.depth };
 }
 
-function categorySwatchStyle(name: string): string {
-  if (name === 'Solar') return SOLAR_COLOR;
-  if (name === 'Grid' || name === 'Power') return POWER_COLOR;
-  if (name === 'Chemicals') return CHEM_COLOR;
-  return FILTER_COLOR;
-}
-
-function categoryIcon(name: string) {
-  if (name === 'Power' || name === 'Grid' || name === 'Solar') {
+function categoryIcon(node: RNode) {
+  let rootCategory = node;
+  while (rootCategory.depth > 1 && rootCategory.parent) {
+    rootCategory = rootCategory.parent as RNode;
+  }
+  const name = rootCategory.data.name;
+  if (name === 'Power' || node.data.name === 'Grid' || node.data.name === 'Solar') {
     return <Zap className="h-3.5 w-3.5" />;
   }
   if (name === 'Chemicals') {
@@ -277,7 +275,7 @@ export function CostSunburst({ plantIds }: Props) {
             focusChildren.map((c) => {
               const clickable = !!c.children?.length;
               const pct = focusTotal ? ((c.value ?? 0) / focusTotal) * 100 : 0;
-              const swatchColor = categorySwatchStyle(c.data.name);
+              const swatchColor = colorFor(c);
 
               return (
                 <div
@@ -295,7 +293,7 @@ export function CostSunburst({ plantIds }: Props) {
                         className="h-5 w-5 rounded-md flex items-center justify-center text-white shrink-0 shadow-2xs"
                         style={{ background: swatchColor }}
                       >
-                        {categoryIcon(c.data.name)}
+                        {categoryIcon(c)}
                       </div>
                       <span className="text-xs font-bold text-foreground truncate flex items-center gap-0.5">
                         <span>{c.data.name}</span>

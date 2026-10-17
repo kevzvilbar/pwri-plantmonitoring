@@ -35,7 +35,7 @@ export function ProductionCostDesktopControls({
         <button
           onClick={() => setShowTotalCostLine(!showTotalCostLine)}
           title="Toggle Production Cost (Power + Chem) line"
-          style={showTotalCostLine ? { borderColor: C_TOTAL_COST, color: C_TOTAL_COST, backgroundColor: `${C_TOTAL_COST}18` } : undefined}
+          style={showTotalCostLine ? { borderColor: C_TOTAL_COST, color: C_TOTAL_COST, backgroundColor: `color-mix(in srgb, ${C_TOTAL_COST} 12%, transparent)` } : undefined}
           className={[
             'h-5 px-1.5 rounded text-2xs font-medium transition-colors leading-none border',
             showTotalCostLine
@@ -47,7 +47,7 @@ export function ProductionCostDesktopControls({
       <button
         onClick={() => setShowPowerCostLine(!showPowerCostLine)}
         title="Toggle Power Cost (₱/m³) line"
-        style={showPowerCostLine ? { borderColor: C_POWER_COST, color: C_POWER_COST, backgroundColor: `${C_POWER_COST}18` } : undefined}
+        style={showPowerCostLine ? { borderColor: C_POWER_COST, color: C_POWER_COST, backgroundColor: `color-mix(in srgb, ${C_POWER_COST} 12%, transparent)` } : undefined}
         className={[
           'h-5 px-1.5 rounded text-2xs font-medium transition-colors leading-none border',
           showPowerCostLine
@@ -58,7 +58,7 @@ export function ProductionCostDesktopControls({
       <button
         onClick={() => setShowChemCostLine(!showChemCostLine)}
         title="Toggle Chemical Cost (₱/m³) line"
-        style={showChemCostLine ? { borderColor: C_CHEM_COST, color: C_CHEM_COST, backgroundColor: `${C_CHEM_COST}18` } : undefined}
+        style={showChemCostLine ? { borderColor: C_CHEM_COST, color: C_CHEM_COST, backgroundColor: `color-mix(in srgb, ${C_CHEM_COST} 12%, transparent)` } : undefined}
         className={[
           'h-5 px-1.5 rounded text-2xs font-medium transition-colors leading-none border',
           showChemCostLine

@@ -271,10 +271,10 @@ export function Rollup() {
             {/* Chemical Cost */}
             <StatCard
               icon={FlaskConical}
-              accent="text-highlight"
+              accent="text-kpi-chem"
               label="Chemical OPEX"
               value={`₱${fmtNum(totals.chem, 0)}`}
-              subtext={<><span className="font-semibold text-highlight font-numeral">{fmtNum(totals.chemPct, 1)}%</span> of total OPEX</>}
+              subtext={<><span className="font-semibold text-kpi-chem font-numeral">{fmtNum(totals.chemPct, 1)}%</span> of total OPEX</>}
             />
 
             {/* Power Cost */}
@@ -333,8 +333,8 @@ export function Rollup() {
                 <BarChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                   <defs>
                     <linearGradient id="costsChemFill" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="hsl(var(--highlight))" stopOpacity={0.95} />
-                      <stop offset="100%" stopColor="hsl(var(--highlight))" stopOpacity={0.6} />
+                      <stop offset="5%" stopColor="hsl(var(--kpi-chem))" stopOpacity={0.95} />
+                      <stop offset="100%" stopColor="hsl(var(--kpi-chem))" stopOpacity={0.6} />
                     </linearGradient>
                     <linearGradient id="costsPowerFill" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor="hsl(var(--chart-6))" stopOpacity={0.95} />

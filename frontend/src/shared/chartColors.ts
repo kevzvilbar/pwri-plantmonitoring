@@ -44,7 +44,7 @@ export const C_FILTER_BAG       = 'hsl(var(--filter-bag))';
  */
 export const C_TOTAL_COST = 'hsl(var(--chart-1, 199 98% 48%))'; // Sky — Prod Cost
 export const C_POWER_COST = 'hsl(var(--warn, 38 92% 50%))';      // Amber — Power Cost
-export const C_CHEM_COST  = 'hsl(var(--chart-4, 258 90% 66%))';  // Violet — Chemical Cost
+export const C_CHEM_COST  = 'hsl(var(--kpi-chem, 189 96% 43%))'; // Cyan — Chemical Cost
 
 /**
  * Standardized Instrument Panel tooltip style for Recharts
