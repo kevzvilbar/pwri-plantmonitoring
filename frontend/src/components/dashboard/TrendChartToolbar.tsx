@@ -6,6 +6,7 @@ import { RangeAndMonthlyPicker } from './RangeAndMonthlyPicker';
 interface TrendChartToolbarProps {
   metric: string;
   title?: string;
+  compact?: boolean;
   range: RangeKey;
   from: string;
   to: string;
@@ -23,6 +24,7 @@ interface TrendChartToolbarProps {
 export function TrendChartToolbar({
   metric,
   title,
+  compact = false,
   range,
   from,
   to,
@@ -52,8 +54,8 @@ export function TrendChartToolbar({
         </div>
       )}
 
-      {/* ── Element B: Range & Monthly picker ── */}
-      <div className="flex items-center min-w-0 max-w-full overflow-x-auto no-scrollbar py-0.5">
+      {/* ── Element B: Range & Monthly picker (hidden on inline compact dashboard cards where the sticky DashboardSectionNav range bar already controls the range) ── */}
+      <div className={compact ? 'hidden' : 'hidden md:flex items-center min-w-0 max-w-full overflow-x-auto no-scrollbar py-0.5'}>
         <RangeAndMonthlyPicker
           range={range}
           onRangeChange={onRangeChange}

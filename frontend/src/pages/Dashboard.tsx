@@ -183,9 +183,9 @@ export default function Dashboard() {
       } else if (viewMode === 'popup') {
         setModal({ metric, title });
       } else {
-        // inline → keep inline mode; just focus the clicked metric's chart in place.
-        // Do NOT persist a switch to 'sections' — that rewrites the saved preference.
-        setExpandedMetric(metric);
+        // inline → keep inline mode; toggle the clicked metric's chart in place
+        // (on mobile this expands/collapses the tapped KPI chart without rewriting saved preference — P5-9).
+        setExpandedMetric((prev) => (prev === metric ? null : metric));
       }
     };
   };
@@ -307,10 +307,15 @@ export default function Dashboard() {
         />
       </div>
 
-      <PlantHealthStrip
-        plantIds={plantIds}
-        onSelectPlant={(pid) => navigate(`/plants/${pid}`)}
-      />
+      <div className={cn(selectedPlantId && 'hidden md:block')}>
+        <PlantHealthStrip
+          plantIds={plantIds}
+          onSelectPlant={(pid) => navigate(`/plants/${pid}`)}
+        />
+      </div>
+
+      {/* Ops-first order: Action Center (today's live tasks) sits above historical range & domain clusters */}
+      <ActionCenter plantIds={plantIds} />
 
       {/* Unified sticky control bar: sections + range + view-mode (single source) */}
       <DashboardSectionNav
@@ -325,9 +330,6 @@ export default function Dashboard() {
         chartMonth={chartMonth}
         onMonthlyPeriodChange={setChartMonthlyPeriod}
       />
-
-      {/* Ops-first order: Action → Overview (water flow) → Quality → Cost → Health → Trust */}
-      <ActionCenter plantIds={plantIds} />
 
       {/* Mobile Domain Cluster Switcher: avoids 4,500px vertical scroll on phones */}
       <div

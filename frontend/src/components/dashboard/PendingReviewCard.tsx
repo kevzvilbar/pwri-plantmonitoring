@@ -69,8 +69,8 @@ export function PendingReviewCard({ plantIds }: Props) {
 
   if (pendingCount === 0) {
     return (
-      <Card className="p-3 flex flex-col justify-between h-full space-y-2" data-testid="pending-review-card">
-        <div className="space-y-2">
+      <Card className="p-2.5 sm:p-3 flex flex-col justify-between h-full space-y-0 sm:space-y-2" data-testid="pending-review-card">
+        <div className="space-y-0 sm:space-y-2">
           <div className="flex items-center gap-2">
             <FileSearch className="h-4 w-4 text-emerald-500 dark:text-emerald-400 shrink-0" aria-hidden />
             <span className="text-xs font-medium text-foreground">Pending review</span>
@@ -80,12 +80,12 @@ export function PendingReviewCard({ plantIds }: Props) {
             </span>
           </div>
 
-          <p className="text-xs text-slate-400 dark:text-slate-300 leading-relaxed">
+          <p className="hidden sm:block text-xs text-slate-400 dark:text-slate-300 leading-relaxed">
             No readings or corrections awaiting review. All operator entries have been verified and approved.
           </p>
         </div>
 
-        <div className="flex justify-end pt-1 border-t border-border/40">
+        <div className="hidden sm:flex justify-end pt-1 border-t border-border/40">
           <Button
             variant="link"
             size="sm"

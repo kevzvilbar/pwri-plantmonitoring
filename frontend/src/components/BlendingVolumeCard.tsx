@@ -353,13 +353,13 @@ export function BlendingVolumeCard({ plantIds }: Props) {
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-2 mb-3">
+      <div className={`grid grid-cols-3 gap-2 mb-3 ${total === 0 ? 'hidden sm:grid' : ''}`}>
         <KpiTile label="Today" value={fmtNum(today, 0)} testId="blending-today" />
         <KpiTile label={`Total ${days}d`} value={fmtNum(total, 0)} testId="blending-total" />
         <KpiTile label="Daily avg" value={fmtNum(dailyAvg, 0)} testId="blending-avg" />
       </div>
 
-      <div className="relative h-40">
+      <div className={`relative ${total === 0 ? 'h-32 sm:h-40' : 'h-40'}`}>
         <ResponsiveContainer width="100%" height="100%">
           <BarChart
             data={chartData}

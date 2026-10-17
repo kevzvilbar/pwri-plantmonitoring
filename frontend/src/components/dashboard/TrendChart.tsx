@@ -91,6 +91,7 @@ export function TrendChart({
       <TrendChartToolbar
         metric={metric}
         title={title}
+        compact={compact}
         range={s.range}
         from={s.from}
         to={s.to}

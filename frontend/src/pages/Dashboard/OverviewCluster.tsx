@@ -1,7 +1,8 @@
-import React from 'react';
-import { Receipt, Droplet, Waves, Split } from 'lucide-react';
+import React, { useState } from 'react';
+import { Receipt, Droplet, Waves, Split, ChevronDown, ChevronUp } from 'lucide-react';
 import { RawWaterIcon } from '@/components/icons/water-icons';
 import { fmtNum } from '@/lib/calculations';
+import { cn } from '@/lib/utils';
 import { StatCard, ClusterHeader } from '@/components/dashboard/StatCard';
 import { NRWGaugeCard } from '@/components/dashboard/NRWGaugeCard';
 import { ClusterCharts } from '@/components/dashboard/TrendChartWrappers';
@@ -31,6 +32,8 @@ export function OverviewCluster({
   consumption, dConsumption, nrw, yNrw, rawWaterVol, dRawWater, roFlowVol, dRoFlow, blending,
   viewMode, expandedMetric, plantIds, onMetricClick,
 }: OverviewClusterProps) {
+  const [showMobileDeepDive, setShowMobileDeepDive] = useState(false);
+
   return (
     <section id="overview-cluster" className="scroll-mt-40 space-y-2.5">
       <ClusterHeader icon={Droplet} title="Overview" accent="text-primary" subtitle="Distribution & Sources" />
@@ -75,24 +78,41 @@ export function OverviewCluster({
           nrw={nrw}
           yNrw={yNrw}
           onClick={onMetricClick('nrw', 'NRW Trend')}
+          className="col-span-2 md:col-span-1"
         />
       </div>
 
       <ClusterCharts metrics={OVERVIEW_CHART_METRICS} viewMode={viewMode} expandedMetric={expandedMetric} plantIds={plantIds} clusterId="overview" />
+
+      {/* Mobile progressive disclosure toggle for secondary Water Balance / Reconciliation / Blending breakdown */}
+      <button
+        type="button"
+        onClick={() => setShowMobileDeepDive((v) => !v)}
+        className="md:hidden w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl bg-muted/40 hover:bg-muted/60 border border-border/60 text-xs font-semibold text-foreground transition-colors cursor-pointer"
+      >
+        <span>Water Balance, Reconciliation &amp; Blending (3)</span>
+        <span className="flex items-center gap-1 text-2xs text-primary">
+          <span>{showMobileDeepDive ? 'Hide' : 'Expand'}</span>
+          {showMobileDeepDive ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+        </span>
+      </button>
+
       {/* Reconciliation card only ever needs to show a handful of plant rows,
           so at desktop widths it gets a quarter of the row (half of its old
           50/50 share) and the Water balance waterfall gets the rest. Both
           still stack full-width below `lg`. */}
-      <div className="grid gap-2.5 sm:gap-3 grid-cols-1 lg:grid-cols-4 items-stretch">
-        <div className="lg:col-span-3">
-          <WaterBalanceBridgeCard plantIds={plantIds} />
+      <div className={cn(!showMobileDeepDive && 'hidden md:block', 'space-y-2.5')}>
+        <div className="grid gap-2.5 sm:gap-3 grid-cols-1 lg:grid-cols-4 items-stretch">
+          <div className="lg:col-span-3">
+            <WaterBalanceBridgeCard plantIds={plantIds} />
+          </div>
+          <div className="lg:col-span-1">
+            <ReconciliationHealthCard plantIds={plantIds} />
+          </div>
         </div>
-        <div className="lg:col-span-1">
-          <ReconciliationHealthCard plantIds={plantIds} />
-        </div>
-      </div>
 
-      <BlendingVolumeCard plantIds={plantIds} />
+        <BlendingVolumeCard plantIds={plantIds} />
+      </div>
     </section>
   );
 }
