@@ -281,8 +281,8 @@ export default function Dashboard() {
           specificPower={powerStats.pv}
           openIncidentsCount={openIncidentCount}
           unacknowledgedAlertsCount={alertBadgeCount}
-          trainsCount={qualityStats.qualityTrainIds.length}
-          onlineTrainsCount={qualityStats.roByTrain.length}
+          trainsCount={qualityStats.qualityTrainIds?.length ?? 0}
+          onlineTrainsCount={qualityStats.roByTrain?.length ?? 0}
           onOpenLogReading={() => navigate('/operations?action=log')}
           onViewIncidents={() => navigate('/incidents')}
           onViewAlerts={() => navigate('/alerts')}

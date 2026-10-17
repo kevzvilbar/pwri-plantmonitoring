@@ -194,9 +194,15 @@ BEGIN
 END;
 $$;
 
+REVOKE ALL ON FUNCTION public.get_dashboard_aggregates(uuid[], timestamptz, timestamptz, timestamptz, timestamptz, date) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.get_dashboard_aggregates(uuid[], timestamptz, timestamptz, timestamptz, timestamptz, date) TO authenticated, service_role;
 
 -- ── 2. Create latest_power_readings_before RPC ────────────────────────────────
+-- Must DROP first because 20260930000002 defined parameter `target_dt` and a
+-- 3-column RETURNS TABLE signature; PostgreSQL 42P13 forbids changing parameter
+-- names or return types via CREATE OR REPLACE FUNCTION alone.
+
+DROP FUNCTION IF EXISTS public.latest_power_readings_before(uuid[], timestamptz);
 
 CREATE OR REPLACE FUNCTION public.latest_power_readings_before(
   plant_ids uuid[],
@@ -231,6 +237,7 @@ AS $$
   ORDER BY pr.plant_id, pr.reading_datetime DESC;
 $$;
 
+REVOKE ALL ON FUNCTION public.latest_power_readings_before(uuid[], timestamptz) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.latest_power_readings_before(uuid[], timestamptz) TO authenticated, service_role;
 
 -- ── 3. Partial indexes for negative daily_volume review inbox ─────────────────
