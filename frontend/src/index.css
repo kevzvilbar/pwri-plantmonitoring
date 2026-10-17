@@ -77,21 +77,21 @@
   /* ── Dark Mode Refined Custom Scrollbars ────────────────────────── */
   .dark {
     scrollbar-width: thin;
-    scrollbar-color: rgba(255, 255, 255, 0.15) rgba(255, 255, 255, 0.02);
+    scrollbar-color: hsl(var(--border)) hsl(var(--background));
   }
   .dark ::-webkit-scrollbar {
     width: 6px;
     height: 6px;
   }
   .dark ::-webkit-scrollbar-track {
-    background: rgba(255, 255, 255, 0.02);
+    background: hsl(var(--background));
   }
   .dark ::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.15);
+    background: hsl(var(--border));
     border-radius: 9999px;
   }
   .dark ::-webkit-scrollbar-thumb:hover {
-    background: rgba(255, 255, 255, 0.28);
+    background: hsl(var(--muted-foreground) / 0.45);
   }
 
   /* ── Photographic Media Dimming in Dark Mode (Anti-Glare) ──────── */
@@ -101,10 +101,14 @@
     transition: filter 200ms ease;
   }
 
-  /* ── Calibrated Selection Styling in Dark Mode ──────────────────── */
+  /* ── Calibrated Selection Styling (Theme-Aware) ─────────────────── */
+  ::selection {
+    background-color: hsl(var(--primary) / 0.22);
+    color: hsl(var(--foreground));
+  }
   .dark ::selection {
-    background-color: rgba(59, 130, 246, 0.3);
-    color: #bfdbfe;
+    background-color: hsl(var(--primary) / 0.32);
+    color: hsl(var(--foreground));
   }
 
   /* ── Number inputs ─────────────────────────────────────────────── */

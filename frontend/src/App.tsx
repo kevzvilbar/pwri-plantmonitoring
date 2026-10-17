@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect } from "react";
+import { lazy, Suspense, useEffect, useRef } from "react";
 import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
 import { queryClient } from "@/lib/queryClient";
 import {
@@ -18,6 +18,7 @@ import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AppShell } from "@/components/AppShell";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { useThemeStore } from "@/store/themeStore";
+import { getThemeById } from "@/lib/themes";
 
 const Auth = lazy(() => import("./pages/Auth"));
 const Onboarding = lazy(() => import("./pages/Onboarding"));
@@ -52,10 +53,24 @@ const RouteFallback = () => (
   <AppLoading className="h-[60vh] w-full text-sm text-muted-foreground" />
 );
 
-/** Applies data-theme and .dark to <html> with fluid view transitions when supported. */
+/** Applies data-theme, .dark, color-scheme, and <meta name="theme-color"> to <html>. */
 function ThemeEffect() {
   const colorTheme = useThemeStore((s) => s.colorTheme);
   const darkMode = useThemeStore((s) => s.darkMode);
+  const themeMode = useThemeStore((s) => s.themeMode);
+  const syncSystemDarkMode = useThemeStore((s) => s.syncSystemDarkMode);
+  const isFirstMount = useRef(true);
+
+  useEffect(() => {
+    if (themeMode !== 'system' || typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+      return;
+    }
+    const mql = window.matchMedia('(prefers-color-scheme: dark)');
+    syncSystemDarkMode(mql.matches);
+    const handler = (e: MediaQueryListEvent) => syncSystemDarkMode(e.matches);
+    mql.addEventListener('change', handler);
+    return () => mql.removeEventListener('change', handler);
+  }, [themeMode, syncSystemDarkMode]);
 
   useEffect(() => {
     const applyTheme = () => {
@@ -66,16 +81,32 @@ function ThemeEffect() {
         root.removeAttribute('data-theme');
       }
       root.classList.toggle('dark', darkMode);
+      root.style.colorScheme = darkMode ? 'dark' : 'light';
+
+      const themeMeta = getThemeById(colorTheme);
+      const metaColor = darkMode
+        ? (themeMeta.themeColorDark ?? themeMeta.swatches[0])
+        : (themeMeta.themeColorLight ?? themeMeta.swatches[0]);
+      const metaEl = document.querySelector('meta[name="theme-color"]');
+      if (metaEl && metaColor) {
+        metaEl.setAttribute('content', metaColor);
+      }
     };
 
+    const prefersReducedMotion =
+      typeof window !== 'undefined' &&
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
     const doc = document as Document & { startViewTransition?: (cb: () => void) => void };
-    if (typeof doc.startViewTransition === 'function') {
+    if (!isFirstMount.current && !prefersReducedMotion && typeof doc.startViewTransition === 'function') {
       doc.startViewTransition(() => {
         applyTheme();
       });
     } else {
       applyTheme();
     }
+    isFirstMount.current = false;
   }, [colorTheme, darkMode]);
 
   return null;

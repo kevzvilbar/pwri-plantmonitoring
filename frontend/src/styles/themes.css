@@ -1535,20 +1535,43 @@
 
 /* ── Theme: Outdoor High-Contrast ───────────────────────────────────────────── */
 :root[data-theme="outdoor-contrast"] {
+  --surface-ground:     0 0% 94%;
+  --surface-base:       0 0% 100%;
   --surface-recessed:   0 0% 90%;
-  --primary:            201 96% 32%;
+  --surface-raised:     0 0% 100%;
+  --surface-overlay:    0 0% 100%;
+  --surface-dialog:     0 0% 100%;
+  --border-hairline:    rgba(0, 0, 0, 0.35);
+
+  --primary:            201 96% 28%;
   --primary-foreground: 0 0% 100%;
-  --primary-soft:       201 50% 90%;
-  --primary-glow:       201 90% 40%;
-  --ring:               201 96% 32%;
+  --primary-soft:       201 55% 88%;
+  --primary-glow:       201 90% 36%;
+  --ring:               201 96% 28%;
 
-  --accent:             160 84% 30%;
+  --accent:             160 84% 26%;
   --accent-foreground:  0 0% 100%;
-  --accent-soft:        160 50% 90%;
+  --accent-soft:        160 55% 88%;
+  --ok:                 160 84% 26%;
+  --ok-foreground:      0 0% 100%;
+  --ok-soft:            160 55% 88%;
 
-  --highlight:          201 96% 32%;
+  --warn:               32 95% 38%;
+  --warn-foreground:    0 0% 100%;
+  --warn-soft:          38 90% 88%;
+
+  --danger:             351 85% 38%;
+  --danger-foreground:  0 0% 100%;
+  --danger-soft:        351 75% 90%;
+  --destructive:        351 85% 38%;
+  --destructive-foreground: 0 0% 100%;
+
+  --info:               201 96% 30%;
+  --info-soft:          201 70% 88%;
+
+  --highlight:          201 96% 28%;
   --highlight-foreground: 0 0% 100%;
-  --highlight-soft:     201 50% 90%;
+  --highlight-soft:     201 55% 88%;
 
   --background:         0 0% 100%;
   --foreground:         0 0% 0%;
@@ -1556,9 +1579,15 @@
   --card-foreground:    0 0% 0%;
   --popover:            0 0% 100%;
   --popover-foreground: 0 0% 0%;
-  --muted:              0 0% 94%;
-  --muted-foreground:   0 0% 20%;
-  --border:             0 0% 30%;
+  --secondary:          0 0% 92%;
+  --secondary-foreground: 0 0% 0%;
+  --muted:              0 0% 92%;
+  --muted-foreground:   0 0% 18%;
+  --hover:              0 0% 88%;
+  --hover-foreground:   0 0% 0%;
+  --border:             0 0% 28%;
+  --divider-strong:     0 0% 15%;
+  --input:              0 0% 25%;
 
   --topbar:             0 0% 0%;
   --topbar-foreground:  0 0% 100%;
@@ -1579,18 +1608,28 @@
 }
 
 :root.dark[data-theme="outdoor-contrast"] {
+  --surface-ground:     0 0% 0%;
+  --surface-base:       0 0% 0%;
   --surface-recessed:   0 0% 0%;
-  --primary:            201 96% 50%;
+  --surface-raised:     0 0% 7%;
+  --surface-overlay:    0 0% 10%;
+  --surface-dialog:     0 0% 12%;
+  --border-hairline:    rgba(255, 255, 255, 0.35);
+
+  --primary:            201 96% 54%;
   --primary-foreground: 0 0% 0%;
   --primary-soft:       201 50% 18%;
-  --primary-glow:       201 96% 50%;
-  --ring:               201 96% 50%;
+  --primary-glow:       201 96% 54%;
+  --ring:               201 96% 54%;
 
-  --accent:             160 84% 45%;
+  --accent:             160 84% 48%;
   --accent-foreground:  0 0% 0%;
   --accent-soft:        160 50% 18%;
+  --ok:                 160 84% 48%;
+  --ok-foreground:      0 0% 0%;
+  --ok-soft:            160 50% 18%;
 
-  --highlight:          201 96% 50%;
+  --highlight:          201 96% 54%;
   --highlight-foreground: 0 0% 0%;
   --highlight-soft:     201 50% 18%;
 
@@ -1600,9 +1639,15 @@
   --card-foreground:    0 0% 100%;
   --popover:            0 0% 10%;
   --popover-foreground: 0 0% 100%;
-  --muted:              0 0% 15%;
+  --secondary:          0 0% 14%;
+  --secondary-foreground: 0 0% 100%;
+  --muted:              0 0% 14%;
   --muted-foreground:   0 0% 85%;
-  --border:             0 0% 40%;
+  --hover:              0 0% 18%;
+  --hover-foreground:   0 0% 100%;
+  --border:             0 0% 42%;
+  --divider-strong:     0 0% 60%;
+  --input:              0 0% 10%;
 
   --topbar:             0 0% 0%;
   --topbar-foreground:  0 0% 100%;
@@ -1610,16 +1655,49 @@
 
   --sidebar-background: 0 0% 0%;
   --sidebar-foreground: 0 0% 100%;
-  --sidebar-primary:    201 96% 50%;
+  --sidebar-primary:    201 96% 54%;
   --sidebar-primary-foreground: 0 0% 0%;
   --sidebar-accent:     0 0% 15%;
   --sidebar-accent-foreground: 0 0% 100%;
   --sidebar-border:     0 0% 30%;
-  --sidebar-ring:       201 96% 50%;
+  --sidebar-ring:       201 96% 54%;
 
   --gradient-stat:      linear-gradient(135deg, hsl(0 0% 0%) 0%, hsl(201 90% 15%) 100%);
   --gradient-accent:    linear-gradient(135deg, hsl(201 96% 40%) 0%, hsl(160 84% 35%) 100%);
   --gradient-highlight: linear-gradient(135deg, hsl(160 84% 35%) 0%, hsl(201 96% 40%) 100%);
+}
+
+/* ── Universal Surface & Token Harmonization for Custom Palettes ─────────────
+   Ensures the 5-tier elevation ladder (surface-ground/base/raised/overlay/dialog),
+   secondary/hover interactive tokens, and form inputs automatically inherit
+   the active [data-theme] palette rather than falling back to Ocean Teal's
+   default blue-grey surfaces. */
+:root[data-theme]:not([data-theme="outdoor-contrast"]) {
+  --surface-ground:       var(--muted);
+  --surface-base:         var(--background);
+  --surface-raised:       var(--card);
+  --surface-overlay:      var(--popover);
+  --surface-dialog:       var(--popover);
+  --foreground:           var(--card-foreground);
+  --secondary:            var(--muted);
+  --secondary-foreground: var(--card-foreground);
+  --hover:                var(--muted);
+  --hover-foreground:     var(--card-foreground);
+  --input:                var(--border);
+}
+
+:root.dark[data-theme]:not([data-theme="outdoor-contrast"]) {
+  --surface-ground:       var(--surface-recessed);
+  --surface-base:         var(--background);
+  --surface-raised:       var(--card);
+  --surface-overlay:      var(--popover);
+  --surface-dialog:       var(--popover);
+  --foreground:           var(--card-foreground);
+  --secondary:            var(--muted);
+  --secondary-foreground: var(--card-foreground);
+  --hover:                var(--muted);
+  --hover-foreground:     var(--card-foreground);
+  --input:                var(--surface-recessed);
 }
 }
 

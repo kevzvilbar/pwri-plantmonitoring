@@ -20,6 +20,8 @@ import { useAuth } from '@/hooks/useAuth';
 import { ThemeSelector } from '@/components/ThemeSelector';
 import { SyncIndicator } from '@/components/SyncIndicator';
 import { usePwaUpdate } from '@/lib/pwaUpdate';
+import { useThemeStore } from '@/store/themeStore';
+import { getThemeById } from '@/lib/themes';
 import { MobileActionFab } from './MobileActionFab';
 import {
   Sheet, 
@@ -45,6 +47,14 @@ export function MobileBottomNav() {
   const { profile, roles, isAdmin, isManager } = useAuth();
   const groups = useNavGroups();
   const { appVersion, buildDate, updateAvailable, isChecking, checkForUpdate, applyUpdate } = usePwaUpdate();
+  const colorTheme = useThemeStore((s) => s.colorTheme);
+  const darkMode = useThemeStore((s) => s.darkMode);
+  const themeMode = useThemeStore((s) => s.themeMode);
+  const sunlightMode = useThemeStore((s) => s.sunlightMode);
+  const activeThemeMeta = getThemeById(colorTheme);
+  const activeThemeLabel = sunlightMode
+    ? 'Sunlight'
+    : `${activeThemeMeta.name} · ${themeMode === 'system' ? 'Auto' : darkMode ? 'Dark' : 'Light'}`;
 
   const isOperatorOnly = !isAdmin && !isManager && roles.includes('Operator');
 
@@ -295,12 +305,16 @@ export function MobileBottomNav() {
                     align="end"
                     trigger={
                       <button className="flex items-center justify-between w-full px-3 py-2.5 rounded-xl text-xs bg-muted/40 hover:bg-muted text-foreground transition-colors cursor-pointer text-left">
-                        <span className="flex items-center gap-2.5">
+                        <span className="flex items-center gap-2.5 min-w-0">
                           <Palette className="h-4 w-4 text-primary shrink-0" />
-                          <span>Theme &amp; Appearance</span>
+                          <span className="truncate">Theme &amp; Appearance</span>
                         </span>
-                        <span className="text-3xs text-muted-foreground font-medium px-2 py-0.5 rounded-full bg-card border border-border/60">
-                          Change
+                        <span className="flex items-center gap-1.5 text-3xs text-muted-foreground font-medium px-2 py-0.5 rounded-full bg-card border border-border/60 shrink-0">
+                          <span
+                            className="w-2 h-2 rounded-full shrink-0"
+                            style={{ background: activeThemeMeta.swatches[1] }}
+                          />
+                          <span>{activeThemeLabel}</span>
                         </span>
                       </button>
                     }

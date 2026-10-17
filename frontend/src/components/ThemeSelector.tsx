@@ -1,4 +1,4 @@
-import { Palette, Check, Moon, Sun, SunMedium } from 'lucide-react';
+import { Palette, Check, Moon, Sun, SunMedium, Monitor } from 'lucide-react';
 import { useThemeStore } from '@/store/themeStore';
 import { COLOR_THEMES } from '@/lib/themes';
 import { Button } from '@/components/ui/button';
@@ -23,11 +23,13 @@ export function ThemeSelector({
   const colorTheme = useThemeStore((s) => s.colorTheme);
   const setColorTheme = useThemeStore((s) => s.setColorTheme);
   const darkMode = useThemeStore((s) => s.darkMode);
-  const setDarkMode = useThemeStore((s) => s.setDarkMode);
+  const themeMode = useThemeStore((s) => s.themeMode);
+  const setThemeMode = useThemeStore((s) => s.setThemeMode);
   const sunlightMode = useThemeStore((s) => s.sunlightMode);
   const toggleSunlightMode = useThemeStore((s) => s.toggleSunlightMode);
 
   const currentThemeObj = COLOR_THEMES.find(t => t.id === colorTheme) || COLOR_THEMES[0];
+  const activeMode = themeMode ?? (darkMode ? 'dark' : 'light');
 
   return (
     <Popover>
@@ -75,33 +77,56 @@ export function ThemeSelector({
           </span>
         </div>
 
-        {/* Segmented Light / Dark Mode Toggle */}
-        <div className="p-1 rounded-xl bg-muted/60 border border-border/50 grid grid-cols-2 gap-1">
+        {/* Segmented Light / Dark / System Mode Toggle */}
+        <div
+          className="p-1 rounded-xl bg-muted/60 border border-border/50 grid grid-cols-3 gap-1"
+          role="radiogroup"
+          aria-label="Appearance mode"
+        >
           <button
             type="button"
-            onClick={() => setDarkMode(false)}
+            role="radio"
+            aria-checked={activeMode === 'light'}
+            onClick={() => setThemeMode('light')}
             className={cn(
-              'h-8 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all',
-              !darkMode
+              'h-8 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer',
+              activeMode === 'light'
                 ? 'bg-card text-foreground shadow-xs border border-border/80'
                 : 'text-muted-foreground hover:text-foreground',
             )}
           >
-            <Sun className="h-3.5 w-3.5 text-amber-500" />
-            <span>Light Mode</span>
+            <Sun className="h-3.5 w-3.5 text-warn" />
+            <span>Light</span>
           </button>
           <button
             type="button"
-            onClick={() => setDarkMode(true)}
+            role="radio"
+            aria-checked={activeMode === 'dark'}
+            onClick={() => setThemeMode('dark')}
             className={cn(
-              'h-8 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all',
-              darkMode
+              'h-8 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer',
+              activeMode === 'dark'
                 ? 'bg-card text-foreground shadow-xs border border-border/80'
                 : 'text-muted-foreground hover:text-foreground',
             )}
           >
-            <Moon className="h-3.5 w-3.5 text-sky-400" />
-            <span>Dark Mode</span>
+            <Moon className="h-3.5 w-3.5 text-info" />
+            <span>Dark</span>
+          </button>
+          <button
+            type="button"
+            role="radio"
+            aria-checked={activeMode === 'system'}
+            onClick={() => setThemeMode('system')}
+            className={cn(
+              'h-8 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer',
+              activeMode === 'system'
+                ? 'bg-card text-foreground shadow-xs border border-border/80'
+                : 'text-muted-foreground hover:text-foreground',
+            )}
+          >
+            <Monitor className="h-3.5 w-3.5 text-primary" />
+            <span>System</span>
           </button>
         </div>
 
@@ -109,15 +134,16 @@ export function ThemeSelector({
         <button
           type="button"
           onClick={toggleSunlightMode}
+          aria-pressed={sunlightMode}
           className={cn(
-            'w-full py-2 px-3 rounded-xl border text-xs font-semibold flex items-center justify-between transition-all',
+            'w-full py-2 px-3 rounded-xl border text-xs font-semibold flex items-center justify-between transition-all cursor-pointer',
             sunlightMode
-              ? 'bg-amber-500/15 border-amber-500/60 text-foreground'
+              ? 'bg-warn/15 border-warn/60 text-foreground'
               : 'bg-muted/40 hover:bg-muted border-border/50 text-muted-foreground hover:text-foreground'
           )}
         >
           <div className="flex items-center gap-2">
-            <SunMedium className={cn("h-4 w-4", sunlightMode ? "text-amber-500" : "text-muted-foreground")} />
+            <SunMedium className={cn("h-4 w-4", sunlightMode ? "text-warn" : "text-muted-foreground")} />
             <div className="text-left">
               <p className="text-xs font-bold leading-tight">Sunlight Mode</p>
               <p className="text-3xs text-muted-foreground leading-tight">Ultra-high contrast for outdoor glare</p>
@@ -126,7 +152,7 @@ export function ThemeSelector({
           <span className={cn(
             'text-3xs font-bold px-2 py-0.5 rounded-full border',
             sunlightMode
-              ? 'bg-amber-500 text-white border-amber-600'
+              ? 'bg-warn text-warn-foreground border-warn'
               : 'bg-background text-muted-foreground border-border'
           )}>
             {sunlightMode ? 'Active' : 'Off'}
@@ -148,10 +174,12 @@ export function ThemeSelector({
               return (
                 <button
                   key={theme.id}
+                  type="button"
                   onClick={() => setColorTheme(theme.id)}
                   title={theme.description}
+                  aria-pressed={active}
                   className={cn(
-                    'group relative p-2.5 rounded-xl border text-left transition-all',
+                    'group relative p-2.5 rounded-xl border text-left transition-all cursor-pointer',
                     active
                       ? 'border-primary bg-primary-soft/40 ring-2 ring-primary/30 shadow-xs'
                       : 'border-border/60 bg-muted/20 hover:bg-muted/60 hover:border-border',

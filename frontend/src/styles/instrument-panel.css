@@ -12,28 +12,28 @@
     transition: background-color 150ms ease, box-shadow 150ms ease;
   }
   .lamp-emerald {
-    background-color: #34d399;
-    box-shadow: 0 0 6px rgba(52, 211, 153, 0.7);
+    background-color: hsl(var(--ok, 158 64% 40%));
+    box-shadow: 0 0 6px hsl(var(--ok, 158 64% 40%) / 0.7);
   }
   .lamp-amber {
-    background-color: #fbbf24;
-    box-shadow: 0 0 6px rgba(251, 191, 36, 0.7);
+    background-color: hsl(var(--warn, 38 92% 50%));
+    box-shadow: 0 0 6px hsl(var(--warn, 38 92% 50%) / 0.7);
   }
   .lamp-rose {
-    background-color: #f43f5e;
-    box-shadow: 0 0 6px rgba(244, 63, 94, 0.7);
+    background-color: hsl(var(--danger, 351 64% 47%));
+    box-shadow: 0 0 6px hsl(var(--danger, 351 64% 47%) / 0.7);
   }
   .lamp-cyan {
-    background-color: #22d3ee;
-    box-shadow: 0 0 6px rgba(34, 211, 238, 0.7);
+    background-color: hsl(var(--highlight, 189 96% 43%));
+    box-shadow: 0 0 6px hsl(var(--highlight, 189 96% 43%) / 0.7);
   }
   .lamp-teal {
-    background-color: #0d9488;
-    box-shadow: 0 0 6px rgba(13, 148, 136, 0.7);
+    background-color: hsl(var(--primary, 175 84% 26%));
+    box-shadow: 0 0 6px hsl(var(--primary, 175 84% 26%) / 0.7);
   }
   .lamp-muted {
-    background-color: #8592a0;
-    box-shadow: 0 0 4px rgba(133, 146, 160, 0.35);
+    background-color: hsl(var(--muted-foreground));
+    box-shadow: 0 0 4px hsl(var(--muted-foreground) / 0.35);
   }
 
   /* Glowing Tabular Numeral Readout */
@@ -48,14 +48,14 @@
   }
 
   /* Instrument Tile Edge-Lights */
-  .edge-light-teal    { border-left: 3px solid #0d9488; }
-  .edge-light-cyan    { border-left: 3px solid #22d3ee; }
-  .edge-light-emerald { border-left: 3px solid #34d399; }
-  .edge-light-amber   { border-left: 3px solid #fbbf24; }
-  .edge-light-rose    { border-left: 3px solid #f43f5e; }
-  .edge-light-sky     { border-left: 3px solid #38bdf8; }
-  .edge-light-violet  { border-left: 3px solid #a78bfa; }
-  .edge-light-slate   { border-left: 3px solid #94a3b8; }
+  .edge-light-teal    { border-left: 3px solid hsl(var(--primary, 175 84% 26%)); }
+  .edge-light-cyan    { border-left: 3px solid hsl(var(--highlight, 189 96% 43%)); }
+  .edge-light-emerald { border-left: 3px solid hsl(var(--ok, 158 64% 40%)); }
+  .edge-light-amber   { border-left: 3px solid hsl(var(--warn, 38 92% 50%)); }
+  .edge-light-rose    { border-left: 3px solid hsl(var(--danger, 351 64% 47%)); }
+  .edge-light-sky     { border-left: 3px solid hsl(var(--info, 199 89% 48%)); }
+  .edge-light-violet  { border-left: 3px solid hsl(var(--elevated, 258 90% 66%)); }
+  .edge-light-slate   { border-left: 3px solid hsl(var(--muted-foreground)); }
 
   /* Calm Live Signal Indicator Pulse */
   .animate-live-pulse {
