@@ -1,12 +1,12 @@
 import {
   C_PRODUCTION, C_CONSUMPTION, C_NRW, C_RAWWATER, C_RECOVERY, C_TDS, C_GRID_PV,
-  C_TOTAL_COST, C_POWER_COST, C_CHEM_COST,
+  C_SOLAR, C_GRID, C_TOTAL_COST, C_POWER_COST, C_CHEM_COST,
 } from '@/lib/chartColors';
 import { ModernChartLegend } from '../TrendChartLegend';
 
 export function TrendChartMetricLegend({
   metric, hasConsumptionDrill, hasRoDrill, kwhChartRows, chartData, kwhSource,
-  showTotalCostLine, showPowerCostLine, showChemCostLine,
+  showTotalCostLine, showPowerCostLine, showChemCostLine, stackMode,
 }: {
   metric: string;
   hasConsumptionDrill: boolean;
@@ -17,6 +17,7 @@ export function TrendChartMetricLegend({
   showTotalCostLine: boolean;
   showPowerCostLine: boolean;
   showChemCostLine: boolean;
+  stackMode?: string;
 }) {
   return (
     <>
@@ -25,8 +26,8 @@ export function TrendChartMetricLegend({
         const hasGridData  = chartData.some((d: any) => (d.kwh      ?? 0) > 0);
         return (
           <ModernChartLegend items={[
-            ...(hasSolarData && kwhSource !== 'grid'  ? [{ color: 'hsl(48,96%,53%)', label: 'Solar (kWh)', shape: 'bar' as const }] : []),
-            ...(hasGridData  && kwhSource !== 'solar' ? [{ color: 'hsl(213,94%,68%)', label: 'Grid (kWh)', shape: 'bar' as const }] : []),
+            ...(hasSolarData && kwhSource !== 'grid'  ? [{ color: C_SOLAR, label: 'Solar (kWh)', shape: 'bar' as const }] : []),
+            ...(hasGridData  && kwhSource !== 'solar' ? [{ color: C_GRID,  label: 'Grid (kWh)',  shape: 'bar' as const }] : []),
           ]} />
         );
       })()}
@@ -60,9 +61,9 @@ export function TrendChartMetricLegend({
 
       {metric === 'productionCost' && (
         <ModernChartLegend items={[
-          ...(showTotalCostLine ? [{ color: C_TOTAL_COST, label: 'Prod Cost (₱/m³)', shape: 'line' as const }] : []),
-          ...(showPowerCostLine ? [{ color: C_POWER_COST, label: 'Power (₱/m³)',     shape: 'line' as const }] : []),
-          ...(showChemCostLine  ? [{ color: C_CHEM_COST,  label: 'Chem (₱/m³)',      shape: 'line' as const }] : []),
+          ...(stackMode !== 'stacked' && showTotalCostLine ? [{ color: C_TOTAL_COST, label: 'Prod Cost (₱/m³)', shape: 'line' as const }] : []),
+          ...(showPowerCostLine ? [{ color: C_POWER_COST, label: 'Power (₱/m³)',     shape: (stackMode === 'stacked' ? 'bar' : 'line') as 'bar' | 'line' }] : []),
+          ...(showChemCostLine  ? [{ color: C_CHEM_COST,  label: 'Chem (₱/m³)',      shape: (stackMode === 'stacked' ? 'bar' : 'line') as 'bar' | 'line' }] : []),
         ]} />
       )}
 

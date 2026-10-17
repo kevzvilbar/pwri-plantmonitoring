@@ -3,6 +3,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts';
 import { fmtNum } from '@/lib/calculations';
+import { C_SOLAR, C_GRID } from '@/lib/chartColors';
 import { Loader2, BarChart2 } from 'lucide-react';
 import { GridPylonIcon } from '@/components/icons/water-icons';
 import type { PowerHistoryRow } from '../hooks/usePowerHistoryQuery';
@@ -46,12 +47,12 @@ export function PowerChart({
           >
             <defs>
               <linearGradient id="solarGradient" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="hsl(48, 96%, 53%)" stopOpacity={0.95} />
-                <stop offset="100%" stopColor="hsl(38, 92%, 48%)" stopOpacity={0.8} />
+                <stop offset="0%" stopColor={C_SOLAR} stopOpacity={0.95} />
+                <stop offset="100%" stopColor={C_SOLAR} stopOpacity={0.78} />
               </linearGradient>
               <linearGradient id="gridGradient" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="hsl(213, 94%, 68%)" stopOpacity={0.95} />
-                <stop offset="100%" stopColor="hsl(217, 91%, 55%)" stopOpacity={0.8} />
+                <stop offset="0%" stopColor={C_GRID} stopOpacity={0.95} />
+                <stop offset="100%" stopColor={C_GRID} stopOpacity={0.78} />
               </linearGradient>
             </defs>
             <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" strokeOpacity={0.6} vertical={false} />
@@ -96,13 +97,13 @@ export function PowerChart({
         <div className="flex items-center gap-4">
           {hasSolar && (
             <div className="flex items-center gap-1.5">
-              <span className="inline-block h-3 w-3 rounded-sm bg-warn shadow-xs" />
+              <span className="inline-block h-3 w-3 rounded-sm shadow-xs" style={{ backgroundColor: C_SOLAR }} />
               <span className="font-medium text-foreground">Solar (kWh)</span>
             </div>
           )}
           {hasGrid && (
             <div className="flex items-center gap-1.5">
-              <span className="inline-block h-3 w-3 rounded-sm bg-info shadow-xs" />
+              <span className="inline-block h-3 w-3 rounded-sm shadow-xs" style={{ backgroundColor: C_GRID }} />
               <span className="font-medium text-foreground">Grid (kWh)</span>
             </div>
           )}

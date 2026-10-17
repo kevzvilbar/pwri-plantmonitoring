@@ -230,6 +230,7 @@ export function TrendChart({
         showTotalCostLine={s.showTotalCostLine}
         showPowerCostLine={s.showPowerCostLine}
         showChemCostLine={s.showChemCostLine}
+        stackMode={s.stackMode}
       />
     </>
   );

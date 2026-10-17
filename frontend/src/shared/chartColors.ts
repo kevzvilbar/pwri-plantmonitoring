@@ -20,8 +20,8 @@ export const C_RAWWATER    = 'hsl(var(--metric-rawwater))';     // raw (untreate
 export const C_RECOVERY    = 'hsl(var(--metric-recovery))';     // RO recovery rate
 export const C_TDS         = 'hsl(var(--metric-tds))';          // permeate TDS
 export const C_GRID_PV     = 'hsl(var(--metric-gridpv))';       // grid power / PV ratio
-export const C_SOLAR       = 'hsl(var(--kpi-solar))';           // solar power generation
-export const C_GRID        = 'hsl(var(--kpi-grid))';            // utility grid power
+export const C_SOLAR       = 'hsl(var(--warn))';                // solar power generation (matches solar stat card & legend)
+export const C_GRID        = 'hsl(var(--info))';                // utility grid power (matches grid stat card & legend)
 export const C_BLEND_PCT   = 'hsl(var(--metric-blendpct))';     // % of a well's raw output diverted to blending
 
 /** ReconciliationHealthCard's per-plant permeate-vs-product-meter bars. Off

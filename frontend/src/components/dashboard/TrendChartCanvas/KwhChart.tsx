@@ -21,13 +21,13 @@ function KwhTooltip({ active, payload, label, hasSolarData, hasGridData, kwhSour
       <p style={{ margin: '0 0 5px', fontWeight: 600, color: 'hsl(var(--foreground))' }}>{label}</p>
       {hasSolarData && kwhSource !== 'grid' && solarVal > 0 && (
         <p style={{ margin: '1px 0', color: C_SOLAR }} className="flex items-center gap-1.5">
-          <Sun className="h-3 w-3 inline text-kpi-solar shrink-0" />
+          <Sun className="h-3 w-3 inline shrink-0" style={{ color: C_SOLAR }} />
           <span>Solar: <strong>{fmt(solarVal)} kWh</strong></span>
         </p>
       )}
       {hasGridData && kwhSource !== 'solar' && gridVal > 0 && (
         <p style={{ margin: '1px 0', color: C_GRID }} className="flex items-center gap-1.5">
-          <Zap className="h-3 w-3 inline text-kpi-grid shrink-0" />
+          <Zap className="h-3 w-3 inline shrink-0" style={{ color: C_GRID }} />
           <span>Grid: <strong>{fmt(gridVal)} kWh</strong></span>
         </p>
       )}
