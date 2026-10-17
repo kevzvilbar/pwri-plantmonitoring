@@ -8,27 +8,22 @@ import {
   Droplet, 
   Bell, 
   ClipboardCheck, 
-  User, 
-  Building2,
-  SlidersHorizontal,
   ChevronRight,
-  ShieldCheck,
-  Award
+  Download,
+  Sparkles,
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { NavItemBadge } from '@/components/NavItemBadge';
 import { useNavGroups } from '@/hooks/useNavGroups';
-import { isNavItemActive, type NavItem } from '@/navConfig';
 import { useAuth } from '@/hooks/useAuth';
-import { useCan } from '@/hooks/usePermission';
 import { ThemeSelector } from '@/components/ThemeSelector';
 import { SyncIndicator } from '@/components/SyncIndicator';
+import { usePwaUpdate } from '@/lib/pwaUpdate';
 import { MobileActionFab } from './MobileActionFab';
 import {
   Sheet, 
   SheetContent, 
-  SheetHeader, 
-  SheetTitle, 
   SheetTrigger 
 } from '@/components/ui/sheet';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -46,8 +41,8 @@ export function MobileBottomNav() {
   const { pathname } = useLocation();
   const navigate = useNavigate();
   const { profile, roles, isAdmin, isManager } = useAuth();
-  const can = useCan();
   const groups = useNavGroups();
+  const { appVersion, buildDate, updateAvailable, isChecking, checkForUpdate, applyUpdate } = usePwaUpdate();
 
   const isOperatorOnly = !isAdmin && !isManager && roles.includes('Operator');
 
@@ -118,12 +113,35 @@ export function MobileBottomNav() {
   // Find any badge across all items (e.g. pending approvals, corrections, alerts)
   const allNavItems = useMemo(() => groups.flatMap((g) => g.items), [groups]);
   const hasMoreBadge = useMemo(() => {
+    if (updateAvailable) return true;
     return allNavItems.some((i) => {
       // If it's already one of the visible 4 bottom tabs, don't count it for "More" badge
       const isVisibleTab = primaryTabs.some((t) => t.id === i.id) || secondaryTabs.some((t) => t.id === i.id);
       return !isVisibleTab && i.badge != null;
     });
-  }, [allNavItems, primaryTabs, secondaryTabs]);
+  }, [allNavItems, primaryTabs, secondaryTabs, updateAvailable]);
+
+  const handleVersionAction = async () => {
+    if (updateAvailable) {
+      toast.info('Applying update and reloading...');
+      const applied = await applyUpdate();
+      if (!applied) {
+        window.location.reload();
+      }
+      return;
+    }
+    const result = await checkForUpdate();
+    if (result === 'available') {
+      toast.success('New app version ready! Tap "Update Now" to install.');
+    } else if (result === 'up-to-date') {
+      toast.success(`You are on the latest version (v${appVersion}).`);
+    } else if (result === 'unsupported') {
+      toast.info(`Running v${appVersion} (${buildDate}). Reloading latest assets...`);
+      window.location.reload();
+    } else {
+      toast.error('Could not check for updates. Check your connection.');
+    }
+  };
 
   const renderTabButton = (tab: MobileNavItemConfig) => {
     const active = tab.end ? pathname === tab.route : (pathname === tab.route || (tab.route !== '/' && pathname.startsWith(`${tab.route}/`)));
@@ -296,6 +314,44 @@ export function MobileBottomNav() {
                       </button>
                     }
                   />
+                  <button
+                    type="button"
+                    onClick={handleVersionAction}
+                    disabled={isChecking}
+                    aria-label={updateAvailable ? `Update app from v${appVersion}` : `App version v${appVersion}, check for updates`}
+                    className={cn(
+                      'flex items-center justify-between w-full px-3 py-2.5 rounded-xl text-xs transition-colors cursor-pointer text-left',
+                      updateAvailable
+                        ? 'bg-primary/15 hover:bg-primary/20 text-primary border border-primary/30'
+                        : 'bg-muted/40 hover:bg-muted text-foreground'
+                    )}
+                  >
+                    <span className="flex items-center gap-2.5 min-w-0">
+                      {updateAvailable ? (
+                        <Sparkles className="h-4 w-4 text-primary shrink-0 animate-pulse" />
+                      ) : (
+                        <Download className={cn('h-4 w-4 text-muted-foreground shrink-0', isChecking && 'animate-bounce')} />
+                      )}
+                      <span className="flex flex-col min-w-0">
+                        <span className="font-medium truncate">
+                          {updateAvailable ? 'New Version Available' : `App Version v${appVersion}`}
+                        </span>
+                        <span className="text-3xs text-muted-foreground truncate">
+                          {updateAvailable ? `Current: v${appVersion} · Tap to install` : `Build ${buildDate}`}
+                        </span>
+                      </span>
+                    </span>
+                    <span
+                      className={cn(
+                        'text-3xs font-semibold px-2.5 py-1 rounded-full shrink-0 transition-colors',
+                        updateAvailable
+                          ? 'bg-primary text-primary-foreground shadow-xs'
+                          : 'bg-card text-muted-foreground border border-border/60'
+                      )}
+                    >
+                      {isChecking ? 'Checking…' : updateAvailable ? 'Update Now' : 'Check Update'}
+                    </span>
+                  </button>
                 </div>
               </div>
             </div>

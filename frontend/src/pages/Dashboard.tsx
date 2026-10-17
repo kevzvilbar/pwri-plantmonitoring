@@ -1,16 +1,21 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
+import { Droplet, FlaskConical, Zap, Activity, LayoutGrid } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { usePlantStore } from '@/store/plantStore';
 import { useChartStore } from '@/store/chartStore';
 import { usePlants } from '@/hooks/usePlants';
 import { useVisiblePlants } from '@/hooks/useVisiblePlants';
+import { useAlertBadge } from '@/hooks/useAlertBadge';
+import { describeFreshness } from '@/shared/freshness';
+import { cn } from '@/lib/utils';
 import { NoPlantsAssigned } from '@/components/NoPlantsAssigned';
 import { format, subDays } from 'date-fns';
 import { DowntimeEventsModal } from '@/components/DowntimeEventsModal';
 import { DashboardViewMode, VIEW_MODE_KEY, pctDelta } from '@/components/dashboard/types';
 import { PlantPulseHero } from '@/components/dashboard/PlantPulseHero';
+import { MobilePlantStatusCard } from '@/components/mobile/MobilePlantStatusCard';
 import { PlantHealthStrip } from '@/components/dashboard/PlantHealthStrip';
 import { DashboardSectionNav } from '@/components/dashboard/DashboardSectionNav';
 import { loadThresholds, DEFAULT_THRESHOLDS } from '@/pages/Compliance';
@@ -27,6 +32,16 @@ import { CostCluster } from './Dashboard/CostCluster';
 import { AuditsCluster } from './Dashboard/AuditsCluster';
 import { HealthCluster } from './Dashboard/HealthCluster';
 import { TrendModal } from '@/components/dashboard/TrendChartWrappers';
+
+type MobileDashboardCluster = 'flow' | 'quality' | 'cost' | 'health' | 'all';
+
+const MOBILE_CLUSTER_TABS: { id: MobileDashboardCluster; label: string; icon: typeof Droplet }[] = [
+  { id: 'flow', label: 'Flow', icon: Droplet },
+  { id: 'quality', label: 'Quality', icon: FlaskConical },
+  { id: 'cost', label: 'Cost', icon: Zap },
+  { id: 'health', label: 'Health', icon: Activity },
+  { id: 'all', label: 'All', icon: LayoutGrid },
+];
 
 // ─── Dashboard ────────────────────────────────────────────────────────────────
 
@@ -233,6 +248,11 @@ export default function Dashboard() {
   // instance only, or useTrainAutoOffline writes duplicate status-log rows.
 
   const selectedPlantName = (selectedPlantId ? plants?.find(p => p.id === selectedPlantId)?.name : null) || 'All Production Facilities';
+  const { count: alertBadgeCount } = useAlertBadge();
+  const [mobileCluster, setMobileCluster] = useState<MobileDashboardCluster>('flow');
+  const freshnessInfo = describeFreshness(dataFreshness, Date.now());
+  const mobileFreshnessTone =
+    freshnessInfo.tone === 'fresh' ? 'good' : freshnessInfo.tone === 'aging' ? 'warn' : 'muted';
 
   // D5: with no plants, an empty `plantIds` is not "no filter". PlantPulseHero
   // and PlantHealthStrip both read [] as "show every plant", so an unassigned
@@ -247,21 +267,45 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-3 animate-fade-in">
+      {/* Mobile-first 2-second glanceable hero card */}
+      <div className="md:hidden">
+        <MobilePlantStatusCard
+          plantName={selectedPlantName}
+          isOnline={true}
+          freshnessLabel={freshnessInfo.label}
+          freshnessTone={mobileFreshnessTone}
+          production={prodStats.production}
+          dProduction={prodStats.dProduction}
+          recovery={qualityStats.avgRecovery}
+          rawWater={prodStats.rawWaterVol}
+          specificPower={powerStats.pv}
+          openIncidentsCount={openIncidentCount}
+          unacknowledgedAlertsCount={alertBadgeCount}
+          trainsCount={qualityStats.qualityTrainIds.length}
+          onlineTrainsCount={qualityStats.roByTrain.length}
+          onOpenLogReading={() => navigate('/operations?action=log')}
+          onViewIncidents={() => navigate('/incidents')}
+          onViewAlerts={() => navigate('/alerts')}
+        />
+      </div>
 
-      <PlantPulseHero
-        plantIds={plantIds}
-        selectedPlantName={selectedPlantName}
-        openIncidentCount={openIncidentCount}
-                lastReadingAt={dataFreshness}
-        production={prodStats.production}
-        dProduction={prodStats.dProduction}
-        rawWaterVol={prodStats.rawWaterVol}
-        recovery={qualityStats.avgRecovery}
-        specificPower={powerStats.pv}
-        onOpenDowntime={() => setDowntimeOpen(true)}
-        onSelectPlant={(pid) => navigate(`/plants/${pid}`)}
-        onViewIncidents={() => navigate('/incidents')}
-      />
+      {/* Desktop telemetry hero */}
+      <div className="hidden md:block">
+        <PlantPulseHero
+          plantIds={plantIds}
+          selectedPlantName={selectedPlantName}
+          openIncidentCount={openIncidentCount}
+          lastReadingAt={dataFreshness}
+          production={prodStats.production}
+          dProduction={prodStats.dProduction}
+          rawWaterVol={prodStats.rawWaterVol}
+          recovery={qualityStats.avgRecovery}
+          specificPower={powerStats.pv}
+          onOpenDowntime={() => setDowntimeOpen(true)}
+          onSelectPlant={(pid) => navigate(`/plants/${pid}`)}
+          onViewIncidents={() => navigate('/incidents')}
+        />
+      </div>
 
       <PlantHealthStrip
         plantIds={plantIds}
@@ -285,59 +329,96 @@ export default function Dashboard() {
       {/* Ops-first order: Action → Overview (water flow) → Quality → Cost → Health → Trust */}
       <ActionCenter plantIds={plantIds} />
 
-      <OverviewCluster
-        consumption={prodStats.consumption}
-        dConsumption={prodStats.dConsumption}
-        nrw={prodStats.nrw}
-        yNrw={prodStats.yNrw}
-        rawWaterVol={prodStats.rawWaterVol}
-        dRawWater={prodStats.dRawWater}
-        roFlowVol={prodStats.roPermeateProduction || (prodStats.todayAllPermeate?.reduce((s: number, r: any) => s + (+r.permeate_meter_delta || 0), 0) || null)}
-        dRoFlow={pctDelta(prodStats.roPermeateProduction, prodStats.yRoPermeateProduction)}
-        blending={prodStats.blending}
-        viewMode={viewMode}
-        expandedMetric={expandedMetric}
-        plantIds={plantIds}
-        onMetricClick={handleMetricClick}
-      />
+      {/* Mobile Domain Cluster Switcher: avoids 4,500px vertical scroll on phones */}
+      <div
+        className="md:hidden flex items-center gap-1 p-1 rounded-2xl bg-muted/60 border border-border/60 overflow-x-auto no-scrollbar"
+        role="tablist"
+        aria-label="Mobile dashboard domain selector"
+      >
+        {MOBILE_CLUSTER_TABS.map((item) => {
+          const Icon = item.icon;
+          const active = mobileCluster === item.id;
+          return (
+            <button
+              key={item.id}
+              type="button"
+              role="tab"
+              aria-selected={active}
+              onClick={() => setMobileCluster(item.id)}
+              className={cn(
+                'flex-1 flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-xl text-xs font-semibold transition-all whitespace-nowrap cursor-pointer',
+                active
+                  ? 'bg-card text-foreground shadow-xs border border-border/80'
+                  : 'text-muted-foreground hover:text-foreground'
+              )}
+            >
+              <Icon className={cn('h-3.5 w-3.5 shrink-0', active ? 'text-primary' : 'text-muted-foreground')} />
+              <span>{item.label}</span>
+            </button>
+          );
+        })}
+      </div>
 
-      <QualityCluster
-        avgFeedTds={qualityStats.avgFeedTds}
-        roByTrain={qualityStats.roByTrain}
-        avgPermTds={qualityStats.avgPermTds}
-        avgChlorineResidual={qualityStats.avgChlorineResidual}
-        thresholds={thresholds}
-        wellsByQuality={qualityStats.wellsByQuality}
-        plantCodeById={qualityStats.plantCodeById}
-        plantIds={plantIds}
-        avgRecovery={qualityStats.avgRecovery}
-        avgRawTds={qualityStats.avgRawTds}
-        avgRawTurb={qualityStats.avgRawTurb}
-        viewMode={viewMode}
-        expandedMetric={expandedMetric}
-        onMetricClick={handleMetricClick}
-      />
+      <div className={cn(mobileCluster !== 'all' && mobileCluster !== 'flow' && 'hidden md:block')}>
+        <OverviewCluster
+          consumption={prodStats.consumption}
+          dConsumption={prodStats.dConsumption}
+          nrw={prodStats.nrw}
+          yNrw={prodStats.yNrw}
+          rawWaterVol={prodStats.rawWaterVol}
+          dRawWater={prodStats.dRawWater}
+          roFlowVol={prodStats.roPermeateProduction || (prodStats.todayAllPermeate?.reduce((s: number, r: any) => s + (+r.permeate_meter_delta || 0), 0) || null)}
+          dRoFlow={pctDelta(prodStats.roPermeateProduction, prodStats.yRoPermeateProduction)}
+          blending={prodStats.blending}
+          viewMode={viewMode}
+          expandedMetric={expandedMetric}
+          plantIds={plantIds}
+          onMetricClick={handleMetricClick}
+        />
+      </div>
 
-      <CostCluster
-        productionCost={costStats.productionCost}
-        costIsStale={costStats.costIsStale}
-        costDataDate={costStats.costDataDate}
-        powerCost={costStats.powerCost}
-        chemCost={costStats.chemCost}
-        kwh={powerStats.kwh}
-        powerIsStale={powerStats.powerIsStale}
-        dKwh={powerStats.dKwh}
-        pv={powerStats.pv}
-        thresholds={thresholds}
-        viewMode={viewMode}
-        expandedMetric={expandedMetric}
-        plantIds={plantIds}
-        onMetricClick={handleMetricClick}
-      />
+      <div className={cn(mobileCluster !== 'all' && mobileCluster !== 'quality' && 'hidden md:block')}>
+        <QualityCluster
+          avgFeedTds={qualityStats.avgFeedTds}
+          roByTrain={qualityStats.roByTrain}
+          avgPermTds={qualityStats.avgPermTds}
+          avgChlorineResidual={qualityStats.avgChlorineResidual}
+          thresholds={thresholds}
+          wellsByQuality={qualityStats.wellsByQuality}
+          plantCodeById={qualityStats.plantCodeById}
+          plantIds={plantIds}
+          avgRecovery={qualityStats.avgRecovery}
+          avgRawTds={qualityStats.avgRawTds}
+          avgRawTurb={qualityStats.avgRawTurb}
+          viewMode={viewMode}
+          expandedMetric={expandedMetric}
+          onMetricClick={handleMetricClick}
+        />
+      </div>
 
-      <HealthCluster plantIds={plantIds} viewMode={viewMode} />
+      <div className={cn(mobileCluster !== 'all' && mobileCluster !== 'cost' && 'hidden md:block')}>
+        <CostCluster
+          productionCost={costStats.productionCost}
+          costIsStale={costStats.costIsStale}
+          costDataDate={costStats.costDataDate}
+          powerCost={costStats.powerCost}
+          chemCost={costStats.chemCost}
+          kwh={powerStats.kwh}
+          powerIsStale={powerStats.powerIsStale}
+          dKwh={powerStats.dKwh}
+          pv={powerStats.pv}
+          thresholds={thresholds}
+          viewMode={viewMode}
+          expandedMetric={expandedMetric}
+          plantIds={plantIds}
+          onMetricClick={handleMetricClick}
+        />
+      </div>
 
-      <AuditsCluster plantIds={plantIds} />
+      <div className={cn(mobileCluster !== 'all' && mobileCluster !== 'health' && 'hidden md:block', 'space-y-3')}>
+        <HealthCluster plantIds={plantIds} viewMode={viewMode} />
+        <AuditsCluster plantIds={plantIds} />
+      </div>
 
       <TrendModal open={!!modal} onClose={() => setModal(null)} metric={modal?.metric ?? ''} title={modal?.title ?? ''} plantIds={plantIds} />
       <DowntimeEventsModal

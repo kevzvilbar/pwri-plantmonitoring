@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import {
   _resetPwaUpdateState, canApplyUpdateSilently, createPwaUpdateController,
-  recordUserActivity,
+  recordUserActivity, APP_VERSION, getPwaUpdateSnapshot, checkForPwaUpdate, applyWaitingPwaUpdate,
 } from './pwaUpdate';
 
 describe('pwaUpdate', () => {
@@ -79,5 +79,32 @@ describe('pwaUpdate', () => {
     expect(update).not.toHaveBeenCalled();
     await vi.advanceTimersByTimeAsync(30 * 60_000);
     expect(update).toHaveBeenCalledTimes(1);
+  });
+
+  it('exposes appVersion and supports manual checkForPwaUpdate + applyWaitingPwaUpdate', async () => {
+    expect(APP_VERSION).toBeTruthy();
+    const apply = vi.fn().mockResolvedValue(undefined);
+    const update = vi.fn().mockResolvedValue(undefined);
+    const reg = { update, waiting: null } as unknown as ServiceWorkerRegistration;
+
+    const ctrl = createPwaUpdateController({
+      applyUpdate: apply,
+      showPrompt: vi.fn(),
+      hasActiveMutations: () => false,
+    });
+    ctrl.onRegistered(reg);
+
+    const status = await checkForPwaUpdate();
+    expect(status).toBe('up-to-date');
+    expect(update).toHaveBeenCalledTimes(1);
+
+    // Simulate update becoming available while user is active
+    recordUserActivity();
+    ctrl.onNeedRefresh();
+    expect(getPwaUpdateSnapshot().updateAvailable).toBe(true);
+
+    const applied = await applyWaitingPwaUpdate();
+    expect(applied).toBe(true);
+    expect(apply).toHaveBeenCalledTimes(1);
   });
 });

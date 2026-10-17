@@ -6,10 +6,15 @@ import { createRequire } from "node:module";
 import { cspHashes } from "./vite-plugins/cspHashes";
 
 const require = createRequire(import.meta.url);
+const pkg = require("./package.json") as { version?: string };
 
 export default defineConfig(({ mode }) => ({
   base: (process.env.VERCEL || process.env.E2E_ROOT_BASE) ? '/' : '/pwri-plantmonitoring/',
   envPrefix: ["VITE_"],
+  define: {
+    __APP_VERSION__: JSON.stringify(pkg.version ?? "1.0.0"),
+    __APP_BUILD_DATE__: JSON.stringify(new Date().toISOString().slice(0, 10)),
+  },
   server: {
     host: "0.0.0.0",
     port: 5000,

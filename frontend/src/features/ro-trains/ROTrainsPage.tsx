@@ -1,3 +1,5 @@
+import { useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useUrlTab } from '@/hooks/useUrlTab';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { LayoutGrid, Recycle } from 'lucide-react';
@@ -7,7 +9,6 @@ import { usePlants } from '@/hooks/usePlants';
 import { useROTrainsForPlant } from '@/hooks/useROTrains';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { type Database } from '@/integrations/supabase/types';
 import { deriveTrainStatus, ROTrainHero } from './index';
 import { loadThresholds } from '@/features/compliance';
 import { calc } from '@/lib/calculations';
@@ -26,6 +27,13 @@ export default function ROTrains() {
   // A tab picked by hand should not keep the ?train= deep link of an earlier
   // alert click: confusing once the operator has moved on to another train.
   const [tab, handleTabChange] = useUrlTab('tab', RO_TRAIN_TABS, 'overview', { clearOnChange: ['train'] });
+  const [searchParams] = useSearchParams();
+
+  useEffect(() => {
+    if (searchParams.get('action') === 'round' && !searchParams.get('tab') && tab !== 'pretreat-ro') {
+      handleTabChange('pretreat-ro');
+    }
+  }, [searchParams, tab, handleTabChange]);
 
   const { selectedPlantId } = useAppStore();
   const { data: plants } = usePlants();

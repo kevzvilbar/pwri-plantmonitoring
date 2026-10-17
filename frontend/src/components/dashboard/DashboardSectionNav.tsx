@@ -108,7 +108,7 @@ export function DashboardSectionNav({
 
   return (
     <div className="sticky top-14 z-20 -mx-1 px-2 py-1.5 bg-background/85 backdrop-blur-md border-y border-border/40 transition-all shadow-xs space-y-1.5" data-testid="dashboard-control-bar">
-      <div className="flex items-center justify-between gap-2">
+      <div className="hidden md:flex items-center justify-between gap-2">
         <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar scroll-smooth min-w-0 flex-1">
           {DASHBOARD_SECTIONS.map((sec) => {
             const Icon = sec.icon;

@@ -407,7 +407,7 @@ export function Signal({
 
           {children}
 
-          {/* Metadata Row */}
+          {/* Metadata & Mobile Quick-Triage Row */}
           <div className="flex items-center gap-1.5 text-3xs font-medium text-muted-foreground flex-wrap pt-0.5">
             {plantName && (
               <span className="px-1.5 py-0.5 rounded bg-muted border border-border/60 text-foreground font-semibold font-mono-num">
@@ -425,18 +425,48 @@ export function Signal({
                 <span className="font-mono-num">{formattedTime}</span>
               </>
             )}
-            {linkPath && (
-              <span
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (onNavigate) onNavigate(linkPath);
-                }}
-                className="ml-auto text-primary font-semibold hover:underline flex items-center gap-0.5 cursor-pointer shrink-0"
-              >
-                View
-                <ArrowUpRight className="h-3 w-3" />
-              </span>
-            )}
+            <div className="ml-auto flex items-center gap-1.5 shrink-0">
+              {onAcknowledge && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onAcknowledge();
+                  }}
+                  aria-label="Quick acknowledge alert"
+                  className="sm:hidden inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-info/10 hover:bg-info/20 text-info border border-info/25 font-semibold transition-colors cursor-pointer"
+                >
+                  <CheckCircle2 className="h-3 w-3" />
+                  <span>Ack</span>
+                </button>
+              )}
+              {onResolve && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onResolve();
+                  }}
+                  aria-label="Quick resolve alert"
+                  className="sm:hidden inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-success/10 hover:bg-success/20 text-success border border-success/25 font-semibold transition-colors cursor-pointer"
+                >
+                  <CheckCheck className="h-3 w-3" />
+                  <span>Done</span>
+                </button>
+              )}
+              {linkPath && (
+                <span
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (onNavigate) onNavigate(linkPath);
+                  }}
+                  className="text-primary font-semibold hover:underline flex items-center gap-0.5 cursor-pointer shrink-0"
+                >
+                  View
+                  <ArrowUpRight className="h-3 w-3" />
+                </span>
+              )}
+            </div>
           </div>
         </div>
       </div>

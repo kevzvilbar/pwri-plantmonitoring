@@ -9,11 +9,12 @@ import {
   DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent,
 } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { BookOpen, ChevronDown, UserCheck, UserCog, LogOut, Users, UserPlus, UserX, ShieldCheck } from 'lucide-react';
+import { BookOpen, ChevronDown, UserCheck, UserCog, LogOut, UserPlus, ShieldCheck, RefreshCw, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import { recordShiftDuty, endShiftDuty, fetchActiveShiftDuty } from '@/data/mutations/shiftDuty';
 import { getShiftCycleKey } from '@/lib/shifts';
+import { usePwaUpdate } from '@/lib/pwaUpdate';
 
 function initials(p: Profile | null): string {
   if (!p) return '?';
@@ -92,6 +93,7 @@ export function OperatorSwitcher() {
   const { activeOperatorId, setActiveOperatorId, selectedPlantId } = useAppStore();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { appVersion, buildDate, updateAvailable, isChecking, checkForUpdate, applyUpdate } = usePwaUpdate();
 
   const switchAllowed = canSwitchOperator(profile);
   const plantAssignments = profile?.plant_assignments ?? (selectedPlantId ? [selectedPlantId] : []);
@@ -351,6 +353,42 @@ export function OperatorSwitcher() {
         </DropdownMenuItem>
         <DropdownMenuItem onClick={() => navigate('/terms')} className="gap-2 text-xs py-1.5 cursor-pointer">
           <BookOpen className="h-3.5 w-3.5" /> Terms of Use
+        </DropdownMenuItem>
+        <DropdownMenuSeparator className="my-0" />
+        <DropdownMenuItem
+          onSelect={async (e) => {
+            e.preventDefault();
+            if (updateAvailable) {
+              toast.info('Applying update and reloading...');
+              const applied = await applyUpdate();
+              if (!applied) window.location.reload();
+              return;
+            }
+            const res = await checkForUpdate();
+            if (res === 'available') {
+              toast.success('New app version ready! Click "Update Now" to install.');
+            } else if (res === 'up-to-date') {
+              toast.success(`App is up to date (v${appVersion}).`);
+            } else if (res === 'unsupported') {
+              toast.info(`v${appVersion} (${buildDate}) — reloading latest assets...`);
+              window.location.reload();
+            } else {
+              toast.error('Could not check for updates.');
+            }
+          }}
+          className={`gap-2 text-xs py-1.5 cursor-pointer justify-between ${updateAvailable ? 'bg-primary/10 text-primary font-semibold' : ''}`}
+        >
+          <span className="flex items-center gap-2 min-w-0">
+            {updateAvailable ? (
+              <Sparkles className="h-3.5 w-3.5 text-primary shrink-0 animate-pulse" />
+            ) : (
+              <RefreshCw className={`h-3.5 w-3.5 text-muted-foreground shrink-0 ${isChecking ? 'animate-spin' : ''}`} />
+            )}
+            <span className="truncate">v{appVersion}</span>
+          </span>
+          <span className={`text-3xs px-1.5 py-0.5 rounded font-semibold shrink-0 ${updateAvailable ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>
+            {isChecking ? 'Checking…' : updateAvailable ? 'Update Now' : 'Check update'}
+          </span>
         </DropdownMenuItem>
         <DropdownMenuSeparator className="my-0" />
         <DropdownMenuItem onClick={signOut} className="text-danger gap-2 text-xs py-1.5 cursor-pointer">

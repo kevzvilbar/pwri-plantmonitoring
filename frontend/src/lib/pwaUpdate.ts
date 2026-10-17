@@ -19,11 +19,125 @@
  *    (sw.js), not to Supabase.
  */
 
+import { useSyncExternalStore } from 'react';
+
+declare const __APP_VERSION__: string | undefined;
+declare const __APP_BUILD_DATE__: string | undefined;
+
+export const APP_VERSION: string =
+  typeof __APP_VERSION__ !== 'undefined' && __APP_VERSION__ ? __APP_VERSION__ : '1.0.0';
+
+export const APP_BUILD_DATE: string =
+  typeof __APP_BUILD_DATE__ !== 'undefined' && __APP_BUILD_DATE__ ? __APP_BUILD_DATE__ : '2026-10-17';
+
 export const IDLE_APPLY_MS = 10 * 60_000;
 export const CHECK_INTERVAL_MS = 30 * 60_000;
 const MIN_CHECK_GAP_MS = 10 * 60_000;
 
 let lastActivityTime = Date.now();
+
+// ── Reactive PWA Update Store for UI Controls (More Drawer & Profile Menu) ──
+export interface PwaUpdateSnapshot {
+  appVersion: string;
+  buildDate: string;
+  updateAvailable: boolean;
+  isChecking: boolean;
+}
+
+let snapshot: PwaUpdateSnapshot = {
+  appVersion: APP_VERSION,
+  buildDate: APP_BUILD_DATE,
+  updateAvailable: false,
+  isChecking: false,
+};
+
+const listeners = new Set<() => void>();
+let activeApplyUpdate: (() => Promise<void> | void) | null = null;
+let activeRegistration: ServiceWorkerRegistration | undefined;
+
+function setSnapshot(partial: Partial<PwaUpdateSnapshot>) {
+  snapshot = { ...snapshot, ...partial };
+  listeners.forEach((l) => l());
+}
+
+function subscribePwaUpdate(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+}
+
+export function getPwaUpdateSnapshot(): PwaUpdateSnapshot {
+  return snapshot;
+}
+
+export async function applyWaitingPwaUpdate(): Promise<boolean> {
+  if (activeApplyUpdate) {
+    setSnapshot({ updateAvailable: false });
+    await activeApplyUpdate();
+    return true;
+  }
+  return false;
+}
+
+export async function checkForPwaUpdate(): Promise<'available' | 'up-to-date' | 'unsupported' | 'error'> {
+  if (snapshot.updateAvailable && activeApplyUpdate) {
+    return 'available';
+  }
+
+  setSnapshot({ isChecking: true });
+  try {
+    let reg = activeRegistration;
+    if (!reg && typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
+      reg = await navigator.serviceWorker.getRegistration();
+      if (reg) activeRegistration = reg;
+    }
+
+    if (!reg) {
+      setSnapshot({ isChecking: false });
+      return snapshot.updateAvailable ? 'available' : 'unsupported';
+    }
+
+    await reg.update();
+    if (reg.waiting || snapshot.updateAvailable) {
+      setSnapshot({ updateAvailable: true, isChecking: false });
+      return 'available';
+    }
+    if (reg.installing) {
+      // Wait briefly for installing worker to reach installed/waiting state
+      await new Promise<void>((resolve) => {
+        const worker = reg?.installing;
+        if (!worker) {
+          resolve();
+          return;
+        }
+        const timer = setTimeout(resolve, 2500);
+        worker.addEventListener('statechange', () => {
+          if (worker.state === 'installed' || worker.state === 'activated' || worker.state === 'redundant') {
+            clearTimeout(timer);
+            resolve();
+          }
+        });
+      });
+      if (reg.waiting || snapshot.updateAvailable) {
+        setSnapshot({ updateAvailable: true, isChecking: false });
+        return 'available';
+      }
+    }
+    setSnapshot({ isChecking: false });
+    return snapshot.updateAvailable ? 'available' : 'up-to-date';
+  } catch {
+    setSnapshot({ isChecking: false });
+    return 'error';
+  }
+}
+
+export function usePwaUpdate() {
+  const state = useSyncExternalStore(subscribePwaUpdate, getPwaUpdateSnapshot, getPwaUpdateSnapshot);
+  return {
+    ...state,
+    checkForUpdate: checkForPwaUpdate,
+    applyUpdate: applyWaitingPwaUpdate,
+  };
+}
 
 export function recordUserActivity(): void {
   lastActivityTime = Date.now();
@@ -31,6 +145,14 @@ export function recordUserActivity(): void {
 
 export function _resetPwaUpdateState(): void {
   lastActivityTime = Date.now();
+  activeApplyUpdate = null;
+  activeRegistration = undefined;
+  setSnapshot({
+    appVersion: APP_VERSION,
+    buildDate: APP_BUILD_DATE,
+    updateAvailable: false,
+    isChecking: false,
+  });
 }
 
 export interface SilentUpdateCheckOptions {
@@ -76,6 +198,12 @@ export function createPwaUpdateController(deps: PwaUpdateDeps) {
   let registration: ServiceWorkerRegistration | undefined;
   let timers: ReturnType<typeof setInterval>[] = [];
 
+  activeApplyUpdate = () => {
+    waiting = false;
+    setSnapshot({ updateAvailable: false });
+    return deps.applyUpdate();
+  };
+
   const markInput = () => {
     recordUserActivity();
   };
@@ -91,6 +219,7 @@ export function createPwaUpdateController(deps: PwaUpdateDeps) {
     if (!waiting) return;
     if (canApplyUpdateSilently({ idleMs: now() - lastActivityTime, hasActiveMutations: checkHasMutations })) {
       waiting = false;
+      setSnapshot({ updateAvailable: false });
       void deps.applyUpdate();
     }
   };
@@ -123,14 +252,21 @@ export function createPwaUpdateController(deps: PwaUpdateDeps) {
 
   const handleRegistered = (reg: ServiceWorkerRegistration | undefined) => {
     registration = reg;
+    activeRegistration = reg;
+    if (reg?.waiting) {
+      waiting = true;
+      setSnapshot({ updateAvailable: true });
+    }
     timers.push(setInterval(check, CHECK_INTERVAL_MS));
   };
 
   return {
     onNeedRefresh() {
       waiting = true;
+      setSnapshot({ updateAvailable: true });
       if (canApplyUpdateSilently({ idleMs: now() - lastActivityTime, hasActiveMutations: checkHasMutations })) {
         waiting = false;
+        setSnapshot({ updateAvailable: false });
         void deps.applyUpdate();
         return;
       }
@@ -138,6 +274,7 @@ export function createPwaUpdateController(deps: PwaUpdateDeps) {
         prompted = true;
         promptFn(() => {
           waiting = false;
+          setSnapshot({ updateAvailable: false });
           void deps.applyUpdate();
         });
       }
@@ -158,4 +295,5 @@ export function createPwaUpdateController(deps: PwaUpdateDeps) {
     },
   };
 }
+
 

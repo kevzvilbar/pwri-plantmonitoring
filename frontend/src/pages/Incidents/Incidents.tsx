@@ -1,4 +1,5 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useUrlTab } from '@/hooks/useUrlTab';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { PageHeader } from '@/components/PageHeader';
@@ -13,8 +14,15 @@ const INCIDENT_TABS = ['open', 'report', 'history'] as const;
 
 export default function Incidents() {
   const [tab, setTab] = useUrlTab('tab', INCIDENT_TABS, 'open');
+  const [searchParams] = useSearchParams();
   const qc = useQueryClient();
-  const { openIncidents, criticalHighCount } = useIncidentsData();
+  const { openIncidents } = useIncidentsData();
+
+  useEffect(() => {
+    if (searchParams.get('action') === 'new' && tab !== 'report') {
+      setTab('report');
+    }
+  }, [searchParams, tab, setTab]);
 
   const reportInitial = useMemo(() => ({
     ...REPORT_INITIAL,
