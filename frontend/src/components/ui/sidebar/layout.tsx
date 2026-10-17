@@ -3,7 +3,7 @@ import { PanelLeft } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Sheet, SheetContent } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import {
   SIDEBAR_WIDTH,
   SIDEBAR_WIDTH_MOBILE,
@@ -46,6 +46,8 @@ const Sidebar = React.forwardRef<
           }
           side={side}
         >
+          <SheetTitle className="sr-only">Navigation Sidebar</SheetTitle>
+          <SheetDescription className="sr-only">Main application navigation menu</SheetDescription>
           <div className="flex h-full w-full flex-col">{children}</div>
         </SheetContent>
       </Sheet>

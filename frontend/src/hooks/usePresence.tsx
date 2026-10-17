@@ -89,6 +89,7 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
 
   // Broadcast channel ref – reused for both send and receive.
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const channelSubscribedRef = useRef<boolean>(false);
 
   // ---------------------------------------------------------------------------
   // Patch helper – update a single user's updated_at in the ['staff'] cache & pings
@@ -129,12 +130,16 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
     patchCacheAndPing(currentUserId, isoNow);
 
     // 2. Broadcast to every other connected browser (instant sub-second path).
+    // Only send over the WebSocket once the channel has finished joining; calling
+    // .send() before SUBSCRIBED triggers a deprecated REST fallback warning.
     try {
-      channelRef.current?.send({
-        type: 'broadcast',
-        event: 'ping',
-        payload: { userId: currentUserId, updatedAt: isoNow },
-      });
+      if (channelSubscribedRef.current && channelRef.current) {
+        channelRef.current.send({
+          type: 'broadcast',
+          event: 'ping',
+          payload: { userId: currentUserId, updatedAt: isoNow },
+        });
+      }
     } catch {
       // Non-blocking
     }
@@ -166,6 +171,7 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
   // Supabase Broadcast subscription – receive pings from other browsers
   // ---------------------------------------------------------------------------
   useEffect(() => {
+    channelSubscribedRef.current = false;
     const ch = supabase
       .channel(ACTIVITY_CHANNEL, { config: { broadcast: { self: false } } })
       .on('broadcast', { event: 'ping' }, ({ payload }) => {
@@ -174,10 +180,13 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
           patchCacheAndPing(payload.userId as string, payload.updatedAt as string);
         }
       })
-      .subscribe();
+      .subscribe((status) => {
+        channelSubscribedRef.current = status === 'SUBSCRIBED';
+      });
 
     channelRef.current = ch;
     return () => {
+      channelSubscribedRef.current = false;
       supabase.removeChannel(ch);
       channelRef.current = null;
     };

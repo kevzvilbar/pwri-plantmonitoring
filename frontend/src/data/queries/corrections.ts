@@ -544,16 +544,25 @@ export async function fetchCorrectionRequestsCount(): Promise<number> {
 export async function fetchInboxCount(): Promise<number> {
   const scope = await getReviewPlantScope();
   if (scope && scope.length === 0) return 0;
-  let q1 = supabase.from('locator_readings').select('id', { count: 'exact', head: true }).eq('norm_status', 'normal').lt('daily_volume', 0).eq('is_meter_replacement', false);
-  let q2 = supabase.from('well_readings').select('id', { count: 'exact', head: true }).eq('norm_status', 'normal').lt('daily_volume', 0).eq('is_meter_replacement', false);
-  let q3 = supabase.from('product_meter_readings').select('id', { count: 'exact', head: true }).eq('norm_status', 'normal').lt('daily_volume', 0).eq('is_meter_replacement', false);
+  // Bound by reading_datetime (indexed on all 3 tables) and cap at 100 rows instead of
+  // an unbounded `count: 'exact', head: true` full-table scan across hundreds of thousands
+  // of historical hourly locator_readings (which hits Postgres statement_timeout → HTTP 500).
+  const since = new Date();
+  since.setDate(since.getDate() - 90);
+  const sinceIso = since.toISOString();
+  let q1 = supabase.from('locator_readings').select('id').eq('norm_status', 'normal').lt('daily_volume', 0).eq('is_meter_replacement', false).gte('reading_datetime', sinceIso).limit(100);
+  let q2 = supabase.from('well_readings').select('id').eq('norm_status', 'normal').lt('daily_volume', 0).eq('is_meter_replacement', false).gte('reading_datetime', sinceIso).limit(100);
+  let q3 = supabase.from('product_meter_readings').select('id').eq('norm_status', 'normal').lt('daily_volume', 0).eq('is_meter_replacement', false).gte('reading_datetime', sinceIso).limit(100);
   if (scope) {
     q1 = q1.in('plant_id', scope);
     q2 = q2.in('plant_id', scope);
     q3 = q3.in('plant_id', scope);
   }
   const [res1, res2, res3] = await Promise.all([q1, q2, q3]);
-  return (res1.count ?? 0) + (res2.count ?? 0) + (res3.count ?? 0);
+  const c1 = typeof res1.count === 'number' ? res1.count : (res1.data?.length ?? 0);
+  const c2 = typeof res2.count === 'number' ? res2.count : (res2.data?.length ?? 0);
+  const c3 = typeof res3.count === 'number' ? res3.count : (res3.data?.length ?? 0);
+  return c1 + c2 + c3;
 }
 
 /** Fetch correction inbox items */

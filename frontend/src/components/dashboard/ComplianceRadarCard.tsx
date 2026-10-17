@@ -195,14 +195,30 @@ export function ComplianceRadarCard({ plantIds }: Props) {
 
                   const renderSmoothRadar = (props: any) => {
                     const { points } = props;
-                    if (!points || points.length < 3) return <path d="" />;
+                    const validPoints = Array.isArray(points)
+                      ? points.filter((d: { x?: number; y?: number }) => Number.isFinite(d?.x) && Number.isFinite(d?.y))
+                      : [];
+                    if (validPoints.length < 2) return <g />;
+                    if (validPoints.length === 2) {
+                      return (
+                        <line
+                          x1={validPoints[0].x}
+                          y1={validPoints[0].y}
+                          x2={validPoints[1].x}
+                          y2={validPoints[1].y}
+                          stroke={color}
+                          strokeWidth={2}
+                        />
+                      );
+                    }
 
                     const lineGen = d3Line<{ x: number; y: number }>()
                       .x((d) => d.x)
                       .y((d) => d.y)
                       .curve(curveCardinalClosed.tension(0.2));
 
-                    const pathData = lineGen(points) ?? undefined;
+                    const pathData = lineGen(validPoints) ?? undefined;
+                    if (!pathData || pathData.includes('NaN')) return <g />;
 
                     return (
                       <path

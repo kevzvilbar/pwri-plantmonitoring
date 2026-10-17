@@ -38,6 +38,11 @@ export interface UseProductionStatsParams {
   qualityTrainIds?: string[];
 }
 
+// Circuit-breaker: if the remote DB has an unapplied migration for get_dashboard_aggregates
+// (e.g. Postgres 42703 undefined_column or PGRST202 missing function), skip further RPC POSTs
+// for the remainder of the session and go straight to client computation.
+let serverAggregatesRpcUnsupported = false;
+
 export function useProductionStats({
   plantIds,
   today,
@@ -54,7 +59,7 @@ export function useProductionStats({
   const { data: serverAggregates } = useQuery<ServerDashboardAggregates | null>({
     queryKey: ['dash-server-aggregates', plantIds, today, todayEnd, yesterday, yesterdayEnd, _localDateStr],
     queryFn: async () => {
-      if (!plantIds.length) return null;
+      if (!plantIds.length || serverAggregatesRpcUnsupported) return null;
       const { data, error } = await (supabase.rpc as any)('get_dashboard_aggregates', {
         p_plant_ids: plantIds,
         p_today_start: today,
@@ -64,6 +69,10 @@ export function useProductionStats({
         p_today_date: _localDateStr,
       });
       if (error) {
+        const errCode = (error as { code?: string })?.code;
+        if (errCode === '42703' || errCode === 'PGRST202' || errCode === '42883') {
+          serverAggregatesRpcUnsupported = true;
+        }
         console.warn('[Dashboard] get_dashboard_aggregates failed, falling back to client computation:', error);
         reportError(error, {
           where: 'dashboard-rpc-fallback',

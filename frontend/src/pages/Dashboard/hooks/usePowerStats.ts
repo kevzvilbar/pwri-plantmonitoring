@@ -79,6 +79,8 @@ export function computePowerKwh(
   return { kwh: totalKwh, powerCostPeso: hasTariff ? totalCostPeso : null };
 }
 
+let latestPowerRpcUnsupported = false;
+
 export function usePowerStats({
   plantIds,
   today,
@@ -145,14 +147,24 @@ export function usePowerStats({
 
       const baselineTimestamp = rows.length > 0 ? rows[0].reading_datetime : today;
       let prevRows: PowerRow[] = [];
-      const { data: prevData, error: prevErr } = (await (supabase.rpc as any)(
-        'latest_power_readings_before',
-        { plant_ids: plantIds, before_ts: baselineTimestamp },
-      )) as { data: PowerRow[] | null; error: unknown };
-      if (!prevErr && prevData && prevData.length > 0) {
-        prevRows = prevData;
-      } else {
-        if (prevErr) console.warn('[Dashboard] latest_power_readings_before failed:', prevErr);
+      let usedRpc = false;
+      if (!latestPowerRpcUnsupported) {
+        const { data: prevData, error: prevErr } = (await (supabase.rpc as any)(
+          'latest_power_readings_before',
+          { plant_ids: plantIds, before_ts: baselineTimestamp },
+        )) as { data: PowerRow[] | null; error: { code?: string } | null };
+        if (prevErr) {
+          if (prevErr.code === 'PGRST202' || prevErr.code === '42883') {
+            latestPowerRpcUnsupported = true;
+          } else {
+            console.warn('[Dashboard] latest_power_readings_before failed:', prevErr);
+          }
+        } else if (prevData && prevData.length > 0) {
+          prevRows = prevData;
+          usedRpc = true;
+        }
+      }
+      if (!usedRpc) {
         await Promise.all(
           plantIds.map(async (pid) => {
             const { data } = await supabase.from('power_readings')
@@ -184,14 +196,24 @@ export function usePowerStats({
       if (rowsErr) throw rowsErr;
 
       let prevRows: PowerRow[] = [];
-      const { data: prevData, error: prevErr } = (await (supabase.rpc as any)(
-        'latest_power_readings_before',
-        { plant_ids: plantIds, before_ts: yesterday },
-      )) as { data: PowerRow[] | null; error: unknown };
-      if (!prevErr && prevData && prevData.length > 0) {
-        prevRows = prevData;
-      } else {
-        if (prevErr) console.warn('[Dashboard] yesterday latest_power_readings_before failed:', prevErr);
+      let usedRpc = false;
+      if (!latestPowerRpcUnsupported) {
+        const { data: prevData, error: prevErr } = (await (supabase.rpc as any)(
+          'latest_power_readings_before',
+          { plant_ids: plantIds, before_ts: yesterday },
+        )) as { data: PowerRow[] | null; error: { code?: string } | null };
+        if (prevErr) {
+          if (prevErr.code === 'PGRST202' || prevErr.code === '42883') {
+            latestPowerRpcUnsupported = true;
+          } else {
+            console.warn('[Dashboard] yesterday latest_power_readings_before failed:', prevErr);
+          }
+        } else if (prevData && prevData.length > 0) {
+          prevRows = prevData;
+          usedRpc = true;
+        }
+      }
+      if (!usedRpc) {
         await Promise.all(
           plantIds.map(async (pid) => {
             const { data } = await supabase.from('power_readings')

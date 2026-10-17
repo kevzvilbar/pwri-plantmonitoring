@@ -24,6 +24,8 @@ import { MobileActionFab } from './MobileActionFab';
 import {
   Sheet, 
   SheetContent, 
+  SheetDescription,
+  SheetTitle,
   SheetTrigger 
 } from '@/components/ui/sheet';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -233,6 +235,8 @@ export function MobileBottomNav() {
           </SheetTrigger>
 
           <SheetContent side="right" className="w-[85vw] max-w-sm flex flex-col p-0">
+            <SheetTitle className="sr-only">Navigation Menu</SheetTitle>
+            <SheetDescription className="sr-only">Mobile navigation links, device sync, and application settings</SheetDescription>
             {/* Sheet Header: User Profile Summary */}
             <div className="p-4 bg-muted/30 border-b border-border/60">
               <div className="flex items-center gap-3">
