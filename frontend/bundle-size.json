@@ -1,6 +1,6 @@
 {
-  "maxTotalGzipKb": 1167.6,
-  "lastUpdated": "2026-10-15",
+  "maxTotalGzipKb": 1213.9,
+  "lastUpdated": "2026-10-17",
   "history": [
     {
       "date": "2026-09-06",
@@ -164,6 +164,12 @@
       "date": "2026-10-15",
       "maxTotalGzipKb": 1167.6,
       "previous": 1189.4
+    },
+    {
+      "date": "2026-10-17",
+      "maxTotalGzipKb": 1213.9,
+      "previous": 1167.6,
+      "reason": "Re-baselined to match authoritative build (1213.9 kB gzipped across 124 assets) following 12-theme system architecture with OS auto-sync, 3-way ThemeSelector, mobile navigation drawer badges, d3 Cost Composition Sunburst with chemical dosing breakdown, unified chart color tokens, and Git commit-based versioning."
     }
   ]
 }
