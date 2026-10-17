@@ -2,18 +2,59 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react-swc";
 import { VitePWA } from "vite-plugin-pwa";
 import path from "path";
+import { execSync } from "node:child_process";
 import { createRequire } from "node:module";
 import { cspHashes } from "./vite-plugins/cspHashes";
 
 const require = createRequire(import.meta.url);
 const pkg = require("./package.json") as { version?: string };
 
+function resolveAppBuildMeta(baseVersion = "1.0.0") {
+  let commitCount = "";
+  let shortSha = "";
+  try {
+    commitCount = execSync("git rev-list --count HEAD", {
+      stdio: ["ignore", "pipe", "ignore"],
+    })
+      .toString()
+      .trim();
+  } catch {
+    commitCount = process.env.GITHUB_RUN_NUMBER ?? "";
+  }
+
+  try {
+    const rawSha =
+      process.env.VERCEL_GIT_COMMIT_SHA ||
+      process.env.GITHUB_SHA ||
+      execSync("git rev-parse --short=7 HEAD", {
+        stdio: ["ignore", "pipe", "ignore"],
+      })
+        .toString()
+        .trim();
+    shortSha = rawSha.slice(0, 7);
+  } catch {
+    shortSha = "";
+  }
+
+  const [major = "1", minor = "0"] = baseVersion.split(".");
+  const versionCore = commitCount ? `${major}.${minor}.${commitCount}` : baseVersion;
+  const appVersion = shortSha ? `${versionCore} (${shortSha})` : versionCore;
+
+  // Format build timestamp in Asia/Manila (UTC+8) so multiple deploys on the same day are distinguishable
+  const phtIso = new Date(Date.now() + 8 * 3600_000).toISOString();
+  const buildDate = `${phtIso.slice(0, 10)} ${phtIso.slice(11, 16)} PHT`;
+
+  return { appVersion, buildDate };
+}
+
+const buildMeta = resolveAppBuildMeta(pkg.version ?? "1.0.0");
+
 export default defineConfig(({ mode }) => ({
   base: (process.env.VERCEL || process.env.E2E_ROOT_BASE) ? '/' : '/pwri-plantmonitoring/',
   envPrefix: ["VITE_"],
   define: {
-    __APP_VERSION__: JSON.stringify(pkg.version ?? "1.0.0"),
-    __APP_BUILD_DATE__: JSON.stringify(new Date().toISOString().slice(0, 10)),
+    __APP_VERSION__: JSON.stringify(buildMeta.appVersion),
+    __APP_BUILD_DATE__: JSON.stringify(buildMeta.buildDate),
   },
   server: {
     host: "0.0.0.0",

@@ -7,7 +7,7 @@ import "./index.css";
 import { registerSW } from "virtual:pwa-register";
 import { queryClient } from "@/lib/queryClient";
 import { toast } from "@/components/ui/sonner";
-import { createPwaUpdateController } from "@/lib/pwaUpdate";
+import { APP_VERSION, createPwaUpdateController } from "@/lib/pwaUpdate";
 
 // ── Chunk-load failure handler ────────────────────────────────────────────────
 // When GitHub Pages deploys a new build, Vite generates new chunk filenames
@@ -69,6 +69,7 @@ if (typeof window !== "undefined" && "serviceWorker" in navigator) {
       toast("A new version of PWRI Monitor is ready.", {
         id: "pwa-update",
         duration: Infinity,
+        description: `Running v${APP_VERSION} · Reload to apply the latest build.`,
         action: { label: "Update now", onClick: onAccept },
       });
     },
