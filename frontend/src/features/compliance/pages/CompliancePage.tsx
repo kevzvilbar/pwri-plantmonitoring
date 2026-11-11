@@ -1,23 +1,10 @@
 /**
  * Compliance.tsx — Compliance & Regulatory Radar page orchestrator.
  *
- * This file re-exports the full public API that external callers depend on
- * (Dashboard.tsx, ComplianceRadarCard, NRWGaugeCard, TrendChartCanvas,
- * ROTrains/Overview, ROTrains/index, PlantHeroBanner, Compliance.test.ts)
- * so that `import ... from '@/pages/Compliance'` continues to resolve.
- *
  * The actual logic lives in:
  *   ./compliance/types.ts          — types, utils, Supabase functions
  *   ./compliance/components/       — UI subcomponents
  */
-export type { Thresholds, Violation, ChemSupply, PlantComplianceSummary } from '../types';
-export {
-  DEFAULT_THRESHOLDS,
-  computeViolations,
-  fetchPlantMetrics,
-  fetchChemDaysOfSupply,
-  loadThresholds,
-} from '../types';
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useUrlTab } from '@/hooks/useUrlTab';

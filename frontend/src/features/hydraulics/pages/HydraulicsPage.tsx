@@ -18,6 +18,8 @@ import {
   Layers,
 } from 'lucide-react';
 import { AppLoading } from '@/components/AppLoading';
+import { DataState } from '@/components/DataState';
+import { PageHeader } from '@/components/PageHeader';
 
 export function HydraulicsPage() {
   const { roles } = useAuth();
@@ -88,42 +90,48 @@ export function HydraulicsPage() {
 
   if (isError) {
     return (
-      <div className="p-6 text-center space-y-3">
-        <p className="text-sm text-destructive">Failed to load well hydraulic fleet data.</p>
-        <Button size="sm" variant="outline" onClick={() => void refetch()}>
-          Retry
-        </Button>
+      <div className="space-y-6 pb-12 animate-fade-in">
+        <PageHeader
+          title="Well Fleet Hydraulics"
+          titleIcon={
+            <div className="p-1.5 rounded-lg bg-info/10 text-info">
+              <Waves className="h-4 w-4" />
+            </div>
+          }
+          subtitle="Monitor specific capacity (Q/s), drawdown margins, and motor load amperage across wellfields."
+        />
+        <DataState
+          error={new Error('Failed to load well hydraulic fleet data.')}
+          onRetry={() => void refetch()}
+        >
+          <div />
+        </DataState>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6 pb-12">
+    <div className="space-y-6 pb-12 animate-fade-in">
       {/* Page Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-        <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <div className="p-2 rounded-lg bg-info/10 text-info">
-              <Waves className="h-5 w-5" />
-            </div>
-            <h1 className="text-xl font-bold tracking-tight text-foreground">
-              Well Fleet Hydraulics
-            </h1>
+      <PageHeader
+        title="Well Fleet Hydraulics"
+        titleIcon={
+          <div className="p-1.5 rounded-lg bg-info/10 text-info">
+            <Waves className="h-4 w-4" />
           </div>
-          <p className="text-xs text-muted-foreground">
-            Cross-well hydraulic benchmarks, water levels, drawdown, and pump equipment surveillance.
-          </p>
-        </div>
-
-        <Button
-          size="sm"
-          variant="outline"
-          className="h-8 text-xs gap-1.5"
-          onClick={() => void refetch()}
-        >
-          <RefreshCw className="h-3.5 w-3.5" /> Refresh
-        </Button>
-      </div>
+        }
+        subtitle="Cross-well hydraulic benchmarks, water levels, drawdown, and pump equipment surveillance."
+        actions={
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8 text-xs gap-1.5"
+            onClick={() => void refetch()}
+          >
+            <RefreshCw className="h-3.5 w-3.5" /> Refresh
+          </Button>
+        }
+      />
 
       {/* Summary KPI Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">

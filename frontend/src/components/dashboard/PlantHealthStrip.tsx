@@ -55,7 +55,15 @@ export function PlantHealthStrip({ plantIds, onSelectPlant }: Props) {
           return (
             <div
               key={plant.id}
+              role="button"
+              tabIndex={0}
               onClick={() => onSelectPlant?.(plant.id)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  onSelectPlant?.(plant.id);
+                }
+              }}
               className={cn(
                 'inline-flex items-center gap-2 px-3 py-1 rounded-[8px] border text-xs font-semibold whitespace-nowrap transition-all duration-150 ease-spring-out active:scale-[0.98] cursor-pointer select-none shrink-0 shadow-2xs',
                 status === 'online' && 'bg-card border-border/80 text-foreground hover:border-primary/50',

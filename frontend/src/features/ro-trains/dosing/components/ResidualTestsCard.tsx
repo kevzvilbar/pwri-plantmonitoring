@@ -138,7 +138,7 @@ export function ResidualTestsCard({ samples, onChange }: ResidualTestsCardProps)
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <div>
-                  <Label className="text-3xs text-muted-foreground">Sampling Location</Label>
+                  <Label htmlFor={`residual-loc-${sample.id}`} className="text-3xs text-muted-foreground">Sampling Location</Label>
                   <Select
                     value={sample.pointRole}
                     onValueChange={(val: any) => {
@@ -149,7 +149,7 @@ export function ResidualTestsCard({ samples, onChange }: ResidualTestsCardProps)
                       });
                     }}
                   >
-                    <SelectTrigger className="h-7 text-xs mt-0.5">
+                    <SelectTrigger id={`residual-loc-${sample.id}`} className="h-7 text-xs mt-0.5">
                       <SelectValue placeholder="Select location" />
                     </SelectTrigger>
                     <SelectContent>
@@ -163,8 +163,9 @@ export function ResidualTestsCard({ samples, onChange }: ResidualTestsCardProps)
                 </div>
 
                 <div>
-                  <Label className="text-3xs text-muted-foreground">Custom Point Name</Label>
+                  <Label htmlFor={`residual-point-${sample.id}`} className="text-3xs text-muted-foreground">Custom Point Name</Label>
                   <Input
+                    id={`residual-point-${sample.id}`}
                     className="h-7 text-xs mt-0.5"
                     placeholder="e.g. Tank 2 outlet"
                     value={sample.samplingPoint}
@@ -175,12 +176,12 @@ export function ResidualTestsCard({ samples, onChange }: ResidualTestsCardProps)
 
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                 <div>
-                  <Label className="text-3xs text-muted-foreground">Method</Label>
+                  <Label htmlFor={`residual-method-${sample.id}`} className="text-3xs text-muted-foreground">Method</Label>
                   <Select
                     value={sample.method}
                     onValueChange={(val: any) => updateSample(sample.id, { method: val })}
                   >
-                    <SelectTrigger className="h-7 text-xs mt-0.5">
+                    <SelectTrigger id={`residual-method-${sample.id}`} className="h-7 text-xs mt-0.5">
                       <SelectValue placeholder="Method" />
                     </SelectTrigger>
                     <SelectContent>
@@ -193,8 +194,9 @@ export function ResidualTestsCard({ samples, onChange }: ResidualTestsCardProps)
                 </div>
 
                 <div>
-                  <Label className="text-3xs text-muted-foreground">Residual (ppm)</Label>
+                  <Label htmlFor={`residual-ppm-${sample.id}`} className="text-3xs text-muted-foreground">Residual (ppm)</Label>
                   <Input
+                    id={`residual-ppm-${sample.id}`}
                     type="number"
                     step="any"
                     min="0"
@@ -206,8 +208,9 @@ export function ResidualTestsCard({ samples, onChange }: ResidualTestsCardProps)
                 </div>
 
                 <div className="col-span-2 sm:col-span-1">
-                  <Label className="text-3xs text-muted-foreground">Test Time</Label>
+                  <Label htmlFor={`residual-time-${sample.id}`} className="text-3xs text-muted-foreground">Test Time</Label>
                   <Input
+                    id={`residual-time-${sample.id}`}
                     type="datetime-local"
                     className="h-7 text-xs mt-0.5"
                     value={sample.testedAt}

@@ -104,8 +104,10 @@ export function WellReadingForm({ highlightId }: { highlightId?: string | null }
     },
   });
 
-  const sharedGroups: Array<{ id: string; name: string; members: string[] }> =
-    (meterConfig?.wells_shared_electric_groups as any[]) ?? [];
+  const sharedGroups: Array<{ id: string; name: string; members: string[] }> = useMemo(
+    () => (meterConfig?.wells_shared_electric_groups as any[]) ?? [],
+    [meterConfig?.wells_shared_electric_groups],
+  );
 
   // Map: well ID → { groupId, groupName, primaryWellId (first member) }
   const wellGroupMap = useMemo(() => {

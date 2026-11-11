@@ -199,8 +199,9 @@ export function ConsumablesCard({
             {/* Extra Reagents Entry */}
             <div className="grid grid-cols-[100px_1fr] gap-2 items-center pt-1 border-t border-border/30">
               <div>
-                <Label className="text-3xs text-muted-foreground">Extra Used</Label>
+                <Label htmlFor={`extra-qty-${line.catalogId}`} className="text-3xs text-muted-foreground">Extra Used</Label>
                 <Input
+                  id={`extra-qty-${line.catalogId}`}
                   type="number"
                   step="any"
                   min="0"
@@ -213,13 +214,13 @@ export function ConsumablesCard({
                 />
               </div>
               <div>
-                <Label className="text-3xs text-muted-foreground">Reason for Extra</Label>
+                <Label htmlFor={`extra-reason-${line.catalogId}`} className="text-3xs text-muted-foreground">Reason for Extra</Label>
                 <Select
                   value={line.extraReason || 'retest'}
                   onValueChange={(val) => updateExtra(line.catalogId, { extraReason: val })}
                   disabled={!line.extraQty}
                 >
-                  <SelectTrigger className="h-7 text-xs mt-0.5">
+                  <SelectTrigger id={`extra-reason-${line.catalogId}`} className="h-7 text-xs mt-0.5">
                     <SelectValue placeholder="Reason" />
                   </SelectTrigger>
                   <SelectContent>
@@ -264,9 +265,9 @@ export function ConsumablesCard({
                   versus manufacturer specifications.
                 </p>
                 <div>
-                  <Label>Reagent Product</Label>
+                  <Label htmlFor="reagent-pack-product">Reagent Product</Label>
                   <Select value={selectedPackCatId} onValueChange={setSelectedPackCatId}>
-                    <SelectTrigger className="mt-1">
+                    <SelectTrigger id="reagent-pack-product" className="mt-1">
                       <SelectValue placeholder="Select reagent" />
                     </SelectTrigger>
                     <SelectContent>
@@ -280,8 +281,9 @@ export function ConsumablesCard({
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <Label>Actual Tests Run</Label>
+                    <Label htmlFor="reagent-pack-tests-run">Actual Tests Run</Label>
                     <Input
+                      id="reagent-pack-tests-run"
                       type="number"
                       min="1"
                       className="mt-1 font-mono"
@@ -290,8 +292,9 @@ export function ConsumablesCard({
                     />
                   </div>
                   <div>
-                    <Label>Rated Bottle Tests</Label>
+                    <Label htmlFor="reagent-pack-rated-tests">Rated Bottle Tests</Label>
                     <Input
+                      id="reagent-pack-rated-tests"
                       type="number"
                       min="1"
                       className="mt-1 font-mono"

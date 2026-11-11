@@ -38,8 +38,8 @@ export function WellRowAlerts({
             If the meter was replaced, check "Meter replaced" above instead.
           </span>
           <div className="pl-5 flex flex-wrap items-center gap-2 pt-1">
-            <label className="flex items-center gap-1.5 text-warn cursor-pointer">
-              <Checkbox checked={isRollover} onCheckedChange={(v) => onIsRolloverChange(v === true)} />
+            <label htmlFor={`well-rollover-${well.id}`} className="flex items-center gap-1.5 text-warn cursor-pointer">
+              <Checkbox id={`well-rollover-${well.id}`} checked={isRollover} onCheckedChange={(v) => onIsRolloverChange(v === true)} />
               This is a meter rollover (odometer wrapped around), not an error
             </label>
             {isRollover && (

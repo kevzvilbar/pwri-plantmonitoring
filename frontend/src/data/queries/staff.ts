@@ -41,25 +41,25 @@ export interface StaffMember {
 
 /** All staff members — uses RPC if available for richer data */
 export async function fetchAllStaff(): Promise<StaffMember[]> {
-  const { data: rpcData, error: rpcError } = await (supabase as any).rpc('get_all_staff_profiles');
-  if (!rpcError && rpcData) return rpcData as StaffMember[];
+  const { data: rpcData, error: rpcError } = await supabase.rpc('get_all_staff_profiles');
+  if (!rpcError && rpcData) return rpcData as unknown as StaffMember[];
   
   const { data, error } = await supabase
     .from('user_profiles')
     .select('id, first_name, last_name, middle_name, suffix, username, designation, plant_assignments, status, updated_at, last_seen_at, immediate_head_id, email, confirmed, profile_complete, created_at')
     .order('last_name');
   if (error) throw error;
-  return (data ?? []) as StaffMember[];
+  return (data ?? []) as unknown as StaffMember[];
 }
 
 /** All user roles — uses RPC if available */
 export async function fetchAllUserRoles(): Promise<{ user_id: string; role: string }[]> {
-  const { data: rpcData, error: rpcError } = await (supabase as any).rpc('get_all_user_roles');
-  if (!rpcError && rpcData) return rpcData as { user_id: string; role: string }[];
+  const { data: rpcData, error: rpcError } = await supabase.rpc('get_all_user_roles');
+  if (!rpcError && rpcData) return rpcData as unknown as { user_id: string; role: string }[];
   
-  const { data } = await (supabase as any).from('user_profiles').select('id, user_roles(role)');
-  return (data ?? []).flatMap((p: any) =>
-    (p.user_roles ?? []).map((r: any) => ({ user_id: p.id, role: r.role }))
+  const { data } = await supabase.from('user_profiles').select('id, user_roles(role)' as '*');
+  return ((data ?? []) as unknown as Array<{ id: string; user_roles?: Array<{ role: string }> | null }>).flatMap((p) =>
+    (p.user_roles ?? []).map((r) => ({ user_id: p.id, role: r.role }))
   );
 }
 
@@ -76,7 +76,7 @@ export async function fetchPlantFlags(): Promise<Record<string, { has_solar: boo
   if (error) throw error;
   
   const flags: Record<string, { has_solar: boolean; has_grid: boolean; ro_hourly_target?: number | string | null }> = {};
-  (data ?? []).forEach((p: any) => {
+  (data ?? []).forEach((p) => {
     flags[p.id] = { has_solar: p.has_solar ?? false, has_grid: p.has_grid ?? true, ro_hourly_target: null };
   });
   return flags;
@@ -106,24 +106,16 @@ export async function fetchEntityCountsPerPlant(): Promise<{
   const trainsPerPlant: Record<string, string[]> = {};
   const metersPerPlant: Record<string, number> = {};
   
-  (wells.data ?? []).forEach((w: any) => { wellsPerPlant[w.plant_id] = (wellsPerPlant[w.plant_id] ?? 0) + 1; });
-  (locators.data ?? []).forEach((l: any) => { locatorsPerPlant[l.plant_id] = (locatorsPerPlant[l.plant_id] ?? 0) + 1; });
-  (trains.data ?? []).forEach((t: any) => { (trainsPerPlant[t.plant_id] = trainsPerPlant[t.plant_id] ?? []).push(t.id); });
-  (meters.data ?? []).forEach((m: any) => { metersPerPlant[m.plant_id] = (metersPerPlant[m.plant_id] ?? 0) + 1; });
+  (wells.data ?? []).forEach((w) => { wellsPerPlant[w.plant_id] = (wellsPerPlant[w.plant_id] ?? 0) + 1; });
+  (locators.data ?? []).forEach((l) => { locatorsPerPlant[l.plant_id] = (locatorsPerPlant[l.plant_id] ?? 0) + 1; });
+  (trains.data ?? []).forEach((t) => { (trainsPerPlant[t.plant_id] = trainsPerPlant[t.plant_id] ?? []).push(t.id); });
+  (meters.data ?? []).forEach((m) => { metersPerPlant[m.plant_id] = (metersPerPlant[m.plant_id] ?? 0) + 1; });
   
   return { wellsPerPlant, locatorsPerPlant, trainsPerPlant, metersPerPlant };
 }
 
 /** Reading data for KPI calculations */
-export async function fetchKpiReadings(range: 'today' | number): Promise<{
-  wellReadings: any[];
-  locReadings: any[];
-  roReadings: any[];
-  meterReadings: any[];
-  powerReadings: any[];
-  chemReadings: any[];
-  blendingReadings: any[];
-}> {
+export async function fetchKpiReadings(range: 'today' | number) {
   const since = range === 'today' 
     ? new Date().toISOString().slice(0, 10)
     : new Date(Date.now() - (range as number) * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);

@@ -163,7 +163,7 @@ export function TrainsList({ plantId }: { plantId: string }) {
       }
       return true;
     });
-  }, [trains, statusFilter, debouncedSearchTerm, recentTrainIds, deriveTrainStatus]);
+  }, [trains, statusFilter, debouncedSearchTerm, deriveTrainStatus]);
 
   const runningCount = (trains ?? []).filter((t: any) => deriveTrainStatus(t) === 'Running').length;
   const maintenanceCount = (trains ?? []).filter((t: any) => deriveTrainStatus(t) === 'Maintenance').length;

@@ -92,9 +92,19 @@ export function DatePicker({
           <div className="flex items-center gap-1 shrink-0 ml-1 text-muted-foreground">
             {clearable && selectedDate && !disabled && (
               <span
+                role="button"
+                tabIndex={0}
                 onClick={handleClear}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onChange?.('');
+                  }
+                }}
                 className="p-0.5 rounded hover:bg-muted hover:text-foreground transition-colors cursor-pointer"
                 title="Clear date"
+                aria-label="Clear date"
               >
                 <X className="h-3 w-3" />
               </span>

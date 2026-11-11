@@ -65,14 +65,10 @@ export default function Maintenance() {
 
   return (
     <div className="space-y-4 animate-fade-in">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div>
-          <PageHeader title="PM Schedule" />
-          <p className="text-xs text-muted-foreground mt-0.5">
-            Manage routine service intervals, checklist executions, and equipment reliability records.
-          </p>
-        </div>
-      </div>
+      <PageHeader
+        title="PM Schedule"
+        subtitle="Manage routine service intervals, checklist executions, and equipment reliability records."
+      />
 
 
 
@@ -227,14 +223,14 @@ function AddTemplate() {
             id="maintenance-equipment-name"
           />
         </div>
-        <div>
-          <Label className="text-xs font-semibold">Maintenance Frequencies (Multi-Select)</Label>
+        <div role="group" aria-labelledby="maintenance-frequencies-label">
+          <div id="maintenance-frequencies-label" className="text-xs font-semibold leading-none">Maintenance Frequencies (Multi-Select)</div>
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 mt-1.5">
             {FREQUENCIES.map(f => (
-              <label key={f}
+              <label key={f} htmlFor={`maintenance-freq-${f}`}
                 className={`flex items-center gap-2 rounded-lg border px-2.5 py-2 cursor-pointer text-xs font-medium transition-colors
                   ${v.frequencies.has(f) ? 'border-primary bg-primary/10 text-primary font-bold' : 'border-border hover:bg-muted/40'}`}>
-                <Checkbox checked={v.frequencies.has(f)} onCheckedChange={() => toggleFreq(f)} />
+                <Checkbox id={`maintenance-freq-${f}`} checked={v.frequencies.has(f)} onCheckedChange={() => toggleFreq(f)} />
                 {f}
               </label>
             ))}

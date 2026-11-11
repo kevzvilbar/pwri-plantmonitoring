@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import {
-  _resetApiHealth, gateRead, isBreakerOpen, isTransientBackendError, queryRetry,
+  _resetApiHealth, gateRead, isAuthLockError, isBreakerOpen, isTransientBackendError, queryRetry,
   recordBackendFailure, recordBackendSuccess, backoffDelay,
 } from './apiHealth';
 
@@ -25,6 +25,14 @@ describe('apiHealth', () => {
     expect(queryRetry(0, { code: '42703', message: 'column does not exist' })).toBe(false);
     expect(queryRetry(0, { code: 'PGRST301', message: 'JWT expired' })).toBe(true);
     expect(queryRetry(1, { code: 'PGRST301', message: 'JWT expired' })).toBe(false);
+
+    const stealAbort = new Error("Lock broken by another request with the 'steal' option.");
+    const stolenRelease = new Error('Lock "lock:sb-sosfbfxovtleuvahxvpm-auth-token" was released because another request stole it');
+    expect(isAuthLockError(stealAbort)).toBe(true);
+    expect(isAuthLockError(stolenRelease)).toBe(true);
+    expect(queryRetry(0, stealAbort)).toBe(true);
+    expect(queryRetry(1, stolenRelease)).toBe(true);
+    expect(queryRetry(2, stolenRelease)).toBe(false);
   });
 
   it('backs off exponentially with bounded jitter', () => {

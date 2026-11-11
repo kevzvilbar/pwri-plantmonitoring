@@ -147,7 +147,7 @@ export function WellCard({
         )}
       </div>
       {isManager && (
-        <div className="flex items-center gap-1.5 mt-1.5 flex-wrap" onClick={e => e.stopPropagation()}>
+        <div role="presentation" className="flex items-center gap-1.5 mt-1.5 flex-wrap" onClick={e => e.stopPropagation()}>
           <button onClick={onToggleBlending} disabled={blendingPending}
             className={`inline-flex items-center gap-1 h-6 px-2 rounded-full text-2xs font-medium border transition-colors ${
               isBlending ? 'bg-primary border-primary text-primary-foreground'
@@ -180,7 +180,7 @@ export function WellCard({
           })()}
         </div>
       )}
-      <div className="mt-1.5 flex items-center gap-2" onClick={e => e.stopPropagation()}>
+      <div role="presentation" className="mt-1.5 flex items-center gap-2" onClick={e => e.stopPropagation()}>
         <button onClick={onSetDetail}
           className="text-xs text-primary hover:underline inline-flex items-center gap-0.5">Details →</button>
       </div>

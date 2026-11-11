@@ -23,7 +23,6 @@
 import { supabase } from '@/integrations/supabase/client';
 
 // ─── Bundle migration SQL files at build time ───────────────────────────────
-// eslint-disable-next-line no-restricted-syntax
 const migrationModules = import.meta.glob('../../../supabase/migrations/*.sql', {
   query: '?raw',
   import: 'default',
@@ -89,7 +88,6 @@ function findCreateTableBlocks(cleanedSql: string): { table: string; body: strin
   const out: { table: string; body: string }[] = [];
   const re = /create\s+table\s+(?:if\s+not\s+exists\s+)?(?:public\.)?([a-z_][a-z0-9_]*)/gi;
   let m: RegExpExecArray | null;
-  // eslint-disable-next-line no-cond-assign
   while ((m = re.exec(cleanedSql))) {
     const name = m[1].toLowerCase();
     const matchEnd = m.index + m[0].length;
@@ -128,13 +126,11 @@ function parseMigration(sql: string): ParsedMigration {
   const columnSeen = new Set<string>();
   const alterRe = /alter\s+table\s+(?:public\.)?([a-z_][a-z0-9_]*)([\s\S]*?)(?=alter\s+table|$)/gi;
   let alterMatch: RegExpExecArray | null;
-  // eslint-disable-next-line no-cond-assign
   while ((alterMatch = alterRe.exec(cleaned))) {
     const table = alterMatch[1].toLowerCase();
     const body = alterMatch[2];
     const addColRe = /add\s+column\s+(?:if\s+not\s+exists\s+)?([a-z_][a-z0-9_]*)/gi;
     let colMatch: RegExpExecArray | null;
-    // eslint-disable-next-line no-cond-assign
     while ((colMatch = addColRe.exec(body))) {
       const colname = colMatch[1].toLowerCase();
       const key = `${table}.${colname}`;
@@ -192,18 +188,18 @@ export interface MigrationProbeTable {
   expected_count: number;
 }
 export interface MigrationProbeColumn { table: string; column: string; exists: boolean; }
-export interface MigrationOverride {
+export type MigrationOverride = {
   marked_at: string;
   by_user_id: string | null;
   by_label: string | null;
   note: string | null;
-}
-export interface MigrationApplyHistory {
+};
+export type MigrationApplyHistory = {
   applied_at: string | null;
   by_label: string | null;
   note: string | null;
   source: string | null;
-}
+};
 export type MigrationStatusValue = 'applied' | 'pending' | 'partial' | 'indeterminate';
 export interface MigrationFile {
   filename: string;
@@ -238,7 +234,7 @@ export async function listMigrationStatus(): Promise<MigrationsResponse> {
   const files = loadMigrationFiles();
 
   const { data: stateRows, error: stateError } = await supabase
-    .from('migration_state' as any)
+    .from('migration_state')
     .select('filename, manual_override, apply_history');
   if (stateError) throw new Error(`Failed to load migration state: ${stateError.message}`);
 
@@ -291,7 +287,6 @@ export async function listMigrationStatus(): Promise<MigrationsResponse> {
 
     const addedColumnProbes: MigrationProbeColumn[] = [];
     for (const [table, col] of parsed.addedColumns) {
-      // eslint-disable-next-line no-await-in-loop
       const exists = await probeColumn(table, col);
       addedColumnProbes.push({ table, column: col, exists });
       allSignals.push(exists);
@@ -354,7 +349,7 @@ export async function listMigrationStatus(): Promise<MigrationsResponse> {
   }
 
   if (rowsToPersist.length > 0) {
-    const { error } = await supabase.from('migration_state' as any).upsert(rowsToPersist, { onConflict: 'filename' });
+    const { error } = await supabase.from('migration_state').upsert(rowsToPersist, { onConflict: 'filename' });
     if (error) throw new Error(`Failed to persist purged overrides: ${error.message}`);
   }
 
@@ -383,7 +378,7 @@ export async function markMigrationApplied(
     note: (note || '').trim().slice(0, 500) || null,
   };
   const { error } = await supabase
-    .from('migration_state' as any)
+    .from('migration_state')
     .upsert({ filename, manual_override: override }, { onConflict: 'filename' });
   if (error) throw new Error(error.message);
   return { ok: true, filename, manual_override: override };
@@ -394,7 +389,7 @@ export async function unmarkMigrationApplied(
 ): Promise<{ ok: true; filename: string; removed: boolean }> {
   validateFilename(filename, new Set(loadMigrationFiles().map((f) => f.filename)));
   const { data: row, error: rowErr } = await supabase
-    .from('migration_state' as any)
+    .from('migration_state')
     .select('manual_override')
     .eq('filename', filename)
     .maybeSingle();
@@ -406,7 +401,7 @@ export async function unmarkMigrationApplied(
   const removed = !!(row as unknown as { manual_override: unknown } | null)?.manual_override;
   if (removed) {
     const { error } = await supabase
-      .from('migration_state' as any)
+      .from('migration_state')
       .update({ manual_override: null })
       .eq('filename', filename);
     if (error) throw new Error(error.message);
@@ -439,7 +434,7 @@ export async function importApplyHistory(
 
   const known = new Set(loadMigrationFiles().map((f) => f.filename));
 
-  const { data: existingRows, error: existingErr } = await supabase.from('migration_state' as any).select('filename, apply_history');
+  const { data: existingRows, error: existingErr } = await supabase.from('migration_state').select('filename, apply_history');
   // Was: error discarded — a failure here made every filename look like it
   // had no existing history, which would make "fill_gaps" mode treat
   // already-recorded entries as new and potentially overwrite them.
@@ -496,7 +491,7 @@ export async function importApplyHistory(
   }
 
   if (toUpsert.length > 0) {
-    const { error } = await supabase.from('migration_state' as any).upsert(toUpsert, { onConflict: 'filename' });
+    const { error } = await supabase.from('migration_state').upsert(toUpsert, { onConflict: 'filename' });
     if (error) throw new Error(error.message);
   }
 

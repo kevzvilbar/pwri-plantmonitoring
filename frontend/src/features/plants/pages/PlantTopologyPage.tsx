@@ -299,7 +299,7 @@ export default function PlantTopology() {
         toast.success(`"${item.label}" placed on canvas`);
       }
     }
-  }, [effectivePlantId, customNodes, customColumns, posOverrides]);
+  }, [effectivePlantId, customNodes, customColumns, posOverrides, stages]);
 
   const startDrag = useCallback((item: DragItem, e: React.PointerEvent) => {
     setDragItem(item);

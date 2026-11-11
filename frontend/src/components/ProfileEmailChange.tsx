@@ -1,1 +1,1 @@
-export * from '@/features/auth/components/ProfileEmailChange';
+export { ProfileEmailChange } from '@/features/auth/components/ProfileEmailChange';

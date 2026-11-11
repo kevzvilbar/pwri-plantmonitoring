@@ -200,6 +200,7 @@ export function BookReader({ open, onOpenChange, initialChapterId }: BookReaderP
           {/* Mobile scrim */}
           {tocOpen && (
             <div
+              role="presentation"
               className="md:hidden fixed inset-0 top-[58px] bg-black/40 z-10"
               onClick={() => setTocOpen(false)}
             />

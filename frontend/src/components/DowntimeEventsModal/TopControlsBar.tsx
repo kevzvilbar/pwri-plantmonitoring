@@ -35,10 +35,11 @@ export function TopControlsBar({
     <div className="flex flex-wrap items-end justify-between gap-2.5 p-3 rounded-xl bg-card border border-border/80 shadow-2xs shrink-0">
       <div className="flex flex-wrap items-center gap-2 flex-1 min-w-[280px]">
         <div className="space-y-1 flex-1 min-w-[200px]">
-          <Label className="text-2xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+          <Label htmlFor="downtime-horizon-range" className="text-2xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
             <Calendar className="h-3 w-3 text-primary" /> Time Horizon Range
           </Label>
           <DateRangePicker
+            id="downtime-horizon-range"
             from={dateRange.from}
             to={dateRange.to}
             onChange={onDateRangeChange}
@@ -50,9 +51,9 @@ export function TopControlsBar({
 
         {!initialPlantId && plants.length > 0 && (
           <div className="space-y-1 min-w-[140px]">
-            <Label className="text-2xs font-semibold uppercase tracking-wider text-muted-foreground">Plant</Label>
+            <Label htmlFor="downtime-filter-plant" className="text-2xs font-semibold uppercase tracking-wider text-muted-foreground">Plant</Label>
             <Select value={selectedPlantId} onValueChange={onSelectedPlantIdChange}>
-              <SelectTrigger className="h-8.5 text-xs bg-background">
+              <SelectTrigger id="downtime-filter-plant" className="h-8.5 text-xs bg-background">
                 <SelectValue placeholder="All Plants" />
               </SelectTrigger>
               <SelectContent>

@@ -19,13 +19,15 @@ export function GridMeterBreakdownTable({
   breakdown: GridMeterBreakdown;
 }) {
   const { columns, byDate, hasUnattributed } = breakdown;
-  const cols: GridMeterColumn[] = hasUnattributed
-    ? [...columns, {
-        key: GRID_METER_OTHER_KEY,
-        label: 'Other',
-        title: 'Days recorded as a stored daily total without per-meter readings — cannot be attributed to a specific meter.',
-      }]
-    : columns;
+  const cols: GridMeterColumn[] = useMemo(() => (
+    hasUnattributed
+      ? [...columns, {
+          key: GRID_METER_OTHER_KEY,
+          label: 'Other',
+          title: 'Days recorded as a stored daily total without per-meter readings — cannot be attributed to a specific meter.',
+        }]
+      : columns
+  ), [columns, hasUnattributed]);
 
   const colTotals = useMemo(() => {
     const totals: Record<string, number> = {};

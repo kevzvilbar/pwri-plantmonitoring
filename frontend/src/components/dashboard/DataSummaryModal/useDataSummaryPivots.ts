@@ -179,7 +179,7 @@ export function useDataSummaryPivots({
       cur2.setDate(cur2.getDate() + 1);
     }
     return { dates: allDates2, entities: sortedMeters, pivot, estimatedKeys };
-  }, [productMeters, prodReadings, plantCodeById, fromStr, toStr, productExcludedPlantIds, directMeterIds]);
+  }, [productMeters, prodReadings, plantCodeById, fromStr, toStr, productExcludedPlantIds, directMeterIds, productMeterMultipliers]);
 
   const roProdPivot = useMemo(() => {
     const sortedTrains = [...(roTrainsMeta ?? [])]

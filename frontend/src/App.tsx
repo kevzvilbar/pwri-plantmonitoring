@@ -33,7 +33,7 @@ const Maintenance = lazy(() => import("./pages/Maintenance"));
 const Incidents = lazy(() => import("./pages/Incidents"));
 const Employees = lazy(() => import("./pages/Employees"));
 const Import = lazy(() => import("./pages/Import"));
-const Compliance = lazy(() => import("./pages/Compliance"));
+const Compliance = lazy(() => import("./features/compliance/pages/CompliancePage"));
 const Exports = lazy(() => import("./pages/Exports"));
 const Admin = lazy(() => import("./pages/Admin"));
 const Profile = lazy(() => import("./pages/Profile"));

@@ -1,6 +1,6 @@
 import { reportError, setMonitoringUser } from '@/lib/monitoring';
 
-import { createContext, useContext, useEffect, useRef, useState, ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState, ReactNode } from 'react';
 import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 import { usePlantStore } from '@/store/plantStore';
@@ -79,7 +79,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const USER_PROFILE_FIELDS = 'id, username, first_name, middle_name, last_name, suffix, designation, immediate_head_id, plant_assignments, status, profile_complete, confirmed' as const;
 
-  const loadProfileAndRoles = async (uid: string, force = false) => {
+  const loadProfileAndRoles = useCallback(async (uid: string, force = false) => {
     const now = Date.now();
     if (
       !force &&
@@ -101,7 +101,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // monitoring isn't configured — see src/lib/monitoring.ts).
     const roleNames = ((roleRows ?? []) as { role: Role }[]).map((r) => r.role);
     setMonitoringUser({ id: uid, role: roleNames.join(',') || undefined });
-  };
+  }, [PROFILE_CACHE_TTL_MS]);
 
   // Load the selected operator's profile whenever activeOperatorId changes
   useEffect(() => {
@@ -177,7 +177,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
 
     return () => subscription.subscription.unsubscribe();
-  }, []); // intentionally empty — must only run once
+  }, [loadProfileAndRoles]); // intentionally runs once on mount
 
   const refreshProfile = async () => {
     if (user) await loadProfileAndRoles(user.id, true);

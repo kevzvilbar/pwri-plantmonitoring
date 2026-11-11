@@ -111,10 +111,21 @@ export function PretreatmentAndROLog() {
   const sharedPowerGroup: string | null = (train as any)?.shared_power_meter_group ?? null;
   const isSharedPowerMeter = !!sharedPowerGroup;
 
+  const {
+    setHppTarget,
+    setTrainOnline,
+    setOfflineStart,
+    setOfflineEnd,
+    setOfflineReason,
+    setOfflineReasonOther,
+    setExemptionSubreason,
+    setExemptionDetail,
+  } = form;
+
   // Auto-fill from configured setpoint
   useEffect(() => {
-    form.setHppTarget(train?.hpp_target_pressure_psi != null ? String(train.hpp_target_pressure_psi) : '');
-  }, [train?.id, train?.hpp_target_pressure_psi]);
+    setHppTarget(train?.hpp_target_pressure_psi != null ? String(train.hpp_target_pressure_psi) : '');
+  }, [train?.id, train?.hpp_target_pressure_psi, setHppTarget]);
 
   // Auto-set offline when train is offline in DB or has no readings in past 2 hours.
   // Wait for isStatusLoading to settle before locking in a default — prevReadings/
@@ -135,33 +146,48 @@ export function PretreatmentAndROLog() {
     if (autoInitializedTrainId.current !== guardKey) {
       autoInitializedTrainId.current = guardKey;
       if (data.isEffectivelyOffline) {
-        form.setTrainOnline(false);
+        setTrainOnline(false);
         // Requirement: "The start time of the offline period will be set automatically from the auto-flag trigger time."
         const triggerTime = latestStatusLog?.confirmed_at
           ? new Date(latestStatusLog.confirmed_at)
           : data.lastReadingTime
             ? new Date(new Date(data.lastReadingTime).getTime() + TWO_HOURS_MS)
             : new Date(dt);
-        form.setOfflineStart(format(triggerTime, "yyyy-MM-dd'T'HH:mm"));
-        form.setOfflineEnd('');
-        form.setOfflineReason(
+        setOfflineStart(format(triggerTime, "yyyy-MM-dd'T'HH:mm"));
+        setOfflineEnd('');
+        setOfflineReason(
           latestStatusLog?.reason && !latestStatusLog.reason.startsWith('Auto-flagged')
             ? latestStatusLog.reason
             : ''
         );
       } else {
-        form.setTrainOnline(true);
-        form.setOfflineStart('');
-        form.setOfflineEnd('');
-        form.setOfflineReason('');
-        form.setOfflineReasonOther('');
+        setTrainOnline(true);
+        setOfflineStart('');
+        setOfflineEnd('');
+        setOfflineReason('');
+        setOfflineReasonOther('');
         // Pre-select a default sub-reason so the one-click shortcut is
         // immediately submittable — the operator can still change it before saving.
-        form.setExemptionSubreason('operator_failed_to_encode');
-        form.setExemptionDetail('');
+        setExemptionSubreason('operator_failed_to_encode');
+        setExemptionDetail('');
       }
     }
-  }, [train?.id, data.isStatusLoading, data.isEffectivelyOffline, data.lastReadingTime, latestStatusLog?.reason, dt]);
+  }, [
+    train,
+    data.isStatusLoading,
+    data.isEffectivelyOffline,
+    data.lastReadingTime,
+    latestStatusLog?.confirmed_at,
+    latestStatusLog?.reason,
+    dt,
+    setTrainOnline,
+    setOfflineStart,
+    setOfflineEnd,
+    setOfflineReason,
+    setOfflineReasonOther,
+    setExemptionSubreason,
+    setExemptionDetail,
+  ]);
 
   // ── Calculations hook ─────────────────────────────────────────────────────
   const calc = usePretreatmentCalculations(

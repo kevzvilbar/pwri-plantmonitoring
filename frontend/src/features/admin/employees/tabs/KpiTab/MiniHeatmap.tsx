@@ -49,6 +49,7 @@ function MiniHeatmap({ scores, days, label, todayStr, dutyStates, onHover }: {
     return (
       <div className="flex items-center justify-center py-1">
         <div
+          role="presentation"
           className="flex items-center justify-center rounded-md font-bold text-2xs text-white cursor-default select-none transition-transform hover:scale-105"
           style={{ background: color, width: 44, height: 22, opacity: status === 'na' ? 0.5 : 1 }}
           onMouseEnter={(e) => onHover(tooltip, e)}
@@ -80,10 +81,19 @@ function MiniHeatmap({ scores, days, label, todayStr, dutyStates, onHover }: {
         return (
           <div
             key={day}
+            role="button"
+            tabIndex={0}
+            aria-label={`${label} ${day}`}
             style={{ width: sqSize, height: sqSize, background: scoreColor(score, isToday), borderRadius: 2, flexShrink: 0, opacity: status === 'na' ? 0.25 : 0.88 }}
             onMouseEnter={(e) => onHover(tooltipText, e)}
             onMouseLeave={() => onHover(null)}
             onClick={(e) => onHover(tooltipText, e)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                onHover(tooltipText);
+              }
+            }}
             className="cursor-pointer transition-transform hover:scale-125"
           />
         );

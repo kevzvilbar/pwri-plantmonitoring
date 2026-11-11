@@ -54,13 +54,12 @@ export function TrainCard({
     highlightId: string;
   } | null>(null);
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (autoOpenLog) {
       setLogOpen(true);
       onAutoOpenConsumed?.();
     }
-  }, [autoOpenLog]);
+  }, [autoOpenLog, onAutoOpenConsumed]);
 
   const trainLabel = `Train ${train.train_number}${train.name ? ` · ${train.name}` : ''}`;
   const status: 'Running' | 'Maintenance' | 'Offline' = deriveTrainStatus(train, last);

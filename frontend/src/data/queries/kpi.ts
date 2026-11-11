@@ -39,7 +39,7 @@ export async function fetchPlantFlags(): Promise<Record<string, PlantFlags>> {
   if (error) throw error;
   
   const flags: Record<string, PlantFlags> = {};
-  (data ?? []).forEach((p: any) => {
+  (data ?? []).forEach((p) => {
     flags[p.id] = { has_solar: p.has_solar ?? false, has_grid: p.has_grid ?? true, ro_hourly_target: null };
   });
   return flags;
@@ -64,16 +64,16 @@ export async function fetchEntityCountsPerPlant(): Promise<EntityCountsPerPlant>
   const trainsPerPlant: Record<string, string[]> = {};
   const metersPerPlant: Record<string, number> = {};
   
-  (wells.data ?? []).filter((w: any) => w.status === 'Active').forEach((w: any) => { 
+  (wells.data ?? []).filter((w) => w.status === 'Active').forEach((w) => { 
     wellsPerPlant[w.plant_id] = (wellsPerPlant[w.plant_id] ?? 0) + 1; 
   });
-  (locators.data ?? []).filter((l: any) => l.status === 'Active').forEach((l: any) => { 
+  (locators.data ?? []).filter((l) => l.status === 'Active').forEach((l) => { 
     locatorsPerPlant[l.plant_id] = (locatorsPerPlant[l.plant_id] ?? 0) + 1; 
   });
-  (trains.data ?? []).filter((t: any) => t.status !== 'Offline').forEach((t: any) => { 
+  (trains.data ?? []).filter((t) => t.status !== 'Offline').forEach((t) => { 
     (trainsPerPlant[t.plant_id] = trainsPerPlant[t.plant_id] ?? []).push(t.id); 
   });
-  (meters.data ?? []).filter((m: any) => m.status === 'Active').forEach((m: any) => { 
+  (meters.data ?? []).filter((m) => m.status === 'Active').forEach((m) => { 
     metersPerPlant[m.plant_id] = (metersPerPlant[m.plant_id] ?? 0) + 1; 
   });
   
@@ -115,21 +115,21 @@ export async function fetchKpiReadings(since: string): Promise<KpiReadings> {
   if (blendingReadings.error) throw blendingReadings.error;
   
   return {
-    wellReadings: ((wellReadings.data ?? []) as any[])
-      .filter(r => !r.is_estimated && r.recorded_by != null) as { plant_id: string; well_id: string; reading_datetime: string; recorded_by: string | null }[],
-    locReadings: ((locReadings.data ?? []) as any[])
-      .filter(r => !r.is_estimated && r.recorded_by != null) as { plant_id: string; locator_id: string; reading_datetime: string; recorded_by: string | null }[],
-    roReadings: ((roReadings.data ?? []) as any[])
-      .filter(r => !r.is_estimated && r.recorded_by != null) as { plant_id: string; train_id: string; reading_datetime: string; recorded_by: string | null }[],
-    meterReadings: ((meterReadings.data ?? []) as any[])
-      .filter(r => !r.is_estimated && r.recorded_by != null) as { plant_id: string; meter_id: string; reading_datetime: string; recorded_by: string | null }[],
-    powerReadings: ((powerReadings.data ?? []) as any[])
-      .filter(r => !r.is_estimated && r.recorded_by != null) as { plant_id: string; reading_datetime: string; recorded_by: string | null; daily_solar_kwh: number | null; daily_grid_kwh: number | null }[],
-    chemReadings: ((chemReadings.data ?? []) as any[])
-      .filter(r => r.recorded_by != null) as { plant_id: string; log_datetime: string; recorded_by: string }[],
-    blendingReadings: ((blendingReadings.data ?? []) as any[])
+    wellReadings: (wellReadings.data ?? [])
+      .filter(r => !r.is_estimated && r.recorded_by != null),
+    locReadings: (locReadings.data ?? [])
+      .filter(r => !r.is_estimated && r.recorded_by != null),
+    roReadings: (roReadings.data ?? [])
+      .filter(r => !r.is_estimated && r.recorded_by != null),
+    meterReadings: (meterReadings.data ?? [])
+      .filter(r => !r.is_estimated && r.recorded_by != null),
+    powerReadings: (powerReadings.data ?? [])
+      .filter(r => !r.is_estimated && r.recorded_by != null),
+    chemReadings: (chemReadings.data ?? [])
+      .filter((r): r is { plant_id: string; log_datetime: string; recorded_by: string } => r.recorded_by != null),
+    blendingReadings: (blendingReadings.data ?? [])
       .filter(r => !r.is_estimated)
-      .map(r => ({ ...r, recorded_by: null })) as { plant_id: string; well_id: string; event_date: string; recorded_by: string | null }[],
+      .map(r => ({ ...r, recorded_by: null })),
   };
 }
 
@@ -147,13 +147,13 @@ export async function fetchLocatorsConfig(): Promise<Array<{ id: string; plant_i
 }
 
 export async function fetchTrainsConfig(): Promise<Array<{ id: string; plant_id: string; status: string }>> {
-  const { data, error } = await (supabase as any).from('ro_trains').select('id, plant_id, status');
+  const { data, error } = await supabase.from('ro_trains').select('id, plant_id, status');
   if (error) throw error;
   return (data ?? []) as Array<{ id: string; plant_id: string; status: string }>;
 }
 
 export async function fetchMetersConfig(): Promise<Array<{ id: string; plant_id: string; status: string }>> {
-  const { data, error } = await (supabase as any).from('product_meters').select('id, plant_id, status');
+  const { data, error } = await supabase.from('product_meters').select('id, plant_id, status');
   if (error) throw error;
   return (data ?? []) as Array<{ id: string; plant_id: string; status: string }>;
 }
@@ -164,8 +164,8 @@ export async function fetchWellReadings(since: string): Promise<Array<{ plant_id
     .select('plant_id, well_id, reading_datetime, recorded_by, is_estimated')
     .gte('reading_datetime', since);
   if (error) throw error;
-  return ((data ?? []) as any[])
-    .filter(r => !r.is_estimated && r.recorded_by != null) as Array<{ plant_id: string; well_id: string; reading_datetime: string; recorded_by: string | null }>;
+  return (data ?? [])
+    .filter(r => !r.is_estimated && r.recorded_by != null);
 }
 
 export async function fetchLocatorReadings(since: string): Promise<Array<{ plant_id: string; locator_id: string; reading_datetime: string; recorded_by: string | null }>> {
@@ -173,26 +173,26 @@ export async function fetchLocatorReadings(since: string): Promise<Array<{ plant
     .select('plant_id, locator_id, reading_datetime, recorded_by, is_estimated')
     .gte('reading_datetime', since);
   if (error) throw error;
-  return ((data ?? []) as any[])
-    .filter(r => !r.is_estimated && r.recorded_by != null) as Array<{ plant_id: string; locator_id: string; reading_datetime: string; recorded_by: string | null }>;
+  return (data ?? [])
+    .filter(r => !r.is_estimated && r.recorded_by != null);
 }
 
 export async function fetchRoTrainReadings(since: string): Promise<Array<{ plant_id: string; train_id: string; reading_datetime: string; recorded_by: string | null }>> {
-  const { data, error } = await (supabase as any).from('ro_train_readings')
+  const { data, error } = await supabase.from('ro_train_readings')
     .select('plant_id, train_id, reading_datetime, recorded_by, is_estimated')
     .gte('reading_datetime', since);
   if (error) throw error;
-  return ((data ?? []) as any[])
-    .filter(r => !r.is_estimated && r.recorded_by != null) as Array<{ plant_id: string; train_id: string; reading_datetime: string; recorded_by: string | null }>;
+  return (data ?? [])
+    .filter(r => !r.is_estimated && r.recorded_by != null);
 }
 
 export async function fetchProductMeterReadings(since: string): Promise<Array<{ plant_id: string; meter_id: string; reading_datetime: string; recorded_by: string | null }>> {
-  const { data, error } = await (supabase as any).from('product_meter_readings')
+  const { data, error } = await supabase.from('product_meter_readings')
     .select('plant_id, meter_id, reading_datetime, recorded_by, is_estimated')
     .gte('reading_datetime', since);
   if (error) throw error;
-  return ((data ?? []) as any[])
-    .filter(r => !r.is_estimated && r.recorded_by != null) as Array<{ plant_id: string; meter_id: string; reading_datetime: string; recorded_by: string | null }>;
+  return (data ?? [])
+    .filter(r => !r.is_estimated && r.recorded_by != null);
 }
 
 export async function fetchPowerReadings(since: string): Promise<Array<{ plant_id: string; reading_datetime: string; recorded_by: string | null; daily_solar_kwh: number | null; daily_grid_kwh: number | null }>> {
@@ -200,8 +200,8 @@ export async function fetchPowerReadings(since: string): Promise<Array<{ plant_i
     .select('plant_id, reading_datetime, recorded_by, daily_solar_kwh, daily_grid_kwh, is_estimated')
     .gte('reading_datetime', since);
   if (error) throw error;
-  return ((data ?? []) as any[])
-    .filter(r => !r.is_estimated && r.recorded_by != null) as Array<{ plant_id: string; reading_datetime: string; recorded_by: string | null; daily_solar_kwh: number | null; daily_grid_kwh: number | null }>;
+  return (data ?? [])
+    .filter(r => !r.is_estimated && r.recorded_by != null);
 }
 
 export async function fetchChemReadings(since: string): Promise<Array<{ plant_id: string; log_datetime: string; recorded_by: string }>> {
@@ -209,8 +209,8 @@ export async function fetchChemReadings(since: string): Promise<Array<{ plant_id
     .select('plant_id, log_datetime, recorded_by')
     .gte('log_datetime', since);
   if (error) throw error;
-  return ((data ?? []) as any[])
-    .filter(r => r.recorded_by != null) as Array<{ plant_id: string; log_datetime: string; recorded_by: string }>;
+  return (data ?? [])
+    .filter((r): r is { plant_id: string; log_datetime: string; recorded_by: string } => r.recorded_by != null);
 }
 
 export async function fetchBlendingReadings(since: string): Promise<Array<{ plant_id: string; well_id: string; event_date: string; recorded_by: string | null }>> {
@@ -218,9 +218,9 @@ export async function fetchBlendingReadings(since: string): Promise<Array<{ plan
     .select('plant_id, well_id, event_date, is_estimated')
     .gte('event_date', since.slice(0, 10));
   if (error) throw error;
-  return ((data ?? []) as any[])
+  return (data ?? [])
     .filter(r => !r.is_estimated)
-    .map(r => ({ ...r, recorded_by: null })) as Array<{ plant_id: string; well_id: string; event_date: string; recorded_by: string | null }>;
+    .map(r => ({ ...r, recorded_by: null }));
 }
 
 export async function fetchShiftDutyLogs(since: string): Promise<Array<{
@@ -241,5 +241,5 @@ export async function fetchShiftDutyLogs(since: string): Promise<Array<{
     console.warn('[KPI] fetchShiftDutyLogs error:', error);
     return [];
   }
-  return (data ?? []) as any[];
+  return data ?? [];
 }

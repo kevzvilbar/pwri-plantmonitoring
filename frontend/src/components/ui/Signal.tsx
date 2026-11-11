@@ -252,6 +252,8 @@ export function Signal({
 
   return (
     <div
+      role="presentation"
+      tabIndex={isClickable ? 0 : undefined}
       className={cn(
         'group p-3 rounded-xl border transition-all relative select-none',
         cfg.bgClass,
@@ -261,6 +263,12 @@ export function Signal({
       )}
       onClick={() => {
         if (onNavigate && linkPath) onNavigate(linkPath);
+      }}
+      onKeyDown={(e) => {
+        if (isClickable && e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) {
+          e.preventDefault();
+          if (onNavigate && linkPath) onNavigate(linkPath);
+        }
       }}
       data-testid={testId}
     >
@@ -291,6 +299,7 @@ export function Signal({
             {/* Actions Overflow Menu */}
             {hasActions && (
               <div
+                role="presentation"
                 className="shrink-0"
                 onClick={(e) => e.stopPropagation()}
               >
@@ -456,9 +465,18 @@ export function Signal({
               )}
               {linkPath && (
                 <span
+                  role="button"
+                  tabIndex={0}
                   onClick={(e) => {
                     e.stopPropagation();
                     if (onNavigate) onNavigate(linkPath);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      if (onNavigate) onNavigate(linkPath);
+                    }
                   }}
                   className="text-primary font-semibold hover:underline flex items-center gap-0.5 cursor-pointer shrink-0"
                 >

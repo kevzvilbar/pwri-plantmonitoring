@@ -33,8 +33,8 @@ export function AddStockDialog() {
 
   // Catalog items
   const { data: catData } = useChemCatalog(plantId || null);
-  const catalog = catData?.catalog ?? [];
-  const allUnits = catData?.units ?? [];
+  const catalog = useMemo(() => catData?.catalog ?? [], [catData?.catalog]);
+  const allUnits = useMemo(() => catData?.units ?? [], [catData?.units]);
 
   const selectedProduct = useMemo(() => {
     return catalog.find((c) => c.id === catalogId);

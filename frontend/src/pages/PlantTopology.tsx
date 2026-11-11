@@ -1,2 +1,1 @@
-export * from '@/features/plants';
-export { PlantTopologyPage as default } from '@/features/plants';
+export { default } from '@/features/plants/pages/PlantTopologyPage';

@@ -31,9 +31,11 @@ export function ChemicalsSection({
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
           {PLANT_CHEMICALS.map(chem => {
             const isEnabled = cfg.enabled_chemicals.length === 0 || cfg.enabled_chemicals.includes(chem.name);
+            const switchId = `chem-toggle-${chem.name.replace(/\s+/g, '-').toLowerCase()}`;
             return (
               <label
                 key={chem.name}
+                htmlFor={switchId}
                 className={[
                   'flex items-center gap-3 p-3 rounded-lg border transition-colors',
                   isEnabled
@@ -47,6 +49,7 @@ export function ChemicalsSection({
                   <div className="text-xs text-muted-foreground">default unit: {chem.defaultUnit}</div>
                 </div>
                 <Switch
+                  id={switchId}
                   checked={isEnabled}
                   disabled={!canEdit}
                   onCheckedChange={canEdit ? (checked) => {

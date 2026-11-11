@@ -1,11 +1,11 @@
-import type { ReactNode } from 'react';
+import { useId, type ReactNode } from 'react';
 import { Switch } from '@/components/ui/switch';
 
 export function MeterToggleTile({
   icon, title, subtitle, checked, onToggle, canEdit,
   accentColor = 'teal',
 }: {
-  icon: React.ReactNode;
+  icon: ReactNode;
   title: string;
   subtitle: string;
   checked: boolean;
@@ -13,6 +13,7 @@ export function MeterToggleTile({
   canEdit: boolean;
   accentColor?: 'teal' | 'amber' | 'blue' | 'purple' | 'neutral';
 }) {
+  const switchId = useId();
   const colors = {
     teal:   { on: 'border-primary/60 bg-primary-soft/70', icon: 'bg-primary-soft', sw: 'data-[state=checked]:bg-primary' },
     amber:  { on: 'border-warn/60 bg-warn-soft/70', icon: 'bg-warn-soft', sw: 'data-[state=checked]:bg-warn' },
@@ -30,7 +31,7 @@ export function MeterToggleTile({
   }[accentColor];
 
   return (
-    <label className={[
+    <label htmlFor={switchId} className={[
       'flex items-center justify-between gap-3 p-3 rounded-lg border transition-colors',
       checked ? colors.on : 'border-border bg-muted/30',
       canEdit ? 'cursor-pointer' : 'cursor-default',
@@ -45,6 +46,7 @@ export function MeterToggleTile({
         </div>
       </div>
       <Switch
+        id={switchId}
         checked={checked}
         onCheckedChange={canEdit ? onToggle : undefined}
         disabled={!canEdit}

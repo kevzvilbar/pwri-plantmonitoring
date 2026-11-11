@@ -276,7 +276,7 @@ export function ChemProductCard({
               {/* Product Form Selection & Entry Mode */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <div>
-                  <Label className="text-3xs uppercase tracking-wider text-muted-foreground">
+                  <Label htmlFor={`chem-form-${family}-${index}`} className="text-3xs uppercase tracking-wider text-muted-foreground">
                     Product Form
                   </Label>
                   <Select
@@ -296,7 +296,7 @@ export function ChemProductCard({
                       }
                     }}
                   >
-                    <SelectTrigger className="h-7 text-xs mt-0.5">
+                    <SelectTrigger id={`chem-form-${family}-${index}`} className="h-7 text-xs mt-0.5">
                       <SelectValue placeholder="Select form" />
                     </SelectTrigger>
                     <SelectContent>
@@ -310,9 +310,9 @@ export function ChemProductCard({
                 </div>
 
                 <div>
-                  <Label className="text-3xs uppercase tracking-wider text-muted-foreground">
+                  <div className="text-3xs font-medium leading-none uppercase tracking-wider text-muted-foreground">
                     Input Method
-                  </Label>
+                  </div>
                   <div className="flex gap-1 mt-0.5">
                     <Button
                       type="button"
@@ -444,8 +444,9 @@ export function ChemProductCard({
 
                   <div className="grid grid-cols-[1fr_1.5fr] gap-2">
                     <div>
-                      <Label className="text-3xs text-muted-foreground">Quantity</Label>
+                      <Label htmlFor={`chem-qty-${family}-${index}`} className="text-3xs text-muted-foreground">Quantity</Label>
                       <Input
+                        id={`chem-qty-${family}-${index}`}
                         type="number"
                         step="any"
                         min="0"
@@ -458,7 +459,7 @@ export function ChemProductCard({
                       />
                     </div>
                     <div>
-                      <Label className="text-3xs text-muted-foreground">Container Type</Label>
+                      <Label htmlFor={`chem-container-${family}-${index}`} className="text-3xs text-muted-foreground">Container Type</Label>
                       <Select
                         value={`${item.factorToBase}`}
                         onValueChange={(val) => {
@@ -478,7 +479,7 @@ export function ChemProductCard({
                           updateItem(index, { factorToBase: factor, entryUnit: label });
                         }}
                       >
-                        <SelectTrigger className="h-7 text-xs mt-0.5">
+                        <SelectTrigger id={`chem-container-${family}-${index}`} className="h-7 text-xs mt-0.5">
                           <SelectValue placeholder="Select container" />
                         </SelectTrigger>
                         <SelectContent>
@@ -512,8 +513,9 @@ export function ChemProductCard({
               {item.entryMode === 'batch' && (
                 <div className="grid grid-cols-[1fr_80px] gap-2">
                   <div>
-                    <Label className="text-3xs text-muted-foreground">Batch Dosed Amount</Label>
+                    <Label htmlFor={`chem-batch-qty-${family}-${index}`} className="text-3xs text-muted-foreground">Batch Dosed Amount</Label>
                     <Input
+                      id={`chem-batch-qty-${family}-${index}`}
                       type="number"
                       step="any"
                       min="0"
@@ -530,7 +532,7 @@ export function ChemProductCard({
                     />
                   </div>
                   <div>
-                    <Label className="text-3xs text-muted-foreground">Unit</Label>
+                    <div className="text-3xs font-medium leading-none text-muted-foreground">Unit</div>
                     <div className="h-7 mt-0.5 px-2.5 flex items-center justify-center font-mono font-medium rounded-md bg-muted text-xs border border-input">
                       {product?.base_unit ?? 'kg'}
                     </div>
@@ -541,12 +543,12 @@ export function ChemProductCard({
               {item.entryMode === 'tank_level' && (
                 <div className="space-y-2">
                   <div>
-                    <Label className="text-3xs text-muted-foreground">Day Tank</Label>
+                    <Label htmlFor={`chem-day-tank-${family}-${index}`} className="text-3xs text-muted-foreground">Day Tank</Label>
                     <Select
                       value={item.dayTankId || familyDayTanks[0]?.id}
                       onValueChange={(val) => updateItem(index, { dayTankId: val })}
                     >
-                      <SelectTrigger className="h-7 text-xs mt-0.5">
+                      <SelectTrigger id={`chem-day-tank-${family}-${index}`} className="h-7 text-xs mt-0.5">
                         <SelectValue placeholder="Pick tank" />
                       </SelectTrigger>
                       <SelectContent>
@@ -561,8 +563,9 @@ export function ChemProductCard({
 
                   <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <Label className="text-3xs text-muted-foreground">Start Level (L)</Label>
+                      <Label htmlFor={`chem-tank-start-${family}-${index}`} className="text-3xs text-muted-foreground">Start Level (L)</Label>
                       <Input
+                        id={`chem-tank-start-${family}-${index}`}
                         type="number"
                         step="any"
                         min="0"
@@ -575,8 +578,9 @@ export function ChemProductCard({
                       />
                     </div>
                     <div>
-                      <Label className="text-3xs text-muted-foreground">End Level (L)</Label>
+                      <Label htmlFor={`chem-tank-end-${family}-${index}`} className="text-3xs text-muted-foreground">End Level (L)</Label>
                       <Input
+                        id={`chem-tank-end-${family}-${index}`}
                         type="number"
                         step="any"
                         min="0"

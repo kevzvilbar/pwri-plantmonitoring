@@ -203,8 +203,16 @@ export function PMDueSoonCard({ plantIds }: Props) {
           {items.map((item) => (
             <div
               key={item.templateId}
+              role="button"
+              tabIndex={0}
               className="flex items-center gap-2.5 p-2 rounded-md bg-muted/20 border border-border/30 hover:bg-muted/30 transition-colors cursor-pointer"
               onClick={() => navigate('/maintenance')}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  navigate('/maintenance');
+                }
+              }}
             >
               {/* Clock icon with status color */}
               <Clock

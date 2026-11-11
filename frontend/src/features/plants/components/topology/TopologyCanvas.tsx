@@ -158,7 +158,7 @@ export default function PlantTopologyContent({
 
   // The plant's process line shape. A plant with no `plant_process_stages`
   // rows resolves to DEFAULT_PROCESS_STAGES, i.e. the legacy column order.
-  const stages = useMemo(() => resolveStages((rawData as any)?.processStages), [rawData?.processStages]);
+  const stages = useMemo(() => resolveStages((rawData as any)?.processStages), [rawData]);
   const stageZones = useMemo(() => buildStageZones(stages), [stages]);
   const colSequence = useMemo(() => buildColSequence(customColumns, stages), [customColumns, stages]);
   const colXMap = useMemo(() => buildColXMap(customColumns, colWidths, stages), [customColumns, colWidths, stages]);

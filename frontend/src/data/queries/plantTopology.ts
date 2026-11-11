@@ -54,8 +54,8 @@ export interface TopoProcessStage {
   node_type: string;
   scope: string;
   sort_order: number;
-  detail: string | null;
-  wrap_cols: number | null;
+  detail?: string | null;
+  wrap_cols?: number | null;
 }
 
 /** A tank in the plant's product-water bank (product_tanks) */
@@ -103,7 +103,7 @@ export interface TopoPowerConfig {
 
 /** Plant meter config */
 export interface TopoMeterConfig {
-  config: any;
+  config: Record<string, unknown> | null;
   permeate_is_production: boolean;
 }
 
@@ -146,7 +146,7 @@ export interface TopologyData {
  * rather than erroring out on a missing relation. Every one of these reads
  * degrades to empty instead of throwing.
  */
-async function fetchOptional<T>(run: () => any, fallback: T): Promise<T> {
+async function fetchOptional<T>(run: () => PromiseLike<{ data: unknown; error: unknown }>, fallback: T): Promise<T> {
   try {
     const { data, error } = await run();
     if (error) return fallback;
@@ -157,10 +157,10 @@ async function fetchOptional<T>(run: () => any, fallback: T): Promise<T> {
 }
 
 async function fetchBlendingWellIds(plantId: string): Promise<Set<string>> {
-  const { data, error } = await (supabase.from('blending_wells' as any) as any)
+  const { data, error } = await supabase.from('blending_wells')
     .select('well_id').eq('plant_id', plantId);
   if (error) return new Set(); // table/RLS hiccup — fall back to no blending wells rather than throw
-  return new Set((data ?? []).map((r: any) => r.well_id));
+  return new Set((data ?? []).map((r) => r.well_id));
 }
 
 /** Fetch all topology data for a plant */
@@ -188,17 +188,17 @@ export async function fetchTopologyData(plantId: string): Promise<TopologyData> 
       .eq('plant_id', plantId).maybeSingle(),
     fetchBlendingWellIds(plantId),
     fetchOptional<TopoProcessStage[] | null>(
-      () => (supabase.from('plant_process_stages' as any) as any)
+      () => supabase.from('plant_process_stages')
         .select('stage_key,label,node_type,scope,sort_order,detail,wrap_cols')
         .eq('plant_id', plantId).order('sort_order'),
       null),
     fetchOptional<TopoProductTank[]>(
-      () => (supabase.from('product_tanks' as any) as any)
+      () => supabase.from('product_tanks')
         .select('id,name,tank_number,status,capacity_m3,product_meter_id')
         .eq('plant_id', plantId).order('tank_number'),
       []),
     fetchOptional<TopoDosingPoint[]>(
-      () => (supabase.from('dosing_points' as any) as any)
+      () => supabase.from('dosing_points')
         .select('id,chemical,label,injects_into_stage_key,pump_hp,status')
         .eq('plant_id', plantId),
       []),
@@ -206,12 +206,12 @@ export async function fetchTopologyData(plantId: string): Promise<TopologyData> 
     // select above: that select throws on error, and an unmigrated database
     // would take the whole topology down with it over two cosmetic columns.
     fetchOptional<{ id: string; num_vessels: number; elements_per_vessel: number }[]>(
-      () => (supabase.from('ro_trains' as any) as any)
+      () => supabase.from('ro_trains')
         .select('id,num_vessels,elements_per_vessel').eq('plant_id', plantId),
       []),
     fetchOptional<TopologyConfigPayload | null>(
       async () => {
-        const { data, error } = await (supabase.from('plant_topology_config' as any) as any)
+        const { data, error } = await supabase.from('plant_topology_config')
           .select('custom_nodes,custom_columns,position_overrides,column_widths,palette_items')
           .eq('plant_id', plantId)
           .maybeSingle();
@@ -289,17 +289,17 @@ export async function fetchWellsForTopology(plantId: string): Promise<TopoWell[]
     supabase.from('wells').select('id,name,status,has_power_meter,is_blending_well').eq('plant_id', plantId).order('name'),
     fetchBlendingWellIds(plantId),
     fetchOptional<TopoProcessStage[] | null>(
-      () => (supabase.from('plant_process_stages' as any) as any)
+      () => supabase.from('plant_process_stages')
         .select('stage_key,label,node_type,scope,sort_order,detail,wrap_cols')
         .eq('plant_id', plantId).order('sort_order'),
       null),
     fetchOptional<TopoProductTank[]>(
-      () => (supabase.from('product_tanks' as any) as any)
+      () => supabase.from('product_tanks')
         .select('id,name,tank_number,status,capacity_m3,product_meter_id')
         .eq('plant_id', plantId).order('tank_number'),
       []),
     fetchOptional<TopoDosingPoint[]>(
-      () => (supabase.from('dosing_points' as any) as any)
+      () => supabase.from('dosing_points')
         .select('id,chemical,label,injects_into_stage_key,pump_hp,status')
         .eq('plant_id', plantId),
       []),
@@ -307,7 +307,7 @@ export async function fetchWellsForTopology(plantId: string): Promise<TopoWell[]
     // select above: that select throws on error, and an unmigrated database
     // would take the whole topology down with it over two cosmetic columns.
     fetchOptional<{ id: string; num_vessels: number; elements_per_vessel: number }[]>(
-      () => (supabase.from('ro_trains' as any) as any)
+      () => supabase.from('ro_trains')
         .select('id,num_vessels,elements_per_vessel').eq('plant_id', plantId),
       []),
   ]);

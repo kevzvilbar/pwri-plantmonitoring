@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef } from 'react';
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -41,14 +41,13 @@ export function Overview() {
     if (!deepTrain) return;
     setStatusFilter('All');
     setSearch('');
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [deepTrain]);
 
-  const clearDeepLinkParams = () => {
+  const clearDeepLinkParams = useCallback(() => {
     const sp = new URLSearchParams(searchParams);
     sp.delete('plant'); sp.delete('train'); sp.delete('log'); sp.delete('logTab'); sp.delete('highlight');
     setSearchParams(sp, { replace: true });
-  };
+  }, [searchParams, setSearchParams]);
 
   const { data: trains } = useROTrainsForPlant(plantId);
 

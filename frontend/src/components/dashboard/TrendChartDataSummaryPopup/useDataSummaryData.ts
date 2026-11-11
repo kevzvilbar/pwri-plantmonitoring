@@ -175,10 +175,10 @@ export function useDataSummaryData({
   useEffect(() => {
     if (!filterFrom && defaultFrom) setFilterFrom(defaultFrom);
     if (!filterTo && defaultTo) setFilterTo(defaultTo);
-  }, [defaultFrom, defaultTo]);
+  }, [defaultFrom, defaultTo, filterFrom, filterTo]);
 
-  const parsedFrom = filterFrom ? new Date(`${filterFrom}T00:00:00`) : null;
-  const parsedTo = filterTo ? new Date(`${filterTo}T23:59:59`) : null;
+  const parsedFrom = useMemo(() => (filterFrom ? new Date(`${filterFrom}T00:00:00`) : null), [filterFrom]);
+  const parsedTo = useMemo(() => (filterTo ? new Date(`${filterTo}T23:59:59`) : null), [filterTo]);
 
   const filteredChartData = useMemo(() => {
     if (!parsedFrom && !parsedTo) return chartData;
@@ -189,7 +189,7 @@ export function useDataSummaryData({
       if (parsedTo && dt > parsedTo) return false;
       return true;
     });
-  }, [chartData, filterFrom, filterTo]);
+  }, [chartData, parsedFrom, parsedTo]);
 
   const filteredLocReadings = useMemo(() => {
     if (!parsedFrom && !parsedTo) return locReadings;
@@ -199,7 +199,7 @@ export function useDataSummaryData({
       if (parsedTo && dt > parsedTo) return false;
       return true;
     });
-  }, [locReadings, filterFrom, filterTo]);
+  }, [locReadings, parsedFrom, parsedTo]);
 
   const filteredProductReadings = useMemo(() => {
     if (!parsedFrom && !parsedTo) return productReadings;
@@ -209,7 +209,7 @@ export function useDataSummaryData({
       if (parsedTo && dt > parsedTo) return false;
       return true;
     });
-  }, [productReadings, filterFrom, filterTo]);
+  }, [productReadings, parsedFrom, parsedTo]);
 
   const filteredWellReadings = useMemo(() => {
     if (!parsedFrom && !parsedTo) return wellReadings;
@@ -219,7 +219,7 @@ export function useDataSummaryData({
       if (parsedTo && dt > parsedTo) return false;
       return true;
     });
-  }, [wellReadings, filterFrom, filterTo]);
+  }, [wellReadings, parsedFrom, parsedTo]);
 
   const plantIdsForPower = useMemo(() => {
     const ids = new Set<string>();
@@ -291,7 +291,7 @@ export function useDataSummaryData({
       if (parsedTo && dt > parsedTo) return false;
       return true;
     });
-  }, [roReadings, filterFrom, filterTo]);
+  }, [roReadings, parsedFrom, parsedTo]);
 
   const roTrainEntities = useMemo<{ id: string; label: string }[]>(() => {
     const idsFromReadings = (filteredRoReadings ?? []).map((r: any) => r.train_id).filter(Boolean);

@@ -20,13 +20,22 @@ export interface InstrumentTileProps extends React.HTMLAttributes<HTMLDivElement
  * - Semantic tone integration: solid alert wash and top edge-light for warn/danger states.
  */
 export const InstrumentTile = React.forwardRef<HTMLDivElement, InstrumentTileProps>(
-  ({ className, tone, edgeLight, clickable, children, onClick, ...props }, ref) => {
+  ({ className, tone, edgeLight, clickable, children, onClick, onKeyDown, tabIndex, ...props }, ref) => {
     const isClickable = clickable || !!onClick;
 
     return (
       <div
         ref={ref}
+        role="presentation"
+        tabIndex={tabIndex ?? (isClickable ? 0 : undefined)}
         onClick={onClick}
+        onKeyDown={(e) => {
+          onKeyDown?.(e);
+          if (onClick && !e.defaultPrevented && e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) {
+            e.preventDefault();
+            onClick(e as unknown as React.MouseEvent<HTMLDivElement>);
+          }
+        }}
         className={cn(
           'instrument-tile group relative rounded-2xl p-0.5 transition-all duration-150 min-w-0 h-full',
           tone

@@ -173,7 +173,15 @@ export function WaterBalanceHud({
 
             {/* 4. Permeate Reconciliation Discrepancy */}
             <div
+              role="button"
+              tabIndex={0}
               onClick={onOpenLedger}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  onOpenLedger();
+                }
+              }}
               className={cn(
                 'rounded-lg border p-2 space-y-0.5 cursor-pointer transition-all',
                 status === 'alert'

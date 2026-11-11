@@ -328,11 +328,12 @@ export function ShiftHandoverModal() {
 
             {/* Optional Pair-Duty Partner Selector */}
             <div className="space-y-1.5 p-3 rounded-xl bg-muted/40 border border-border/70">
-              <label className="text-3xs uppercase font-bold text-muted-foreground flex items-center gap-1.5">
+              <label htmlFor="shift-partner-select" className="text-3xs uppercase font-bold text-muted-foreground flex items-center gap-1.5">
                 <UserPlus className="h-3.5 w-3.5 text-accent" />
                 Working with a partner on this shift? (Optional)
               </label>
               <select
+                id="shift-partner-select"
                 value={selectedPartnerId}
                 onChange={(e) => setSelectedPartnerId(e.target.value)}
                 className="w-full text-xs px-2.5 py-2 rounded-lg bg-background border border-border/80 text-foreground focus:outline-none focus:ring-1 focus:ring-accent"

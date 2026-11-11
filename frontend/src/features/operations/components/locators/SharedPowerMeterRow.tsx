@@ -94,6 +94,7 @@ export function SharedPowerMeterRow({
         {/* Date picker */}
         <label className="shrink-0 cursor-pointer relative">
           <span
+            role="presentation"
             className="inline-flex items-center gap-1.5 text-2xs text-muted-foreground bg-muted border border-border/70 rounded-md px-3.5 py-1.5 font-mono-num whitespace-nowrap hover:bg-muted/80 transition-colors peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-ring peer-focus-visible:outline-offset-2"
             onClick={(e) => {
               e.preventDefault();

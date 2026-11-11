@@ -1,2 +1,2 @@
-export * from '@/features/plants';
-export { PlantsPage as default } from '@/features/plants';
+export { default } from '@/features/plants/pages/PlantsPage';
+export type { AddPlantFormData } from '@/features/plants/pages/PlantsPage';

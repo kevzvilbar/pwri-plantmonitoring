@@ -20,6 +20,8 @@ export function DropZone({ onFile, file, onClear, id }: DropZoneProps) {
 
   return (
     <div
+      role="button"
+      tabIndex={0}
       onDrop={onDrop}
       onDragOver={e => e.preventDefault()}
       className={cn(
@@ -27,6 +29,12 @@ export function DropZone({ onFile, file, onClear, id }: DropZoneProps) {
         file ? 'border-primary/40 bg-primary/5' : 'border-border hover:border-primary/40 hover:bg-muted/30',
       )}
       onClick={() => !file && ref.current?.click()}
+      onKeyDown={(e) => {
+        if (!file && (e.key === 'Enter' || e.key === ' ')) {
+          e.preventDefault();
+          ref.current?.click();
+        }
+      }}
     >
       <input
         ref={ref}

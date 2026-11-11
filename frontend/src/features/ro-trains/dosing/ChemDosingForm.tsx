@@ -48,7 +48,7 @@ export function ChemDosingForm() {
 
   // ── Catalog Data ───────────────────────────────────────────────────────────
   const { data: catalogData } = useChemCatalog(plantId || selectedPlantId || null);
-  const catalogProducts = catalogData?.catalog ?? [];
+  const catalogProducts = useMemo(() => catalogData?.catalog ?? [], [catalogData?.catalog]);
   const allUnits = catalogData?.units ?? [];
   const dayTanks = catalogData?.dayTanks ?? [];
 

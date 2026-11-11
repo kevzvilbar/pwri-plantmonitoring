@@ -28,7 +28,15 @@ export function ScorecardSummaryTiles({
         tone={avgCompleteness !== null && avgCompleteness < 80 ? 'danger' : undefined}
       />
       <div
+        role="button"
+        tabIndex={0}
         onClick={onNavigateToCorrections}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            onNavigateToCorrections();
+          }
+        }}
         className="cursor-pointer transition-transform active:scale-[0.99]"
         title="Click to review pending corrections in Data Corrections Hub"
       >
