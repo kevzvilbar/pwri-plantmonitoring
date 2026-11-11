@@ -40,6 +40,10 @@ interface GenericReadingRow {
   entity_id: string;
 }
 
+let inflightScopePromise: Promise<string[] | null> | null = null;
+let cachedScope: { uid: string; scope: string[] | null; expiresAt: number } | null = null;
+const SCOPE_CACHE_TTL_MS = 15_000;
+
 /**
  * Plants whose readings the current reviewer may see in the review queues.
  * `null` = unrestricted (Admin / Data Analyst). Managers and everyone else are
@@ -47,15 +51,45 @@ interface GenericReadingRow {
  * another plant's items. RLS enforces the same rule server-side.
  */
 export async function getReviewPlantScope(): Promise<string[] | null> {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return [];
-  const [profileRes, rolesRes] = await Promise.all([
-    supabase.from('user_profiles').select('plant_assignments').eq('id', user.id).maybeSingle(),
-    supabase.from('user_roles').select('role').eq('user_id', user.id),
-  ]);
-  const roles = (rolesRes.data ?? []).map(r => String(r.role));
-  if (roles.includes('Admin') || roles.includes('Data Analyst')) return null;
-  return ((profileRes.data?.plant_assignments ?? []) as string[]).filter(Boolean);
+  if (inflightScopePromise) return inflightScopePromise;
+
+  inflightScopePromise = (async (): Promise<string[] | null> => {
+    // Prefer getSession() (reads local session without a network round-trip to
+    // /auth/v1/user while holding the exclusive Web Lock). Fall back to getUser()
+    // if getSession returns no user (e.g. unit test mocks).
+    let uid: string | null = null;
+    if (typeof supabase.auth.getSession === 'function') {
+      const sessionRes = await supabase.auth.getSession();
+      uid = sessionRes?.data?.session?.user?.id ?? null;
+    }
+    if (!uid && typeof supabase.auth.getUser === 'function') {
+      const userRes = await supabase.auth.getUser();
+      uid = userRes?.data?.user?.id ?? null;
+    }
+    if (!uid) return [];
+
+    const now = Date.now();
+    if (cachedScope && cachedScope.uid === uid && now < cachedScope.expiresAt) {
+      return cachedScope.scope;
+    }
+
+    const [profileRes, rolesRes] = await Promise.all([
+      supabase.from('user_profiles').select('plant_assignments').eq('id', uid).maybeSingle(),
+      supabase.from('user_roles').select('role').eq('user_id', uid),
+    ]);
+    const roles = (rolesRes.data ?? []).map(r => String(r.role));
+    const scope =
+      roles.includes('Admin') || roles.includes('Data Analyst')
+        ? null
+        : ((profileRes.data?.plant_assignments ?? []) as string[]).filter(Boolean);
+
+    cachedScope = { uid, scope, expiresAt: Date.now() + SCOPE_CACHE_TTL_MS };
+    return scope;
+  })().finally(() => {
+    inflightScopePromise = null;
+  });
+
+  return inflightScopePromise;
 }
 
 async function fetchRawPending(

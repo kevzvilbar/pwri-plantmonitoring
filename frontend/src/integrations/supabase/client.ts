@@ -22,6 +22,75 @@ if (supabaseConfigError && typeof console !== 'undefined') {
 // when env vars are missing. The app renders a configuration banner instead
 // of a blank white screen, and any actual Supabase call will surface a
 // readable error rather than crashing on import.
+const inTabLocks = new Map<string, Promise<unknown>>();
+
+function isLockStealError(err: unknown): boolean {
+  const e = err as { name?: string; message?: string; isAcquireTimeout?: boolean } | null;
+  if (!e) return false;
+  if (e.isAcquireTimeout) return true;
+  const msg = e.message ?? '';
+  return (
+    e.name === 'AbortError' ||
+    /lock broken by another request|released because another request stole it|navigator lockmanager lock/i.test(msg)
+  );
+}
+
+/**
+ * Serializes auth-token lock acquisitions within the current tab before touching
+ * the browser's Navigator LockManager API. Prevents concurrent React Query
+ * fetches from starting parallel acquire-timeout timers that all expire at once
+ * and trigger a `{ steal: true }` abort cascade across in-flight queries.
+ */
+async function supabaseAuthLock<R>(
+  name: string,
+  acquireTimeout: number,
+  fn: () => Promise<R>,
+): Promise<R> {
+  const prev = inTabLocks.get(name) ?? Promise.resolve();
+  const waitPrev = prev.catch(() => undefined);
+
+  const run = (async (): Promise<R> => {
+    await waitPrev;
+    const navLocks = typeof navigator !== 'undefined' ? navigator.locks : undefined;
+    if (!navLocks?.request) {
+      return await fn();
+    }
+
+    const timeoutMs = acquireTimeout > 0 ? Math.max(acquireTimeout, 15_000) : acquireTimeout;
+    const controller = new AbortController();
+    const timer =
+      timeoutMs > 0 ? setTimeout(() => controller.abort(), timeoutMs) : undefined;
+
+    try {
+      return await navLocks.request(
+        name,
+        timeoutMs === 0
+          ? { mode: 'exclusive', ifAvailable: true }
+          : { mode: 'exclusive', signal: controller.signal },
+        async () => {
+          if (timer !== undefined) clearTimeout(timer);
+          return await fn();
+        },
+      );
+    } catch (err) {
+      if (timer !== undefined) clearTimeout(timer);
+      if (isLockStealError(err)) {
+        return await fn();
+      }
+      throw err;
+    }
+  })();
+
+  inTabLocks.set(
+    name,
+    run.then(
+      () => undefined,
+      () => undefined,
+    ),
+  );
+  return await run;
+}
+
 export const supabase: SupabaseClient<Database> = createClient<Database>(
   SUPABASE_URL ?? 'http://localhost.invalid',
   SUPABASE_PUBLISHABLE_KEY ?? 'missing-anon-key',
@@ -30,6 +99,7 @@ export const supabase: SupabaseClient<Database> = createClient<Database>(
       storage: typeof window !== 'undefined' ? window.localStorage : undefined,
       persistSession: true,
       autoRefreshToken: true,
+      lock: supabaseAuthLock,
     },
     // Outage circuit breaker (lib/apiHealth.ts): short-circuits REST reads while the
     // backend is down. NOTE: this file is marked auto-generated — if it is ever

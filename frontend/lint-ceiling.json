@@ -1,5 +1,5 @@
 {
-  "maxWarnings": 2271,
+  "maxWarnings": 2270,
   "lastUpdated": "2026-11-11",
   "history": [
     {
@@ -336,9 +336,9 @@
     },
     {
       "date": "2026-11-11",
-      "maxWarnings": 2271,
+      "maxWarnings": 2270,
       "previous": 2658,
-      "reason": "Application-wide polish pass (-387 warnings, 2658 -> 2271): resolved all 37 jsx-a11y/label-has-associated-control warnings, all 37 jsx-a11y/click-events-have-key-events + 36 jsx-a11y/no-static-element-interactions warnings (0 jsx-a11y warnings remaining), all 44 react-hooks/exhaustive-deps warnings (0 remaining), all 7 unused eslint-disable directives (0 remaining), 203 stale @typescript-eslint/no-explicit-any casts across data queries/mutations (kpi.ts, staff.ts, plantTopology.ts, readingHistory.ts, locators.ts, migrationsStatus.ts) and topology shared.ts, and 23 react-refresh/only-export-components warnings from page and component barrel decoupling."
+      "reason": "Application-wide polish pass (-388 warnings, 2658 -> 2270): resolved all 37 jsx-a11y/label-has-associated-control warnings, all 37 jsx-a11y/click-events-have-key-events + 36 jsx-a11y/no-static-element-interactions warnings (0 jsx-a11y warnings remaining), all 44 react-hooks/exhaustive-deps warnings (0 remaining), all 7 unused eslint-disable directives (0 remaining), 204 stale @typescript-eslint/no-explicit-any casts across data queries/mutations (kpi.ts, staff.ts, plantTopology.ts, readingHistory.ts, locators.ts, migrationsStatus.ts), queryClient.ts, and topology shared.ts, and 23 react-refresh/only-export-components warnings from page and component barrel decoupling."
     }
   ]
 }

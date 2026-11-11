@@ -4,7 +4,7 @@ import { friendlyError } from "@/lib/supabaseErrors";
 import { reportError } from "@/lib/monitoring";
 import { globalStampActivity } from "@/hooks/usePresence";
 import { registerOfflineMutationDefaults } from "@/lib/offlineMutations";
-import { isTransientBackendError, queryRetry, queryRetryDelay } from "@/lib/apiHealth";
+import { isAuthLockError, isTransientBackendError, queryRetry, queryRetryDelay } from "@/lib/apiHealth";
 
 export const queryClient = new QueryClient({
   defaultOptions: {
@@ -28,8 +28,9 @@ export const queryClient = new QueryClient({
   },
   queryCache: new QueryCache({
     onError: (error, query) => {
-      const msg = friendlyError(error) || (error instanceof Error ? error.message : (error as any)?.message) || 'Query failed';
-      if (!msg || /abort/i.test(msg)) return;
+      const errObj = error as { name?: string; message?: string } | null;
+      const msg = friendlyError(error) || (error instanceof Error ? error.message : errObj?.message) || 'Query failed';
+      if (!msg || errObj?.name === 'AbortError' || /abort/i.test(msg) || isAuthLockError(error)) return;
       // Queries with meta.silent = true silently fail (backend unavailable in static deploy)
       if (query.meta?.silent) return;
       const key = Array.isArray(query.queryKey) ? String(query.queryKey[0]) : 'query';

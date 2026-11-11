@@ -128,9 +128,21 @@ function isExpiredJwt(err: unknown): boolean {
   return !!e && (e.code === 'PGRST301' || e.status === 401);
 }
 
+const AUTH_LOCK_MESSAGE =
+  /lock broken by another request|released because another request stole it|navigator lockmanager lock|acquiring process lock with name/i;
+
+/** True when a Supabase Web Lock timed out or was stolen by a concurrent request. */
+export function isAuthLockError(err: unknown): boolean {
+  if (!err) return false;
+  const e = err as { name?: string; message?: string; isAcquireTimeout?: boolean };
+  if (e.isAcquireTimeout) return true;
+  return AUTH_LOCK_MESSAGE.test(e.message ?? '');
+}
+
 /** react-query `retry`: backend outages retry (bounded); everything else fails fast. */
 export function queryRetry(failureCount: number, error: unknown): boolean {
   if (isBreakerOpen()) return false;
+  if (isAuthLockError(error)) return failureCount < 2;
   if (isTransientBackendError(error)) return failureCount < 2;
   if (isExpiredJwt(error)) return failureCount < 1; // token refresh race
   return false; // 400/403/404/42703…: a retry cannot succeed, it only adds log rows
