@@ -70,8 +70,9 @@ export function AddEventForm({
 
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
         <div className="space-y-1">
-          <Label className="text-2xs font-semibold">Event Date *</Label>
+          <Label htmlFor="downtime-event-date" className="text-2xs font-semibold">Event Date *</Label>
           <DatePicker
+            id="downtime-event-date"
             value={eventDate}
             onChange={onEventDateChange}
             size="sm"
@@ -80,9 +81,9 @@ export function AddEventForm({
         </div>
 
         <div className="space-y-1">
-          <Label className="text-2xs font-semibold">Plant *</Label>
+          <Label htmlFor="downtime-plant" className="text-2xs font-semibold">Plant *</Label>
           <Select value={plantId} onValueChange={onPlantIdChange}>
-            <SelectTrigger className="h-8 text-xs bg-background">
+            <SelectTrigger id="downtime-plant" className="h-8 text-xs bg-background">
               <SelectValue placeholder="Select plant" />
             </SelectTrigger>
             <SelectContent>
@@ -96,9 +97,9 @@ export function AddEventForm({
         </div>
 
         <div className="space-y-1">
-          <Label className="text-2xs font-semibold">Subsystem *</Label>
+          <Label htmlFor="downtime-subsystem" className="text-2xs font-semibold">Subsystem *</Label>
           <Select value={subsystem} onValueChange={onSubsystemChange}>
-            <SelectTrigger className="h-8 text-xs bg-background">
+            <SelectTrigger id="downtime-subsystem" className="h-8 text-xs bg-background">
               <SelectValue placeholder="Select subsystem" />
             </SelectTrigger>
             <SelectContent>
@@ -112,8 +113,9 @@ export function AddEventForm({
         </div>
 
         <div className="space-y-1">
-          <Label className="text-2xs font-semibold">Duration (hrs) *</Label>
+          <Label htmlFor="downtime-duration" className="text-2xs font-semibold">Duration (hrs) *</Label>
           <Input
+            id="downtime-duration"
             type="number"
             step="0.1"
             min="0.1"
@@ -128,8 +130,9 @@ export function AddEventForm({
       </div>
 
       <div className="space-y-1">
-        <Label className="text-2xs font-semibold">Root Cause / Operational Remarks</Label>
+        <Label htmlFor="downtime-description" className="text-2xs font-semibold">Root Cause / Operational Remarks</Label>
         <Input
+          id="downtime-description"
           value={description}
           onChange={(e) => onDescriptionChange(e.target.value)}
           placeholder="Describe shutdown reason, maintenance performed, or grid outage details…"

@@ -205,11 +205,24 @@ export function DataTrustAuditCard({ plantIds }: DataTrustAuditCardProps) {
             return (
               <div
                 key={gate.id}
+                role="button"
+                aria-disabled={!gate.onClick || undefined}
+                tabIndex={gate.onClick ? 0 : undefined}
                 className={cn(
                   'flex items-center justify-between p-2 rounded-md bg-muted/15 border border-border/30 transition-colors',
                   gate.onClick && 'hover:bg-muted/30 cursor-pointer',
                 )}
                 onClick={gate.onClick}
+                onKeyDown={
+                  gate.onClick
+                    ? (e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          gate.onClick?.();
+                        }
+                      }
+                    : undefined
+                }
               >
                 <div className="flex items-center gap-2 min-w-0">
                   <div className="p-1 rounded-md bg-muted/50 text-foreground shrink-0">

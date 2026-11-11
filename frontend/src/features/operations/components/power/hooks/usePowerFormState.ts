@@ -238,7 +238,7 @@ export function usePowerFormState() {
       const prevVal0 = getLatestGridReading(0);
       return prevVal0 != null ? prevVal0.toFixed(2) : r;
     });
-  }, [prevRow?.id, getLatestGridReading]);
+  }, [prevRow, getLatestGridReading]);
 
   useEffect(() => {
     if (!prevRow || solarInputMode !== 'raw') return;
@@ -253,7 +253,7 @@ export function usePowerFormState() {
       if (r !== '') return r;
       return prevSolar != null ? prevSolar.toFixed(2) : r;
     });
-  }, [prevRow?.id, solarInputMode, prevSolar]);
+  }, [prevRow, solarInputMode, prevSolar]);
 
   const deltaGrid = prevGrid != null && reading ? +reading - prevGrid : null;
   const deltaSolar = solarInputMode === 'direct'

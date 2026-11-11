@@ -30,7 +30,7 @@ export function useDeletionAudit(kindFilter: string, auditMode: string) {
     },
   });
 
-  const entries = data?.entries ?? [];
+  const entries = useMemo(() => data?.entries ?? [], [data?.entries]);
 
   const groupedDeletionsByDay = useMemo(() => {
     const groups: GroupedDeletion[] = [];

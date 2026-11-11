@@ -15,7 +15,7 @@ export async function insertLocatorReadings(
     .from('locators').select('id, name').eq('plant_id', plantId);
   if (locatorsErr) throw locatorsErr;
   const nameToId: Record<string, string> = {};
-  (locators ?? []).forEach((l: any) => { nameToId[l.name.trim().toLowerCase()] = l.id; });
+  (locators ?? []).forEach((l) => { nameToId[l.name.trim().toLowerCase()] = l.id; });
 
   const locatorIds = Object.values(nameToId);
   const existingByKey: Record<string, string> = {};
@@ -25,8 +25,8 @@ export async function insertLocatorReadings(
       .select('id, locator_id, reading_datetime')
       .in('locator_id', locatorIds);
     if (existingErr) throw existingErr;
-    (existingReadings ?? []).forEach((e: any) => {
-      const key = `${e.locator_id}|${(e.reading_datetime as string).slice(0, 16)}`;
+    (existingReadings ?? []).forEach((e) => {
+      const key = `${e.locator_id}|${e.reading_datetime.slice(0, 16)}`;
       existingByKey[key] = e.id;
     });
   }
@@ -34,7 +34,7 @@ export async function insertLocatorReadings(
   let count = 0;
   const errors: string[] = [];
   const affectedIds = new Set<string>();
-  const toInsert: { payload: Record<string, any>; locatorId: string }[] = [];
+  const toInsert: { payload: { locator_id: string; plant_id: string; reading_datetime: string; recorded_by: string | null; is_estimated: boolean; current_reading: number; previous_reading: number | null }; locatorId: string }[] = [];
 
   for (const r of rows) {
     const locatorId = nameToId[r.locator_name?.trim().toLowerCase()];
@@ -51,7 +51,13 @@ export async function insertLocatorReadings(
       const decision = await resolveImportDuplicate(dupKey, `${r.locator_name} @ ${dtMin}`);
       if (decision === 'skip') continue;
 
-      const updatePayload: Record<string, any> = { reading_datetime: dt, recorded_by: userId, is_estimated: false };
+      const updatePayload: { reading_datetime: string; recorded_by: string | null; is_estimated: boolean; current_reading: number; previous_reading: number | null } = {
+        reading_datetime: dt,
+        recorded_by: userId,
+        is_estimated: false,
+        current_reading: 0,
+        previous_reading: null,
+      };
       if (isDirect) {
         updatePayload.current_reading  = r.previous_reading ? +r.previous_reading : 0;
         updatePayload.previous_reading = r.previous_reading ? +r.previous_reading : null;
@@ -64,17 +70,19 @@ export async function insertLocatorReadings(
         if (rawLocDelta != null && rawLocDelta < 0)
           errors.push(`Locator "${r.locator_name}" @ ${dtMin}: negative delta (${rawLocDelta.toFixed(2)}) — meter rollback detected.`);
       }
-      const { error } = await supabase.from('locator_readings').update(updatePayload as any).eq('id', existingId);
+      const { error } = await supabase.from('locator_readings').update(updatePayload).eq('id', existingId);
       if (error) errors.push(error.message); else { count++; existingByKey[dupKey] = existingId; }
       continue;
     }
 
-    const insertPayload: Record<string, any> = {
+    const insertPayload = {
       locator_id:       locatorId,
       plant_id:         plantId,
       reading_datetime: dt,
       recorded_by:      userId,
       is_estimated:     false,
+      current_reading:  0,
+      previous_reading: null as number | null,
     };
 
     if (isDirect) {
@@ -98,14 +106,14 @@ export async function insertLocatorReadings(
     const chunk = toInsert.slice(i, i + LOCATOR_INSERT_CHUNK_SIZE);
     const { error: chunkError } = await supabase
       .from('locator_readings')
-      .insert(chunk.map(c => c.payload) as any);
+      .insert(chunk.map(c => c.payload));
     if (!chunkError) {
       count += chunk.length;
       chunk.forEach(c => affectedIds.add(c.locatorId));
       continue;
     }
     for (const { payload, locatorId } of chunk) {
-      const { error } = await supabase.from('locator_readings').insert(payload as any);
+      const { error } = await supabase.from('locator_readings').insert(payload);
       if (error) errors.push(error.message);
       else { count++; affectedIds.add(locatorId); }
     }
@@ -137,8 +145,8 @@ export async function syncDerivedLocatorMirrors(
   readingDatetime: string,
   value: number,
 ): Promise<void> {
-  const { data: mirrors, error: mirrorsErr } = await (supabase
-    .from('product_meters' as any) as any)
+  const { data: mirrors, error: mirrorsErr } = await supabase
+    .from('product_meters')
     .select('id, plant_id')
     .eq('derived_from_locator_id', locatorId)
     .eq('is_derived', true);
@@ -152,9 +160,9 @@ export async function syncDerivedLocatorMirrors(
   const dayEnd    = dayEndDt.toISOString();
   const insertDt  = new Date(`${dateKey}T23:59:00+08:00`).toISOString();
 
-  for (const mirror of mirrors as any[]) {
-    const { data: existing } = await (supabase
-      .from('product_meter_readings' as any) as any)
+  for (const mirror of mirrors) {
+    const { data: existing } = await supabase
+      .from('product_meter_readings')
       .select('id')
       .eq('meter_id', mirror.id)
       .gte('reading_datetime', dayStart)
@@ -164,14 +172,14 @@ export async function syncDerivedLocatorMirrors(
       .maybeSingle();
 
     if (existing?.id) {
-      await (supabase.from('product_meter_readings' as any) as any).update({
+      await supabase.from('product_meter_readings').update({
         current_reading:  value,
         previous_reading: 0,
         daily_volume:     value,
         is_estimated:     true,
       }).eq('id', existing.id);
     } else {
-      await (supabase.from('product_meter_readings' as any) as any).insert({
+      await supabase.from('product_meter_readings').insert({
         meter_id:         mirror.id,
         plant_id:         mirror.plant_id,
         reading_datetime: insertDt,
@@ -211,8 +219,8 @@ export async function insertDerivedOverrideRows(
     .select('id, reading_datetime, current_reading, is_estimated')
     .eq('locator_id', locatorId);
   if (existingErr) throw existingErr;
-  const existingByDate: Record<string, any> = {};
-  (existing ?? []).forEach((row: any) => {
+  const existingByDate: Record<string, { id: string; reading_datetime: string; current_reading: number; is_estimated: boolean | null }> = {};
+  (existing ?? []).forEach((row) => {
     const dKey = new Date(row.reading_datetime).toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
     if (!existingByDate[dKey] || new Date(row.reading_datetime) > new Date(existingByDate[dKey].reading_datetime)) {
       existingByDate[dKey] = row;
@@ -228,7 +236,7 @@ export async function insertDerivedOverrideRows(
       const before = existingRow
         ? { current_reading: existingRow.current_reading, is_estimated: existingRow.is_estimated }
         : {};
-      const payload: any = {
+      const payload = {
         locator_id: locatorId, plant_id: plantId,
         current_reading: value, previous_reading: 0, is_estimated: false,
         recorded_by: userId,
@@ -242,7 +250,7 @@ export async function insertDerivedOverrideRows(
 
       await logReadingEdit({
         table_name: 'locator_readings',
-        record_id: (savedRow as any)?.id ?? null,
+        record_id: savedRow?.id ?? null,
         plant_id: plantId,
         actor_user_id: userId,
         actor_label: actorLabel,
@@ -251,11 +259,11 @@ export async function insertDerivedOverrideRows(
       });
       await syncDerivedLocatorMirrors(
         locatorId,
-        (savedRow as any)?.reading_datetime ?? new Date(`${dateKey}T23:59:00+08:00`).toISOString(),
+        savedRow?.reading_datetime ?? new Date(`${dateKey}T23:59:00+08:00`).toISOString(),
         value,
       );
       count++;
-    } catch (err: any) {
+    } catch (err: unknown) {
       errors.push(`Row ${line} (${row.date}): ${friendlyError(err)}`);
     }
   }

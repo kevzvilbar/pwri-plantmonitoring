@@ -217,16 +217,6 @@ export function ChartControlsProvider({
     console.log('selectTopNWells', n);
   }, []);
   
-  // These would be provided by parent or computed
-  const drillEntities: any[] = initialState?.drillEntities ?? [];
-  const roTrainEntities: any[] = initialState?.roTrainEntities ?? [];
-  const wellEntities: any[] = initialState?.wellEntities ?? [];
-  const filteredLocatorList: any[] = initialState?.filteredLocatorList ?? [];
-  const filteredTrainList: any[] = initialState?.filteredTrainList ?? [];
-  const filteredWellList: any[] = initialState?.filteredWellList ?? [];
-  const locatorTotals: any = initialState?.locatorTotals;
-  const wellTotals: any = initialState?.wellTotals;
-  
   const value = useMemo(() => ({
     // Core
     viewGran, setViewGran,
@@ -266,14 +256,14 @@ export function ChartControlsProvider({
     trainSearch, setTrainSearch,
     wellSearch, setWellSearch,
     // Entities
-    drillEntities,
-    roTrainEntities,
-    wellEntities,
-    filteredLocatorList,
-    filteredTrainList,
-    filteredWellList,
-    locatorTotals,
-    wellTotals,
+    drillEntities: initialState?.drillEntities ?? [],
+    roTrainEntities: initialState?.roTrainEntities ?? [],
+    wellEntities: initialState?.wellEntities ?? [],
+    filteredLocatorList: initialState?.filteredLocatorList ?? [],
+    filteredTrainList: initialState?.filteredTrainList ?? [],
+    filteredWellList: initialState?.filteredWellList ?? [],
+    locatorTotals: initialState?.locatorTotals,
+    wellTotals: initialState?.wellTotals,
     // Helpers
     selectTopNLocators,
     selectTopNWells,
@@ -286,9 +276,14 @@ export function ChartControlsProvider({
     selectedWellIds, showWellFilter, allWellsSelected, noneWellsSelected,
     selectedTrainIds, showTrainFilter, allTrainsSelected, noTrainsSelected,
     locatorSearch, trainSearch, wellSearch,
-    drillEntities, roTrainEntities, wellEntities,
-    filteredLocatorList, filteredTrainList, filteredWellList,
-    locatorTotals, wellTotals,
+    initialState?.drillEntities, initialState?.roTrainEntities, initialState?.wellEntities,
+    initialState?.filteredLocatorList, initialState?.filteredTrainList, initialState?.filteredWellList,
+    initialState?.locatorTotals, initialState?.wellTotals,
+    initialState?.setProdDrillSource,
+    selectAllLocators, clearAllLocators, toggleLocator,
+    selectAllWells, clearAllWells, toggleWell,
+    selectAllTrains, clearAllTrains, toggleTrain,
+    selectTopNLocators, selectTopNWells,
   ]);
   
   return (

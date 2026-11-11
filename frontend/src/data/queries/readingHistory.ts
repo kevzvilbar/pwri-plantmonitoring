@@ -45,7 +45,7 @@ function getDateRange(options: ReadingHistoryOptions): { sinceDate: string; unti
 }
 
 /** Fetch locator readings */
-export async function fetchLocatorReadings(entityId: string, sinceDate: string, untilNextDay: string): Promise<any[]> {
+export async function fetchLocatorReadings(entityId: string, sinceDate: string, untilNextDay: string): Promise<Record<string, unknown>[]> {
   const { data, error } = await supabase
     .from('locator_readings')
     .select('id, current_reading, previous_reading, reading_datetime, off_location_flag, is_meter_replacement, is_meter_rollover, meter_rollover_max, is_estimated, recorded_by, created_at, norm_status')
@@ -54,7 +54,7 @@ export async function fetchLocatorReadings(entityId: string, sinceDate: string, 
     .lt('reading_datetime', untilNextDay)
     .order('reading_datetime', { ascending: false });
   
-  if (!error) return data ?? [];
+  if (!error) return (data ?? []) as Record<string, unknown>[];
   
   // Fallback: base columns only
   const { data: fallback } = await supabase
@@ -65,11 +65,11 @@ export async function fetchLocatorReadings(entityId: string, sinceDate: string, 
     .lt('reading_datetime', untilNextDay)
     .order('reading_datetime', { ascending: false });
   
-  return (fallback ?? []).map((r: any) => ({ ...r, is_meter_replacement: false, is_meter_rollover: false, meter_rollover_max: null, is_estimated: false }));
+  return (fallback ?? []).map((r) => ({ ...r, is_meter_replacement: false, is_meter_rollover: false, meter_rollover_max: null, is_estimated: false }));
 }
 
 /** Fetch well readings */
-export async function fetchWellReadings(entityId: string, sinceDate: string, untilNextDay: string): Promise<any[]> {
+export async function fetchWellReadings(entityId: string, sinceDate: string, untilNextDay: string): Promise<Record<string, unknown>[]> {
   const { data, error } = await supabase
     .from('well_readings')
     .select('id, current_reading, previous_reading, power_meter_reading, tds_ppm, turbidity_ntu, pressure_psi, reading_datetime, is_meter_replacement, is_meter_rollover, meter_rollover_max, is_estimated, recorded_by, created_at, norm_status')
@@ -78,7 +78,7 @@ export async function fetchWellReadings(entityId: string, sinceDate: string, unt
     .lt('reading_datetime', untilNextDay)
     .order('reading_datetime', { ascending: false });
   
-  if (!error) return data ?? [];
+  if (!error) return (data ?? []) as Record<string, unknown>[];
   
   // Fallback
   const { data: fallback } = await supabase
@@ -89,11 +89,11 @@ export async function fetchWellReadings(entityId: string, sinceDate: string, unt
     .lt('reading_datetime', untilNextDay)
     .order('reading_datetime', { ascending: false });
   
-  return (fallback ?? []).map((r: any) => ({ ...r, is_meter_rollover: false, meter_rollover_max: null, is_estimated: false }));
+  return (fallback ?? []).map((r) => ({ ...r, is_meter_rollover: false, meter_rollover_max: null, is_estimated: false }));
 }
 
 /** Fetch power readings */
-export async function fetchPowerReadings(entityId: string, sinceDate: string, untilNextDay: string): Promise<any[]> {
+export async function fetchPowerReadings(entityId: string, sinceDate: string, untilNextDay: string): Promise<Record<string, unknown>[]> {
   const { data, error } = await supabase
     .from('power_readings')
     .select('id, meter_reading_kwh, grid_meter_readings, daily_consumption_kwh, daily_solar_kwh, daily_grid_kwh, solar_meter_reading, reading_datetime, is_meter_replacement, is_estimated, recorded_by, created_at')
@@ -102,7 +102,7 @@ export async function fetchPowerReadings(entityId: string, sinceDate: string, un
     .lt('reading_datetime', untilNextDay)
     .order('reading_datetime', { ascending: false });
   
-  if (!error) return data ?? [];
+  if (!error) return (data ?? []) as Record<string, unknown>[];
   
   // Fallback
   const { data: fallback } = await supabase
@@ -113,15 +113,15 @@ export async function fetchPowerReadings(entityId: string, sinceDate: string, un
     .lt('reading_datetime', untilNextDay)
     .order('reading_datetime', { ascending: false });
   
-  return (fallback ?? []).map((r: any) => ({ ...r, is_estimated: false }));
+  return (fallback ?? []).map((r) => ({ ...r, is_estimated: false }));
 }
 
 /** Fetch blending events */
-export async function fetchBlendingEvents(entityId: string, options: ReadingHistoryOptions): Promise<any[]> {
+export async function fetchBlendingEvents(entityId: string, options: ReadingHistoryOptions): Promise<Record<string, unknown>[]> {
   const { days, customFrom, customTo } = options;
   
   try {
-    let q = (supabase.from('blending_events' as any) as any)
+    let q = supabase.from('blending_events')
       .select('id, well_id, plant_id, well_name, plant_name, event_date, reading_datetime, volume_m3, noted_at, is_meter_replacement, raw_meter_reading, is_estimated')
       .eq('well_id', entityId)
       .order('event_date', { ascending: false });
@@ -140,7 +140,7 @@ export async function fetchBlendingEvents(entityId: string, options: ReadingHist
     if (error) {
       // is_meter_replacement may not exist yet — retry without it
       if (error.message?.includes('is_meter_replacement') || error.message?.includes('raw_meter_reading') || error.message?.includes('does not exist')) {
-        let q2 = (supabase.from('blending_events' as any) as any)
+        let q2 = supabase.from('blending_events')
           .select('id, well_id, plant_id, well_name, plant_name, event_date, volume_m3, noted_at')
           .eq('well_id', entityId)
           .order('event_date', { ascending: false });
@@ -156,19 +156,19 @@ export async function fetchBlendingEvents(entityId: string, options: ReadingHist
         
         const { data: d2, error: e2 } = await q2;
         if (e2) throw e2;
-        return (d2 ?? []).map((r: any) => ({ ...r, is_meter_replacement: false, raw_meter_reading: null, is_estimated: false }));
+        return (d2 ?? []).map((r) => ({ ...r, is_meter_replacement: false, raw_meter_reading: null, is_estimated: false }));
       }
       throw error;
     }
     
-    return (data ?? []).map((r: any) => ({ ...r, is_meter_replacement: !!r.is_meter_replacement, is_estimated: !!r.is_estimated }));
+    return (data ?? []).map((r) => ({ ...r, is_meter_replacement: !!r.is_meter_replacement, is_estimated: !!r.is_estimated }));
   } catch {
     return [];
   }
 }
 
 /** Main entry point - fetch readings based on module */
-export async function fetchReadingHistory(options: ReadingHistoryOptions): Promise<any[]> {
+export async function fetchReadingHistory(options: ReadingHistoryOptions): Promise<Record<string, unknown>[]> {
   const { sinceDate, untilNextDay } = getDateRange(options);
   
   switch (options.module) {
@@ -199,7 +199,7 @@ export async function resyncLocatorChain(locatorId: string): Promise<void> {
   const updates: { id: string; previous_reading: number | null }[] = [];
   const staleEstimatedIds: string[] = [];
 
-  for (const row of all as any[]) {
+  for (const row of all) {
     const cur = +row.current_reading;
     if (row.is_estimated && last != null && cur <= last) {
       staleEstimatedIds.push(row.id);
@@ -219,12 +219,12 @@ export async function resyncLocatorChain(locatorId: string): Promise<void> {
   if (updates.length) {
     await Promise.all(updates.map(u => supabase
       .from('locator_readings')
-      .update({ previous_reading: u.previous_reading } as any)
+      .update({ previous_reading: u.previous_reading })
       .eq('id', u.id)));
   }
 
   if (staleEstimatedIds.length || updates.length) {
-    (supabase.rpc as any)('fn_backfill_missing_readings', { p_lookback_days: 14 }).catch(() => {});
+    void Promise.resolve(supabase.rpc('fn_backfill_missing_readings', { p_lookback_days: 14 })).catch(() => {});
   }
 }
 
@@ -248,13 +248,19 @@ export async function resyncLocatorChain(locatorId: string): Promise<void> {
  */
 async function resyncStoredVolumeChain(
   table: 'well_readings' | 'product_meter_readings',
-  filterColumn: 'well_id' | 'meter_id',
   assetId: string,
 ): Promise<void> {
-  const { data: all, error } = await (supabase.from(table as any) as any)
-    .select('id, current_reading, previous_reading, daily_volume, is_meter_replacement')
-    .eq(filterColumn, assetId)
-    .order('reading_datetime', { ascending: true });
+  const { data: all, error } = table === 'well_readings'
+    ? await supabase
+        .from('well_readings')
+        .select('id, current_reading, previous_reading, daily_volume, is_meter_replacement')
+        .eq('well_id', assetId)
+        .order('reading_datetime', { ascending: true })
+    : await supabase
+        .from('product_meter_readings')
+        .select('id, current_reading, previous_reading, daily_volume, is_meter_replacement')
+        .eq('meter_id', assetId)
+        .order('reading_datetime', { ascending: true });
 
   if (error || !all) return;
 
@@ -264,7 +270,7 @@ async function resyncStoredVolumeChain(
   let last: number | null = null;
   const updates: { id: string; previous_reading: number | null; daily_volume: number }[] = [];
 
-  for (const row of all as any[]) {
+  for (const row of all) {
     if (row.current_reading == null) continue; // defective/empty row — doesn't move the meter
     const cur = +row.current_reading;
     const newPrev = last;
@@ -278,17 +284,17 @@ async function resyncStoredVolumeChain(
   if (updates.length) {
     await Promise.all(updates.map(u => supabase
       .from(table)
-      .update({ previous_reading: u.previous_reading, daily_volume: u.daily_volume } as any)
+      .update({ previous_reading: u.previous_reading, daily_volume: u.daily_volume })
       .eq('id', u.id)));
   }
 }
 
 /** Rebuild previous_reading/daily_volume across a well's readings (replacement-aware). */
 export async function resyncWellChain(wellId: string): Promise<void> {
-  return resyncStoredVolumeChain('well_readings', 'well_id', wellId);
+  return resyncStoredVolumeChain('well_readings', wellId);
 }
 
 /** Rebuild previous_reading/daily_volume across a product meter's readings (replacement-aware). */
 export async function resyncProductMeterChain(meterId: string): Promise<void> {
-  return resyncStoredVolumeChain('product_meter_readings', 'meter_id', meterId);
+  return resyncStoredVolumeChain('product_meter_readings', meterId);
 }

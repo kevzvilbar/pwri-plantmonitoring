@@ -287,7 +287,7 @@ export function ProductMetersCard({ plant, highlightId }: { plant: any; highligh
                     <div className="text-xs text-muted-foreground">
                       Product Meter · {(m.status ?? 'Active') === 'Active' ? 'Reading active' : 'Inactive'}
                     </div>
-                    <div className="mt-1 flex items-center gap-1.5 flex-wrap" onClick={(e) => e.stopPropagation()}>
+                    <div role="presentation" className="mt-1 flex items-center gap-1.5 flex-wrap" onClick={(e) => e.stopPropagation()}>
                       {(() => {
                         const fresh = lastReadingFreshness(latestDtByMeter[m.id]);
                         return (
@@ -364,7 +364,7 @@ export function ProductMetersCard({ plant, highlightId }: { plant: any; highligh
                 })()}
               </div>
               {canEdit && (
-                <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+                <div role="presentation" className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
                   <Button size="sm" variant="ghost" className="h-7 w-7 p-0 rounded-full text-primary hover:text-primary/90 hover:bg-primary-soft" title="Assign locators" onClick={() => setAssignTarget(m)} data-testid={`assign-locators-${m.id}`}>
                     <Droplet className="h-3.5 w-3.5" />
                   </Button>
@@ -377,7 +377,7 @@ export function ProductMetersCard({ plant, highlightId }: { plant: any; highligh
             </div>
 
             {selectedMeter === m.id && (
-              <div className="mt-3 pt-3 border-t space-y-3" onClick={(e) => e.stopPropagation()}>
+              <div role="presentation" className="mt-3 pt-3 border-t space-y-3" onClick={(e) => e.stopPropagation()}>
                 <MeterDetailButton
                   label="Product Meter"
                   icon={<Gauge className="h-4 w-4 text-info" />}

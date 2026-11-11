@@ -169,7 +169,7 @@ export function LocatorCard({
           </div>
         </div>
         {isManager && (
-          <div className="flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>
+          <div role="presentation" className="flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>
             <Button size="sm" variant="ghost" className="h-7 w-7 p-0 rounded-full" title="Edit" onClick={() => onEdit(l)}>
               <Pencil className="h-3.5 w-3.5" />
             </Button>
@@ -179,7 +179,7 @@ export function LocatorCard({
           </div>
         )}
       </div>
-      <div className="mt-1.5 flex items-center gap-2" onClick={e => e.stopPropagation()}>
+      <div role="presentation" className="mt-1.5 flex items-center gap-2" onClick={e => e.stopPropagation()}>
         <button
           onClick={() => onDetail(l.id)}
           className="text-2xs text-primary hover:underline inline-flex items-center gap-0.5"

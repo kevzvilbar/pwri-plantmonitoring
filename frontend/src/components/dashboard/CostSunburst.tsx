@@ -280,7 +280,20 @@ export function CostSunburst({ plantIds }: Props) {
               return (
                 <div
                   key={c.id}
+                  role="button"
+                  aria-disabled={!clickable || undefined}
+                  tabIndex={clickable ? 0 : undefined}
                   onClick={clickable ? () => setFocusId(c.id) : undefined}
+                  onKeyDown={
+                    clickable
+                      ? (e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            setFocusId(c.id);
+                          }
+                        }
+                      : undefined
+                  }
                   className={`p-1.5 px-2.5 rounded-lg border border-border/70 bg-muted/40 transition-all ${
                     clickable
                       ? 'hover:bg-muted hover:border-primary/50 cursor-pointer shadow-2xs group'

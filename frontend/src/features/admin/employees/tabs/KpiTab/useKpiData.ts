@@ -449,7 +449,7 @@ export function useKpiData(opts: UseKpiDataOptions): UseKpiDataResult {
   const { staff, roles, plants, range, refreshKey, viewMode } = opts;
   const queryClient = useQueryClient();
 
-  const days = useMemo(() => generateDays2(range), [range, refreshKey]);
+  const days = useMemo(() => generateDays2(range), [range]);
   const since = useMemo(() => days[0] + 'T00:00:00+08:00', [days]);
   const todayStr = useMemo(() => fmtIsoDate(new Date()), []);
   const now = new Date();

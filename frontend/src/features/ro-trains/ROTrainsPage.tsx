@@ -1,9 +1,10 @@
-import { useEffect } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useUrlTab } from '@/hooks/useUrlTab';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { LayoutGrid, Recycle } from 'lucide-react';
 import { ROTrainIcon, ChemicalsIcon } from '@/components/icons/water-icons';
+import { AppLoading } from '@/components/AppLoading';
 import { useAppStore } from '@/store/appStore';
 import { usePlants } from '@/hooks/usePlants';
 import { useROTrainsForPlant } from '@/hooks/useROTrains';
@@ -13,10 +14,21 @@ import { deriveTrainStatus, ROTrainHero } from './index';
 import { loadThresholds } from '@/features/compliance';
 import { calc } from '@/lib/calculations';
 
-import { CIPLog } from './cip/CIPLog';
-import { ChemicalDosing } from './dosing/ChemicalDosing';
 import { Overview } from './Overview';
-import { PretreatmentAndROLog } from './pretreatment/PretreatmentAndROLog';
+
+const PretreatmentAndROLog = lazy(() =>
+  import('./pretreatment/PretreatmentAndROLog').then((m) => ({ default: m.PretreatmentAndROLog }))
+);
+const CIPLog = lazy(() =>
+  import('./cip/CIPLog').then((m) => ({ default: m.CIPLog }))
+);
+const ChemicalDosing = lazy(() =>
+  import('./dosing/ChemicalDosing').then((m) => ({ default: m.ChemicalDosing }))
+);
+
+const TabFallback = () => (
+  <AppLoading className="h-[40vh] w-full text-xs text-muted-foreground" />
+);
 
 // Mirrors the ?tab= pattern already used by operations/index.tsx, so alerts
 // (Dashboard.tsx) and notifications can deep-link straight to a tab instead
@@ -186,9 +198,21 @@ export default function ROTrains() {
           </TabsTrigger>
         </TabsList>
         <TabsContent value="overview" className="mt-2"><Overview /></TabsContent>
-        <TabsContent value="pretreat-ro" className="mt-2"><PretreatmentAndROLog /></TabsContent>
-        <TabsContent value="cip" className="mt-2"><CIPLog /></TabsContent>
-        <TabsContent value="chemical-dosing" className="mt-2"><ChemicalDosing /></TabsContent>
+        <TabsContent value="pretreat-ro" className="mt-2">
+          <Suspense fallback={<TabFallback />}>
+            <PretreatmentAndROLog />
+          </Suspense>
+        </TabsContent>
+        <TabsContent value="cip" className="mt-2">
+          <Suspense fallback={<TabFallback />}>
+            <CIPLog />
+          </Suspense>
+        </TabsContent>
+        <TabsContent value="chemical-dosing" className="mt-2">
+          <Suspense fallback={<TabFallback />}>
+            <ChemicalDosing />
+          </Suspense>
+        </TabsContent>
       </Tabs>
     </div>
   );

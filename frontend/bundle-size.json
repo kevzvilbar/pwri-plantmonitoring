@@ -1,6 +1,6 @@
 {
-  "maxTotalGzipKb": 1213.9,
-  "lastUpdated": "2026-10-17",
+  "maxTotalGzipKb": 1225.9,
+  "lastUpdated": "2026-11-11",
   "history": [
     {
       "date": "2026-09-06",
@@ -170,6 +170,12 @@
       "maxTotalGzipKb": 1213.9,
       "previous": 1167.6,
       "reason": "Re-baselined to match authoritative build (1213.9 kB gzipped across 124 assets) following 12-theme system architecture with OS auto-sync, 3-way ThemeSelector, mobile navigation drawer badges, d3 Cost Composition Sunburst with chemical dosing breakdown, unified chart color tokens, and Git commit-based versioning."
+    },
+    {
+      "date": "2026-11-11",
+      "maxTotalGzipKb": 1225.9,
+      "previous": 1213.9,
+      "reason": "Code-split /plants, /topology, and /compliance by removing wildcard barrel re-exports in pages/Plants.tsx, pages/PlantTopology.tsx, and pages/Compliance.tsx (reducing Plants chunk from 138.3 kB to 101.1 kB gz and isolating PlantTopology at 32.4 kB gz), and lazy-loaded non-default RO Trains sub-tabs (PretreatmentAndROLog, CIPLog, ChemicalDosing) in ROTrainsPage.tsx (cutting initial /ro-trains route chunk by 62% from 91.5 kB to 35.0 kB gz). Per-file gzip header overhead across 14 newly split chunks accounts for the +12.0 kB sum-of-assets baseline change."
     }
   ]
 }

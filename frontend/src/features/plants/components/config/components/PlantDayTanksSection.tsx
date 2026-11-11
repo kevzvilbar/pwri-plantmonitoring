@@ -109,8 +109,9 @@ export function PlantDayTanksSection({ plantId, canEdit }: PlantDayTanksSectionP
               </DialogHeader>
               <div className="space-y-3 text-xs">
                 <div>
-                  <Label>Tank Name</Label>
+                  <Label htmlFor="day-tank-name">Tank Name</Label>
                   <Input
+                    id="day-tank-name"
                     placeholder="e.g. Chlorine Day Tank 1"
                     className="mt-1"
                     value={tankName}
@@ -119,9 +120,9 @@ export function PlantDayTanksSection({ plantId, canEdit }: PlantDayTanksSectionP
                 </div>
 
                 <div>
-                  <Label>Dosed Chemical Product</Label>
+                  <Label htmlFor="day-tank-product">Dosed Chemical Product</Label>
                   <Select value={catalogId} onValueChange={setCatalogId}>
-                    <SelectTrigger className="mt-1">
+                    <SelectTrigger id="day-tank-product" className="mt-1">
                       <SelectValue placeholder="Select product" />
                     </SelectTrigger>
                     <SelectContent>
@@ -136,8 +137,9 @@ export function PlantDayTanksSection({ plantId, canEdit }: PlantDayTanksSectionP
 
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <Label>Tank Capacity (L)</Label>
+                    <Label htmlFor="day-tank-capacity">Tank Capacity (L)</Label>
                     <Input
+                      id="day-tank-capacity"
                       type="number"
                       min="1"
                       placeholder="e.g. 500"
@@ -147,8 +149,9 @@ export function PlantDayTanksSection({ plantId, canEdit }: PlantDayTanksSectionP
                     />
                   </div>
                   <div>
-                    <Label>Neat Base per 100 L Solution</Label>
+                    <Label htmlFor="day-tank-neat-ratio">Neat Base per 100 L Solution</Label>
                     <Input
+                      id="day-tank-neat-ratio"
                       type="number"
                       step="any"
                       min="0.01"

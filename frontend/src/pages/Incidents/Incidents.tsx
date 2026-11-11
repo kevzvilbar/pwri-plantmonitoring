@@ -31,14 +31,10 @@ export default function Incidents() {
 
   return (
     <div className="space-y-4 animate-fade-in">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div>
-          <PageHeader title="Incident Management & HSE Log" />
-          <p className="text-xs text-muted-foreground mt-0.5">
-            Log equipment malfunctions, chemical spills, plant security events, and environmental safety reports.
-          </p>
-        </div>
-      </div>
+      <PageHeader
+        title="Incident Management & HSE Log"
+        subtitle="Log equipment malfunctions, chemical spills, plant security events, and environmental safety reports."
+      />
 
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList className="grid grid-cols-3 w-full bg-muted/60 p-1 rounded-xl">

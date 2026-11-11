@@ -1,1 +1,1 @@
-export * from '@/features/readings/components/readingHistory/MeterReplacementDetailDialog';
+export { MeterReplacementDetailDialog } from '@/features/readings/components/readingHistory/MeterReplacementDetailDialog';

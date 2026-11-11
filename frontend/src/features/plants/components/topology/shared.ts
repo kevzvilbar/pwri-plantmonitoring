@@ -1,5 +1,16 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import type {
+  TopoWell,
+  TopoRoTrain,
+  TopoProcessStage,
+  TopoProductTank,
+  TopoDosingPoint,
+  TopoLocator,
+  TopoProductMeter,
+  TopoPowerConfig,
+  TopoMeterConfig,
+} from '@/data/queries/plantTopology';
 import {
   RawWaterIcon,
   MediaFilterIcon,
@@ -136,7 +147,7 @@ export const CHAIN_STAGE_TYPES: NodeType[] = [
 ];
 
 /** Rows from `plant_process_stages` → ProcessStage[], falling back to default. */
-export function resolveStages(rows?: any[] | null): ProcessStage[] {
+export function resolveStages(rows?: TopoProcessStage[] | null): ProcessStage[] {
   if (!rows?.length) return DEFAULT_PROCESS_STAGES;
   const mapped = rows
     .slice()
@@ -553,8 +564,8 @@ export async function saveLinks(plantId: string, links: TopoLink[]) {
   const rows = links.map((l) => ({ plant_id: plantId, from_id: l.from, to_id: l.to }));
   try { localStorage.setItem(TOPO_LS_KEY(plantId), JSON.stringify(links.map((l) => ({ from_id: l.from, to_id: l.to })))); } catch { /**/ }
   try {
-    await (supabase.from('plant_topology_links' as any) as any).delete().eq('plant_id', plantId);
-    if (rows.length) await (supabase.from('plant_topology_links' as any) as any).insert(rows);
+    await supabase.from('plant_topology_links').delete().eq('plant_id', plantId);
+    if (rows.length) await supabase.from('plant_topology_links').insert(rows);
   } catch { /**/ }
 }
 
@@ -620,53 +631,53 @@ export function saveColWidths(plantId: string, widths: Record<string, number>) {
  *  Meter nodes accept a `variant` prop ('mechanical' | 'electromagnetic')
  *  resolved from train EM config.
  */
-export function getNodeIcon(type: NodeType, variant?: string): React.ComponentType<any> | null {
+export function getNodeIcon(type: NodeType, variant?: string): React.ComponentType<Record<string, unknown>> | null {
   switch (type) {
     case 'well':
-      return WellSymbol;
+      return WellSymbol as React.ComponentType<Record<string, unknown>>;
     case 'rawMeter':
-      return RawMeterSymbol;
+      return RawMeterSymbol as React.ComponentType<Record<string, unknown>>;
     case 'rawTank':
-      return RawTankSymbol;
+      return RawTankSymbol as React.ComponentType<Record<string, unknown>>;
     case 'rawWaterPump':
-      return RawWaterPumpSymbol;
+      return RawWaterPumpSymbol as React.ComponentType<Record<string, unknown>>;
     case 'mediaFilter':
-      return MediaFilterSymbol;
+      return MediaFilterSymbol as React.ComponentType<Record<string, unknown>>;
     case 'bagCartridge':
-      return variant === 'bank' ? BagFilterBankSymbol : CartridgeFilterSymbol;
+      return (variant === 'bank' ? BagFilterBankSymbol : CartridgeFilterSymbol) as React.ComponentType<Record<string, unknown>>;
     case 'hpPump':
-      return HPPumpSymbol;
+      return HPPumpSymbol as React.ComponentType<Record<string, unknown>>;
     case 'pretreat':
-      return PretreatSymbol;
+      return PretreatSymbol as React.ComponentType<Record<string, unknown>>;
     case 'feedMeter':
-      return FeedMeterSymbol;
+      return FeedMeterSymbol as React.ComponentType<Record<string, unknown>>;
     case 'roTrain':
-      return ROTrainSymbol;
+      return ROTrainSymbol as React.ComponentType<Record<string, unknown>>;
     case 'permeate':
-      return variant === 'tank' ? TankSymbol : PermeateSymbol;
+      return (variant === 'tank' ? TankSymbol : PermeateSymbol) as React.ComponentType<Record<string, unknown>>;
     case 'reject':
-      return RejectSymbol;
+      return RejectSymbol as React.ComponentType<Record<string, unknown>>;
     case 'productTank':
-      return ProductTankSymbol;
+      return ProductTankSymbol as React.ComponentType<Record<string, unknown>>;
     case 'bulk':
-      return variant === 'tank' ? TankSymbol : BulkMeterSymbol;
+      return (variant === 'tank' ? TankSymbol : BulkMeterSymbol) as React.ComponentType<Record<string, unknown>>;
     case 'locator':
-      return LocatorSymbol;
+      return LocatorSymbol as React.ComponentType<Record<string, unknown>>;
     case 'degasifier':
-      return DegasifierSymbol;
+      return DegasifierSymbol as React.ComponentType<Record<string, unknown>>;
     case 'dosingPump':
-      return DosingPumpSymbol;
+      return DosingPumpSymbol as React.ComponentType<Record<string, unknown>>;
     case 'refillStation':
-      return RefillStationSymbol;
+      return RefillStationSymbol as React.ComponentType<Record<string, unknown>>;
     case 'transferPump':
-      return TransferPumpSymbol;
+      return TransferPumpSymbol as React.ComponentType<Record<string, unknown>>;
     case 'solarSource':
-      return SolarSymbol;
+      return SolarSymbol as React.ComponentType<Record<string, unknown>>;
     case 'solarMeter':
     case 'gridMeter':
-      return PowerMeterSymbol;
+      return PowerMeterSymbol as React.ComponentType<Record<string, unknown>>;
     case 'gridSource':
-      return GridSymbol;
+      return GridSymbol as React.ComponentType<Record<string, unknown>>;
     case 'customNode':
     default:
       return null;
@@ -805,6 +816,11 @@ export const STREAM_LABELS: Record<StreamType, string> = {
   general:   'General Connection',
 };
 
+export type ExtendedTopoRoTrain = TopoRoTrain & {
+  permeate_meter_size?: string | null;
+  reject_meter_size?: string | null;
+};
+
 export function useTopologyData(plantId: string | null) {
   return useQuery({
     queryKey: ['topology-data', plantId],
@@ -823,37 +839,37 @@ export function useTopologyData(plantId: string | null) {
           'unit_type,feed_source_train_id,reject_routing'
         ).eq('plant_id', plantId).order('train_number'),
         supabase.from('locators').select('id,name,status,product_meter_id').eq('plant_id', plantId).order('name'),
-        (supabase.from('product_meters' as any) as any).select('id,name,status').eq('plant_id', plantId).order('name'),
-        (supabase.from('plant_power_config' as any) as any)
+        supabase.from('product_meters').select('id,name,status').eq('plant_id', plantId).order('name'),
+        supabase.from('plant_power_config')
           .select('solar_meter_count,solar_meter_names,grid_meter_count,grid_meter_names')
           .eq('plant_id', plantId).maybeSingle(),
-        (supabase.from('plant_meter_config' as any) as any)
+        supabase.from('plant_meter_config')
           .select('config,permeate_is_production')
           .eq('plant_id', plantId).maybeSingle(),
         // Optional topology extensions — a plant with none of these rows keeps
         // the legacy line shape untouched (see resolveStages / buildTopology).
         // Wrapped so a project that hasn't run 20260916000001 yet still loads.
-        (supabase.from('plant_process_stages' as any) as any)
+        supabase.from('plant_process_stages')
           .select('stage_key,label,node_type,scope,sort_order,detail,wrap_cols')
           .eq('plant_id', plantId).order('sort_order')
-          .then((r: any) => r, () => ({ data: null })),
-        (supabase.from('product_tanks' as any) as any)
+          .then((r) => r, () => ({ data: null })),
+        supabase.from('product_tanks')
           .select('id,name,tank_number,status,capacity_m3,product_meter_id')
           .eq('plant_id', plantId).order('tank_number')
-          .then((r: any) => r, () => ({ data: null })),
-        (supabase.from('dosing_points' as any) as any)
+          .then((r) => r, () => ({ data: null })),
+        supabase.from('dosing_points')
           .select('id,chemical,label,injects_into_stage_key,pump_hp,status')
           .eq('plant_id', plantId)
-          .then((r: any) => r, () => ({ data: null })),
-        (supabase.from('plant_topology_config' as any) as any)
+          .then((r) => r, () => ({ data: null })),
+        supabase.from('plant_topology_config')
           .select('custom_nodes,custom_columns,position_overrides,column_widths,palette_items')
           .eq('plant_id', plantId).maybeSingle()
-          .then((r: any) => r, () => ({ data: null })),
+          .then((r) => r, () => ({ data: null })),
       ]);
 
       let savedLinks: { from_id: string; to_id: string }[] = [];
       try {
-        const { data: linkRows } = await (supabase.from('plant_topology_links' as any) as any)
+        const { data: linkRows } = await supabase.from('plant_topology_links')
           .select('from_id,to_id').eq('plant_id', plantId);
         if (linkRows?.length) savedLinks = linkRows;
         else {
@@ -876,15 +892,15 @@ export function useTopologyData(plantId: string | null) {
       } : null;
 
       return {
-        wells:         (wellsRes.data ?? []) as any[],
-        roTrains:      (roRes.data    ?? []) as any[],
-        locators:      (locRes.data   ?? []) as any[],
-        productMeters: (prodRes.data  ?? []) as any[],
-        powerCfg:      powerCfgRes.data as any,
-        meterCfg:      meterCfgRes.data as any,
-        processStages: (stagesRes?.data ?? null) as any[] | null,
-        productTanks:  (tanksRes?.data  ?? []) as any[],
-        dosingPoints:  (dosingRes?.data ?? []) as any[],
+        wells:         (wellsRes.data ?? []) as unknown as TopoWell[],
+        roTrains:      (roRes.data    ?? []) as unknown as ExtendedTopoRoTrain[],
+        locators:      (locRes.data   ?? []) as unknown as TopoLocator[],
+        productMeters: (prodRes.data  ?? []) as unknown as TopoProductMeter[],
+        powerCfg:      powerCfgRes.data as unknown as TopoPowerConfig | null,
+        meterCfg:      meterCfgRes.data as unknown as TopoMeterConfig | null,
+        processStages: (stagesRes?.data ?? null) as unknown as TopoProcessStage[] | null,
+        productTanks:  (tanksRes?.data  ?? []) as unknown as TopoProductTank[],
+        dosingPoints:  (dosingRes?.data ?? []) as unknown as TopoDosingPoint[],
         savedLinks,
         topologyConfig,
       };
@@ -894,7 +910,7 @@ export function useTopologyData(plantId: string | null) {
 
 // ─── Build equipment detail string for RO train ──────────────────────────────
 
-export function buildTrainDetail(t: any): string {
+export function buildTrainDetail(t: Partial<ExtendedTopoRoTrain>): string {
   const mediaType  = (t.filter_media_type ?? 'AFM') as string;
   const filterType = (t.filter_housing_type ?? 'Cartridge Filter') as string;
   const filterLabel = filterType === 'Bag Filter' ? 'BF' : 'CF';
@@ -928,11 +944,11 @@ export function buildTopology(
   const fixedLinks: TopoLink[] = [];
 
   const { wells, roTrains, locators, productMeters, powerCfg, meterCfg, savedLinks } = data;
-  const productTankRows = ((data as any).productTanks ?? []) as any[];
-  const dosingRows      = ((data as any).dosingPoints ?? []) as any[];
-  const stages          = resolveStages((data as any).processStages);
+  const productTankRows = data.productTanks ?? [];
+  const dosingRows      = data.dosingPoints ?? [];
+  const stages          = resolveStages(data.processStages);
 
-  const cfg = (meterCfg?.config ?? meterCfg ?? {}) as any;
+  const cfg = ((meterCfg?.config ?? meterCfg ?? {}) as Record<string, boolean | undefined>);
   const hasSolar     = cfg?.has_solar ?? false;
   const hasGrid      = cfg?.has_grid  ?? true;
   const hasFeedMeter = cfg?.ro_has_feed_meter     ?? true;
@@ -940,22 +956,22 @@ export function buildTopology(
   const hasReject    = cfg?.ro_has_reject_meter   ?? true;
 
   const permeateIsProduction =
-    (meterCfg as any)?.permeate_is_production === true || cfg?.permeate_is_production === true;
+    meterCfg?.permeate_is_production === true || cfg?.permeate_is_production === true;
 
   const productTankId = `producttank-${plantId}`;
   const rawTankId     = `rawtank-${plantId}`;
 
   const solarCount = powerCfg?.solar_meter_count ?? 1;
   const gridCount  = powerCfg?.grid_meter_count  ?? 1;
-  const solarNames: string[] = powerCfg?.solar_meter_names ?? Array.from({ length: solarCount }, (_: any, i: number) => `Solar Meter ${i + 1}`);
-  const gridNames:  string[] = powerCfg?.grid_meter_names  ?? Array.from({ length: gridCount  }, (_: any, i: number) => `Grid Meter ${i + 1}`);
+  const solarNames: string[] = powerCfg?.solar_meter_names ?? Array.from({ length: solarCount }, (_, i: number) => `Solar Meter ${i + 1}`);
+  const gridNames:  string[] = powerCfg?.grid_meter_names  ?? Array.from({ length: gridCount  }, (_, i: number) => `Grid Meter ${i + 1}`);
 
   // Per-train EM-meter resolution: which streams on this train use electromagnetic
   // magmeters instead of mechanical register meters. Drawn from the ro_trains EM
   // fields directly; the config-level `em_all_streams` acts as a blanket override
   // only for trains that have NO per-stream EM flags set at all.
   const trainEM = new Map<string, { feed: boolean; permeate: boolean; reject: boolean }>();
-  roTrains.forEach((r: any) => {
+  roTrains.forEach((r) => {
     const hasAny = !!(r.em_stream_feed || r.em_stream_permeate || r.em_stream_reject);
     if (hasAny) {
       trainEM.set(r.id, {
@@ -968,7 +984,7 @@ export function buildTopology(
     }
   });
 
-  const primaryTrains = roTrains.filter((r: any) => r.unit_type !== 'secondary');
+  const primaryTrains = roTrains.filter((r) => r.unit_type !== 'secondary');
 
   // ── Feed chain stages ──
   // Everything the template places between the raw meters and the RO. A stage
@@ -1003,7 +1019,7 @@ export function buildTopology(
     `${stagePrefix(stage)}-${trainId}`;
 
   /** Label + detail for a chain node, preserving the pre-template strings. */
-  function chainNodeMeta(stage: ProcessStage, r?: any): Partial<TopoNode> {
+  function chainNodeMeta(stage: ProcessStage, r?: ExtendedTopoRoTrain): Partial<TopoNode> {
     if (!r) {
       return {
         label: stage.label,
@@ -1067,12 +1083,12 @@ export function buildTopology(
   // Blending wells keep their raw meter (blending volumes are meter deltas)
   // but that meter discharges straight into the product line — a metered
   // bypass from the raw side, skipping the intake chain and the RO.
-  wells.forEach((w: any) => {
+  wells.forEach((w) => {
     nodes.push({ id: w.id, type: 'well', stageKey: 'well', label: w.name, status: w.status });
     const rmId = `rawmeter-${w.id}`;
     nodes.push({ id: rmId, type: 'rawMeter', stageKey: 'rawMeter', label: `Raw ${w.name}` });
     fixedLinks.push({ from: w.id, to: rmId });
-    if ((w as any).is_blending_well) {
+    if (w.is_blending_well) {
       fixedLinks.push({ from: rmId, to: productTankId, bypass: true });
       return;
     }
@@ -1084,7 +1100,7 @@ export function buildTopology(
   // ── Train-scope chain, one set per primary RO train ──
   const trainChainEnd = new Map<string, string>();
   const trainStageIdsByKey = new Map<string, string[]>();
-  primaryTrains.forEach((r: any) => {
+  primaryTrains.forEach((r) => {
     let prev: string | null = plantChainEnd;
     chainStages.filter((s) => s.scope === 'train').forEach((stage) => {
       const id = trainStageNodeId(stage, r.id);
@@ -1108,7 +1124,7 @@ export function buildTopology(
   });
 
   // ── RO trains — with equipment detail ──
-  roTrains.forEach((r: any) => {
+  roTrains.forEach((r) => {
     const detail = buildTrainDetail(r);
     const isSecondary = r.unit_type === 'secondary';
     const trainLabel = (r.name ? `Train ${r.train_number} · ${r.name}` : `RO Train ${r.train_number}`)
@@ -1133,7 +1149,7 @@ export function buildTopology(
   });
 
   // ── Permeate / Reject — one per train ──
-  roTrains.forEach((r: any) => {
+  roTrains.forEach((r) => {
     const em = trainEM.get(r.id) ?? { feed: false, permeate: false, reject: false };
 
     if (hasPermeate) {
@@ -1169,7 +1185,7 @@ export function buildTopology(
   // picked up by the last tank so no meter dangles.
   const tankIds: string[] = [];
   if (productTankRows.length) {
-    productTankRows.forEach((t: any) => {
+    productTankRows.forEach((t) => {
       nodes.push({
         id: t.id,
         type: 'productTank',
@@ -1192,21 +1208,21 @@ export function buildTopology(
     tankIds.push(productTankId);
   }
 
-  primaryTrains.forEach((r: any) => {
+  primaryTrains.forEach((r) => {
     const src = hasPermeate ? `permeate-${r.id}` : r.id;
     tankIds.forEach((tid) => fixedLinks.push({ from: src, to: tid }));
   });
 
   // ── Bulk meters (product_meters from DB — exactly as configured in Plants) ──
-  productMeters.forEach((m: any) => {
+  productMeters.forEach((m) => {
     nodes.push({ id: m.id, type: 'bulk', stageKey: 'bulk', label: m.name, status: m.status });
   });
 
   if (productMeters.length) {
     const fedMeters = new Set<string>();
     if (productTankRows.length) {
-      productTankRows.forEach((t: any) => {
-        const target = t.product_meter_id && productMeters.some((m: any) => m.id === t.product_meter_id)
+      productTankRows.forEach((t) => {
+        const target = t.product_meter_id && productMeters.some((m) => m.id === t.product_meter_id)
           ? t.product_meter_id
           : productMeters[0].id;
         fixedLinks.push({ from: t.id, to: target });
@@ -1214,15 +1230,15 @@ export function buildTopology(
       });
       const lastTank = tankIds[tankIds.length - 1];
       productMeters
-        .filter((m: any) => !fedMeters.has(m.id))
-        .forEach((m: any) => fixedLinks.push({ from: lastTank, to: m.id }));
+        .filter((m) => !fedMeters.has(m.id))
+        .forEach((m) => fixedLinks.push({ from: lastTank, to: m.id }));
     } else {
-      productMeters.forEach((m: any) => fixedLinks.push({ from: productTankId, to: m.id }));
+      productMeters.forEach((m) => fixedLinks.push({ from: productTankId, to: m.id }));
     }
   }
 
   // ── Locators (exactly as configured in Plants) ──
-  locators.forEach((l: any) => {
+  locators.forEach((l) => {
     nodes.push({ id: l.id, type: 'locator', stageKey: 'locator', label: l.name, status: l.status ?? 'Active' });
   });
 
@@ -1231,7 +1247,7 @@ export function buildTopology(
   // bay rather than to drain. That water leaves the plant but was never
   // permeate, so the bay and its transfer pump carry an explicit `reject`
   // stream and must never be counted as production.
-  const reuseTrains = roTrains.filter((r: any) => r.reject_routing === 'reuse');
+  const reuseTrains = roTrains.filter((r) => r.reject_routing === 'reuse');
   if (reuseTrains.length && hasReject) {
     const bayId  = `refill-${plantId}`;
     const pumpId = `transferpump-${plantId}`;
@@ -1244,14 +1260,14 @@ export function buildTopology(
       id: pumpId, type: 'transferPump', stageKey: 'refillStation',
       label: 'Transfer Pump', stream: 'reject',
     });
-    reuseTrains.forEach((r: any) => fixedLinks.push({ from: `reject-${r.id}`, to: bayId }));
+    reuseTrains.forEach((r) => fixedLinks.push({ from: `reject-${r.id}`, to: bayId }));
     fixedLinks.push({ from: bayId, to: pumpId });
   }
 
   // ── Chemical dosing points ──
   // A dosing pump injects into a stage rather than carrying process flow. The
   // link is drawn on its own `chemical` stream so it never reads as water.
-  dosingRows.forEach((d: any) => {
+  dosingRows.forEach((d) => {
     const stageKey = d.injects_into_stage_key as string;
     const id = `dosing-${d.id}`;
     nodes.push({
@@ -1267,8 +1283,8 @@ export function buildTopology(
     const targets: string[] = [];
     if (plantStageIdByKey.has(stageKey)) targets.push(plantStageIdByKey.get(stageKey)!);
     else if (trainStageIdsByKey.has(stageKey)) targets.push(...trainStageIdsByKey.get(stageKey)!);
-    else if (stageKey === 'roTrain') targets.push(...primaryTrains.map((r: any) => r.id));
-    else if (stageKey === 'bulk') targets.push(...productMeters.map((m: any) => m.id));
+    else if (stageKey === 'roTrain') targets.push(...primaryTrains.map((r) => r.id));
+    else if (stageKey === 'bulk') targets.push(...productMeters.map((m) => m.id));
     else if (stageKey === 'productTank') targets.push(...tankIds);
     targets.forEach((t) => fixedLinks.push({ from: id, to: t }));
   });
@@ -1307,14 +1323,14 @@ export function buildTopology(
   // above) draw their locator supply directly off the permeate line as well as
   // via the product tank/meter, so seed permeate → locator defaults.
   if (permeateIsProduction && hasPermeate) {
-    primaryTrains.forEach((r: any) => {
-      locators.forEach((l: any) => {
+    primaryTrains.forEach((r) => {
+      locators.forEach((l) => {
         defaultEditLinks.push({ from: `permeate-${r.id}`, to: l.id, editable: true });
       });
     });
   }
 
-  locators.forEach((l: any) => {
+  locators.forEach((l) => {
     if (l.product_meter_id)
       defaultEditLinks.push({ from: l.product_meter_id, to: l.id, editable: true });
   });
@@ -1324,12 +1340,12 @@ export function buildTopology(
   // meter configured the tank feeds the locators directly (rewirable in
   // Connect mode).
   if (productMeters.length === 0) {
-    locators.forEach((l: any) => {
+    locators.forEach((l) => {
       tankIds.forEach((tid) => defaultEditLinks.push({ from: tid, to: l.id, editable: true }));
     });
   }
 
-  roTrains.forEach((r: any) => {
+  roTrains.forEach((r) => {
     if (r.unit_type === 'secondary' && r.feed_source_train_id) {
       defaultEditLinks.push({ from: `permeate-${r.feed_source_train_id}`, to: r.id, editable: true });
       if (r.reject_routing === 'recirculate') {
@@ -1339,11 +1355,11 @@ export function buildTopology(
   });
 
   const firstGridMeter = hasGrid ? `grid-meter-${plantId}-0` : null;
-  wells.forEach((w: any) => {
+  wells.forEach((w) => {
     if (w.has_power_meter && firstGridMeter)
       defaultEditLinks.push({ from: firstGridMeter, to: w.id, editable: true });
   });
-  roTrains.forEach((r: any) => {
+  roTrains.forEach((r) => {
     if (!r.shared_power_meter_group && firstGridMeter)
       defaultEditLinks.push({ from: firstGridMeter, to: r.id, editable: true });
   });
@@ -1356,7 +1372,7 @@ export function buildTopology(
   // A saved link duplicating a fixedLink pair would render the pipe twice.
   const fixedPairs = new Set(fixedLinks.map((l) => `${l.from}→${l.to}`));
   const sanitizedSaved = savedLinks.filter(
-    (s: any) => {
+    (s) => {
       if (!knownIds.has(s.from_id) || !knownIds.has(s.to_id)) return false;
       if (fixedPairs.has(`${s.from_id}→${s.to_id}`)) return false;
       return true;
@@ -1364,7 +1380,7 @@ export function buildTopology(
   );
 
   const editLinks: TopoLink[] = sanitizedSaved.length
-    ? sanitizedSaved.map((s: any) => ({ from: s.from_id, to: s.to_id, editable: true }))
+    ? sanitizedSaved.map((s) => ({ from: s.from_id, to: s.to_id, editable: true }))
     : defaultEditLinks;
 
   return { nodes, fixedLinks, editLinks };

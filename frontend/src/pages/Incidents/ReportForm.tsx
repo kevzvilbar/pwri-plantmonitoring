@@ -106,8 +106,8 @@ export function ReportForm({ initial }: { initial: typeof REPORT_INITIAL }) {
         </div>
       </div>
 
-      <div>
-        <Label className="text-xs font-semibold">Severity Rating</Label>
+      <div role="group" aria-labelledby="incidents-severity-label">
+        <div id="incidents-severity-label" className="text-xs font-semibold leading-none">Severity Rating</div>
         <div className="grid grid-cols-4 gap-2 mt-1.5">
           {SEVERITIES.map(s => {
             const isSelected = v.severity === s;

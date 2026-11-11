@@ -1,2 +1,1 @@
-export * from '@/features/wells';
-export { WellRow as default } from '@/features/wells';
+export { WellRow, WellRow as default } from '@/features/wells/components/WellRow';

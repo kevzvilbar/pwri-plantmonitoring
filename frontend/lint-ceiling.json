@@ -1,6 +1,6 @@
 {
-  "maxWarnings": 2658,
-  "lastUpdated": "2026-10-08",
+  "maxWarnings": 2479,
+  "lastUpdated": "2026-11-11",
   "history": [
     {
       "date": "2026-09-26",
@@ -333,6 +333,12 @@
       "date": "2026-10-08",
       "maxWarnings": 2658,
       "previous": 2660
+    },
+    {
+      "date": "2026-11-11",
+      "maxWarnings": 2479,
+      "previous": 2658,
+      "reason": "Application-wide polish pass (-179 warnings, 2658 -> 2479): resolved all 37 jsx-a11y/label-has-associated-control warnings, all 37 jsx-a11y/click-events-have-key-events + 36 jsx-a11y/no-static-element-interactions warnings, all 44 react-hooks/exhaustive-deps warnings (0 remaining), all 7 unused eslint-disable directives (0 remaining), 15 stale @typescript-eslint/no-explicit-any casts, and 3 react-refresh/only-export-components warnings from page barrel decoupling."
     }
   ]
 }

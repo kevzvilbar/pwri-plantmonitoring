@@ -56,7 +56,7 @@ export default function Alerts() {
   };
 
   return (
-    <div className="space-y-3 sm:space-y-5 pb-12">
+    <div className="space-y-3 sm:space-y-5 pb-12 animate-fade-in">
       <PageHeader
         title="Alerts"
         subtitle={

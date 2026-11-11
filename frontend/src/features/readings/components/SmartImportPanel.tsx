@@ -288,7 +288,7 @@ export default function SmartImportPanel() {
 
       {sidebarOpen && (
         <div className="lg:hidden fixed inset-0 z-50 flex">
-          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setSidebarOpen(false)} />
+          <div role="presentation" className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setSidebarOpen(false)} />
           <div className="relative z-10 flex flex-col w-72 max-w-[85vw] h-full bg-background border-r shadow-xl animate-in slide-in-from-left-4 duration-200">
             <div className="flex items-center justify-between px-4 py-3 border-b">
               <span className="text-2xs font-semibold uppercase tracking-wider text-muted-foreground">Import Type</span>

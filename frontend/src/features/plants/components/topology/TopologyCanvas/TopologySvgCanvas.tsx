@@ -74,6 +74,7 @@ export function TopologySvgCanvas({
 }: TopologySvgCanvasProps) {
   const canvasRef = useRef<HTMLDivElement>(null);
   const { selectedPlantId } = useAppStore();
+  const { setZoom, setInspectNode, setEditMode, setPendingFrom } = props;
 
   // Spacebar pan state and drag refs
   const [isSpacePressed, setIsSpacePressed] = useState(false);
@@ -91,14 +92,14 @@ export function TopologySvgCanvas({
         setIsSpacePressed(true);
       }
       if (e.key === '+' || e.key === '=') {
-        props.setZoom((z) => Math.min(2.5, +(z + 0.15).toFixed(2)));
+        setZoom((z) => Math.min(2.5, +(z + 0.15).toFixed(2)));
       }
       if (e.key === '-' || e.key === '_') {
-        props.setZoom((z) => Math.max(0.3, +(z - 0.15).toFixed(2)));
+        setZoom((z) => Math.max(0.3, +(z - 0.15).toFixed(2)));
       }
       if (e.key === '0' && (e.ctrlKey || e.metaKey)) {
         e.preventDefault();
-        props.setZoom(1);
+        setZoom(1);
         if (canvasRef.current) {
           canvasRef.current.scrollLeft = 0;
           canvasRef.current.scrollTop = 0;
@@ -121,10 +122,10 @@ export function TopologySvgCanvas({
         if (canvasRef.current) canvasRef.current.scrollLeft += 60;
       }
       if (e.key === 'Escape') {
-        if (inspectNode) props.setInspectNode(null);
+        if (inspectNode) setInspectNode(null);
         if (editMode) {
-          props.setEditMode(null);
-          props.setPendingFrom(null);
+          setEditMode(null);
+          setPendingFrom(null);
         }
       }
     };
@@ -142,7 +143,7 @@ export function TopologySvgCanvas({
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [props.setZoom]);
+  }, [setZoom, setInspectNode, setEditMode, setPendingFrom, inspectNode, editMode]);
 
   // Cursor-anchored wheel zooming: zooms directly into point under mouse cursor on Ctrl+wheel or pinch
   const handleWheel = useCallback((e: React.WheelEvent) => {
@@ -162,7 +163,7 @@ export function TopologySvgCanvas({
       if (newZoom !== oldZoom) {
         const canvasX = (mouseX + el.scrollLeft) / oldZoom;
         const canvasY = (mouseY + el.scrollTop) / oldZoom;
-        props.setZoom(newZoom);
+        setZoom(newZoom);
         requestAnimationFrame(() => {
           if (canvasRef.current) {
             canvasRef.current.scrollLeft = canvasX * newZoom - mouseX;
@@ -172,7 +173,7 @@ export function TopologySvgCanvas({
       }
     }
     // Without Ctrl/Cmd, standard wheel/touchpad gesture scrolls natively.
-  }, [zoom, props.setZoom]);
+  }, [zoom, setZoom]);
 
   // Pointer panning handlers (Middle-click, Space+drag, or Alt+drag)
   const handlePointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {

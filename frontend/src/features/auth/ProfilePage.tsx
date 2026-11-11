@@ -62,7 +62,7 @@ export default function Profile() {
       });
     }
     setEditing(false);
-  }, [displayProfile?.id]);
+  }, [displayProfile]);
 
   const { data: existingDesignations } = useQuery({
     queryKey: ['designation-suggestions'],
@@ -77,7 +77,7 @@ export default function Profile() {
   const assignedPlants = useMemo(() => {
     if (!plants || !profile) return [];
     return plants.filter((p) => displayProfile?.plant_assignments?.includes(p.id));
-  }, [plants, displayProfile]);
+  }, [plants, profile, displayProfile]);
 
   const currentActivePlant = useMemo(() => {
     if (!plants) return null;
@@ -450,7 +450,15 @@ export default function Profile() {
                   return (
                     <div
                       key={p.id}
+                      role="button"
+                      tabIndex={0}
                       onClick={() => setSelectedPlantId(p.id)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          setSelectedPlantId(p.id);
+                        }
+                      }}
                       className={`p-2.5 rounded-md border transition-all flex items-center justify-between gap-3 cursor-pointer ${
                         isActive
                           ? 'border-primary bg-primary-soft/40 shadow-xs'

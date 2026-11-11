@@ -19,7 +19,7 @@ function DetailDrawer({ member, roles, plants, allStaff, onChat, onClose, isSelf
 
   return (
     <>
-      <div className="fixed inset-0 z-40 bg-black/20" onClick={onClose} />
+      <div role="presentation" className="fixed inset-0 z-40 bg-black/20" onClick={onClose} />
       <div
         className={cn(
           'fixed top-0 bottom-0 z-50 bg-background border-l shadow-2xl flex flex-col',

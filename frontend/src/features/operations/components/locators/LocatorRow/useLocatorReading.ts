@@ -80,7 +80,7 @@ export function useLocatorReading({
 
   useEffect(() => {
     if (reading === '' && draftReading.value) setReading(draftReading.value);
-  }, []);
+  }, [reading, draftReading.value]);
 
   const locInputMode: 'raw' | 'direct' = locator.default_input_mode === 'direct' ? 'direct' : 'raw';
 

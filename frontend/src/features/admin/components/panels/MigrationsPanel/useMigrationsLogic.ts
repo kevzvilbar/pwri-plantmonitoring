@@ -73,7 +73,7 @@ export function useMigrationsLogic() {
     if (Object.keys(seenShas).length === 0 && Object.keys(currentShas).length > 0) {
       persistShas(currentShas);
     }
-  }, [data]);
+  }, [data, currentShas, seenShas]);
 
   const driftCount = useMemo(() => {
     let n = 0;

@@ -128,8 +128,9 @@ export function MigrationsPanel() {
                   </button>
                 )}
               </div>
-              <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+              <label htmlFor="migrations-show-applied" className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
                 <Checkbox
+                  id="migrations-show-applied"
                   checked={showApplied}
                   onCheckedChange={(v) => setShowApplied(!!v)}
                   data-testid="migrations-show-applied"

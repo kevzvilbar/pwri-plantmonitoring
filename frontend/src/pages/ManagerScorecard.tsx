@@ -27,7 +27,7 @@ export default function ManagerScorecard() {
     return (
       <div className="flex items-center justify-center min-h-[50vh]">
         <Card className="p-8 text-center space-y-2 max-w-sm">
-          <ShieldAlert className="h-8 w-8 mx-auto text-destructive" />
+          <ShieldAlert className="h-8 w-8 mx-auto text-danger" />
           <h2 className="font-semibold">Access restricted</h2>
           <p className="text-sm text-muted-foreground">Manager Scorecard requires Admin, Manager, or Data Analyst access.</p>
         </Card>

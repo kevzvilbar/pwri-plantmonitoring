@@ -182,7 +182,7 @@ export default function DataAnalysisPage() {
     retry: false,
     throwOnError: false,
   });
-  const regressionResults = resultsData?.results ?? [];
+  const regressionResults = useMemo(() => resultsData?.results ?? [], [resultsData?.results]);
 
   // When source table changes, reset column and entity
   const handleTableChange = (t: string) => {

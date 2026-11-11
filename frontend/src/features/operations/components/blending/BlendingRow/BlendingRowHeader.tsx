@@ -67,6 +67,7 @@ export function BlendingRowHeader({ state }: BlendingRowHeaderProps) {
         />
         <label className="cursor-pointer relative">
           <span
+            role="presentation"
             className="inline-flex items-center gap-1.5 text-2xs text-muted-foreground bg-muted border border-border/70 rounded-full px-3 py-1 font-mono-num whitespace-nowrap hover:bg-muted/80 hover:text-foreground transition-colors"
             onClick={(e) => {
               e.preventDefault();

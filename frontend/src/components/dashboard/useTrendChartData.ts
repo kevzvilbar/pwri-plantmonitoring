@@ -522,7 +522,8 @@ export function useTrendChartData({
     });
   }, [locReadings, wellReadings, productReadings, roReadings, powerReadings, costReadings, powerTariffs,
       billMultiplierMap, powerConfigMap, metric, wellNames, locatorNames, productMeterNames, plantNames,
-      permeateIsProductionPlants, productExcludedPlants, _trainPlantMap, _trainUnitTypeMap, startISO, startKey, endKey, _directLocatorIds, _directProductMeterIds]);
+      permeateIsProductionPlants, productExcludedPlants, _trainPlantMap, _trainUnitTypeMap, startISO, startKey, endKey, _directLocatorIds, _directProductMeterIds,
+      locatorMultipliers, productMeterMultipliers, wellMultipliers]);
 
   // ── trendRows: chartData bucketed to the active granularity (M1 + M4) ────
   // chartData itself stays DAILY, unchanged, always — it's still what feeds

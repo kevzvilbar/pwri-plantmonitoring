@@ -72,7 +72,7 @@ function CategorySection({
         </div>
         <div className="flex items-center gap-2 ml-auto">
           {/* Export all in category */}
-          <div onClick={e => e.stopPropagation()}>
+          <div role="presentation" onClick={e => e.stopPropagation()}>
             <Button
               variant="ghost"
               size="sm"

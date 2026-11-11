@@ -18,8 +18,16 @@ function StaffCard({ member, roles, plants, isSelf, onlineIds, onChat, onDetail 
 
   return (
     <div
+      role="button"
+      tabIndex={0}
       className="bg-card hover:bg-card/90 rounded-xl border border-border/70 p-3.5 flex flex-col justify-between gap-3 shadow-2xs hover:shadow-md hover:border-primary/50 transition-all cursor-pointer group"
       onClick={onDetail}
+      onKeyDown={(e) => {
+        if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) {
+          e.preventDefault();
+          onDetail();
+        }
+      }}
     >
       {/* Top row: Avatar + Identity + Presence pill */}
       <div className="flex items-start justify-between gap-2.5">
@@ -74,7 +82,7 @@ function StaffCard({ member, roles, plants, isSelf, onlineIds, onChat, onDetail 
         </div>
 
         {/* Action buttons */}
-        <div className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
+        <div role="presentation" className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
           {!isSelf && (
             <Button
               size="sm"

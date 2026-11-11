@@ -96,6 +96,7 @@ export function WellRowHeader({
 
         <label className="cursor-pointer relative shrink-0">
           <span
+            role="presentation"
             className="inline-flex items-center gap-1.5 text-2xs text-muted-foreground bg-muted border border-border/70 rounded-full px-3 py-1 font-mono-num whitespace-nowrap hover:bg-muted/80 hover:text-foreground transition-colors"
             onClick={(e) => {
               e.preventDefault();

@@ -223,11 +223,11 @@ export function SeriesSelectorProvider({
   const selectTopNLocators = useCallback((n: number) => {
     // Implementation would filter drill entities
     console.log('selectTopNLocators', n);
-  }, [drill]);
+  }, []);
   
   const selectTopNWells = useCallback((n: number) => {
     console.log('selectTopNWells', n);
-  }, [well]);
+  }, []);
 
   const value = useMemo(() => ({
     // Locator
@@ -259,10 +259,15 @@ export function SeriesSelectorProvider({
     filteredTrainList: roTrain,
     roTrainEntities: roTrain,
   }), [
-    selectedLocatorIds, showLocatorFilter, allSelected, noneSelected,
-    locatorSearch, selectedWellIds, showWellFilter, allWellsSelected, noneWellsSelected,
-    wellSearch, selectedTrainIds, showTrainFilter, allTrainsSelected, noTrainsSelected,
-    trainSearch, drill, roTrain, well,
+    selectedLocatorIds, setSelectedLocatorIds, showLocatorFilter, setShowLocatorFilter,
+    allSelected, noneSelected, selectAllLocators, clearAllLocators, toggleLocator,
+    locatorSearch, setLocatorSearch, selectTopNLocators,
+    selectedWellIds, setSelectedWellIds, showWellFilter, setShowWellFilter,
+    allWellsSelected, noneWellsSelected, selectAllWells, clearAllWells, toggleWell,
+    wellSearch, setWellSearch, selectTopNWells,
+    selectedTrainIds, setSelectedTrainIds, showTrainFilter, setShowTrainFilter,
+    allTrainsSelected, noTrainsSelected, selectAllTrains, clearAllTrains, toggleTrain,
+    trainSearch, setTrainSearch, drill, roTrain, well,
   ]);
 
   return (

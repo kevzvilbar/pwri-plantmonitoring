@@ -523,7 +523,7 @@ export function useWellRowActions({
       setCustomDt(format(new Date(), "yyyy-MM-dd'T'HH:mm"));
     }
     setEditingId(null); onSaved();
-  }, [saving, reading, atLimit, editingId, editReason, editCustomReason, previousMeter, cur, hoursElapsedWell, meterReplacePending, anomalyRemarkRequired, anomalyRemark, userId, plantId, well, customDt, isRollover, rolloverMax, dailyVol, powerReading, tdsReading, ntuReading, pressureReading, showDedicatedPower, canAutoApprove, activeOperator, onSaved, defaultRolloverMax]);
+  }, [saving, reading, atLimit, editingId, editReason, editCustomReason, previousMeter, cur, hoursElapsedWell, meterReplacePending, anomalyRemarkRequired, anomalyRemark, userId, plantId, well, customDt, isRollover, rolloverMax, dailyVol, powerReading, tdsReading, ntuReading, pressureReading, showDedicatedPower, canAutoApprove, activeOperator, onSaved, defaultRolloverMax, avgVol, clearDraftWell, deviationWell.avgRate, deviationWell.deviationPct, deviationWell.direction, deviationWell.rate, deviationWell.tier, editBefore, saveWellMutation]);
 
   const savePower = useCallback(async () => {
     if (!powerReading) { toast.error(`${well.name}: enter a power reading`); return; }

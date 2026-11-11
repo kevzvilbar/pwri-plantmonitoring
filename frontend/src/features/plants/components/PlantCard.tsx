@@ -332,7 +332,7 @@ export function PlantCard({ plant, summaryCounts, lastReadingAt, onNavigate, onI
           </Button>
 
           {isManager && (
-            <div onClick={e => e.stopPropagation()}>
+            <div role="presentation" onClick={e => e.stopPropagation()}>
               <DeleteEntityMenu
                 kind="plant"
                 id={plant.id}
@@ -390,7 +390,7 @@ export function PlantCard({ plant, summaryCounts, lastReadingAt, onNavigate, onI
             </div>
           </div>
 
-          <div className="flex items-center gap-1.5 shrink-0" onClick={e => e.stopPropagation()}>
+          <div role="presentation" className="flex items-center gap-1.5 shrink-0" onClick={e => e.stopPropagation()}>
             <Button
               size="sm"
               variant="outline"

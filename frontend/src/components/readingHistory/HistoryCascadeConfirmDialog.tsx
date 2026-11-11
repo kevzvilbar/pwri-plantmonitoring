@@ -1,1 +1,1 @@
-export * from '@/features/readings/components/readingHistory/HistoryCascadeConfirmDialog';
+export { HistoryCascadeConfirmDialog } from '@/features/readings/components/readingHistory/HistoryCascadeConfirmDialog';

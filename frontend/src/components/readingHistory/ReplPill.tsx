@@ -1,1 +1,1 @@
-export * from '@/features/readings/components/readingHistory/ReplPill';
+export { ReplPill } from '@/features/readings/components/readingHistory/ReplPill';

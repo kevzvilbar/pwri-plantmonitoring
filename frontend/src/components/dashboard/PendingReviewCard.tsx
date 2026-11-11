@@ -139,7 +139,14 @@ export function PendingReviewCard({ plantIds }: Props) {
               key={r.label}
               className="flex items-center justify-between p-2 rounded-md bg-muted/20 border border-border/30 hover:bg-muted/30 transition-colors cursor-pointer"
               onClick={goReview}
-              role={canReview ? 'button' : undefined}
+              onKeyDown={(e) => {
+                if (canReview && (e.key === 'Enter' || e.key === ' ')) {
+                  e.preventDefault();
+                  goReview();
+                }
+              }}
+              role="button"
+              tabIndex={canReview ? 0 : undefined}
               aria-disabled={canReview ? undefined : true}
             >
               <div className="flex items-center gap-2 min-w-0">

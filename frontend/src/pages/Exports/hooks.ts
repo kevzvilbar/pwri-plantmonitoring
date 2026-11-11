@@ -19,15 +19,15 @@ export function useExportActions(
       else next.add(id);
       return next;
     });
-  }, []);
+  }, [setSelectedTableIds]);
 
   const selectAll = useCallback(() => {
     setSelectedTableIds(new Set(ALL_TABLES.map(t => t.id)));
-  }, []);
+  }, [setSelectedTableIds]);
 
   const clearSelection = useCallback(() => {
     setSelectedTableIds(new Set());
-  }, []);
+  }, [setSelectedTableIds]);
 
   const selectCuratedPackage = useCallback((pkgType: 'ops' | 'ro' | 'chem' | 'power') => {
     const pkgMap: Record<string, string[]> = {
@@ -38,7 +38,7 @@ export function useExportActions(
     };
     setSelectedTableIds(new Set(pkgMap[pkgType] || []));
     toast.success(`Selected ${pkgType.toUpperCase()} table package (${(pkgMap[pkgType] || []).length} tables)`);
-  }, []);
+  }, [setSelectedTableIds]);
 
   const exportAll = useCallback(async () => {
     setExportState('busy');
@@ -56,7 +56,7 @@ export function useExportActions(
     if (failed) toast.info(`Export complete — ${failed} table(s) had errors`);
     else toast.success(`All tables exported — ${total.toLocaleString()} total rows`);
     setTimeout(() => setExportState('idle'), 3000);
-  }, [plantId, from, to]);
+  }, [plantId, from, to, setExportState]);
 
   const exportSelected = useCallback(async () => {
     if (selectedTableIds.size === 0) {
@@ -79,7 +79,7 @@ export function useExportActions(
     if (failed) toast.info(`Export complete — ${failed} table(s) had errors`);
     else toast.success(`Exported ${total.toLocaleString()} rows across ${targetTables.length} selected tables`);
     setTimeout(() => setExportState('idle'), 3000);
-  }, [selectedTableIds, plantId, from, to]);
+  }, [selectedTableIds, plantId, from, to, setExportState]);
 
   return {
     toggleSelectTable,
