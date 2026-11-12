@@ -1,5 +1,5 @@
 {
-  "maxTotalGzipKb": 1227.1,
+  "maxTotalGzipKb": 1190.4,
   "lastUpdated": "2026-11-12",
   "history": [
     {
@@ -182,6 +182,12 @@
       "maxTotalGzipKb": 1227.1,
       "previous": 1224.2,
       "reason": "App polish pass: serialized Supabase auth lock queue with in-memory retry resilience to eliminate tab lock-stealing race conditions, extracted Provider/Hook pairs and modal subcomponents to eliminate Fast Refresh warnings, and decoupled barrel re-exports."
+    },
+    {
+      "date": "2026-11-12",
+      "maxTotalGzipKb": 1190.4,
+      "previous": 1227.1,
+      "reason": "Upgraded zod to ^4.6.7 to resolve high-severity vulnerability GHSA-mrhx-c7xc-m3w5, yielding a 36.7 kB gzip reduction due to improved tree-shaking."
     }
   ]
 }
