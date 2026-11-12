@@ -8,7 +8,6 @@ import {
 import { useCustomRoles } from '@/hooks/useCustomRoles';
 import { friendlyError } from '@/lib/supabaseErrors';
 import { ALL_ROLES, type AppRole, primaryRole } from './constants';
-import { OPERATOR_DESIGNATION, accessLevelFromRoles } from '@/lib/designations';
 
 function RoleSelector({ userId, currentRoles, onChanged }: {
   userId: string;
