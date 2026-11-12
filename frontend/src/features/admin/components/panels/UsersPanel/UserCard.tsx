@@ -12,7 +12,6 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { EmailChangeDialog, EmailChangeTarget } from '@/components/EmailChangeDialog';
-import { DesignationCombobox } from '@/components/DesignationCombobox';
 import { accessLevelFromRoles, OPERATOR_DESIGNATION } from '@/lib/designations';
 import { toast } from '@/components/ui/sonner';
 import {
