@@ -7,7 +7,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
-import { DesignationCombobox, OPERATOR_DESIGNATION } from '@/components/DesignationCombobox';
+import { DesignationCombobox } from '@/components/DesignationCombobox';
+import { OPERATOR_DESIGNATION } from '@/lib/designations';
 import { toast } from 'sonner';
 import { friendlyError } from '@/lib/supabaseErrors';
 

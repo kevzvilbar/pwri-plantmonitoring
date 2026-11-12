@@ -29,7 +29,6 @@ import { useOdometerRoller } from './useOdometerRoller';
 import { MobileCarousel } from './MobileCarousel';
 
 export type { OdometerAlertState } from './theme';
-export { ODO_THEME } from './theme';
 export { MobileCarousel } from './MobileCarousel';
 
 export function OdometerRollerInput({

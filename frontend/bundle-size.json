@@ -1,6 +1,6 @@
 {
-  "maxTotalGzipKb": 1224.2,
-  "lastUpdated": "2026-11-11",
+  "maxTotalGzipKb": 1227.1,
+  "lastUpdated": "2026-11-12",
   "history": [
     {
       "date": "2026-09-06",
@@ -176,6 +176,12 @@
       "maxTotalGzipKb": 1224.2,
       "previous": 1213.9,
       "reason": "Code-split /plants, /topology, /compliance, and /operations by removing wildcard barrel re-exports in pages/Plants.tsx, pages/PlantTopology.tsx, pages/Compliance.tsx, and pages/Operations.tsx (reducing Plants chunk from 138.3 kB to 101.1 kB gz, isolating PlantTopology at 32.4 kB gz, and separating CompliancePage at 9.4 kB gz out of the Dashboard chunk), and lazy-loaded non-default RO Trains sub-tabs (PretreatmentAndROLog, CIPLog, ChemicalDosing) in ROTrainsPage.tsx (cutting initial /ro-trains route chunk by 62% from 91.5 kB to 35.0 kB gz). Per-file gzip header overhead across 14 newly split chunks accounts for the +10.3 kB sum-of-assets baseline change."
+    },
+    {
+      "date": "2026-11-12",
+      "maxTotalGzipKb": 1227.1,
+      "previous": 1224.2,
+      "reason": "App polish pass: serialized Supabase auth lock queue with in-memory retry resilience to eliminate tab lock-stealing race conditions, extracted Provider/Hook pairs and modal subcomponents to eliminate Fast Refresh warnings, and decoupled barrel re-exports."
     }
   ]
 }

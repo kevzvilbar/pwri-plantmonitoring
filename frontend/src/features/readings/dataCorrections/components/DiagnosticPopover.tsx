@@ -1,20 +1,7 @@
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Activity, AlertTriangle, Clock, Pencil, ShieldAlert } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { FlaggedRow, fmtDt, fmtNum } from '../types';
-
-export function formatElapsedDuration(hours: number | null): string {
-  if (hours == null || !Number.isFinite(hours)) return '—';
-  if (hours < 1) {
-    const mins = Math.max(1, Math.round(hours * 60));
-    return `${mins}m`;
-  }
-  if (hours < 24) {
-    return `${hours.toFixed(1)}h`;
-  }
-  const days = (hours / 24).toFixed(1);
-  return `${days}d (${hours.toFixed(1)}h)`;
-}
+import { FlaggedRow, fmtDt, fmtNum, formatElapsedDuration } from '../types';
 
 export function PrecedingReadingTooltip({
   prevReading,

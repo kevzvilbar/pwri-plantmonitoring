@@ -9,9 +9,8 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
-import {
-  DesignationCombobox, OPERATOR_DESIGNATION,
-} from '@/components/DesignationCombobox';
+import { DesignationCombobox } from '@/components/DesignationCombobox';
+import { OPERATOR_DESIGNATION } from '@/lib/designations';
 import { friendlyError } from '@/lib/supabaseErrors';
 import { cn } from '@/lib/utils';
 

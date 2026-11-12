@@ -1,8 +1,9 @@
 import { MapPin, Gauge, Droplet, Zap, Settings2 } from 'lucide-react';
 import { ROTrainIcon } from '@/components/icons/water-icons';
 import { useRovingTabs } from '@/hooks/useRovingTabs';
+import { type PlantTab, plantTabId, plantTabPanelId } from './plantTabs';
 
-export type PlantTab = 'locators' | 'wells' | 'product' | 'trains' | 'power' | 'configuration';
+export type { PlantTab };
 
 const TABS: { id: PlantTab; label: string; short: string; icon: React.ReactNode }[] = [
   { id: 'locators', label: 'Locators', short: 'LOC', icon: <MapPin className="h-3.5 w-3.5" /> },
@@ -18,8 +19,6 @@ const TABS: { id: PlantTab; label: string; short: string; icon: React.ReactNode 
 // strings on either side would be free to drift, and a drifted pair means a
 // screen reader announces a tab that controls nothing.
 const PLANT_TAB_PREFIX = 'plant';
-export const plantTabId = (id: PlantTab) => `${PLANT_TAB_PREFIX}-tab-${id}`;
-export const plantTabPanelId = (id: PlantTab) => `${PLANT_TAB_PREFIX}-tabpanel-${id}`;
 
 const TAB_IDS: readonly PlantTab[] = TABS.map((t) => t.id);
 

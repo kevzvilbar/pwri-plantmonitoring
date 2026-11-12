@@ -13,7 +13,7 @@ vi.mock('@/integrations/supabase/client', () => ({ supabase: { from: vi.fn() } }
 vi.mock('sonner', () => ({ toast: { error: vi.fn(), success: vi.fn(), warning: vi.fn() } }));
 
 import { OperatorSwitcher } from './OperatorSwitcher';
-import { OPERATOR_ALLOWED_PATHS } from './ProtectedRoute';
+import { OPERATOR_ALLOWED_PATHS } from '@/lib/operatorAllowedPaths';
 
 describe('avatar menu: Help & Manual (P5-5)', () => {
   it('has a Help & Manual item that opens /help', async () => {

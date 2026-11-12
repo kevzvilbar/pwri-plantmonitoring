@@ -14,7 +14,8 @@ import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 import { PullToRefreshIndicator } from './PullToRefresh';
 import { ShiftHandoverModal } from './ShiftHandoverModal';
 import { AlertsRuntime } from '@/features/notifications/AlertsRuntime';
-import { CommandPalette, useCommandPaletteShortcut } from '@/components/CommandPalette';
+import { CommandPalette } from '@/components/CommandPalette';
+import { useCommandPaletteShortcut } from '@/hooks/useCommandPaletteShortcut';
 import { useQueryClient } from '@tanstack/react-query';
 import { ErrorBoundary } from './ErrorBoundary';
 

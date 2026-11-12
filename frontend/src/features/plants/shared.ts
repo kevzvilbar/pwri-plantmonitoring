@@ -61,22 +61,7 @@ export { PLANT_CHEMICALS } from '@/lib/chemicals';
 // maintaining separate copies that can silently drift apart.
 export { GridPylonIcon } from '@/components/icons/water-icons';
 
-export function SummaryCount({ label }: { label: string }) {
-  const [active, total] = label.split('/').map(Number);
-  const allActive = active === total && total > 0;
-  const noneActive = active === 0;
-  const color = allActive
-    ? 'text-accent'
-    : noneActive && total > 0
-      ? 'text-warn'
-      : 'text-foreground';
-  return (
-    <div className={`font-mono-num text-sm font-medium ${color}`}>
-      {active}
-      <span className="text-muted-foreground font-normal">/{total}</span>
-    </div>
-  );
-}
+export { SummaryCount } from './components/SummaryCount';
 
 // ─── Entity status change audit logger ───────────────────────────────────────
 // Called whenever a Well, Locator, or RO Train flips Active ↔ Inactive.
@@ -118,32 +103,7 @@ export async function logPlantEdit(entry: {
   }
 }
 
-export function CollapsibleSection({
-  title,
-  defaultOpen = true,
-  children,
-}: {
-  title: string;
-  defaultOpen?: boolean;
-  children: ReactNode;
-}) {
-  const [open, setOpen] = useState(defaultOpen);
-  return (
-    <div>
-      <button
-        onClick={() => setOpen((o) => !o)}
-        className="w-full flex items-center justify-between px-1 py-2 hover:bg-muted/30 rounded-md transition-colors text-left group"
-      >
-        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground group-hover:text-foreground">{title}</span>
-        <ChevronDown
-          className={`h-3.5 w-3.5 text-muted-foreground transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
-        />
-      </button>
-      {open && <div className="space-y-2">{children}</div>}
-    </div>
-  );
-}
-
+export { CollapsibleSection } from './components/CollapsibleSection';
 
 export interface PlantMeterConfig {
   // RO Train flow meters — these are FLEET DEFAULTS applied when a new train
@@ -491,46 +451,7 @@ export function downloadTemplate(filename: string, headers: string[]) {
   downloadCSVMatrix(filename, headers, []);
 }
 
-export function CsvPreviewTable({ rows, headers }: { rows: Record<string, string>[]; headers: string[] }) {
-  if (!rows.length) return null;
-  // Fixed column width — wide enough to read, narrow enough to scroll cleanly
-  const colW = 120;
-  return (
-    <div className="rounded border overflow-hidden">
-      <div className="overflow-x-auto overflow-y-auto max-h-44" style={{ fontSize: 11 }}>
-        <table className="table-fixed text-left w-max" style={{ minWidth: headers.length * colW }}>
-          <thead className="bg-muted/80 sticky top-0 z-10">
-            <tr>
-              {headers.map(h => (
-                <th key={h} className="px-2 py-1.5 font-semibold whitespace-nowrap border-b"
-                    style={{ width: colW, minWidth: colW }}>
-                  {h}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.slice(0, 10).map((row, i) => (
-              <tr key={i} className={i % 2 === 0 ? 'bg-background' : 'bg-muted/30'}>
-                {headers.map(h => (
-                  <td key={h} className="px-2 py-1 truncate border-b border-border/40"
-                      style={{ width: colW, maxWidth: colW }} title={row[h] ?? ''}>
-                    {row[h] ?? <span className="text-muted-foreground/40">—</span>}
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      {rows.length > 10 && (
-        <p className="text-xs text-muted-foreground px-2 py-1 bg-muted/30 border-t">
-          …and {rows.length - 10} more rows
-        </p>
-      )}
-    </div>
-  );
-}
+export { CsvPreviewTable } from './components/CsvPreviewTable';
 
 // ─── Locator CSV Import ───────────────────────────────────────────────────────
 

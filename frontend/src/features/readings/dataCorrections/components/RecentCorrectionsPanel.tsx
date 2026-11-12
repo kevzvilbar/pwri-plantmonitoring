@@ -1,31 +1,10 @@
-import { useState, useCallback } from 'react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ArrowRight } from 'lucide-react';
-import { SourceTable, tableLabel, fmtNum, fmtDt } from '../types';
+import { tableLabel, fmtNum, fmtDt } from '../types';
+import { type RecentCorrection } from '../hooks/useRecentCorrections';
 
-export interface RecentCorrection {
-  key: string;
-  label: string;
-  plantName: string;
-  sourceTable: SourceTable;
-  oldValue: number;
-  newValue: number;
-  correctedAt: string;
-}
-
-export function useRecentCorrections() {
-  const [items, setItems] = useState<RecentCorrection[]>([]);
-  const add = useCallback((c: Omit<RecentCorrection, 'key' | 'correctedAt'>) => {
-    if (c.oldValue === c.newValue) return;
-    setItems(prev => [
-      { ...c, key: `${c.sourceTable}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, correctedAt: new Date().toISOString() },
-      ...prev,
-    ].slice(0, 8));
-  }, []);
-  const clear = useCallback(() => setItems([]), []);
-  return { items, add, clear };
-}
+export type { RecentCorrection };
 
 export function RecentCorrectionsPanel({ items, onClear }: { items: RecentCorrection[]; onClear: () => void }) {
   if (!items.length) return null;

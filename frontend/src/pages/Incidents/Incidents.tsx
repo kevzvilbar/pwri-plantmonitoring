@@ -6,7 +6,8 @@ import { PageHeader } from '@/components/PageHeader';
 import { ShieldAlert, PlusCircle, History as HistoryIcon } from 'lucide-react';
 import { useIncidentsData } from './useIncidentsData';
 import { OpenList } from './OpenList';
-import { ReportForm, REPORT_INITIAL } from './ReportForm';
+import { ReportForm } from './ReportForm';
+import { REPORT_INITIAL } from './reportInitial';
 import { IncidentHistory } from './IncidentHistory';
 import { useQueryClient } from '@tanstack/react-query';
 

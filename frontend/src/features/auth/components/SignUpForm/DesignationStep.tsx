@@ -2,10 +2,8 @@ import { useState } from 'react';
 import { z } from 'zod';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import {
-  DesignationCombobox,
-  OPERATOR_DESIGNATION,
-} from '@/components/DesignationCombobox';
+import { DesignationCombobox } from '@/components/DesignationCombobox';
+import { OPERATOR_DESIGNATION } from '@/lib/designations';
 import { Users, User, Eye, EyeOff } from 'lucide-react';
 import { toast } from 'sonner';
 

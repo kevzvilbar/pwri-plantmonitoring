@@ -13,7 +13,7 @@ vi.mock('@/hooks/useAuth', () => ({
   }),
 }));
 vi.mock('@/components/AppLoading', () => ({ AppLoading: () => null }));
-vi.mock('@/components/DesignationCombobox', () => ({ OPERATOR_DESIGNATION: 'Operator' }));
+vi.mock('@/lib/designations', () => ({ OPERATOR_DESIGNATION: 'Operator' }));
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 
 const Where = () => <span data-testid="p">{useLocation().pathname}</span>;

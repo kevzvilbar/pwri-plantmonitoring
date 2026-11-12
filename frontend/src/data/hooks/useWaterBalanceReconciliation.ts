@@ -15,7 +15,7 @@ import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { computeEntityDeltas } from '@/lib/entityDeltas';
-import { resolveDateWindow } from '@/components/dashboard/WaterBalanceBridgeCard';
+import { resolveDateWindow } from '@/components/dashboard/WaterBalanceBridgeCard/useWaterBalancePeriodTotals';
 import type { RangeKey } from '@/components/dashboard/types';
 import {
   computePlantWaterBalanceSummary,

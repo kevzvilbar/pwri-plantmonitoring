@@ -1,5 +1,6 @@
 export { default } from './Incidents';
 export { OpenList } from './OpenList';
 export { IncidentCard } from './IncidentCard';
-export { ReportForm, REPORT_INITIAL } from './ReportForm';
+export { ReportForm } from './ReportForm';
+export { REPORT_INITIAL } from './reportInitial';
 export { IncidentHistory } from './IncidentHistory';

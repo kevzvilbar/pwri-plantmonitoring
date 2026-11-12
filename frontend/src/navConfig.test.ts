@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { buildNavConfig, isNavItemActive, type Can, type NavItem } from '@/navConfig';
 import { hasPermission, MODULE_LABELS, type Role } from '@/lib/permissions';
-import { OPERATOR_ALLOWED_PATHS } from '@/components/ProtectedRoute';
+import { OPERATOR_ALLOWED_PATHS } from '@/lib/operatorAllowedPaths';
 
 const canFor = (role: Role): Can => (moduleKey, action = 'view') => hasPermission([role], moduleKey, action);
 

@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { DRILL_COLORS } from '../TrendChartLegend';
+import { DRILL_COLORS } from '../drillColors';
 import { buildEntityPivot } from '../TrendChartPivotShared';
 import { buildEntityPivotRows } from '../TrendChartAggregate';
 

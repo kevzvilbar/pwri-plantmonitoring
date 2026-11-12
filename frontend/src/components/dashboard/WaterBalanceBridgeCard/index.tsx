@@ -6,10 +6,7 @@ import { BridgeHeader } from './BridgeHeader';
 import { BridgeChart } from './BridgeChart';
 import { formatRangeLabel } from '../types';
 
-export type { WaterBalanceTotals } from './types';
-export type { BridgeRow } from './types';
-export { resolveDateWindow } from './useWaterBalancePeriodTotals';
-export { buildBridgeRows } from './bridgeMath';
+export type { WaterBalanceTotals, BridgeRow } from './types';
 
 export function WaterBalanceBridgeCard({
   plantIds, title = 'Water balance',

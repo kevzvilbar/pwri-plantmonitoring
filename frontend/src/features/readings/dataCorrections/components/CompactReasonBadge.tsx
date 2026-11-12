@@ -6,7 +6,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Tag, FileQuestion, Loader2, CheckCircle2 } from 'lucide-react';
 import { FlaggedRow, fmtDt } from '../types';
 
-export const QUICK_ANOMALY_REASONS = [
+const QUICK_ANOMALY_REASONS = [
   { label: 'Demand Surge', icon: '⚡', text: 'Unusually high operational demand / production surge' },
   { label: 'Line Flushing / Leak', icon: '💧', text: 'Pipeline flushing / leak test conducted' },
   { label: 'Plant Downtime', icon: '🛑', text: 'Plant downtime / pump stopped during interval' },

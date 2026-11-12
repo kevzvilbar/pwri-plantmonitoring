@@ -9,6 +9,6 @@ import { ReasonField } from './LocatorDialogs/ReasonField';
 import { EditLocatorDialog } from './LocatorDialogs/EditLocatorDialog';
 import { AddLocatorDialog } from './LocatorDialogs/AddLocatorDialog';
 import { ReplaceMeterDialog } from './LocatorDialogs/ReplaceMeterDialog';
-import { LocatorCsvImportDialog, LOCATOR_CSV_HEADERS } from './LocatorDialogs/LocatorCsvImportDialog';
+import { LocatorCsvImportDialog } from './LocatorDialogs/LocatorCsvImportDialog';
 
-export { ReasonField, EditLocatorDialog, AddLocatorDialog, ReplaceMeterDialog, LocatorCsvImportDialog, LOCATOR_CSV_HEADERS };
+export { ReasonField, EditLocatorDialog, AddLocatorDialog, ReplaceMeterDialog, LocatorCsvImportDialog };

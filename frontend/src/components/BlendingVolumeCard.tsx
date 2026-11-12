@@ -12,7 +12,8 @@ import { fmtNum } from '@/lib/calculations';
 import { supabase } from '@/integrations/supabase/client';
 import { useAppStore } from '@/store/appStore';
 import { rangeKeyToDays } from '@/components/dashboard/types';
-import { DRILL_COLORS, ModernChartLegend } from '@/components/dashboard/TrendChartLegend';
+import { ModernChartLegend } from '@/components/dashboard/TrendChartLegend';
+import { DRILL_COLORS } from '@/components/dashboard/drillColors';
 import { PivotTable } from '@/components/dashboard/TrendChartTables/PivotTable';
 import { BlendingDataSummaryModal } from '@/components/dashboard/BlendingDataSummaryModal';
 

@@ -6,10 +6,8 @@ import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { friendlyError } from '@/lib/supabaseErrors';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
-import {
-  DesignationCombobox,
-  OPERATOR_DESIGNATION,
-} from '@/components/DesignationCombobox';
+import { DesignationCombobox } from '@/components/DesignationCombobox';
+import { OPERATOR_DESIGNATION } from '@/lib/designations';
 import { StepIndicator } from './SignUpForm/StepIndicator';
 import { SignUpNavigation } from './SignUpForm/SignUpNavigation';
 import { DesignationStep } from './SignUpForm/DesignationStep';

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { OPERATOR_ALLOWED_PATHS } from '@/components/ProtectedRoute';
+import { OPERATOR_ALLOWED_PATHS } from '@/lib/operatorAllowedPaths';
 
 /**
  * P2-3: every alert linkPath an operator can receive must survive

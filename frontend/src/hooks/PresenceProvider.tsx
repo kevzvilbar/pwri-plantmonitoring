@@ -1,32 +1,5 @@
-/**
- * usePresence  –  Global online-presence tracking for the entire app.
- *
- * Strategy (three complementary layers):
- *
- *  1. Supabase Realtime BROADCAST  – "activity-pings" channel
- *     When any user stamps activity they broadcast { userId, updatedAt }.
- *     Every other tab (admin on /employees, operators on other pages) receives
- *     this and IMMEDIATELY marks the user as online in-memory AND patches
- *     the ['staff'] cache so the card goes green without any round-trip delay.
- *
- *  2. Database RPC Heartbeat (`touch_user_presence`)  – durable source of truth.
- *     Calls SECURITY DEFINER RPC `touch_user_presence(p_user_id)` so that a
- *     staff member (or a shift operator sharing a plant with the caller) can
- *     update their presence in `user_profiles.last_seen_at` without RLS
- *     permission errors. The RPC itself still checks the caller is allowed
- *     to touch that particular profile (self, admin, or same-plant).
- *
- *  3. Telemetry Triggers & Periodic Refetch Safety Net
- *     Database triggers on plant reading entries (`locator_readings`, `ro_train_readings`,
- *     `well_readings`, `product_meter_readings`, `chemical_dosing_logs`, etc.)
- *     automatically stamp the operator's presence whenever they log data.
- *     The ['staff'] query also refetches periodically to catch any missed pings.
- */
-
-import React, {
-  createContext,
+import {
   useCallback,
-  useContext,
   useEffect,
   useRef,
   useState,
@@ -36,42 +9,10 @@ import React, {
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
 import { useQueryClient } from '@tanstack/react-query';
+import { registerGlobalStampActivity } from '@/lib/presenceStamp';
+import { PresenceContext } from './usePresence';
 
-// ---------------------------------------------------------------------------
-// Broadcast channel name (shared across all tabs / browsers)
-// ---------------------------------------------------------------------------
 const ACTIVITY_CHANNEL = 'activity-pings';
-
-// ---------------------------------------------------------------------------
-// Module-level stamp so App.tsx MutationCache.onSuccess can call it without
-// needing access to the React context tree.
-// ---------------------------------------------------------------------------
-let _globalStamp: (() => void) | null = null;
-
-/** Call this after any successful mutation to mark the current user as active. */
-export function globalStampActivity() {
-  _globalStamp?.();
-}
-
-// ---------------------------------------------------------------------------
-// Context
-// ---------------------------------------------------------------------------
-
-interface PresenceContextValue {
-  /** True if userId has been seen active within the last 15 minutes. */
-  isUserOnline: (userId?: string | null) => boolean;
-  /** Immediately update user_profiles.updated_at for the current user. */
-  stampActivity: () => void;
-}
-
-const PresenceContext = createContext<PresenceContextValue>({
-  isUserOnline: () => false,
-  stampActivity: () => {},
-});
-
-// ---------------------------------------------------------------------------
-// Provider
-// ---------------------------------------------------------------------------
 
 export function PresenceProvider({ children }: { children: ReactNode }) {
   const { user, activeOperator, activeOperatorId } = useAuth();
@@ -163,8 +104,8 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
 
   // Register as the global stamp function (always force-enabled for explicit data actions).
   useEffect(() => {
-    _globalStamp = () => stamp(true);
-    return () => { _globalStamp = null; };
+    registerGlobalStampActivity(() => stamp(true));
+    return () => { registerGlobalStampActivity(null); };
   }, [stamp]);
 
   // ---------------------------------------------------------------------------
@@ -287,11 +228,4 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
   );
 
   return <PresenceContext.Provider value={value}>{children}</PresenceContext.Provider>;
-}
-
-// ---------------------------------------------------------------------------
-// Hook
-// ---------------------------------------------------------------------------
-export function usePresence() {
-  return useContext(PresenceContext);
 }

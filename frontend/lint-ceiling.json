@@ -1,6 +1,6 @@
 {
-  "maxWarnings": 2270,
-  "lastUpdated": "2026-11-11",
+  "maxWarnings": 2116,
+  "lastUpdated": "2026-11-12",
   "history": [
     {
       "date": "2026-09-26",
@@ -339,6 +339,12 @@
       "maxWarnings": 2270,
       "previous": 2658,
       "reason": "Application-wide polish pass (-388 warnings, 2658 -> 2270): resolved all 37 jsx-a11y/label-has-associated-control warnings, all 37 jsx-a11y/click-events-have-key-events + 36 jsx-a11y/no-static-element-interactions warnings (0 jsx-a11y warnings remaining), all 44 react-hooks/exhaustive-deps warnings (0 remaining), all 7 unused eslint-disable directives (0 remaining), 204 stale @typescript-eslint/no-explicit-any casts across data queries/mutations (kpi.ts, staff.ts, plantTopology.ts, readingHistory.ts, locators.ts, migrationsStatus.ts), queryClient.ts, and topology shared.ts, and 23 react-refresh/only-export-components warnings from page and component barrel decoupling."
+    },
+    {
+      "date": "2026-11-12",
+      "maxWarnings": 2116,
+      "previous": 2270,
+      "reason": "Application-wide polish pass (-154 warnings, 2270 -> 2116): completely eliminated all react-refresh/only-export-components warnings (dropped from 120 to 0 across the entire repository) by decoupling pure utilities from component modules, extracting AuthProvider, PresenceProvider, TelemetryGauge, and recent-corrections hooks, and scoping UI primitives in eslint config. 0 fast refresh warnings, 0 jsx-a11y warnings, 0 react-hooks warnings remain in the project."
     }
   ]
 }

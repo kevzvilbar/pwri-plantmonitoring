@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
-import { PlantDetailTabs, plantTabId, plantTabPanelId, type PlantTab } from './PlantDetailTabs';
+import { PlantDetailTabs } from './PlantDetailTabs';
+import { plantTabId, plantTabPanelId, type PlantTab } from './plantTabs';
 
 const ALL: PlantTab[] = ['locators', 'wells', 'product', 'trains', 'power', 'configuration'];
 

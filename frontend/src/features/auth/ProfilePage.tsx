@@ -16,7 +16,8 @@ import { PageHeader } from '@/components/PageHeader';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import { DesignationCombobox, accessLevelFromRoles } from '@/components/DesignationCombobox';
+import { DesignationCombobox } from '@/components/DesignationCombobox';
+import { accessLevelFromRoles } from '@/lib/designations';
 import { toast } from '@/components/ui/sonner';
 import {
   Loader2, Pencil, ShieldCheck, Building2, MapPin, User, Mail,

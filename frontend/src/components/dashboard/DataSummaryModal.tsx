@@ -14,10 +14,6 @@ import { DataSummaryTable } from './DataSummaryTable';
 import { DataSummaryStats } from './DataSummaryStats';
 import { useDataSummaryQueries } from './DataSummaryModal/useDataSummaryQueries';
 import { useDataSummaryPivots } from './DataSummaryModal/useDataSummaryPivots';
-import { computePivotFromReadingsNoCache, pivotDayTotal } from './DataSummaryModal/pivotUtils';
-
-export { computePivotFromReadingsNoCache, pivotDayTotal };
-
 export type SummaryTab = 'both' | 'production' | 'consumption' | 'current';
 
 export interface DataSummaryModalProps {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getGridMeterVal } from './ReadingHistoryDialog';
+import { getGridMeterVal } from './readingHistory/types';
 
 describe('getGridMeterVal — Multi-meter power reading resolution & fallback', () => {
   it('returns direct reading from grid_meter_readings JSONB when present', () => {

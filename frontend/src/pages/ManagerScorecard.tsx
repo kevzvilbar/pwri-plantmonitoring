@@ -11,9 +11,6 @@ import { ManagerScorecardView } from './ManagerScorecard/ManagerScorecardView';
 import { APPRAISAL_TIERS, getAppraisalTier } from '@/lib/appraisal';
 
 export type ManagerAppraisalTier = import('@/lib/appraisal').AppraisalTier;
-export const MANAGER_APPRAISAL_TIERS = APPRAISAL_TIERS;
-export const getManagerAppraisalTier = getAppraisalTier;
-export { computeManagerOversightScore } from './ManagerScorecard/useScorecardData';
 
 export default function ManagerScorecard() {
   const {

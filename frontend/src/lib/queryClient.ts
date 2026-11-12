@@ -2,7 +2,7 @@ import { QueryClient, QueryCache, MutationCache } from "@tanstack/react-query";
 import { toast } from "@/components/ui/sonner";
 import { friendlyError } from "@/lib/supabaseErrors";
 import { reportError } from "@/lib/monitoring";
-import { globalStampActivity } from "@/hooks/usePresence";
+import { globalStampActivity } from "@/lib/presenceStamp";
 import { registerOfflineMutationDefaults } from "@/lib/offlineMutations";
 import { isAuthLockError, isTransientBackendError, queryRetry, queryRetryDelay } from "@/lib/apiHealth";
 

@@ -1,7 +1,7 @@
 import { supabase } from '@/integrations/supabase/client';
 import { CsvImportDialog } from '@/components/import';
 
-export const LOCATOR_CSV_HEADERS = [
+const LOCATOR_CSV_HEADERS = [
   'name', 'address',
   'meter_brand', 'meter_size', 'meter_serial', 'meter_installed_date',
   'gps_lat', 'gps_lng',

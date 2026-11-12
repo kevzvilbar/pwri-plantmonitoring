@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { format } from 'date-fns';
-import { DRILL_COLORS } from '../TrendChartLegend';
+import { DRILL_COLORS } from '../drillColors';
 import { buildEntityPivotRows } from '../TrendChartAggregate';
 import { toggleIsolateEntity } from '../TrendChartDrillKit';
 import { buildHourlyChlorineByTrain, CHLORINE_CONFIG, type RawChlorinePoint } from '@/lib/chlorineConfig';

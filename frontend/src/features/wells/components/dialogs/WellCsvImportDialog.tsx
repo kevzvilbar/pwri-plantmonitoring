@@ -6,7 +6,7 @@ import { Upload, FileDown, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { parseCsv, downloadTemplate, CsvPreviewTable } from '@/features/plants/shared';
 
-export const WELL_CSV_HEADERS = [
+const WELL_CSV_HEADERS = [
   'name', 'diameter', 'drilling_depth_m',
   'meter_brand', 'meter_size', 'meter_serial', 'meter_installed_date',
   'has_power_meter',

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computeIntraFileDuplicateIndices, parseCSVText, normalizeDatetime } from './ReadingImportDialog';
+import { computeIntraFileDuplicateIndices, parseCSVText, normalizeDatetime } from './ReadingImportDialog/utils';
 
 // BUG (reported 2026-08-22): importing a Power CSV for a plant with multiple
 // grid meters — one row per meter, same plant_name + reading_datetime,

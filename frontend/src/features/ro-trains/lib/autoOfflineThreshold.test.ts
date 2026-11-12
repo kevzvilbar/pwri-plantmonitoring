@@ -18,7 +18,7 @@ import { TWO_HOURS_MS as HELPERS_TWO_HOURS_MS, ONE_HOUR_MS as HELPERS_ONE_HOUR_M
 const SHARED_FILES = [
   '../../../hooks/useTrainAutoOffline.ts',
   './trainStatusTimeline.ts',
-  '../helpers.tsx',
+  '../helpers.ts',
   '../pretreatment/hooks/usePretreatmentData.ts',
 ] as const;
 

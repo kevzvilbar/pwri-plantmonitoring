@@ -1,7 +1,7 @@
 import { act, fireEvent, render } from '@testing-library/react';
 import { MemoryRouter, useLocation, useNavigate } from 'react-router-dom';
 import type { ReactElement } from 'react';
-import { OPERATOR_ALLOWED_PATHS } from '@/components/ProtectedRoute';
+import { OPERATOR_ALLOWED_PATHS } from '@/lib/operatorAllowedPaths';
 
 const START = '/__start';
 
