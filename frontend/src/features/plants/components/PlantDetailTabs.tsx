@@ -1,7 +1,7 @@
 import { MapPin, Gauge, Droplet, Zap, Settings2 } from 'lucide-react';
 import { ROTrainIcon } from '@/components/icons/water-icons';
 import { useRovingTabs } from '@/hooks/useRovingTabs';
-import { type PlantTab, plantTabId, plantTabPanelId } from './plantTabs';
+import { type PlantTab } from './plantTabs';
 
 export type { PlantTab };
 
