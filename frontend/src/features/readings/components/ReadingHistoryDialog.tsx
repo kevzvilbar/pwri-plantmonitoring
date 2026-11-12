@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { format } from 'date-fns';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { HistoryModule, HISTORY_WINDOWS, ReadingHistoryProps } from './readingHistory/types';
+import { HISTORY_WINDOWS, ReadingHistoryProps } from './readingHistory/types';
 import { useReadingHistoryQuery } from './readingHistory/useReadingHistoryQuery';
 import { ReadingHistoryTable } from './readingHistory/ReadingHistoryTable';
 import { useAuth } from '@/hooks/useAuth';
