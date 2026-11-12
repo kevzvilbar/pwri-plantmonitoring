@@ -4,7 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { usePlantStore } from '@/store/plantStore';
 import { clearAssetSnapshots } from '@/lib/assetSnapshotCache';
 import { queryClient } from '@/lib/queryClient';
-import { reportError, setMonitoringUser } from '@/lib/monitoring';
+import { setMonitoringUser } from '@/lib/monitoring';
 import { AuthContext, Profile, Role } from './useAuth';
 
 export function AuthProvider({ children }: { children: ReactNode }) {
