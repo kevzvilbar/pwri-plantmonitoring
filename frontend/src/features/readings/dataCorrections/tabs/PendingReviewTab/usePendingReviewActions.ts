@@ -9,7 +9,7 @@ import { submitAnomalyRemark } from '@/lib/anomalyRemarks';
 import {
   SourceTable, FlaggedRow, CorrectionRequest, pickDisplayRole, tableLabel,
 } from '../../types';
-import { useRecentCorrections } from '../../components/RecentCorrectionsPanel';
+import { useRecentCorrections } from '../../hooks/useRecentCorrections';
 import { 
   usePending, 
   useCorrectionRequests, 

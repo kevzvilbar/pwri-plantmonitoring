@@ -1,36 +1,5 @@
 import React from 'react';
 import { CsvImportDialog } from './import';
-import {
-  parseCSVLine,
-  parseCSVText,
-  triggerTemplateDownload,
-  normalizeDatetime,
-  computeIntraFileDuplicateIndices,
-  clearDupDecisions,
-  clearBulkDupDecision,
-  setBulkDupDecision,
-  resolveDupPrompt,
-  resolveImportDuplicate,
-  setDupShowPrompt,
-  clearDupShowPrompt,
-  logReadingImport,
-} from './ReadingImportDialog/utils';
-
-export {
-  parseCSVLine,
-  parseCSVText,
-  triggerTemplateDownload,
-  normalizeDatetime,
-  computeIntraFileDuplicateIndices,
-  clearDupDecisions,
-  clearBulkDupDecision,
-  setBulkDupDecision,
-  resolveDupPrompt,
-  resolveImportDuplicate,
-  setDupShowPrompt,
-  clearDupShowPrompt,
-  logReadingImport,
-};
 
 export interface ImportDialogProps {
   title: string;

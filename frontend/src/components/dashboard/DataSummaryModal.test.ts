@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computePivotFromReadingsNoCache } from './DataSummaryModal';
+import { computePivotFromReadingsNoCache } from './DataSummaryModal/pivotUtils';
 
 const iso = (d: string) => `${d}T12:00:00`;
 

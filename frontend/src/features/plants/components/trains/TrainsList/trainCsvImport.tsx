@@ -14,7 +14,7 @@ export type TrainCsvFormData = {
   shared_power_meter_group: string | null;
 };
 
-export function getTrainCsvHeaders(
+function getTrainCsvHeaders(
   plantMediaType: 'AFM' | 'MMF' = 'AFM',
   plantFilterType: 'Cartridge Filter' | 'Bag Filter' = 'Cartridge Filter',
 ): string[] {

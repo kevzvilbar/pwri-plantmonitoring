@@ -209,7 +209,7 @@ export async function logProductionCalc(entry: {
   timestamp: string;
 }) {
   try {
-    await (supabase.from('production_calc_log' as any) as any).insert([entry]);
+    await supabase.from('production_calc_log' as never).insert([entry as never]);
   } catch { /* silently ignore if table missing */ }
 }
 
@@ -227,11 +227,11 @@ export function useBlendingWells(plantId: string) {
       // table Plants → Wells writes to.
       try {
         const { data, error } = await supabase
-          .from('blending_wells' as any)
+          .from('blending_wells')
           .select('well_id')
           .eq('plant_id', plantId);
         if (!error && Array.isArray(data)) {
-          return { wells: (data as any[]).map((r) => ({ well_id: r.well_id })) };
+          return { wells: (data as Array<{ well_id: string }>).map((r) => ({ well_id: r.well_id })) };
         }
       } catch {
         // Table may not exist yet

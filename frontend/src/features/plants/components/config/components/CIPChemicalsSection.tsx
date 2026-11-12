@@ -3,8 +3,8 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { X, SprayCan } from 'lucide-react';
 
-export const BUILTIN_CIP_CHEMICALS = ['Caustic Soda', 'HCl', 'SLS'];
-export const CIP_CHEM_UNITS = ['kg', 'g', 'L', 'mL', 'pcs', 'gal'];
+const BUILTIN_CIP_CHEMICALS = ['Caustic Soda', 'HCl', 'SLS'];
+const CIP_CHEM_UNITS = ['kg', 'g', 'L', 'mL', 'pcs', 'gal'];
 
 export function CIPChemicalsSection({
   cfg,

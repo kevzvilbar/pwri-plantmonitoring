@@ -11,8 +11,8 @@ import {
 import { BrowserRouter, Route, Routes, Navigate } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { AuthProvider } from "@/hooks/useAuth";
-import { PresenceProvider } from "@/hooks/usePresence";
+import { AuthProvider } from "@/hooks/AuthProvider";
+import { PresenceProvider } from "@/hooks/PresenceProvider";
 import { AppLoading } from '@/components/AppLoading';
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AppShell } from "@/components/AppShell";

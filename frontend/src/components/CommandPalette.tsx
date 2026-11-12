@@ -129,20 +129,6 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
   );
 }
 
-/** Global Ctrl+K / Cmd+K wiring. Mounted once in AppShell. */
-export function useCommandPaletteShortcut(open: () => void) {
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
-        e.preventDefault();
-        open();
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [open]);
-}
-
 /**
  * Wells and locators for the visible plants. Split out so the two list queries
  * mount only when there is at least one plant to ask about: `useWells([])`

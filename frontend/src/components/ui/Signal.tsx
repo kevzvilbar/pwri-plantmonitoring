@@ -104,7 +104,7 @@ const TONE_MAPPING: Record<string, {
   },
 };
 
-export function normalizeTone(tone?: string): string {
+function normalizeTone(tone?: string): string {
   if (!tone) return 'info';
   const lower = tone.toLowerCase();
   if (lower === 'critical' || lower === 'high' || lower === 'danger') return 'critical';

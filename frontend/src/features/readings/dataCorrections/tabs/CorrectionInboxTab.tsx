@@ -20,7 +20,8 @@ import { supersedeOtherCorrectionRequests } from '../api';
 import { fetchCorrectionInbox } from '@/data/queries/corrections';
 import { DeltaBadge } from '../components/DeltaBadge';
 import { ChainContext } from '../components/ChainContext';
-import { RecentCorrectionsPanel, useRecentCorrections } from '../components/RecentCorrectionsPanel';
+import { RecentCorrectionsPanel } from '../components/RecentCorrectionsPanel';
+import { useRecentCorrections } from '../hooks/useRecentCorrections';
 import { EditValueModal } from '../components/EditValueModal';
 
 export function CorrectionInboxTab() {

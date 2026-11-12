@@ -34,7 +34,8 @@ import { usePlantDetail } from '../hooks/usePlantDetail';
 import { usePlantRouteSync } from '../hooks/usePlantRouteSync';
 import { PlantList } from '../components/PlantList';
 import { PlantListHeader } from '../components/PlantListHeader';
-import { PlantDetailTabs, plantTabId, plantTabPanelId } from '../components/PlantDetailTabs';
+import { PlantDetailTabs } from '../components/PlantDetailTabs';
+import { plantTabId, plantTabPanelId } from '../components/plantTabs';
 import { PlantInfoEditDialog } from '../components/PlantInfoEditDialog';
 
 export interface AddPlantFormData {

@@ -16,11 +16,6 @@ import { useChemicalPriceEdit } from './useChemicalPriceEdit';
 import { useChemicalPriceDelete } from './useChemicalPriceDelete';
 import { FlaskConical, TrendingUp } from 'lucide-react';
 
-const CIP_ONLY_CHEMICALS = ['Free Cl Reagent', 'Caustic Soda', 'HCl', 'SLS'];
-const KNOWN_CHEMICALS = [...PLANT_CHEMICALS.map((c) => c.name), ...CIP_ONLY_CHEMICALS];
-
-export { CIP_ONLY_CHEMICALS, KNOWN_CHEMICALS };
-
 export function ChemicalPrices() {
   const { user } = useAuth();
   const canEdit = usePermission('costs', 'edit');

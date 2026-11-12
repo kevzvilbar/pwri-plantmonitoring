@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { ChevronLeft, Users, Eye, EyeOff } from 'lucide-react';
-import { OPERATOR_DESIGNATION } from '@/components/DesignationCombobox';
+import { OPERATOR_DESIGNATION } from '@/lib/designations';
 import { getPostLoginPath } from '../getPostLoginPath';
 import { EmailConfirmationNotice, PendingNotice } from './EmailConfirmation';
 import { ForgotPasswordForm } from './PasswordResetForm';

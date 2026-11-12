@@ -23,22 +23,7 @@ import { ChevronDown, MapPin, Printer, AlertOctagon, ShieldAlert, AlertTriangle,
 import { downloadCSV } from '@/lib/csv';
 import { cn } from '@/lib/utils';
 
-const REPORT_INITIAL = {
-  plant_id: '',
-  incident_type: '',
-  severity: 'Medium' as 'Low' | 'Medium' | 'High' | 'Critical',
-  what_description: '',
-  where_location: '',
-  gps_lat: null as number | null,
-  gps_lng: null as number | null,
-  when_datetime: '',
-  witness: '',
-  weather: 'Clear',
-  temperature_c: '',
-  immediate_action: '',
-};
-
-export { REPORT_INITIAL };
+import { REPORT_INITIAL } from './reportInitial';
 
 const TYPES = ['Equipment failure', 'Chemical spill', 'Power outage', 'Safety incident', 'Quality deviation', 'Other'];
 const WEATHER = ['Clear', 'Partly cloudy', 'Cloudy', 'Rain', 'Heavy rain'];

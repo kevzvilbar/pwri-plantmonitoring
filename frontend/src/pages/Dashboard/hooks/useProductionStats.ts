@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { format, subDays } from 'date-fns';
-import { computePivotFromReadingsNoCache, pivotDayTotal } from '@/components/dashboard/DataSummaryModal';
+import { computePivotFromReadingsNoCache, pivotDayTotal } from '@/components/dashboard/DataSummaryModal/pivotUtils';
 import { pctDelta } from '@/components/dashboard/types';
 import { calc } from '@/lib/calculations';
 import { reportError } from '@/shared/monitoring';

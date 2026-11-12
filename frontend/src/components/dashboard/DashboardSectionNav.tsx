@@ -23,7 +23,7 @@ export interface DashboardSection {
   accent: string;
 }
 
-export const DASHBOARD_SECTIONS: DashboardSection[] = [
+const DASHBOARD_SECTIONS: DashboardSection[] = [
   { id: 'action-center', label: 'Action Center', shortLabel: 'Action', icon: ClipboardList, accent: 'text-warn' },
   { id: 'overview-cluster', label: 'Overview', shortLabel: 'Overview', icon: Droplet, accent: 'text-primary' },
   { id: 'quality-cluster', label: 'Quality', shortLabel: 'Quality', icon: FlaskConical, accent: 'text-accent' },

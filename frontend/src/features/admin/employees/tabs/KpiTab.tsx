@@ -25,8 +25,6 @@ import { MiniHeatmap } from './KpiTab/MiniHeatmap';
 import { KpiLegend } from './KpiTab/KpiLegend';
 
 export type { AppraisalTier };
-export { APPRAISAL_TIERS, getAppraisalTier };
-export { computeEntityOverallScore } from './KpiTab/constants';
 export type { EntityTypeScore } from './KpiTab/constants';
 
 const RANGES: { label: string; value: KpiRange2 }[] = [

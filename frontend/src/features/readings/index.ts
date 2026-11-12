@@ -5,8 +5,8 @@ export { default as DataAnalysisPage } from './pages/DataAnalysisPage';
 
 // Components
 export { default as SmartImportPanel } from './components/SmartImportPanel';
+export { ImportReadingsDialog, type ImportDialogProps } from './components/ReadingImportDialog';
 export {
-  ImportReadingsDialog,
   parseCSVLine,
   parseCSVText,
   triggerTemplateDownload,
@@ -20,10 +20,10 @@ export {
   setDupShowPrompt,
   clearDupShowPrompt,
   logReadingImport,
-} from './components/ReadingImportDialog';
-export type { ImportDialogProps } from './components/ReadingImportDialog';
+} from './components/ReadingImportDialog/utils';
 
-export { ReadingHistoryDialog, getGridMeterVal } from './components/ReadingHistoryDialog';
+export { ReadingHistoryDialog } from './components/ReadingHistoryDialog';
+export { getGridMeterVal } from './components/readingHistory/types';
 export { CsvImportDialog } from './components/import';
 export * from './components/readingHistory/replacementTypes';
 export { ReplPill } from './components/readingHistory/ReplPill';

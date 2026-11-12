@@ -18,7 +18,7 @@ import {
   extractOldValueFromChanges,
   tableLabel,
 } from '@/features/readings/dataCorrections/types';
-import { formatElapsedDuration } from '@/features/readings/dataCorrections/components/DiagnosticPopover';
+import { formatElapsedDuration } from '@/features/readings/dataCorrections/types';
 import {
   computeRollingAverageRate,
   computeRollingAverageRateFromDeltas,

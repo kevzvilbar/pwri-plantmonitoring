@@ -3,7 +3,7 @@ import { CHAPTER_ROUTE_MAP, chapterLink } from './chapterRoutes';
 import { BOOK_PARTS } from './bookChapters';
 import { canOpenRoute, type Can } from '@/navConfig';
 import { hasPermission, type Role } from '@/lib/permissions';
-import { OPERATOR_ALLOWED_PATHS } from '@/components/ProtectedRoute';
+import { OPERATOR_ALLOWED_PATHS } from '@/lib/operatorAllowedPaths';
 
 const canFor = (role: Role): Can => (moduleKey, action = 'view') => hasPermission([role], moduleKey, action);
 

@@ -43,7 +43,7 @@ import {
   type RawChlorinePoint,
   type ChlorineGap,
 } from '@/lib/chlorineConfig';
-import { DRILL_COLORS } from './TrendChartLegend';
+import { DRILL_COLORS } from './drillColors';
 import { CHART_CURSOR } from './TrendChartCanvas/chartShell';
 import { INSTRUMENT_TOOLTIP_STYLE } from '@/shared/chartColors';
 

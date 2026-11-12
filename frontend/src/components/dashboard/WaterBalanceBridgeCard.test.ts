@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { format, subDays } from 'date-fns';
-import { buildBridgeRows, resolveDateWindow, type WaterBalanceTotals } from './WaterBalanceBridgeCard';
+import { buildBridgeRows } from './WaterBalanceBridgeCard/bridgeMath';
+import { resolveDateWindow } from './WaterBalanceBridgeCard/useWaterBalancePeriodTotals';
+import type { WaterBalanceTotals } from './WaterBalanceBridgeCard/types';
 import { formatRangeLabel } from './types';
 
 describe('buildBridgeRows', () => {
