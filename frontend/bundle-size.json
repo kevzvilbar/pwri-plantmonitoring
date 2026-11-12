@@ -1,5 +1,5 @@
 {
-  "maxTotalGzipKb": 1234.4,
+  "maxTotalGzipKb": 1190.4,
   "lastUpdated": "2026-11-12",
   "history": [
     {
@@ -188,6 +188,12 @@
       "maxTotalGzipKb": 1234.4,
       "previous": 1227.1,
       "reason": "Re-baselined to match authoritative CI production build (1234.4 kB gzipped) after upgrading zod to ^4.6.7 (GHSA-mrhx-c7xc-m3w5) with Sentry and CI environment variables injected."
+    },
+    {
+      "date": "2026-11-12",
+      "maxTotalGzipKb": 1190.4,
+      "previous": 1234.4,
+      "reason": "Re-baselined bundle size to 1190.4 kB matching optimized tree-shaken production build."
     }
   ]
 }

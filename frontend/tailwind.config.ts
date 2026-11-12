@@ -86,6 +86,7 @@ export default {
           DEFAULT: "hsl(var(--ok, var(--accent)))",
           foreground: "hsl(var(--ok-foreground, var(--accent-foreground)))",
           soft: "hsl(var(--ok-soft, var(--accent-soft)))",
+          text: "hsl(var(--ok-text, var(--ok)))",
         },
         accent: {
           DEFAULT: "hsl(var(--accent))",
@@ -96,15 +97,18 @@ export default {
           DEFAULT: "hsl(var(--warn))",
           foreground: "hsl(var(--warn-foreground))",
           soft: "hsl(var(--warn-soft))",
+          text: "hsl(var(--warn-text, var(--warn)))",
         },
         danger: {
           DEFAULT: "hsl(var(--danger))",
           foreground: "hsl(var(--danger-foreground))",
           soft: "hsl(var(--danger-soft))",
+          text: "hsl(var(--danger-text, var(--danger)))",
         },
         info: {
           DEFAULT: "hsl(var(--info))",
           soft: "hsl(var(--info-soft))",
+          text: "hsl(var(--info-text, var(--info)))",
         },
         highlight: {
           DEFAULT: "hsl(var(--highlight))",

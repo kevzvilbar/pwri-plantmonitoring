@@ -56,7 +56,7 @@ export function MeterColumn({
   const isPermeate = stream === 'permeate';
 
   const inputClass = cn(
-    "placeholder:text-2xs placeholder:text-muted-foreground/50",
+    "placeholder:text-xs placeholder:text-muted-foreground/70",
     negWarn && "border-danger bg-danger-soft text-danger focus-visible:ring-danger",
     !negWarn && spike && spike.tier === 'critical' && "border-destructive bg-destructive/10 focus-visible:ring-destructive",
     !negWarn && spike && spike.tier === 'needs_remark' && "border-warn bg-warn-soft focus-visible:ring-warn"
@@ -69,14 +69,14 @@ export function MeterColumn({
         {prevReading != null
           ? <ComputedInput value={String(prevReading)} className="text-foreground font-semibold bg-muted/40" id={prevId}/>
           : <div className="h-9 rounded-md border border-dashed border-border/50 px-3 flex items-center">
-              <span className="text-xs text-muted-foreground/50 italic">No prior reading</span>
+              <span className="text-xs text-muted-foreground italic">No prior reading</span>
             </div>
         }
       </div>
       <div>
         <Label htmlFor={currentId} className="text-xs text-muted-foreground">
           {label} Meter Reading{required && <span className="text-destructive font-bold ml-1" title="Required input">*</span>}
-          {!required && <span className="text-info text-2xs ml-1 font-normal">(auto-inferred)</span>}
+          {!required && <span className="text-info text-xs ml-1 font-normal">(auto-inferred)</span>}
         </Label>
         <Input
           type="number"

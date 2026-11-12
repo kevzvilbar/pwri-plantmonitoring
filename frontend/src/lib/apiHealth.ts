@@ -134,9 +134,13 @@ const AUTH_LOCK_MESSAGE =
 /** True when a Supabase Web Lock timed out or was stolen by a concurrent request. */
 export function isAuthLockError(err: unknown): boolean {
   if (!err) return false;
-  const e = err as { name?: string; message?: string; isAcquireTimeout?: boolean };
+  if (typeof err === 'string') return AUTH_LOCK_MESSAGE.test(err);
+  const e = err as { name?: string; message?: string; details?: string; hint?: string; isAcquireTimeout?: boolean };
   if (e.isAcquireTimeout) return true;
-  return AUTH_LOCK_MESSAGE.test(e.message ?? '');
+  const str = [e.name, e.message, e.details, e.hint].filter(Boolean).join(' ');
+  if (AUTH_LOCK_MESSAGE.test(str)) return true;
+  if (err instanceof Error && AUTH_LOCK_MESSAGE.test(err.message)) return true;
+  return false;
 }
 
 /** react-query `retry`: backend outages retry (bounded); everything else fails fast. */

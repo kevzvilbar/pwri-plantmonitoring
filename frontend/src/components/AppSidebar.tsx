@@ -80,7 +80,7 @@ export function AppSidebar() {
                 className={cn(
                   'h-5 px-1.5 mb-0.5',
                   'text-xs font-bold tracking-[0.14em] uppercase select-none',
-                  'text-sidebar-foreground/30',
+                  'text-sidebar-foreground/75',
                   groupIdx > 0 && 'border-t border-sidebar-border/25 pt-2.5 mt-2',
                 )}
               >
@@ -146,7 +146,7 @@ export function AppSidebar() {
                                     'bg-sidebar-accent text-sidebar-foreground font-semibold',
                                     'shadow-[inset_2.5px_0_0_0_hsl(var(--sidebar-primary))]',
                                   ]
-                                : 'text-sidebar-foreground/55 hover:text-sidebar-foreground hover:bg-sidebar-accent/60',
+                                : 'text-sidebar-foreground/75 hover:text-sidebar-foreground hover:bg-sidebar-accent/60',
                             )}
                           >
                             <item.icon
@@ -154,7 +154,7 @@ export function AppSidebar() {
                                 'h-[14px] w-[14px] shrink-0 transition-colors duration-150',
                                 isActive
                                   ? 'text-sidebar-primary'
-                                  : 'text-sidebar-foreground/38 group-hover:text-sidebar-foreground/65',
+                                  : 'text-sidebar-foreground/65 group-hover:text-sidebar-foreground',
                               )}
                             />
                             <span className="truncate">{item.label}</span>

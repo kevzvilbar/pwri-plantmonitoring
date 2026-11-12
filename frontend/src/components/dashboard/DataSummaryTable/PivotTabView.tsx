@@ -92,10 +92,10 @@ export function PivotTabView({
           </tr>
 
           <tr className="bg-primary-soft/60">
-            <td className="sticky left-0 z-30 bg-primary-soft/60 px-3 py-1.5 font-semibold text-primary whitespace-nowrap border-b border-r border-border text-2xs">TOTAL</td>
+            <td className="sticky left-0 z-30 bg-primary-soft/60 px-3 py-1.5 font-semibold text-primary whitespace-nowrap border-b border-r border-border text-xs">TOTAL</td>
             {colTotals.map((tot, i) => (
               <td key={entities[i].id} className="px-2 py-1.5 text-center font-semibold font-mono-num text-primary border-b border-border tabular-nums">
-                {tot > 0 ? fmtVal(tot) : <span className="text-muted-foreground/50">—</span>}
+                {tot > 0 ? fmtVal(tot) : <span className="text-muted-foreground font-medium">—</span>}
               </td>
             ))}
             <td className="sticky right-0 z-30 bg-primary-soft/60 px-3 py-1.5 text-right font-bold font-mono-num text-primary border-b border-l border-border tabular-nums">
@@ -133,12 +133,12 @@ export function PivotTabView({
                       {vol != null && vol !== 0 ? (
                         <span className={cn("inline-flex items-center gap-0.5", vol < 0 && "text-destructive font-semibold")}>
                           {isEst && (
-                            <span className="text-warn text-3xs font-bold leading-none" aria-label="estimated">~</span>
+                            <span className="text-warn-text text-xs font-bold leading-none" aria-label="estimated">~</span>
                           )}
                           {fmtVal(vol)}
                         </span>
                       ) : (
-                        <span className="text-muted-foreground/40">—</span>
+                        <span className="text-muted-foreground font-medium">—</span>
                       )}
                     </td>
                   );
@@ -217,18 +217,18 @@ function InlineCurrentReadings({
           </tr>
 
           <tr className="bg-primary-soft/60">
-            <td className="sticky left-0 z-20 bg-primary-soft/60 px-3 py-1.5 text-2xs font-bold text-primary whitespace-nowrap border-b border-r border-border">LATEST</td>
+            <td className="sticky left-0 z-20 bg-primary-soft/60 px-3 py-1.5 text-xs font-bold text-primary whitespace-nowrap border-b border-r border-border">LATEST</td>
             {entityLatest.map((val, i) => (
               <td
                 key={entities[i].id}
-                className="px-2 py-1.5 text-center text-2xs font-semibold font-mono-num tabular-nums text-primary border-b border-border"
+                className="px-2 py-1.5 text-center text-xs font-semibold font-mono-num tabular-nums text-primary border-b border-border"
               >
                 {val != null
                   ? val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-                  : <span className="text-muted-foreground/40">—</span>}
+                  : <span className="text-muted-foreground font-medium">—</span>}
               </td>
             ))}
-            <td className="sticky right-0 z-20 bg-primary-soft/60 px-3 py-1.5 text-right text-2xs font-bold text-primary border-b border-l border-border tabular-nums">
+            <td className="sticky right-0 z-20 bg-primary-soft/60 px-3 py-1.5 text-right text-xs font-bold text-primary border-b border-l border-border tabular-nums">
               {entities.length} entities
             </td>
           </tr>
@@ -242,9 +242,9 @@ function InlineCurrentReadings({
             const total       = entities.length;
             const coveragePct = total > 0 ? Math.round((reported / total) * 100) : 0;
             const coverageColor =
-              coveragePct === 100 ? 'text-accent' :
-              coveragePct >= 50   ? 'text-warn'    :
-                                    'text-danger';
+              coveragePct === 100 ? 'text-ok-text' :
+              coveragePct >= 50   ? 'text-warn-text' :
+                                    'text-danger-text';
             return (
               <tr
                 key={date}
@@ -264,19 +264,19 @@ function InlineCurrentReadings({
                   >
                     {val != null
                       ? <span className="text-foreground">{fmtVal(val, 2, 2)}</span>
-                      : <span className="text-muted-foreground/40">—</span>}
+                      : <span className="text-muted-foreground font-medium">—</span>}
                   </td>
                 ))}
 
                 <td
                   className={[
-                    'sticky right-0 z-10 px-3 py-1.5 text-right font-semibold font-mono-num tabular-nums text-2xs border-l border-border',
+                    'sticky right-0 z-10 px-3 py-1.5 text-right font-semibold font-mono-num tabular-nums text-xs border-l border-border',
                     isEven ? 'bg-background' : 'bg-muted/10',
                     coverageColor,
                   ].join(' ')}
                   title={`${reported} of ${total} entities reported on this date`}
                 >
-                  {reported > 0 ? `${reported}/${total}` : <span className="text-muted-foreground/40">—</span>}
+                  {reported > 0 ? `${reported}/${total}` : <span className="text-muted-foreground font-medium">—</span>}
                 </td>
               </tr>
             );

@@ -152,12 +152,15 @@ export function friendlyError(err: AnyError, fallback = 'An unexpected error occ
     return 'Unable to complete registration with this email. If you already have an account, please sign in or reset your password.';
   }
 
-  // 7. Generic network / JWT
+  // 7. Generic network / JWT / Web Locks
   if (msg.toLowerCase().includes('jwt')) {
     return 'Your session has expired. Please sign in again.';
   }
   if (msg.toLowerCase().includes('networkerror') || msg.toLowerCase().includes('failed to fetch')) {
     return 'Network error — please check your connection and try again.';
+  }
+  if (/lock broken by another request|released because another request stole it|navigator lockmanager lock/i.test(msg)) {
+    return 'Syncing session state across tabs...';
   }
 
   // 8. Fallback to raw message (acceptable for most app-level errors)

@@ -60,10 +60,10 @@ export function BothTabView({
             return (
               <tr key={date} className={isEven ? 'bg-background hover:bg-muted/20' : 'bg-muted/10 hover:bg-muted/30'}>
                 <td className={['sticky left-0 z-10 px-3 py-1.5 font-medium text-muted-foreground whitespace-nowrap border-r border-border', isEven ? 'bg-background' : 'bg-muted/10'].join(' ')}>{format(new Date(date + 'T12:00:00'), 'MMM d, yyyy')}</td>
-                <td className="px-3 py-1.5 text-right font-mono-num tabular-nums text-primary">{prod !== 0 ? <span className={prod < 0 ? 'text-destructive font-semibold' : ''}>{fmtVal(prod)}</span> : <span className="text-muted-foreground/40">—</span>}</td>
-                <td className="px-3 py-1.5 text-right font-mono-num tabular-nums text-highlight">{cons !== 0 ? <span className={cons < 0 ? 'text-destructive font-semibold' : ''}>{fmtVal(cons)}</span> : <span className="text-muted-foreground/40">—</span>}</td>
-                <td className={['px-3 py-1.5 text-right font-mono-num tabular-nums', bal > 0 ? 'text-accent' : bal < 0 ? 'text-danger' : 'text-muted-foreground/40'].join(' ')}>{prod !== 0 || cons !== 0 ? fmtVal(bal) : '—'}</td>
-                <td className={['sticky right-0 z-10 px-3 py-1.5 text-right font-semibold font-mono-num tabular-nums border-l border-border', isEven ? 'bg-background' : 'bg-muted/10', nrw != null && nrw > 10 ? 'text-danger' : nrw != null ? 'text-primary' : 'text-muted-foreground/40'].join(' ')}>{nrw != null ? `${nrw}%` : '—'}</td>
+                <td className="px-3 py-1.5 text-right font-mono-num tabular-nums text-primary">{prod !== 0 ? <span className={prod < 0 ? 'text-destructive font-semibold' : ''}>{fmtVal(prod)}</span> : <span className="text-muted-foreground font-medium">—</span>}</td>
+                <td className="px-3 py-1.5 text-right font-mono-num tabular-nums text-highlight">{cons !== 0 ? <span className={cons < 0 ? 'text-destructive font-semibold' : ''}>{fmtVal(cons)}</span> : <span className="text-muted-foreground font-medium">—</span>}</td>
+                <td className={['px-3 py-1.5 text-right font-mono-num tabular-nums', bal > 0 ? 'text-accent' : bal < 0 ? 'text-danger' : 'text-muted-foreground'].join(' ')}>{prod !== 0 || cons !== 0 ? fmtVal(bal) : '—'}</td>
+                <td className={['sticky right-0 z-10 px-3 py-1.5 text-right font-semibold font-mono-num tabular-nums border-l border-border', isEven ? 'bg-background' : 'bg-muted/10', nrw != null && nrw > 10 ? 'text-danger' : nrw != null ? 'text-primary' : 'text-muted-foreground'].join(' ')}>{nrw != null ? `${nrw}%` : '—'}</td>
               </tr>
             );
           })}

@@ -90,17 +90,25 @@ function extractVars(blockText) {
 }
 
 function extractBlock(name) {
-  // Matches `:root {` or `:root[data-theme="x"] {` through its matching closing brace.
-  // Not a full CSS parser (doesn't track nested braces), but every block this
-  // script reads is flat (no nested rules), so a first-`}` match is correct.
-  const escaped = name === ':root' ? ':root' : `(?::root)?\\[data-theme="${name}"\\]`;
-  const re = new RegExp(`${escaped}\\s*\\{([^}]*)\\}`);
+  // Matches `:root {`, `.dark {`, `:root[data-theme="x"] {`, or `:root.dark[data-theme="x"] {`
+  let re;
+  if (name === ':root') {
+    re = /:root\s*\{([^}]*)\}/;
+  } else if (name === '.dark') {
+    re = /(?:^|\n)\s*\.dark\s*\{([^}]*)\}/;
+  } else if (name.startsWith('dark:')) {
+    const themeId = name.replace('dark:', '');
+    re = new RegExp(`(?::root)?\\.dark\\[data-theme="${themeId}"\\]\\s*\\{([^}]*)\\}`);
+  } else {
+    re = new RegExp(`(?::root)?\\[data-theme="${name}"\\]\\s*\\{([^}]*)\\}`);
+  }
   const m = css.match(re);
   if (!m) throw new Error(`Could not find CSS block for ${name} in ${cssPath}`);
   return extractVars(m[1]);
 }
 
 const root = extractBlock(':root');
+const dark = extractBlock('.dark');
 const THEME_IDS = [
   'aerial-autumn',
   'fire-ocean',
@@ -124,20 +132,34 @@ const PAIRS = [
   ['hover-state text on hover-state bg', 'sidebar-accent-foreground', 'sidebar-accent'],
 ];
 
+const STATUS_PAIRS = [
+  ['ok status text on bg', 'ok-text', 'background'],
+  ['warn status text on bg', 'warn-text', 'background'],
+  ['danger status text on bg', 'danger-text', 'background'],
+  ['info status text on bg', 'info-text', 'background'],
+];
+
 // Full AA text-contrast bar (4.5:1). Calibrated across all 11 themes.
 const MIN_RATIO = 4.5;
 const AA_NORMAL = 4.5;
 
-const themes = { 'default': root, ...Object.fromEntries(THEME_IDS.map((id) => [id, extractBlock(id)])) };
+const themes = {
+  'default (light)': root,
+  'default (dark)': dark,
+  ...Object.fromEntries(THEME_IDS.map((id) => [`${id} (light)`, extractBlock(id)])),
+  ...Object.fromEntries(THEME_IDS.map((id) => [`${id} (dark)`, extractBlock(`dark:${id}`)])),
+};
 
 let anyBelowMin = false;
 let anyBelowAA = false;
 const rows = [];
 
 for (const [themeName, vars] of Object.entries(themes)) {
-  for (const [label, fgKey, bgKey] of PAIRS) {
-    const fg = vars[fgKey];
-    const bg = vars[bgKey];
+  const isDefault = themeName.startsWith('default');
+  const pairsToCheck = isDefault ? [...PAIRS, ...STATUS_PAIRS] : PAIRS;
+  for (const [label, fgKey, bgKey] of pairsToCheck) {
+    const fg = vars[fgKey] ?? (themeName.includes('dark') ? dark[fgKey] : root[fgKey]);
+    const bg = vars[bgKey] ?? (themeName.includes('dark') ? dark[bgKey] : root[bgKey]);
     if (!fg || !bg) {
       console.error(`${themeName}: missing --${fgKey} or --${bgKey}, skipping "${label}"`);
       continue;

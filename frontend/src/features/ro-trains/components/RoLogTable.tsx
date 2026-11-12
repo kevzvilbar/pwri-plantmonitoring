@@ -256,10 +256,10 @@ export function RoLogTable({
               </td>
               <td className="px-2 py-2 text-right font-mono tabular-nums whitespace-nowrap border-r border-border/20">{fmtVal(r.permeate_flow, 'm³/h')}</td>
               <td className="px-2 py-2 text-right font-mono tabular-nums whitespace-nowrap">
-                {isRepl ? <span className="text-kpi-solar text-2xs">—</span>
+                {isRepl ? <span className="text-kpi-solar text-xs">—</span>
                   : r._perm_flow_meter != null
-                    ? <span className="text-primary font-mono tabular-nums text-xs">{Number(r._perm_flow_meter).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}<span className="text-muted-foreground/60 ml-0.5 text-3xs">m³/h</span></span>
-                    : <span className="text-muted-foreground/30">—</span>}
+                    ? <span className="text-primary font-mono tabular-nums text-xs">{Number(r._perm_flow_meter).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}<span className="text-muted-foreground ml-0.5 text-xs">m³/h</span></span>
+                    : <span className="text-muted-foreground">—</span>}
               </td>
               <td className="px-2 py-2 text-right font-mono tabular-nums whitespace-nowrap">{fmtVal(r.feed_flow, 'm³/h')}</td>
               <td className="px-2 py-2 text-right font-mono tabular-nums whitespace-nowrap">{fmtVal(r.reject_flow, 'm³/h')}</td>
@@ -279,47 +279,47 @@ export function RoLogTable({
                 {r.feed_meter != null ? (
                   Number(r.feed_meter).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
                 ) : r._inferred_feed_delta != null ? (
-                  <span className="text-muted-foreground/60 italic text-2xs font-sans" title={`Physical feed meter unrecorded or not installed; feed delta inferred = Permeate + Reject (~${Number(r._inferred_feed_delta).toFixed(2)} m³)`}>
+                  <span className="text-muted-foreground italic text-xs font-sans" title={`Physical feed meter unrecorded or not installed; feed delta inferred = Permeate + Reject (~${Number(r._inferred_feed_delta).toFixed(2)} m³)`}>
                     Inferred
                   </span>
                 ) : (
-                  <span className="text-muted-foreground/30">—</span>
+                  <span className="text-muted-foreground">—</span>
                 )}
               </td>
               <td className="px-2 py-2 text-right font-mono tabular-nums whitespace-nowrap text-xs">
                 {r.permeate_meter != null ? (
                   Number(r.permeate_meter).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
                 ) : r._inferred_perm_delta != null ? (
-                  <span className="text-muted-foreground/60 italic text-2xs font-sans" title={`Physical permeate meter unrecorded or not installed; permeate delta inferred = Feed − Reject (~${Number(r._inferred_perm_delta).toFixed(2)} m³)`}>
+                  <span className="text-muted-foreground italic text-xs font-sans" title={`Physical permeate meter unrecorded or not installed; permeate delta inferred = Feed − Reject (~${Number(r._inferred_perm_delta).toFixed(2)} m³)`}>
                     Inferred
                   </span>
                 ) : (
-                  <span className="text-muted-foreground/30">—</span>
+                  <span className="text-muted-foreground">—</span>
                 )}
               </td>
               <td className={cn('px-2 py-2 text-right font-mono tabular-nums whitespace-nowrap text-xs', isRepl && 'text-kpi-solar')}>
                 {isRepl ? <span className="text-kpi-solar font-semibold">★ 0.00</span>
-                  : delta != null ? <span className={+delta < 0 ? 'text-destructive font-semibold' : ''}>{Number(delta).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}<span className="text-muted-foreground/60 ml-0.5 text-3xs">m³</span></span>
+                  : delta != null ? <span className={+delta < 0 ? 'text-destructive font-semibold' : ''}>{Number(delta).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}<span className="text-muted-foreground ml-0.5 text-xs">m³</span></span>
                   : r._inferred_perm_delta != null ? (
                     <span
                       className="text-info font-medium"
                       title="Inferred permeate volume = Feed Delta − Reject Delta"
                     >
                       ~{Number(r._inferred_perm_delta).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      <span className="text-info/70 ml-0.5 text-3xs font-sans">m³ (inf)</span>
+                      <span className="text-info/80 ml-0.5 text-xs font-sans">m³ (inf)</span>
                     </span>
                   )
-                  : <span className="text-muted-foreground/30">—</span>}
+                  : <span className="text-muted-foreground">—</span>}
               </td>
               <td className="px-2 py-2 text-right font-mono tabular-nums whitespace-nowrap text-xs">
                 {r.reject_meter != null ? (
                   Number(r.reject_meter).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
                 ) : r._inferred_rej_delta != null ? (
-                  <span className="text-muted-foreground/60 italic text-2xs font-sans" title="Physical reject meter unrecorded or not installed; reject volume inferred from water balance">
+                  <span className="text-muted-foreground italic text-xs font-sans" title="Physical reject meter unrecorded or not installed; reject volume inferred from water balance">
                     Inferred
                   </span>
                 ) : (
-                  <span className="text-muted-foreground/30">—</span>
+                  <span className="text-muted-foreground">—</span>
                 )}
               </td>
               <td className={cn('px-2 py-2 text-right font-mono tabular-nums whitespace-nowrap text-xs', r.is_reject_meter_replacement && 'text-kpi-solar')}>
@@ -327,7 +327,7 @@ export function RoLogTable({
                   const isRejRepl = !!(r.is_reject_meter_replacement);
                   const rejDelta  = r._computed_rej_delta ?? (r.reject_meter_delta != null ? +r.reject_meter_delta : null);
                   if (isRejRepl)         return <span className="text-kpi-solar font-semibold">★ 0.00</span>;
-                  if (rejDelta != null)   return <span className={+rejDelta < 0 ? 'text-destructive font-semibold' : ''}>{Number(rejDelta).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}<span className="text-muted-foreground/60 ml-0.5 text-3xs">m³</span></span>;
+                  if (rejDelta != null)   return <span className={+rejDelta < 0 ? 'text-destructive font-semibold' : ''}>{Number(rejDelta).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}<span className="text-muted-foreground ml-0.5 text-xs">m³</span></span>;
                   if (r._inferred_rej_delta != null) {
                     return (
                       <span
@@ -335,11 +335,11 @@ export function RoLogTable({
                         title="Inferred reject volume = Feed Delta − Permeate Delta"
                       >
                         ~{Number(r._inferred_rej_delta).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                        <span className="text-info/70 ml-0.5 text-3xs font-sans">m³ (inf)</span>
+                        <span className="text-info/80 ml-0.5 text-xs font-sans">m³ (inf)</span>
                       </span>
                     );
                   }
-                  return <span className="text-muted-foreground/30">—</span>;
+                  return <span className="text-muted-foreground">—</span>;
                 })()}
               </td>
               <td className="px-2 py-2 text-center whitespace-nowrap">
@@ -350,12 +350,12 @@ export function RoLogTable({
                     className={cn('h-5 w-5 rounded border-2 inline-flex items-center justify-center transition-colors mx-auto',
                       isRepl ? 'border-kpi-solar bg-kpi-solar text-white' : 'border-border bg-background hover:border-kpi-solar/90',
                       isToggling ? 'opacity-50 cursor-wait' : 'cursor-pointer')}>
-                    {isToggling ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : isRepl ? <span className="text-3xs font-bold leading-none">✓</span> : null}
+                    {isToggling ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : isRepl ? <span className="text-xs font-bold leading-none">✓</span> : null}
                   </button>
-                ) : isRepl ? <span className="text-kpi-solar text-2xs">★</span> : null}
+                ) : isRepl ? <span className="text-kpi-solar text-xs">★</span> : null}
               </td>
               <td className="px-2 py-2 text-left text-xs text-muted-foreground max-w-[150px] truncate">
-                {r.remarks ? <span title={r.remarks}>{r.remarks}</span> : <span className="text-muted-foreground/30">—</span>}
+                {r.remarks ? <span title={r.remarks}>{r.remarks}</span> : <span className="text-muted-foreground">—</span>}
               </td>
               <td className={cn(
                 'px-2 py-2 text-center whitespace-nowrap sticky right-0 z-10 border-l border-border/30 shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.12)] transition-colors',

@@ -99,7 +99,7 @@ export function EMFlowRow({
             ) : (
               <Input type="number" step="any" {...f('feed_flow')}
                 placeholder={feedFlowMeter != null ? `≈ ${Number(feedFlowMeter).toFixed(2)} (meter)` : 'EM reading'}
-                className="placeholder:text-2xs placeholder:text-muted-foreground/50" id="pretreat-feed-flowrate"/>
+                className="placeholder:text-xs placeholder:text-muted-foreground/70" id="pretreat-feed-flowrate"/>
             )}
           </div>
         )}
@@ -116,7 +116,7 @@ export function EMFlowRow({
             ) : (
               <Input type="number" step="any" {...f('permeate_flow')}
                 placeholder={permFlowMeter != null ? `≈ ${Number(permFlowMeter).toFixed(2)} (meter)` : 'EM reading'}
-                className="placeholder:text-2xs placeholder:text-muted-foreground/50" id="pretreat-field-3"/>
+                className="placeholder:text-xs placeholder:text-muted-foreground/70" id="pretreat-field-3"/>
             )}
             {recovery != null && (
               <div className="mt-1">
@@ -141,7 +141,7 @@ export function EMFlowRow({
             ) : (
               <Input type="number" step="any" {...f('reject_flow')}
                 placeholder={rejFlowMeter != null ? `≈ ${Number(rejFlowMeter).toFixed(2)} (meter)` : 'EM reading'}
-                className="placeholder:text-2xs placeholder:text-muted-foreground/50" id="pretreat-reject-flowrate"/>
+                className="placeholder:text-xs placeholder:text-muted-foreground/70" id="pretreat-reject-flowrate"/>
             )}
           </div>
         )}

@@ -138,7 +138,7 @@ export function BoosterPumpSection({
                             placeholder={psiMode ? 'Enter psi' : '—'}
                             title={pumpConfigured ? 'Set in Train Settings' : undefined}
                             className={cn(
-                              'text-center placeholder:text-2xs placeholder:text-muted-foreground/40 rounded-lg',
+                              'text-center placeholder:text-xs placeholder:text-muted-foreground/70 rounded-lg',
                               !psiMode && 'opacity-35 cursor-not-allowed bg-muted/30',
                               psiMode && pumpConfigured && 'bg-muted/40'
                             )}
@@ -152,7 +152,7 @@ export function BoosterPumpSection({
                             placeholder={!psiMode ? 'Enter Hz' : '—'}
                             title={pumpConfigured ? 'Set in Train Settings' : undefined}
                             className={cn(
-                              'text-center placeholder:text-2xs placeholder:text-muted-foreground/40 rounded-lg',
+                              'text-center placeholder:text-xs placeholder:text-muted-foreground/70 rounded-lg',
                               psiMode && 'opacity-35 cursor-not-allowed bg-muted/30',
                               !psiMode && pumpConfigured && 'bg-muted/40'
                             )}
@@ -162,7 +162,7 @@ export function BoosterPumpSection({
                             type="number" step="any"
                             value={b.amp}
                             placeholder="Enter A"
-                            className="text-center placeholder:text-2xs placeholder:text-muted-foreground/40 rounded-lg"
+                            className="text-center placeholder:text-xs placeholder:text-muted-foreground/70 rounded-lg"
                             onChange={(e) => setB({ amp: e.target.value })}
                           />
                         </div>
@@ -216,7 +216,7 @@ export function BoosterPumpSection({
                   })}
                 </div>
 
-                <p className="text-3xs text-muted-foreground/50 italic">
+                <p className="text-xs text-muted-foreground italic">
                   {boosterConfig
                     ? `${globalPsiMode ? 'psi' : 'Hz'} mode — set in Train Settings, applies to all pumps on this train.`
                     : globalPsiMode ? 'psi mode — Hz column locked. Tap psi/Hz to switch.' : 'Hz mode — psi column locked. Tap psi/Hz to switch.'}

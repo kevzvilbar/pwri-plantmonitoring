@@ -71,7 +71,7 @@ export function EventRow({ event, index, isAdmin, isManager, onDelete }: EventRo
             <Trash2 className="h-3.5 w-3.5" />
           </button>
         ) : (
-          <span className="text-muted-foreground/30 text-2xs">—</span>
+          <span className="text-muted-foreground text-xs font-medium">—</span>
         )}
       </div>
     </div>

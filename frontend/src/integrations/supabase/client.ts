@@ -25,10 +25,14 @@ if (supabaseConfigError && typeof console !== 'undefined') {
 const inTabLocks = new Map<string, Promise<unknown>>();
 
 function isLockStealError(err: unknown): boolean {
+  if (!err) return false;
+  if (typeof err === 'string') {
+    return /lock broken by another request|released because another request stole it|navigator lockmanager lock/i.test(err);
+  }
   const e = err as { name?: string; message?: string; isAcquireTimeout?: boolean } | null;
   if (!e) return false;
   if (e.isAcquireTimeout) return true;
-  const msg = e.message ?? '';
+  const msg = [e.name, e.message].filter(Boolean).join(' ');
   return (
     e.name === 'AbortError' ||
     /lock broken by another request|released because another request stole it|navigator lockmanager lock/i.test(msg)
@@ -75,6 +79,9 @@ async function supabaseAuthLock<R>(
     } catch (err) {
       if (timer !== undefined) clearTimeout(timer);
       if (isLockStealError(err)) {
+        // When another request steals the lock, give the winner 50ms to finish
+        // writing the token into storage before reading session state.
+        await new Promise((res) => setTimeout(res, 50));
         return await fn();
       }
       throw err;

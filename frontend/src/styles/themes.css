@@ -44,6 +44,7 @@
     --ok:                  158 64% 40%;
     --ok-foreground:       0 0% 100%;
     --ok-soft:             158 50% 92%;
+    --ok-text:             160 84% 22%;
 
     /* ── Semantic: Cyan (active highlights) ─────────────────────── */
     --highlight:           189 96% 43%;
@@ -54,17 +55,20 @@
     --warn:                38 92% 50%;
     --warn-foreground:     38 90% 16%;
     --warn-soft:           38 85% 93%;
+    --warn-text:           32 95% 24%;
 
     /* ── Semantic: Rose (danger / errors) ───────────────────────── */
     --danger:              351 64% 47%;
     --danger-foreground:   0 0% 100%;
     --danger-soft:         351 60% 95%;
+    --danger-text:         351 78% 32%;
     --destructive:         351 64% 47%;
     --destructive-foreground: 0 0% 100%;
 
     /* ── Semantic: Sky (informational) ─────────────────────────── */
     --info:                199 89% 48%;
     --info-soft:           199 80% 93%;
+    --info-text:           214 90% 28%;
 
     /* ── Semantic: Elevated / Special / Privileged ──────────────── */
     --elevated:            258 90% 66%;
@@ -402,7 +406,7 @@
 
     /* ── Calibrated Desaturated Brand & Semantic Accents ── */
     --primary:             175 70% 38%;   /* Calibrated Treated Water Teal */
-    --primary-foreground:  0 0% 100%;
+    --primary-foreground:  220 25% 6%;
     --primary-soft:        175 40% 15%;
     --primary-glow:        175 70% 45%;
 
@@ -418,6 +422,7 @@
     --ok:                  158 60% 48%;
     --ok-foreground:       220 15% 91%;
     --ok-soft:             158 35% 15%;
+    --ok-text:             152 76% 75%;
 
     --highlight:           189 80% 50%;   /* Signal Cyan */
     --highlight-foreground:220 15% 91%;
@@ -426,15 +431,18 @@
     --warn:                43 85% 55%;    /* Caution Lamp Amber */
     --warn-foreground:     43 90% 10%;
     --warn-soft:           43 40% 15%;
+    --warn-text:           43 96% 75%;
 
     --danger:              350 75% 58%;   /* Alarm Lamp Rose */
     --danger-foreground:   0 0% 100%;
     --danger-soft:         350 40% 15%;
+    --danger-text:         0 86% 75%;
     --destructive:         350 75% 58%;
     --destructive-foreground: 0 0% 100%;
 
     --info:                199 80% 56%;   /* Calibrated Sky Blue */
     --info-soft:           199 40% 15%;
+    --info-text:           214 95% 75%;
 
     --elevated:            258 75% 65%;
     --elevated-foreground: 0 0% 100%;
@@ -452,6 +460,7 @@
     --sidebar-accent:      225 13% 14%;
     --sidebar-accent-foreground: 220 15% 91%;
     --sidebar-primary:     189 80% 50%;
+    --sidebar-primary-foreground: 220 25% 6%;
     --sidebar-ring:        189 80% 50%;
 
     /* ── Ambient Downward Shadows (Preserved depth on near-black canvas) ── */
@@ -1349,7 +1358,7 @@
 
   --sidebar-background: 224 60% 12%;
   --sidebar-foreground: 220 30% 95%;
-  --sidebar-primary:    267 85% 65%;
+  --sidebar-primary:    267 75% 50%;
   --sidebar-primary-foreground: 0 0% 100%;
   --sidebar-accent:     224 45% 18%;
   --sidebar-accent-foreground: 220 30% 95%;
