@@ -12,7 +12,6 @@ import {
 import { reasonCategoryLabel, reasonEntityPrefix } from '@/lib/reasonCodes';
 import { buildEntityPivot, fillDateRange } from './TrendChartPivotShared';
 import { buildEntityPivotRows, getIsoWeekStart } from './TrendChartAggregate';
-import { DRILL_COLORS } from './drillColors';
 import {
   type DrillCrumb, makeDrillableBarShape, toggleIsolateEntity,
   focusToRange, nextFinerGranularity, type DrillFocus,
