@@ -2,6 +2,7 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react-swc";
 import { VitePWA } from "vite-plugin-pwa";
 import path from "path";
+import fs from "node:fs";
 import { execSync } from "node:child_process";
 import { createRequire } from "node:module";
 import { cspHashes } from "./vite-plugins/cspHashes";
@@ -44,7 +45,7 @@ function resolveAppBuildMeta(baseVersion = "1.0.0") {
   const phtIso = new Date(Date.now() + 8 * 3600_000).toISOString();
   const buildDate = `${phtIso.slice(0, 10)} ${phtIso.slice(11, 16)} PHT`;
 
-  return { appVersion, buildDate };
+  return { appVersion, buildDate, versionCore, shortSha };
 }
 
 const buildMeta = resolveAppBuildMeta(pkg.version ?? "1.0.0");
@@ -67,6 +68,77 @@ export default defineConfig(({ mode }) => ({
   plugins: [
     react(),
     cspHashes(),
+    {
+      name: "emit-version-json",
+      buildStart() {
+        const payload = JSON.stringify(
+          {
+            version: buildMeta.appVersion,
+            versionCore: buildMeta.versionCore,
+            buildDate: buildMeta.buildDate,
+            commit: buildMeta.shortSha,
+            timestamp: Date.now(),
+          },
+          null,
+          2,
+        );
+        try {
+          fs.writeFileSync(path.resolve(__dirname, "public/version.json"), payload, "utf-8");
+        } catch {}
+      },
+      generateBundle() {
+        this.emitFile({
+          type: "asset",
+          fileName: "version.json",
+          source: JSON.stringify(
+            {
+              version: buildMeta.appVersion,
+              versionCore: buildMeta.versionCore,
+              buildDate: buildMeta.buildDate,
+              commit: buildMeta.shortSha,
+              timestamp: Date.now(),
+            },
+            null,
+            2,
+          ),
+        });
+      },
+      closeBundle() {
+        const payload = JSON.stringify(
+          {
+            version: buildMeta.appVersion,
+            versionCore: buildMeta.versionCore,
+            buildDate: buildMeta.buildDate,
+            commit: buildMeta.shortSha,
+            timestamp: Date.now(),
+          },
+          null,
+          2,
+        );
+        try {
+          fs.writeFileSync(path.resolve(__dirname, "dist/version.json"), payload, "utf-8");
+        } catch {}
+      },
+      configureServer(server) {
+        server.middlewares.use((req, res, next) => {
+          if (req.url && (req.url === "/version.json" || req.url.startsWith("/version.json?"))) {
+            res.setHeader("Content-Type", "application/json");
+            res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+            res.end(
+              JSON.stringify({
+                version: buildMeta.appVersion,
+                versionCore: buildMeta.versionCore,
+                buildDate: buildMeta.buildDate,
+                commit: buildMeta.shortSha,
+                timestamp: Date.now(),
+              }),
+            );
+            return;
+          }
+          next();
+        });
+      },
+    },
     VitePWA({
       // "prompt": a new service worker waits until src/main.tsx activates it via
       // lib/pwaUpdate.ts — automatically once the tab has been idle ≥10 min with

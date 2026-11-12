@@ -107,4 +107,26 @@ describe('pwaUpdate', () => {
     expect(applied).toBe(true);
     expect(apply).toHaveBeenCalledTimes(1);
   });
+
+  it('detects new version when server version.json differs from client APP_VERSION', async () => {
+    const originalFetch = globalThis.fetch;
+    try {
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          version: '1.0.1079 (deb03bd)',
+          versionCore: '1.0.1079',
+          buildDate: '2026-11-12 14:00 PHT',
+        }),
+      } as Response);
+
+      const status = await checkForPwaUpdate();
+      expect(status).toBe('available');
+      const snap = getPwaUpdateSnapshot();
+      expect(snap.updateAvailable).toBe(true);
+      expect(snap.newVersion).toBe('1.0.1079 (deb03bd)');
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
 });

@@ -42,6 +42,36 @@ export interface PwaUpdateSnapshot {
   buildDate: string;
   updateAvailable: boolean;
   isChecking: boolean;
+  newVersion?: string;
+}
+
+export interface ServerVersionInfo {
+  version: string;
+  versionCore?: string;
+  buildDate?: string;
+  commit?: string;
+  timestamp?: number;
+}
+
+export async function fetchServerVersion(): Promise<ServerVersionInfo | null> {
+  if (typeof fetch === 'undefined') return null;
+  try {
+    const rawBase = typeof import.meta !== 'undefined' && import.meta.env?.BASE_URL ? import.meta.env.BASE_URL : '/';
+    const base = rawBase.endsWith('/') ? rawBase : `${rawBase}/`;
+    const url = `${base}version.json?t=${Date.now()}`;
+    const res = await fetch(url, {
+      cache: 'no-store',
+      headers: {
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        Pragma: 'no-cache',
+      },
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as ServerVersionInfo;
+    return data && typeof data.version === 'string' ? data : null;
+  } catch {
+    return null;
+  }
 }
 
 let snapshot: PwaUpdateSnapshot = {
@@ -70,46 +100,103 @@ export function getPwaUpdateSnapshot(): PwaUpdateSnapshot {
 }
 
 export async function applyWaitingPwaUpdate(): Promise<boolean> {
+  setSnapshot({ updateAvailable: false });
+
   if (activeApplyUpdate) {
-    setSnapshot({ updateAvailable: false });
-    await activeApplyUpdate();
+    try {
+      await activeApplyUpdate();
+      return true;
+    } catch (e) {
+      console.warn('[pwaUpdate] activeApplyUpdate error, falling back to cache purge:', e);
+    }
+  }
+
+  // Fallback: post SKIP_WAITING to waiting worker, clear all CacheStorage, and reload
+  try {
+    if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
+      const reg = activeRegistration ?? await navigator.serviceWorker.getRegistration();
+      if (reg?.waiting) {
+        reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+      }
+    }
+    if (typeof caches !== 'undefined') {
+      const keys = await caches.keys();
+      await Promise.all(keys.map((k) => caches.delete(k)));
+    }
+  } catch (err) {
+    console.warn('[pwaUpdate] cache clear error:', err);
+  }
+
+  if (typeof window !== 'undefined') {
+    window.location.reload();
     return true;
   }
   return false;
 }
 
 export async function checkForPwaUpdate(): Promise<'available' | 'up-to-date' | 'unsupported' | 'error'> {
-  if (snapshot.updateAvailable && activeApplyUpdate) {
+  if (snapshot.updateAvailable && (activeApplyUpdate || snapshot.newVersion)) {
     return 'available';
   }
 
   setSnapshot({ isChecking: true });
   try {
+    // 1. Check live deployed version from static version.json (always bypasses cache)
+    const serverInfo = await fetchServerVersion();
+    const isNewVersionOnServer =
+      !!serverInfo?.version &&
+      serverInfo.version.trim() !== APP_VERSION.trim();
+
+    // 2. Query service worker registration
     let reg = activeRegistration;
     if (!reg && typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
       reg = await navigator.serviceWorker.getRegistration();
       if (reg) activeRegistration = reg;
     }
 
-    if (!reg) {
-      setSnapshot({ isChecking: false });
-      return snapshot.updateAvailable ? 'available' : 'unsupported';
+    if (reg) {
+      try {
+        await reg.update();
+      } catch (err) {
+        console.warn('[pwaUpdate] reg.update() failed:', err);
+      }
     }
 
-    await reg.update();
-    if (reg.waiting || snapshot.updateAvailable) {
+    // If server has a newer or different version, an update is DEFINITELY available!
+    if (isNewVersionOnServer) {
+      setSnapshot({
+        updateAvailable: true,
+        isChecking: false,
+        newVersion: serverInfo.version,
+      });
+
+      // If worker is currently installing assets, give it up to 8s to finish precaching
+      if (reg?.installing) {
+        const worker = reg.installing;
+        await new Promise<void>((resolve) => {
+          const timer = setTimeout(resolve, 8000);
+          worker.addEventListener('statechange', () => {
+            if (worker.state === 'installed' || worker.state === 'activated' || worker.state === 'redundant') {
+              clearTimeout(timer);
+              resolve();
+            }
+          });
+        });
+      }
+
+      return 'available';
+    }
+
+    // 3. Fallback: inspect Service Worker states
+    if (reg?.waiting || snapshot.updateAvailable) {
       setSnapshot({ updateAvailable: true, isChecking: false });
       return 'available';
     }
-    if (reg.installing) {
-      // Wait briefly for installing worker to reach installed/waiting state
+
+    if (reg?.installing) {
+      const worker = reg.installing;
       await new Promise<void>((resolve) => {
-        const worker = reg?.installing;
-        if (!worker) {
-          resolve();
-          return;
-        }
-        const timer = setTimeout(resolve, 2500);
+        const timer = setTimeout(resolve, 8000);
         worker.addEventListener('statechange', () => {
           if (worker.state === 'installed' || worker.state === 'activated' || worker.state === 'redundant') {
             clearTimeout(timer);
@@ -122,6 +209,12 @@ export async function checkForPwaUpdate(): Promise<'available' | 'up-to-date' | 
         return 'available';
       }
     }
+
+    if (!reg && !serverInfo) {
+      setSnapshot({ isChecking: false });
+      return 'unsupported';
+    }
+
     setSnapshot({ isChecking: false });
     return snapshot.updateAvailable ? 'available' : 'up-to-date';
   } catch {
@@ -152,6 +245,7 @@ export function _resetPwaUpdateState(): void {
     buildDate: APP_BUILD_DATE,
     updateAvailable: false,
     isChecking: false,
+    newVersion: undefined,
   });
 }
 
@@ -224,13 +318,39 @@ export function createPwaUpdateController(deps: PwaUpdateDeps) {
     }
   };
 
-  const check = () => {
-    if (!registration) return;
+  const check = async () => {
     if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
     if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
     if (now() - lastCheck < MIN_CHECK_GAP_MS) return;
     lastCheck = now();
-    void registration.update().catch(() => {});
+
+    try {
+      const serverInfo = await fetchServerVersion();
+      if (serverInfo?.version && serverInfo.version.trim() !== APP_VERSION.trim()) {
+        waiting = true;
+        setSnapshot({ updateAvailable: true, newVersion: serverInfo.version });
+        if (canApplyUpdateSilently({ idleMs: now() - lastActivityTime, hasActiveMutations: checkHasMutations })) {
+          waiting = false;
+          setSnapshot({ updateAvailable: false });
+          void deps.applyUpdate();
+          return;
+        }
+        if (!prompted && promptFn) {
+          prompted = true;
+          promptFn(() => {
+            waiting = false;
+            setSnapshot({ updateAvailable: false });
+            void deps.applyUpdate();
+          });
+        }
+      }
+    } catch {
+      // ignore network errors during periodic check
+    }
+
+    if (registration) {
+      void registration.update().catch(() => {});
+    }
   };
 
   const onVisibility = () => {

@@ -93,7 +93,7 @@ export function OperatorSwitcher() {
   const { activeOperatorId, setActiveOperatorId, selectedPlantId } = useAppStore();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { appVersion, buildDate, updateAvailable, isChecking, checkForUpdate, applyUpdate } = usePwaUpdate();
+  const { appVersion, buildDate, updateAvailable, isChecking, newVersion, checkForUpdate, applyUpdate } = usePwaUpdate();
 
   const switchAllowed = canSwitchOperator(profile);
   const plantAssignments = profile?.plant_assignments ?? (selectedPlantId ? [selectedPlantId] : []);
@@ -366,7 +366,13 @@ export function OperatorSwitcher() {
             }
             const res = await checkForUpdate();
             if (res === 'available') {
-              toast.success('New app version ready! Click "Update Now" to install.');
+              const target = newVersion ? ` (${newVersion})` : '';
+              toast.success(`New app version ready${target}! Click "Update Now" to install.`, {
+                action: {
+                  label: 'Update now',
+                  onClick: () => { void applyUpdate(); },
+                },
+              });
             } else if (res === 'up-to-date') {
               toast.success(`App is up to date (v${appVersion}).`);
             } else if (res === 'unsupported') {

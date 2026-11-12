@@ -56,6 +56,7 @@ window.addEventListener('load', () => {
 // the operator clicks the toast. See lib/pwaUpdate.ts.
 if (typeof window !== "undefined" && "serviceWorker" in navigator) {
   const updateSW = registerSW({
+    immediate: true,
     onNeedRefresh: () => controller.onNeedRefresh(),
     onRegisteredSW: (url, reg) => controller.onRegisteredSW(url, reg),
   });

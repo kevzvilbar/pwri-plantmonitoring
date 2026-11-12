@@ -46,7 +46,7 @@ export function MobileBottomNav() {
   const navigate = useNavigate();
   const { profile, roles, isAdmin, isManager } = useAuth();
   const groups = useNavGroups();
-  const { appVersion, buildDate, updateAvailable, isChecking, checkForUpdate, applyUpdate } = usePwaUpdate();
+  const { appVersion, buildDate, updateAvailable, isChecking, newVersion, checkForUpdate, applyUpdate } = usePwaUpdate();
   const colorTheme = useThemeStore((s) => s.colorTheme);
   const darkMode = useThemeStore((s) => s.darkMode);
   const themeMode = useThemeStore((s) => s.themeMode);
@@ -144,7 +144,13 @@ export function MobileBottomNav() {
     }
     const result = await checkForUpdate();
     if (result === 'available') {
-      toast.success('New app version ready! Tap "Update Now" to install.');
+      const target = newVersion ? ` (${newVersion})` : '';
+      toast.success(`New app version ready${target}! Tap "Update Now" to install.`, {
+        action: {
+          label: 'Update now',
+          onClick: () => { void applyUpdate(); },
+        },
+      });
     } else if (result === 'up-to-date') {
       toast.success(`You are on the latest version (v${appVersion}).`);
     } else if (result === 'unsupported') {
