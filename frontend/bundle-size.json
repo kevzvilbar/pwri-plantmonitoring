@@ -1,5 +1,5 @@
 {
-  "maxTotalGzipKb": 1190.4,
+  "maxTotalGzipKb": 1198.3,
   "lastUpdated": "2026-11-12",
   "history": [
     {
@@ -194,6 +194,12 @@
       "maxTotalGzipKb": 1190.4,
       "previous": 1234.4,
       "reason": "Re-baselined bundle size to 1190.4 kB matching optimized tree-shaken production build."
+    },
+    {
+      "date": "2026-11-12",
+      "maxTotalGzipKb": 1198.3,
+      "previous": 1190.4,
+      "reason": "Re-baselined to 1198.3 kB with WCAG AA status color tokens and lock stealing mitigation."
     }
   ]
 }
