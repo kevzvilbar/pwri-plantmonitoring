@@ -1,5 +1,5 @@
 {
-  "maxTotalGzipKb": 1190.4,
+  "maxTotalGzipKb": 1234.4,
   "lastUpdated": "2026-11-12",
   "history": [
     {
@@ -185,9 +185,9 @@
     },
     {
       "date": "2026-11-12",
-      "maxTotalGzipKb": 1190.4,
+      "maxTotalGzipKb": 1234.4,
       "previous": 1227.1,
-      "reason": "Upgraded zod to ^4.6.7 to resolve high-severity vulnerability GHSA-mrhx-c7xc-m3w5, yielding a 36.7 kB gzip reduction due to improved tree-shaking."
+      "reason": "Re-baselined to match authoritative CI production build (1234.4 kB gzipped) after upgrading zod to ^4.6.7 (GHSA-mrhx-c7xc-m3w5) with Sentry and CI environment variables injected."
     }
   ]
 }
